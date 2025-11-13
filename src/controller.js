@@ -53,7 +53,7 @@ export default class Controller {
   updateView() {
     const state = this.game.getState();
 
-    if (state.isGameOwer) {
+    if (state.isGameOver) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
     } else if (!this.isPlaying) {
@@ -73,7 +73,7 @@ export default class Controller {
 
     switch (event.keyCode) {
       case 13: // ENTER
-        if (state.isGameOwer) {
+        if (state.isGameOver) {
           this.reset();
         } else if (this.isPlaying) {
           this.pause();
@@ -82,19 +82,19 @@ export default class Controller {
         }
 
         break;
-      case 37:
+      case 37: // LEFT ARROW
         this.game.movePieceLeft();
         this.updateView();
         break;
-      case 38:
+      case 38: // UP ARROW
         this.game.rotatePiece();
         this.updateView();
         break;
-      case 39:
+      case 39: // RIGHT ARROW
         this.game.movePieceRight();
         this.updateView();
         break;
-      case 40:
+      case 40: // DOWN ARROW
         this.game.movePieceDown();
         this.updateView();
         break;

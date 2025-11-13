@@ -308,3 +308,51 @@ body {
     width: 100%;
   }
 }
+
+/* Error Message Styling */
+.error-message {
+  background: linear-gradient(135deg, rgba(139, 0, 0, 0.8) 0%, rgba(255, 0, 0, 0.6) 100%);
+  border: 2px solid rgba(255, 0, 0, 0.5);
+  border-radius: 10px;
+  padding: 30px;
+  color: #ffffff;
+  font-family: 'Open Sans', sans-serif;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 20px auto;
+  box-shadow: 0 4px 20px rgba(255, 0, 0, 0.3);
+  text-align: center;
+}
+
+.error-message a {
+  color: #ffff00;
+  text-decoration: underline;
+  font-weight: bold;
+}
+
+.error-message a:hover {
+  color: #ffffff;
+}
+
+/* Smooth transitions for all interactive elements */
+button, .key, a {
+  transition: all 0.3s ease;
+}
+
+/* Add glow effect on stat values when they change */
+.stat-value {
+  transition: all 0.3s ease;
+}
+
+/* Add highlight effect for new high score */
+@keyframes celebrate {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.2) rotate(-5deg);
+  }
+  75% {
+    transform: scale(1.2) rotate(5deg);
+  }
+}
