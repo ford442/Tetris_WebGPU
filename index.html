@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Tetris</title>
+    <title>Tetris WebGPU - Enhanced Edition</title>
     <link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
@@ -17,17 +17,83 @@
 </head>
 
 <body>
-    <div id=root>
-        <h1><span style="color: red ;">T</span><span style="color: orange;">E</span><span
-                style="color: yellow;">T</span><span style="color: #3c803c;">R</span><span
-                style="color: cyan;">I</span><span style="color: darkmagenta;">S</span><span style="color: red;">
-                WebGPU</span></h1><br>
-        <div id=info>
-            
-            <p id=info1>Created by Konstantin84UKR </p>
-            <p id=info2>-----------------------------</p><a id=info3
-                href="https://github.com/Konstantin84UKR/Tetris_WebGPU">https://github.com/Konstantin84UKR/Tetris_WebGPU</a>
+    <div id="root">
+        <div class="header">
+            <h1 class="game-title">
+                <span style="color: #ff0000;">T</span><span style="color: #ff8800;">E</span><span
+                    style="color: #ffff00;">T</span><span style="color: #00ff00;">R</span><span
+                    style="color: #00ffff;">I</span><span style="color: #ff00ff;">S</span>
+                <span class="webgpu-badge">WebGPU</span>
+            </h1>
         </div>
+        
+        <div class="game-container">
+            <div class="left-panel">
+                <div class="info-box">
+                    <h2>Game Info</h2>
+                    <div class="stat-row">
+                        <span class="stat-label">Score:</span>
+                        <span id="score-display" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Lines:</span>
+                        <span id="lines-display" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Level:</span>
+                        <span id="level-display" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">High Score:</span>
+                        <span id="high-score-display" class="stat-value">0</span>
+                    </div>
+                </div>
+                
+                <div class="info-box controls-box">
+                    <h2>Controls</h2>
+                    <div class="control-item">
+                        <span class="key">←</span> Move Left
+                    </div>
+                    <div class="control-item">
+                        <span class="key">→</span> Move Right
+                    </div>
+                    <div class="control-item">
+                        <span class="key">↓</span> Move Down
+                    </div>
+                    <div class="control-item">
+                        <span class="key">↑</span> Rotate
+                    </div>
+                    <div class="control-item">
+                        <span class="key">Enter</span> Pause/Resume
+                    </div>
+                </div>
+            </div>
+            
+            <div id="canvas-wrapper" class="canvas-wrapper">
+                <!-- Canvas will be inserted here by JavaScript -->
+            </div>
+            
+            <div class="right-panel">
+                <div class="info-box">
+                    <h2>Next Piece</h2>
+                    <div id="next-piece-display" class="next-piece-display">
+                        <!-- Next piece preview will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-message">
+            <p id="info1">Press ENTER to Start</p>
+            <p id="info2" class="sub-message"></p>
+        </div>
+        
+        <footer class="footer">
+            <p>Created by Konstantin84UKR | Enhanced Edition</p>
+            <a id="info3" href="https://github.com/Konstantin84UKR/Tetris_WebGPU" target="_blank">
+                View on GitHub
+            </a>
+        </footer>
     </div> 
     <script src='./index.js' type='module'></script>
 </body>
