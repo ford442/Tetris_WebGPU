@@ -189,7 +189,8 @@ export default class View {
     this.panelWidth = this.width / 3;
     this.panelHeight = this.heigh;
 
-    //this.element.appendChild(this.canvasWebGPU);
+    // High score tracking
+    this.highScore = parseInt(localStorage.getItem('tetrisHighScore')) || 0;
 
     this.state = {
       playfield: [
@@ -217,48 +218,130 @@ export default class View {
     };
     this.blockData = {};
     if (this.isWebGPU.result) {
-      this.element.appendChild(this.canvasWebGPU);
+      // Append canvas to the canvas wrapper instead of root
+      const canvasWrapper = document.querySelector('#canvas-wrapper');
+      if (canvasWrapper) {
+        canvasWrapper.appendChild(this.canvasWebGPU);
+      } else {
+        this.element.appendChild(this.canvasWebGPU);
+      }
       this.preRender();
     } else {
       let divError = document.createElement("div");
-      divError.innerText = this.isWebGPU.description;
-      this.element.appendChild(divError);
+      divError.className = "error-message";
+      divError.innerHTML = this.isWebGPU.description;
+      const canvasWrapper = document.querySelector('#canvas-wrapper');
+      if (canvasWrapper) {
+        canvasWrapper.appendChild(divError);
+      } else {
+        this.element.appendChild(divError);
+      }
     }
   }
 
   renderMainScreen(state) {
-    this.clearScreen(state);
+    this.updateUIDisplay(state);
     this.renderPlayfild_WebGPU(state);
   }
 
+  updateUIDisplay({ lines, score, level, nextPiece }) {
+    // Update score display
+    const scoreDisplay = document.querySelector("#score-display");
+    if (scoreDisplay) scoreDisplay.textContent = score;
+
+    // Update lines display
+    const linesDisplay = document.querySelector("#lines-display");
+    if (linesDisplay) linesDisplay.textContent = lines;
+
+    // Update level display
+    const levelDisplay = document.querySelector("#level-display");
+    if (levelDisplay) levelDisplay.textContent = level;
+
+    // Update high score
+    if (score > this.highScore) {
+      this.highScore = score;
+      localStorage.setItem('tetrisHighScore', score);
+    }
+    const highScoreDisplay = document.querySelector("#high-score-display");
+    if (highScoreDisplay) highScoreDisplay.textContent = this.highScore;
+
+    // Update status message
+    const info1 = document.querySelector("#info1");
+    if (info1) info1.textContent = "PLAYING";
+
+    const info2 = document.querySelector("#info2");
+    if (info2) info2.textContent = "Press ENTER to Pause";
+
+    // Render next piece preview
+    this.renderNextPiece(nextPiece);
+  }
+
+  renderNextPiece(nextPiece) {
+    const nextPieceDisplay = document.querySelector("#next-piece-display");
+    if (!nextPieceDisplay || !nextPiece) return;
+
+    // Create a simple ASCII representation of the next piece
+    const colorMap = {
+      1: '#00ffff', // I - Cyan
+      2: '#0000ff', // J - Blue
+      3: '#ff8800', // L - Orange
+      4: '#ffff00', // O - Yellow
+      5: '#00ff00', // S - Green
+      6: '#ff00ff', // T - Magenta
+      7: '#ff0000', // Z - Red
+    };
+
+    let html = '<div style="display: inline-block;">';
+    for (let y = 0; y < nextPiece.blocks.length; y++) {
+      html += '<div style="display: flex; justify-content: center;">';
+      for (let x = 0; x < nextPiece.blocks[y].length; x++) {
+        const block = nextPiece.blocks[y][x];
+        if (block) {
+          const color = colorMap[block] || '#ffffff';
+          html += `<div style="width: 20px; height: 20px; margin: 2px; background: ${color}; border: 1px solid rgba(255,255,255,0.3); border-radius: 3px; box-shadow: 0 0 10px ${color}80;"></div>`;
+        } else {
+          html += '<div style="width: 20px; height: 20px; margin: 2px;"></div>';
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    nextPieceDisplay.innerHTML = html;
+  }
+
   clearScreen({ lines, score }) {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Line :" + lines + " Score :" + score;
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    // This method is now handled by updateUIDisplay
+    this.updateUIDisplay({ lines, score, level: Math.floor(lines * 0.1) });
   }
 
   renderStartScreen() {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Start";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    const info1 = document.querySelector("#info1");
+    if (info1) info1.textContent = "Press ENTER to Start";
+    
+    const info2 = document.querySelector("#info2");
+    if (info2) info2.textContent = "Use arrow keys to play";
   }
 
   renderPauseScreen() {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Resume";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    const info1 = document.querySelector("#info1");
+    if (info1) info1.textContent = "PAUSED";
+    
+    const info2 = document.querySelector("#info2");
+    if (info2) info2.textContent = "Press ENTER to Resume";
   }
 
   renderEndScreen({ score }) {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "GAME OVER  Score :" + score;
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "Press ENTER to Resume";
-    let info3 = document.querySelector("#info3");
-    info3.innerHTML = "https://github.com/Konstantin84UKR/Tetris_WebGPU";
+    const info1 = document.querySelector("#info1");
+    if (info1) info1.textContent = "GAME OVER";
+    
+    const info2 = document.querySelector("#info2");
+    if (info2) {
+      if (score >= this.highScore) {
+        info2.textContent = `🎉 NEW HIGH SCORE: ${score}! Press ENTER to restart`;
+      } else {
+        info2.textContent = `Final Score: ${score} - Press ENTER to restart`;
+      }
+    }
   }
 
   //// ***** WEBGPU ***** ////
