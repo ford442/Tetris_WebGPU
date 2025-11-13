@@ -114,7 +114,7 @@ export default class Game {
                 playfield[y][x] = element;
 
                 // Заполняю данными "Текушей" фигуры
-                const { y: pieceY, x: pieceX, blocks } = this.activPiece;
+                const { y: pieceY, x: pieceX, blocks } = this.activePiece;
 
                 for (let activPiece_y = 0; activPiece_y < blocks.length; activPiece_y++) {
                     for (let activPiece_x = 0; activPiece_x < blocks[activPiece_y].length; activPiece_x++) {
@@ -171,23 +171,23 @@ export default class Game {
     }
 
     movePieceLeft() {
-        this.activPiece.x -= 1;
+        this.activePiece.x -= 1;
         if (this.hasCollision()) {
-            this.activPiece.x += 1;
+            this.activePiece.x += 1;
         }
     }
 
     movePieceRight() {
-        this.activPiece.x += 1;
+        this.activePiece.x += 1;
         if (this.hasCollision()) {
-            this.activPiece.x -= 1;
+            this.activePiece.x -= 1;
         }
     }
 
     movePieceDown() {
-        this.activPiece.y += 1;
+        this.activePiece.y += 1;
         if (this.hasCollision()) {
-            this.activPiece.y -= 1;
+            this.activePiece.y -= 1;
             this.lockPiece();
             const linesScore = this.clearLine();
             if (linesScore) {
@@ -199,7 +199,7 @@ export default class Game {
 
     rotatePiece(rightRurn = true) {
 
-        const blocks = this.activPiece.blocks;
+        const blocks = this.activePiece.blocks;
         const length = blocks.length;
 
         const temp = [];
@@ -225,14 +225,14 @@ export default class Game {
                 }
             }
         }
-        this.activPiece.blocks = temp;
+        this.activePiece.blocks = temp;
         if (this.hasCollision()) {
-            this.activPiece.blocks = blocks;
+            this.activePiece.blocks = blocks;
         } else {
-            //  this.activPiece.blocks = temp;
+            //  this.activePiece.blocks = temp;
         }
 
-        // console.log(this.activPiece.blocks);
+        // console.log(this.activePiece.blocks);
     }
 
     hasCollision() {
@@ -269,7 +269,7 @@ export default class Game {
     }
 
     updatePieces() {
-        this.activPiece = this.nextPiece;
+        this.activePiece = this.nextPiece;
         this.nextPiece = this.createPiece();
     }
 
