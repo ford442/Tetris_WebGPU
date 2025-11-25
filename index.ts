@@ -40,6 +40,8 @@ uiContainer.innerHTML = `
     <button id="pause-button">PAUSE</button>
   </div>
   <div id="game-over">GAME OVER</div>
+  <div id="info1"></div>
+  <div id="info2"></div>
 `;
 
 const game = new Game();

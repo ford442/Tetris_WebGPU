@@ -289,6 +289,7 @@ export default class View {
   }
 
   resize() {
+    if (!this.device) return;
     this.width = window.innerWidth;
     this.heigh = window.innerHeight;
     this.canvasWebGPU.width = this.width;
@@ -308,9 +309,9 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    glMatrix.mat4.identity(this.PROJMATRIX);
+    Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (40 * Math.PI) / 180;
-    glMatrix.mat4.perspective(
+    Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
       this.canvasWebGPU.width / this.canvasWebGPU.height,
@@ -318,9 +319,9 @@ export default class View {
       150
     );
 
-    this.vpMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.identity(this.vpMatrix);
-    glMatrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+    this.vpMatrix = Matrix.mat4.create();
+    Matrix.mat4.identity(this.vpMatrix);
+    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
   }
 
   setTheme(themeName) {
@@ -466,25 +467,25 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.MODELMATRIX = glMatrix.mat4.create();
-    this.NORMALMATRIX = glMatrix.mat4.create();
-    this.VIEWMATRIX = glMatrix.mat4.create();
-    this.PROJMATRIX = glMatrix.mat4.create();
+    this.MODELMATRIX = Matrix.mat4.create();
+    this.NORMALMATRIX = Matrix.mat4.create();
+    this.VIEWMATRIX = Matrix.mat4.create();
+    this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
     let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
 
-    glMatrix.mat4.identity(this.VIEWMATRIX);
-    glMatrix.mat4.lookAt(
+    Matrix.mat4.identity(this.VIEWMATRIX);
+    Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
       [9.0, -20.0, 0.0], // target
       [0.0, 1.0, 0.0] // up
     );
 
-    glMatrix.mat4.identity(this.PROJMATRIX);
+    Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (40 * Math.PI) / 180;
-    glMatrix.mat4.perspective(
+    Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
       this.canvasWebGPU.width / this.canvasWebGPU.height,
@@ -492,9 +493,9 @@ export default class View {
       150
     );
 
-    this.vpMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.identity(this.vpMatrix);
-    glMatrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+    this.vpMatrix = Matrix.mat4.create();
+    Matrix.mat4.identity(this.vpMatrix);
+    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
@@ -661,18 +662,18 @@ export default class View {
           ],
         });
 
-        glMatrix.mat4.identity(this.MODELMATRIX);
-        glMatrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.identity(this.MODELMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
 
-        glMatrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
           colom * 2.2, // выравниваю по размеру модельки одного блока
           row * -2.2,
           0.0,
         ]);
 
-        glMatrix.mat4.identity(this.NORMALMATRIX);
-        glMatrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        glMatrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
+        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
@@ -779,18 +780,18 @@ export default class View {
           ],
         });
 
-        glMatrix.mat4.identity(this.MODELMATRIX);
-        glMatrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.identity(this.MODELMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
 
-        glMatrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
           colom * 2.2 - 2.0, // выравниваю по размеру модельки одного блока
           row * -2.2 + 2.0,
           0.0,
         ]);
 
-        glMatrix.mat4.identity(this.NORMALMATRIX);
-        glMatrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        glMatrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
+        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
