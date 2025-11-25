@@ -1,4 +1,4 @@
-import * as Matrix from "./gl-matrix.js";
+import * as Matrix from "gl-matrix";
 
 ////
 
@@ -148,6 +148,46 @@ const state = {
 ////
 
 export default class View {
+  element: HTMLElement;
+  width: number;
+  heigh: number;
+  nextPieceContext: CanvasRenderingContext2D;
+  canvasWebGPU: HTMLCanvasElement;
+  ctxWebGPU: GPUCanvasContext;
+  isWebGPU: { result: boolean; description: string };
+  playfildBorderWidth: number;
+  playfildX: number;
+  playfildY: number;
+  playfildWidth: number;
+  playfildHeight: number;
+  playfildInnerWidth: number;
+  playfildInnerHeight: number;
+  blockWidth: number;
+  blockHeight: number;
+  panelX: number;
+  panelY: number;
+  panelWidth: number;
+  panelHeight: number;
+  state: { playfield: number[][] };
+  blockData: any;
+  device: GPUDevice;
+  numberOfVertices: number;
+  vertexBuffer: GPUBuffer;
+  normalBuffer: GPUBuffer;
+  pipeline: GPURenderPipeline;
+  fragmentUniformBuffer: GPUBuffer;
+  MODELMATRIX: any;
+  NORMALMATRIX: any;
+  VIEWMATRIX: any;
+  PROJMATRIX: any;
+  vpMatrix: any;
+  renderPassDescription: GPURenderPassDescriptor;
+  vertexUniformBuffer: GPUBuffer;
+  vertexUniformBuffer_border: GPUBuffer;
+  uniformBindGroup_ARRAY: GPUBindGroup[];
+  uniformBindGroup_ARRAY_border: GPUBindGroup[];
+  x: number;
+
   themes = {
     pastel: {
       0: [0.3, 0.3, 0.3],
@@ -175,7 +215,7 @@ export default class View {
 
   currentTheme = this.themes.pastel;
 
-  constructor(element, width, heigh, rows, coloms, nextPieceContext) {
+  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
     this.heigh = heigh;
@@ -672,7 +712,6 @@ export default class View {
     const state_Border = {
       playfield: [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
