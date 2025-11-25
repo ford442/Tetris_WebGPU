@@ -9,26 +9,28 @@
     <link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/themes.css">
     <style>
         html {
             overflow-y: hidden;
+        }
+        #bg-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
         }
     </style>
 </head>
 
 <body>
-    <div id=root>
-        <h1><span style="color: red ;">T</span><span style="color: orange;">E</span><span
-                style="color: yellow;">T</span><span style="color: #3c803c;">R</span><span
-                style="color: cyan;">I</span><span style="color: darkmagenta;">S</span><span style="color: red;">
-                WebGPU</span></h1><br>
-        <div id=info>
-            
-            <p id=info1>Created by Konstantin84UKR </p>
-            <p id=info2>-----------------------------</p><a id=info3
-                href="https://github.com/Konstantin84UKR/Tetris_WebGPU">https://github.com/Konstantin84UKR/Tetris_WebGPU</a>
-        </div>
-    </div> 
+    <video id="bg-video" autoplay loop muted>
+        <source src="https://img.noahcohn.com/agent/clouds.mp4" type="video/mp4">
+    </video>
+    <div id="ui-container"></div>
     <script src='./index.js' type='module'></script>
 </body>
 
