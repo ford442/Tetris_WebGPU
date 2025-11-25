@@ -2,7 +2,15 @@ import Game from "./src/game.js";
 import View from "./src/viewWebGPU.js";
 import Controller from "./src/controller.js";
 
-const uiContainer = document.getElementById('ui-container');
+declare global {
+  interface Window {
+    game: Game;
+    view: View;
+    controller: Controller;
+  }
+}
+
+const uiContainer = document.getElementById('ui-container')!;
 
 // Create UI
 uiContainer.innerHTML = `
@@ -35,24 +43,24 @@ uiContainer.innerHTML = `
 `;
 
 const game = new Game();
-const view = new View(document.body, window.innerWidth, window.innerHeight, 20, 10, document.getElementById('next-piece-canvas').getContext('2d'));
+const view = new View(document.body, window.innerWidth, window.innerHeight, 20, 10, (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!);
 const controller = new Controller(game, view, view);
 
-document.getElementById('pastel-theme').addEventListener('click', () => {
+document.getElementById('pastel-theme')!.addEventListener('click', () => {
   document.body.className = 'pastel-theme';
   view.setTheme('pastel');
 });
 
-document.getElementById('neon-theme').addEventListener('click', () => {
+document.getElementById('neon-theme')!.addEventListener('click', () => {
   document.body.className = 'neon-theme';
   view.setTheme('neon');
 });
 
-document.getElementById('start-button').addEventListener('click', () => {
+document.getElementById('start-button')!.addEventListener('click', () => {
     controller.play();
 });
 
-document.getElementById('pause-button').addEventListener('click', () => {
+document.getElementById('pause-button')!.addEventListener('click', () => {
     controller.pause();
 });
 
@@ -61,4 +69,4 @@ window.view = view;
 window.controller = controller;
 
 // Set default theme
-document.getElementById('pastel-theme').click();
+document.getElementById('pastel-theme')!.click();
