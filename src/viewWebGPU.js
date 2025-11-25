@@ -148,24 +148,45 @@ const state = {
 ////
 
 export default class View {
-  static colorWebGL = {
-    0: [0.3, 0.3, 0.3],
-    1: [0.0, 1.0, 1.0],
-    2: [0.0, 0.0, 1.0],
-    3: [1.0, 0.5, 0.0],
-    4: [1.0, 1.0, 0.0],
-    5: [0.0, 1.0, 0.0],
-    6: [0.5, 0.0, 0.5],
-    7: [1.0, 0.0, 0.0],
+  themes = {
+    pastel: {
+      0: [0.3, 0.3, 0.3],
+      1: [0.69, 0.92, 0.95], // I
+      2: [0.73, 0.87, 0.98], // J
+      3: [1.0, 0.8, 0.74],   // L
+      4: [1.0, 0.98, 0.77], // O
+      5: [0.78, 0.9, 0.79],  // S
+      6: [0.88, 0.75, 0.91], // T
+      7: [1.0, 0.8, 0.82],   // Z
+      border: [0.82, 0.77, 0.91],
+    },
+    neon: {
+      0: [0.1, 0.1, 0.1],
+      1: [0.0, 1.0, 1.0], // Cyan for I
+      2: [0.0, 0.0, 1.0], // Blue for J
+      3: [1.0, 0.5, 0.0], // Orange for L
+      4: [1.0, 1.0, 0.0], // Yellow for O
+      5: [0.0, 1.0, 0.0], // Green for S
+      6: [0.5, 0.0, 1.0], // Purple for T
+      7: [1.0, 0.0, 0.0], // Red for Z
+      border: [1.0, 1.0, 1.0],
+    }
   };
 
-  constructor(element, width, heigh, rows, coloms) {
+  currentTheme = this.themes.pastel;
+
+  constructor(element, width, heigh, rows, coloms, nextPieceContext) {
     this.element = element;
     this.width = width;
     this.heigh = heigh;
+    this.nextPieceContext = nextPieceContext;
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
+    this.canvasWebGPU.style.position = 'absolute';
+    this.canvasWebGPU.style.top = '0';
+    this.canvasWebGPU.style.left = '0';
+    this.canvasWebGPU.style.pointerEvents = 'none';
     this.canvasWebGPU.width = this.width;
     this.canvasWebGPU.height = this.heigh;
 
@@ -219,6 +240,7 @@ export default class View {
     if (this.isWebGPU.result) {
       this.element.appendChild(this.canvasWebGPU);
       this.preRender();
+      window.addEventListener('resize', this.resize.bind(this));
     } else {
       let divError = document.createElement("div");
       divError.innerText = this.isWebGPU.description;
@@ -226,9 +248,71 @@ export default class View {
     }
   }
 
+  resize() {
+    this.width = window.innerWidth;
+    this.heigh = window.innerHeight;
+    this.canvasWebGPU.width = this.width;
+    this.canvasWebGPU.height = this.heigh;
+
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const presentationSize = [
+      this.canvasWebGPU.width * devicePixelRatio,
+      this.canvasWebGPU.height * devicePixelRatio,
+    ];
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    this.ctxWebGPU.configure({
+      device: this.device,
+      format: presentationFormat,
+      size: presentationSize,
+      alphaMode: 'premultiplied',
+    });
+
+    glMatrix.mat4.identity(this.PROJMATRIX);
+    let fovy = (40 * Math.PI) / 180;
+    glMatrix.mat4.perspective(
+      this.PROJMATRIX,
+      fovy,
+      this.canvasWebGPU.width / this.canvasWebGPU.height,
+      1,
+      150
+    );
+
+    this.vpMatrix = glMatrix.mat4.create();
+    glMatrix.mat4.identity(this.vpMatrix);
+    glMatrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+  }
+
+  setTheme(themeName) {
+    this.currentTheme = this.themes[themeName];
+    this.renderPlayfild_Border_WebGPU();
+  }
+
+  renderNextPiece(nextPiece) {
+    this.nextPieceContext.clearRect(0, 0, this.nextPieceContext.canvas.width, this.nextPieceContext.canvas.height);
+    const { blocks } = nextPiece;
+    const blockSize = 20;
+    const themeColors = Object.values(this.currentTheme);
+
+    blocks.forEach((row, y) => {
+      row.forEach((value, x) => {
+        if (value > 0) {
+          const color = themeColors[value];
+          this.nextPieceContext.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
+          this.nextPieceContext.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+        }
+      });
+    });
+  }
+
   renderMainScreen(state) {
     this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
+    this.renderNextPiece(state.nextPiece);
+
+    document.getElementById('score').textContent = state.score;
+    document.getElementById('lines').textContent = state.lines;
+    document.getElementById('level').textContent = state.level;
   }
 
   clearScreen({ lines, score }) {
@@ -253,12 +337,7 @@ export default class View {
   }
 
   renderEndScreen({ score }) {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "GAME OVER  Score :" + score;
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "Press ENTER to Resume";
-    let info3 = document.querySelector("#info3");
-    info3.innerHTML = "https://github.com/Konstantin84UKR/Tetris_WebGPU";
+    document.getElementById('game-over').style.display = 'block';
   }
 
   //// ***** WEBGPU ***** ////
@@ -279,6 +358,7 @@ export default class View {
       device: this.device,
       format: presentationFormat,
       size: presentationSize,
+      alphaMode: 'premultiplied',
     });
 
     const shader = Shaders();
@@ -389,7 +469,7 @@ export default class View {
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       32,
-      new Float32Array(View.colorWebGL[5])
+      new Float32Array(this.currentTheme[5])
     );
 
     let textureView = this.ctxWebGPU.getCurrentTexture().createView();
@@ -403,7 +483,7 @@ export default class View {
       colorAttachments: [
         {
           view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, //background color
+          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
           loadOp: 'clear',
           storeOp: "store",
         },
@@ -454,7 +534,7 @@ export default class View {
       colorAttachments: [
         {
           view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, //background color
+          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
           storeOp: "store",
           loadOp: 'clear',
         },
@@ -574,7 +654,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(View.colorWebGL[colorBlockindex])
+          new Float32Array(this.currentTheme[colorBlockindex])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -693,7 +773,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          new Float32Array([0.5, 0.5, 0.5])
+          new Float32Array(this.currentTheme.border)
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
