@@ -1,5 +1,15 @@
+import Game from "./game.js";
+import View from "./viewWebGPU.js";
+
 export default class Controller {
-  constructor(game, view, viewWebGPU) {
+  game: Game;
+  view: View;
+  viewWebGPU: View;
+  isPlaying: boolean;
+  gameLoopID: number | null;
+  intervalID: number | null;
+
+  constructor(game: Game, view: View, viewWebGPU: View) {
     this.game = game;
     this.view = view;
     this.viewWebGPU = viewWebGPU;
@@ -11,26 +21,26 @@ export default class Controller {
     this.play();
   }
 
-  update() {
-    game.movePieceDown();
+  update(): void {
+    this.game.movePieceDown();
     this.updateView();
   }
 
-  play() {
+  play(): void {
     this.isPlaying = true;
     this.startTimer();
     this.updateView();
     this.gameLoop(this);
   }
 
-  pause() {
+  pause(): void {
     this.isPlaying = false;
     this.stopTimer();
     this.updateView();
     this.view.renderPauseScreen();
   }
 
-  startTimer() {
+  startTimer(): void {
     const speed = 1000 - this.game.getState().level * 100;
 
     if (!this.intervalID) {
@@ -43,32 +53,32 @@ export default class Controller {
     }
   }
 
-  stopTimer() {
+  stopTimer(): void {
     if (this.intervalID) {
       clearInterval(this.intervalID);
       this.intervalID = null;
     }
   }
 
-  updateView() {
+  updateView(): void {
     const state = this.game.getState();
 
     if (state.isGameOwer) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
     } else if (!this.isPlaying) {
-      this.view.renderPauseScreen(state);
+      this.view.renderPauseScreen();
     } else {
       this.view.renderMainScreen(state);
     }
   }
 
-  reset() {
+  reset(): void {
     this.game.reset();
     this.play();
   }
 
-  handleKeyDown(event) {
+  handleKeyDown(event: KeyboardEvent): void {
     const state = this.game.getState();
 
     switch (event.keyCode) {
@@ -101,11 +111,11 @@ export default class Controller {
     }
   }
 
-  gameLoop(thisRL) {
+  gameLoop(thisRL: Controller): void {
     let dt = 0;
     let old_time = 0;
 
-    const animate = function (time) {
+    const animate = function (time: number) {
       if (!old_time) old_time = time;
       if (Math.abs(time - old_time) >= 1000 / 30) {
         const stateForWebGPU = thisRL.game.getState();
