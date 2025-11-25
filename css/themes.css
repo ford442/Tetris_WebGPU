@@ -1,0 +1,106 @@
+/* Themes */
+body.pastel-theme {
+  --background-color: #f0e6f2;
+  --text-color: #7b6d8d;
+  --button-bg: #d1c4e9;
+  --button-text: #5e548e;
+  --border-color: #bca0dc;
+  --h1-color: #a1887f;
+}
+
+body.neon-theme {
+  --background-color: #000000;
+  --text-color: #ffffff;
+  --button-bg: #ff00ff;
+  --button-text: #ffffff;
+  --border-color: #00ffff;
+  --h1-color: #ffff00;
+}
+
+#ui-container {
+  font-family: 'Press Start 2P', cursive;
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  backdrop-filter: blur(5px);
+}
+
+.pastel-theme #ui-container, .neon-theme #ui-container {
+  color: var(--text-color);
+}
+
+#ui-container h1 {
+  font-size: 2em;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.pastel-theme #ui-container h1, .neon-theme #ui-container h1 {
+  color: var(--h1-color);
+}
+
+.info-line {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+  font-size: 1em;
+}
+
+.info-line p:first-child {
+  font-weight: bold;
+}
+
+#next-piece-container {
+  text-align: center;
+}
+
+#next-piece-canvas {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  margin-top: 10px;
+}
+
+.theme-buttons,
+.control-buttons {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.theme-buttons button,
+.control-buttons button {
+  padding: 10px 20px;
+  font-family: 'Press Start 2P', cursive;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin: 0 5px;
+}
+
+.pastel-theme .theme-buttons button, .pastel-theme .control-buttons button,
+.neon-theme .theme-buttons button, .neon-theme .control-buttons button {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: 2px solid var(--border-color);
+}
+
+.pastel-theme .theme-buttons button:hover, .pastel-theme .control-buttons button:hover,
+.neon-theme .theme-buttons button:hover, .neon-theme .control-buttons button:hover {
+  background-color: var(--border-color);
+  color: white;
+}
+
+#game-over {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 3em;
+    color: var(--h1-color);
+    text-align: center;
+}
