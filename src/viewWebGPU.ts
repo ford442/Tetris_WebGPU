@@ -112,7 +112,7 @@ const Shaders = () => {
                 }
                 let ambient:f32 = ${params.ambientIntensity};
                 let finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
-                return vec4<f32>(finalColor, 1.0);
+                return vec4<f32>(finalColor, vColor.w);
             }`;
 
   return {
@@ -447,6 +447,18 @@ export default class View {
         targets: [
           {
             format: presentationFormat,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+            },
           },
         ],
       },
@@ -636,7 +648,13 @@ export default class View {
         if (!playfield[row][colom]) {
           continue;
         }
-        let colorBlockindex = playfield[row][colom];
+        let value = playfield[row][colom];
+        let colorBlockindex = Math.abs(value);
+        let alpha = value < 0 ? 0.3 : 1.0;
+
+        let color = this.currentTheme[colorBlockindex];
+        // If it's a ghost piece, we might want to ensure it has a color even if the index is somehow weird
+        if (!color) color = this.currentTheme[0];
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -694,7 +712,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme[colorBlockindex])
+          new Float32Array([...color, alpha])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -812,7 +830,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme.border)
+          new Float32Array([...this.currentTheme.border, 1.0])
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);

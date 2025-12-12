@@ -144,6 +144,25 @@ export default class Game {
       }
     }
 
+    // Calculate Ghost Piece
+    if (!this.gameower) {
+      const ghostY = this.getGhostY();
+      const { x: pieceX, blocks } = this.activPiece;
+
+      for (let y = 0; y < blocks.length; y++) {
+        for (let x = 0; x < blocks[y].length; x++) {
+          if (blocks[y][x] && (ghostY + y) >= 0) {
+            // Only draw ghost if the cell is empty (0)
+            // Note: collision logic ensures ghost doesn't overlap locked blocks,
+            // but we check just in case to avoid overwriting locked blocks in the view
+            if (playfield[ghostY + y][pieceX + x] === 0) {
+              playfield[ghostY + y][pieceX + x] = -blocks[y][x]; // Negative value for ghost
+            }
+          }
+        }
+      }
+    }
+
     // this.playfield = playfield;
     return {
       score: this.score,
@@ -152,6 +171,32 @@ export default class Game {
       nextPiece: this.nextPiece,
       isGameOwer: this.gameower,
       playfield
+    }
+  }
+
+  getGhostY(): number {
+    const originalY = this.activPiece.y;
+    while (!this.hasCollision()) {
+      this.activPiece.y++;
+    }
+    const ghostY = this.activPiece.y - 1;
+    this.activPiece.y = originalY;
+    return ghostY;
+  }
+
+  hardDrop(): void {
+    const ghostY = this.getGhostY();
+    this.activPiece.y = ghostY;
+    // Force a collision check which should lead to locking
+    this.activPiece.y += 1; // Move into collision
+    if (this.hasCollision()) {
+        this.activPiece.y -= 1; // Back to ghost position
+        this.lockPiece();
+        const linesScore = this.clearLine();
+        if (linesScore) {
+            this.updateScore(linesScore);
+        }
+        this.updatePieces();
     }
   }
 
