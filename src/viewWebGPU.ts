@@ -48,6 +48,79 @@ const CubeData = () => {
   };
 };
 
+const FullScreenQuadData = () => {
+    const positions = new Float32Array([
+        -1.0, -1.0, 0.0,
+         1.0, -1.0, 0.0,
+        -1.0,  1.0, 0.0,
+        -1.0,  1.0, 0.0,
+         1.0, -1.0, 0.0,
+         1.0,  1.0, 0.0,
+    ]);
+    return { positions };
+};
+
+const BackgroundShaders = () => {
+    const vertex = `
+        struct Output {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vUV : vec2<f32>,
+        };
+
+        @vertex
+        fn main(@location(0) position: vec3<f32>) -> Output {
+            var output: Output;
+            output.Position = vec4<f32>(position, 1.0);
+            output.vUV = position.xy * 0.5 + 0.5; // Map -1..1 to 0..1
+            return output;
+        }
+    `;
+
+    const fragment = `
+        struct Uniforms {
+            time : f32,
+            resolution : vec2<f32>,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        @fragment
+        fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
+            var color = vec3<f32>(0.0);
+
+            // Grid effect
+            let uv = vUV * 20.0;
+            let time = uniforms.time * 0.5;
+
+            // Animated grid
+            let val = sin(uv.x + time) + cos(uv.y + time);
+
+            // "Plasma" like background
+            let r = sin(vUV.x * 10.0 + time) * 0.5 + 0.5;
+            let g = cos(vUV.y * 10.0 + time * 0.8) * 0.5 + 0.5;
+            let b = sin((vUV.x + vUV.y) * 10.0 - time) * 0.5 + 0.5;
+
+            // Deep space / futuristic grid look
+            let gridX = abs(fract(vUV.x * 20.0 + time * 0.1) - 0.5);
+            let gridY = abs(fract(vUV.y * 20.0 + time * 0.05) - 0.5);
+            let grid = 1.0 - step(0.02, min(gridX, gridY));
+
+            let deepColor = vec3<f32>(0.05, 0.0, 0.1);
+            let gridColor = vec3<f32>(0.0, 0.8, 1.0) * 0.5;
+
+            color = mix(deepColor, gridColor, grid);
+
+            // Add some moving lights/glows
+            let light1 = 0.05 / length(vUV - vec2<f32>(0.5 + sin(time)*0.3, 0.5 + cos(time*0.7)*0.3));
+            color += vec3<f32>(0.8, 0.2, 0.5) * light1;
+
+            return vec4<f32>(color, 1.0);
+        }
+    `;
+
+    return { vertex, fragment };
+};
+
+
 const Shaders = () => {
   let params = {};
   // define default input values:
@@ -72,8 +145,8 @@ const Shaders = () => {
                 @builtin(position) Position : vec4<f32>,
                 @location(0) vPosition : vec4<f32>,
                 @location(1) vNormal : vec4<f32>,
-                @location(2) vColor : vec4<f32>             
-              
+                @location(2) vColor : vec4<f32>,
+                @location(3) vUV : vec2<f32>
             };
           
             @vertex
@@ -84,6 +157,8 @@ const Shaders = () => {
                 output.vNormal   =  uniforms.normalMatrix*normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
                 output.vColor   =  uniforms.colorVertex;
+                // Simple UV mapping for cube faces based on position
+                output.vUV = position.xy * 0.5 + 0.5;
                 return output;
             }`;
 
@@ -96,7 +171,7 @@ const Shaders = () => {
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
               let N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -111,7 +186,21 @@ const Shaders = () => {
                     specular = ${params.specularIntensity} * pow(max(dot(N, H),0.0), ${params.shininess});
                 }
                 let ambient:f32 = ${params.ambientIntensity};
-                let finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+
+                // Futuristic Edge Glow
+                // Use UV coordinates to determine if we are near the edge of the face
+                let edgeWidth = 0.05;
+                let edgeX = step(1.0 - edgeWidth, abs(vUV.x - 0.5) * 2.0);
+                let edgeY = step(1.0 - edgeWidth, abs(vUV.y - 0.5) * 2.0);
+                let isEdge = max(edgeX, edgeY);
+
+                var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+
+                // Mix in emission for edge
+                if (isEdge > 0.5) {
+                    finalColor = finalColor + vColor.xyz * 0.8; // Boost brightness at edges
+                }
+
                 return vec4<f32>(finalColor, 1.0);
             }`;
 
@@ -120,32 +209,6 @@ const Shaders = () => {
     fragment,
   };
 };
-
-const state = {
-  playfield: [
-    [7, 2, 3, 4, 5, 6, 7, 0, 1, 1],
-    [4, 5, 6, 0, 0, 0, 0, 0, 0, 1],
-    [0, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 1, 1, 1, 0, 0],
-    [0, 1, 1, 1, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
-    [0, 1, 0, 0, 7, 6, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 5, 2, 0, 0, 0],
-    [0, 0, 0, 0, 0, 4, 2, 0, 0, 0],
-    [0, 0, 0, 0, 0, 3, 2, 2, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 1, 0, 0, 0, 0, 0, 0, 1, 1],
-  ],
-};
-////
 
 export default class View {
   element: HTMLElement;
@@ -188,6 +251,14 @@ export default class View {
   uniformBindGroup_ARRAY_border: GPUBindGroup[];
   x: number;
 
+  // Background specific
+  backgroundPipeline: GPURenderPipeline;
+  backgroundVertexBuffer: GPUBuffer;
+  backgroundUniformBuffer: GPUBuffer;
+  backgroundBindGroup: GPUBindGroup;
+  startTime: number;
+
+
   themes = {
     pastel: {
       0: [0.3, 0.3, 0.3],
@@ -220,6 +291,7 @@ export default class View {
     this.width = width;
     this.heigh = heigh;
     this.nextPieceContext = nextPieceContext;
+    this.startTime = performance.now();
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -249,8 +321,6 @@ export default class View {
     this.panelY = 0;
     this.panelWidth = this.width / 3;
     this.panelHeight = this.heigh;
-
-    //this.element.appendChild(this.canvasWebGPU);
 
     this.state = {
       playfield: [
@@ -357,23 +427,23 @@ export default class View {
 
   clearScreen({ lines, score }) {
     let info = document.querySelector("#info1");
-    info.innerHTML = "Line :" + lines + " Score :" + score;
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    // info.innerHTML = "Line :" + lines + " Score :" + score;
+    // let info2 = document.querySelector("#info2");
+    // info2.innerHTML = "-----------------------------";
   }
 
   renderStartScreen() {
     let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Start";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    // info.innerHTML = "Press ENTER to Start";
+    // let info2 = document.querySelector("#info2");
+    // info2.innerHTML = "-----------------------------";
   }
 
   renderPauseScreen() {
     let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Resume";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+    // info.innerHTML = "Press ENTER to Resume";
+    // let info2 = document.querySelector("#info2");
+    // info2.innerHTML = "-----------------------------";
   }
 
   renderEndScreen({ score }) {
@@ -401,6 +471,7 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
+    // --- Main Block Pipeline ---
     const shader = Shaders();
     const cubeData = CubeData();
 
@@ -447,6 +518,18 @@ export default class View {
         targets: [
           {
             format: presentationFormat,
+            blend: {
+              color: {
+                  srcFactor: 'src-alpha',
+                  dstFactor: 'one-minus-src-alpha',
+                  operation: 'add',
+              },
+              alpha: {
+                  srcFactor: 'one',
+                  dstFactor: 'one-minus-src-alpha',
+                  operation: 'add',
+              },
+            }
           },
         ],
       },
@@ -459,6 +542,45 @@ export default class View {
         depthCompare: "less",
       },
     });
+
+    // --- Background Pipeline ---
+    const backgroundShader = BackgroundShaders();
+    const bgData = FullScreenQuadData();
+    this.backgroundVertexBuffer = this.CreateGPUBuffer(this.device, bgData.positions);
+
+    this.backgroundPipeline = this.device.createRenderPipeline({
+        label: 'background pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: backgroundShader.vertex }),
+            entryPoint: 'main',
+            buffers: [{
+                arrayStride: 12,
+                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }]
+            }]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: backgroundShader.fragment }),
+            entryPoint: 'main',
+            targets: [{ format: presentationFormat }]
+        },
+        primitive: { topology: 'triangle-list' }
+    });
+
+    // Background Uniforms
+    this.backgroundUniformBuffer = this.device.createBuffer({
+        size: 16, // time(f32) + padding(f32) + resolution(vec2<f32>) = 4+4+8 = 16
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.backgroundBindGroup = this.device.createBindGroup({
+        layout: this.backgroundPipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: this.backgroundUniformBuffer }
+        }]
+    });
+
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
@@ -533,8 +655,6 @@ export default class View {
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store'
-        // stencilLoadValue: 0,
-        // stencilStoreOp: "store",
       },
     };
 
@@ -563,6 +683,11 @@ export default class View {
   };
 
   Frame = () => {
+    // Update time for background
+    const currentTime = (performance.now() - this.startTime) / 1000.0;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([currentTime]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+
     let textureView = this.ctxWebGPU.getCurrentTexture().createView();
     const depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
@@ -570,13 +695,35 @@ export default class View {
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
+    // 1. Render Background
+    const backgroundPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [{
+            view: textureView,
+            loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+    bgPassEncoder.setPipeline(this.backgroundPipeline);
+    bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+    bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
+    bgPassEncoder.draw(6); // 2 triangles
+    bgPassEncoder.end();
+
+
+    // 2. Render Playfield
+    this.renderPlayfild_WebGPU(this.state);
+
     this.renderPassDescription = {
       colorAttachments: [
         {
           view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+          loadValue: 'load', // Load the background
+          loadOp: 'load',
           storeOp: "store",
-          loadOp: 'clear',
         },
       ],
       depthStencilAttachment: {
@@ -584,14 +731,9 @@ export default class View {
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store'
-        // stencilLoadValue: 0,
-        // stencilStoreOp: "store",
       },
     };
 
-    this.renderPlayfild_WebGPU(this.state);
-
-    const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass(
       this.renderPassDescription
     );
@@ -637,6 +779,12 @@ export default class View {
           continue;
         }
         let colorBlockindex = playfield[row][colom];
+        let colorArray = this.currentTheme[colorBlockindex];
+        // Handle ghost pieces (negative values)
+        if (colorBlockindex < 0) {
+            colorArray = this.currentTheme[Math.abs(colorBlockindex)];
+            // Optional: modify alpha or color for ghost piece if we had alpha support in shader/blending
+        }
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -694,7 +842,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme[colorBlockindex])
+          new Float32Array(colorArray)
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
