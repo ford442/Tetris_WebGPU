@@ -18,6 +18,7 @@ uiContainer.innerHTML = `
   <div class="theme-buttons">
     <button id="pastel-theme">Pastel</button>
     <button id="neon-theme">Neon</button>
+    <button id="futuristic-theme">Future</button>
   </div>
   <div class="info-line">
     <p>SCORE</p>
@@ -56,6 +57,13 @@ document.getElementById('neon-theme')!.addEventListener('click', () => {
   view.setTheme('neon');
 });
 
+document.getElementById('futuristic-theme')!.addEventListener('click', () => {
+  document.body.className = 'futuristic-theme';
+  // Futuristic theme shares the neon color palette for blocks but has different UI
+  // We could add a specific palette in View if needed, but 'neon' works well for now.
+  view.setTheme('neon');
+});
+
 document.getElementById('start-button')!.addEventListener('click', () => {
     controller.play();
 });
@@ -68,5 +76,5 @@ window.game = game;
 window.view = view;
 window.controller = controller;
 
-// Set default theme
-document.getElementById('pastel-theme')!.click();
+// Set default theme to futuristic for the new look
+document.getElementById('futuristic-theme')!.click();
