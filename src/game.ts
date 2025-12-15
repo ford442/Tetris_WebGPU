@@ -97,54 +97,72 @@ export default class Game {
   }
 
   getState(): GameState {
-    const playfield = [
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ];
+    const playfield: number[][] = [];
 
+    // 1. Copy locked blocks
     for (let y = 0; y < this.playfield.length; y++) {
-      const lines = this.playfield[y];
-
-      for (let x = 0; x < lines.length; x++) {
-        const element = lines[x];
-        // Заполняю данными состояния поля
-        playfield[y][x] = element;
-
-        // Заполняю данными "Текушей" фигуры
-        const { y: pieceY, x: pieceX, blocks } = this.activPiece;
-
-        for (let activPiece_y = 0; activPiece_y < blocks.length; activPiece_y++) {
-          for (let activPiece_x = 0; activPiece_x < blocks[activPiece_y].length; activPiece_x++) {
-
-            if ((blocks[activPiece_y][activPiece_x]) && (pieceY + activPiece_y) >= 0) {
-
-              playfield[pieceY + activPiece_y][pieceX + activPiece_x] = blocks[activPiece_y][activPiece_x];
-            }
-          }
-        }
+      playfield[y] = [];
+      for (let x = 0; x < this.playfield[y].length; x++) {
+        playfield[y][x] = this.playfield[y][x];
       }
     }
 
-    // this.playfield = playfield;
+    // 2. Calculate and Draw Ghost Piece
+    // Clone active piece position
+    let ghostY = this.activPiece.y;
+    const ghostX = this.activPiece.x;
+    const blocks = this.activPiece.blocks;
+
+    // Move ghost down until collision
+    // Temporarily move active piece to check collision
+    const originalY = this.activPiece.y;
+
+    while(true) {
+        this.activPiece.y++;
+        if (this.hasCollision()) {
+            this.activPiece.y--;
+            ghostY = this.activPiece.y;
+            break;
+        }
+    }
+    this.activPiece.y = originalY; // Restore
+
+    // Draw Ghost (negative values)
+    for (let y = 0; y < blocks.length; y++) {
+        for (let x = 0; x < blocks[y].length; x++) {
+            if (blocks[y][x]) {
+                const targetY = ghostY + y;
+                const targetX = ghostX + x;
+                // Only draw if within bounds and cell is empty (don't overwrite locked blocks,
+                // though ghost shouldn't overlap locked blocks by definition of collision)
+                if (targetY >= 0 && targetY < playfield.length &&
+                    targetX >= 0 && targetX < playfield[0].length) {
+                        // Use negative value for ghost
+                        // If there is already a block there, we might overlap?
+                        // Ghost is only valid where there is no block.
+                        if (playfield[targetY][targetX] === 0) {
+                             playfield[targetY][targetX] = -blocks[y][x];
+                        }
+                }
+            }
+        }
+    }
+
+    // 3. Draw Active Piece
+    const { y: pieceY, x: pieceX } = this.activPiece;
+    for (let y = 0; y < blocks.length; y++) {
+        for (let x = 0; x < blocks[y].length; x++) {
+            if (blocks[y][x]) {
+                 const targetY = pieceY + y;
+                 const targetX = pieceX + x;
+                 if (targetY >= 0 && targetY < playfield.length &&
+                     targetX >= 0 && targetX < playfield[0].length) {
+                        playfield[targetY][targetX] = blocks[y][x];
+                 }
+            }
+        }
+    }
+
     return {
       score: this.score,
       level: this.level,
@@ -213,6 +231,22 @@ export default class Game {
     }
   }
 
+  dropPiece(): void {
+    while (true) {
+      this.activPiece.y += 1;
+      if (this.hasCollision()) {
+        this.activPiece.y -= 1;
+        break;
+      }
+    }
+    this.lockPiece();
+    const linesScore = this.clearLine();
+    if (linesScore) {
+      this.updateScore(linesScore);
+    }
+    this.updatePieces();
+  }
+
   rotatePiece(rightRurn: boolean = true): void {
     const blocks = this.activPiece.blocks;
     const length = blocks.length;
@@ -240,7 +274,33 @@ export default class Game {
     }
     this.activPiece.blocks = temp;
     if (this.hasCollision()) {
-      this.activPiece.blocks = blocks;
+        // Wall Kicks
+        const kicks = [
+            [1, 0], [-1, 0],  // Shift right/left
+            [0, -1],          // Shift up (floor kick)
+            [1, -1], [-1, -1], // Diagonal up
+            [2, 0], [-2, 0]   // Shift 2 (for I piece)
+        ];
+
+        let kicked = false;
+        const originalX = this.activPiece.x;
+        const originalY = this.activPiece.y;
+
+        for (const [ox, oy] of kicks) {
+            this.activPiece.x = originalX + ox;
+            this.activPiece.y = originalY + oy;
+            if (!this.hasCollision()) {
+                kicked = true;
+                break;
+            }
+        }
+
+        if (!kicked) {
+             // Revert everything
+             this.activPiece.x = originalX;
+             this.activPiece.y = originalY;
+             this.activPiece.blocks = blocks;
+        }
     } else {
       //  this.activPiece.blocks = temp;
     }
