@@ -201,7 +201,7 @@ const Shaders = () => {
                     finalColor = finalColor + vColor.xyz * 0.8; // Boost brightness at edges
                 }
 
-                return vec4<f32>(finalColor, 1.0);
+                return vec4<f32>(finalColor, vColor.w);
             }`;
 
   return {
@@ -584,7 +584,7 @@ export default class View {
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 48,
+      size: 64, // Increased size to be safe, though we only use 48 bytes currently
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -780,10 +780,12 @@ export default class View {
         }
         let colorBlockindex = playfield[row][colom];
         let colorArray = this.currentTheme[colorBlockindex];
+        let alpha = 1.0;
+
         // Handle ghost pieces (negative values)
         if (colorBlockindex < 0) {
             colorArray = this.currentTheme[Math.abs(colorBlockindex)];
-            // Optional: modify alpha or color for ghost piece if we had alpha support in shader/blending
+            alpha = 0.3;
         }
 
         let uniformBindGroup_next = this.device.createBindGroup({
@@ -842,7 +844,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(colorArray)
+          new Float32Array([...colorArray, alpha])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -960,7 +962,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme.border)
+          new Float32Array([...this.currentTheme.border, 1.0])
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
