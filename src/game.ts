@@ -2,6 +2,8 @@ interface Piece {
   blocks: number[][];
   x: number;
   y: number;
+  rotation: number; // 0: Spawn, 1: Right, 2: 180, 3: Left
+  type: string;
 }
 
 interface GameState {
@@ -21,19 +23,40 @@ export default class Game {
   activPiece!: Piece;
   nextPiece!: Piece;
 
+  private static readonly SRS_KICKS_JLSTZ = {
+    '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '1-0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '1-2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '2-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '2-3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '3-2': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '3-0': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '0-3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]]
+  };
+
+  private static readonly SRS_KICKS_I = {
+    '0-1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
+    '1-0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
+    '1-2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
+    '2-1': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
+    '2-3': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
+    '3-2': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
+    '3-0': [[0, 0], [1, 0], [-2, 0], [1, 2], [-2, -1]],
+    '0-3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]]
+  };
+
   constructor() {
     this.reset();
   }
 
   get level(): number {
     return Math.floor(this.lines * 0.1);
-    //return 9;
   }
 
   createPiece(): Piece {
     const index = Math.floor(Math.random() * 7);
     const type = 'IJLOSTZ'[index];
-    const piece: Piece = { blocks: [], x: 0, y: 0 };
+    const piece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type };
     switch (type) {
       case 'I':
         piece.blocks = [
@@ -45,16 +68,16 @@ export default class Game {
         break;
       case 'J':
         piece.blocks = [
+          [2, 0, 0],
           [2, 2, 2],
-          [0, 0, 2],
           [0, 0, 0]
         ];
         break;
       case 'L':
         piece.blocks = [
-          [3, 0, 0],
-          [3, 0, 0],
-          [3, 3, 0]
+          [0, 0, 3],
+          [3, 3, 3],
+          [0, 0, 0]
         ];
         break;
       case 'O':
@@ -74,8 +97,8 @@ export default class Game {
         break;
       case 'T':
         piece.blocks = [
-          [6, 6, 6],
           [0, 6, 0],
+          [6, 6, 6],
           [0, 0, 0]
         ];
         break;
@@ -90,15 +113,14 @@ export default class Game {
         throw new Error('Что то пошло не так!');
     }
 
-    piece.x = 4;
-    piece.y = -2;
+    piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
+    piece.y = -2; // Start slightly above visible area
 
     return piece;
   }
 
   getState(): GameState {
     const playfield = [
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -125,26 +147,38 @@ export default class Game {
       const lines = this.playfield[y];
 
       for (let x = 0; x < lines.length; x++) {
-        const element = lines[x];
-        // Заполняю данными состояния поля
-        playfield[y][x] = element;
+        playfield[y][x] = lines[x];
+      }
+    }
 
-        // Заполняю данными "Текушей" фигуры
-        const { y: pieceY, x: pieceX, blocks } = this.activPiece;
-
-        for (let activPiece_y = 0; activPiece_y < blocks.length; activPiece_y++) {
-          for (let activPiece_x = 0; activPiece_x < blocks[activPiece_y].length; activPiece_x++) {
-
-            if ((blocks[activPiece_y][activPiece_x]) && (pieceY + activPiece_y) >= 0) {
-
-              playfield[pieceY + activPiece_y][pieceX + activPiece_x] = blocks[activPiece_y][activPiece_x];
+    // Calculate Ghost Piece
+    const ghostPiece = this.getGhostPiece();
+    if (ghostPiece) {
+        const { y: pieceY, x: pieceX, blocks } = ghostPiece;
+        for (let y = 0; y < blocks.length; y++) {
+            for (let x = 0; x < blocks[y].length; x++) {
+                if (blocks[y][x] !== 0 && (pieceY + y) >= 0 && (pieceY + y) < 20) {
+                    // Only draw ghost if the cell is empty
+                    if (playfield[pieceY + y][pieceX + x] === 0) {
+                        playfield[pieceY + y][pieceX + x] = -blocks[y][x];
+                    }
+                }
             }
-          }
+        }
+    }
+
+    // Fill Active Piece
+    const { y: pieceY, x: pieceX, blocks } = this.activPiece;
+
+    for (let activPiece_y = 0; activPiece_y < blocks.length; activPiece_y++) {
+      for (let activPiece_x = 0; activPiece_x < blocks[activPiece_y].length; activPiece_x++) {
+
+        if ((blocks[activPiece_y][activPiece_x]) && (pieceY + activPiece_y) >= 0 && (pieceY + activPiece_y) < 20) {
+          playfield[pieceY + activPiece_y][pieceX + activPiece_x] = blocks[activPiece_y][activPiece_x];
         }
       }
     }
 
-    // this.playfield = playfield;
     return {
       score: this.score,
       level: this.level,
@@ -155,32 +189,45 @@ export default class Game {
     }
   }
 
+  getGhostPiece(): Piece | null {
+      if (this.gameower) return null;
+      const ghost = { ...this.activPiece, blocks: this.activPiece.blocks.map(row => [...row]) };
+
+      while (!this.hasCollisionPiece(ghost)) {
+          ghost.y++;
+      }
+      ghost.y--; // Back up one step
+      return ghost;
+  }
+
+  hasCollisionPiece(piece: Piece): boolean {
+    const playfield = this.playfield;
+    const { y: pieceY, x: pieceX, blocks } = piece;
+
+    for (let y = 0; y < blocks.length; y++) {
+      for (let x = 0; x < blocks[y].length; x++) {
+        if (blocks[y][x] !== 0) {
+            const boardY = pieceY + y;
+            const boardX = pieceX + x;
+
+            if (boardY >= 20 || boardX < 0 || boardX >= 10) {
+                return true;
+            }
+
+            if (boardY >= 0 && playfield[boardY][boardX] !== 0) {
+                return true;
+            }
+        }
+      }
+    }
+    return false;
+  }
+
   reset(): void {
     this.score = 0;
     this.lines = 0;
     this.gameower = false;
-    this.playfield = [
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ];
+    this.playfield = Array.from({ length: 20 }, () => Array(10).fill(0));
 
     this.activPiece = this.createPiece();
     this.nextPiece = this.createPiece();
@@ -213,18 +260,34 @@ export default class Game {
     }
   }
 
+  hardDrop(): void {
+      const ghost = this.getGhostPiece();
+      if (ghost) {
+          this.activPiece.y = ghost.y;
+          // Trigger lock immediately
+          this.lockPiece();
+          const linesScore = this.clearLine();
+          if (linesScore) {
+            this.updateScore(linesScore);
+          }
+          this.updatePieces();
+      }
+  }
+
   rotatePiece(rightRurn: boolean = true): void {
     const blocks = this.activPiece.blocks;
     const length = blocks.length;
+    const type = this.activPiece.type;
+    const currentRotation = this.activPiece.rotation;
+    let nextRotation = rightRurn ? (currentRotation + 1) % 4 : (currentRotation + 3) % 4;
 
     const temp: number[][] = [];
-
-    // console.log(blocks);
 
     for (let i = 0; i < length; i++) {
       temp[i] = new Array(length).fill(0);
     }
 
+    // Perform basic rotation
     if (rightRurn) {
       for (let y = 0; y < length; y++) {
         for (let x = 0; x < length; x++) {
@@ -238,33 +301,50 @@ export default class Game {
         }
       }
     }
+
+    // Store original state
+    const originalBlocks = this.activPiece.blocks;
+    const originalX = this.activPiece.x;
+    const originalY = this.activPiece.y;
+    const originalRotation = this.activPiece.rotation;
+
+    // Apply new blocks
     this.activPiece.blocks = temp;
-    if (this.hasCollision()) {
-      this.activPiece.blocks = blocks;
-    } else {
-      //  this.activPiece.blocks = temp;
+    this.activPiece.rotation = nextRotation;
+
+    // SRS Wall Kicks
+    let kicks: number[][] = [[0, 0]]; // Default is (0,0) test
+    const key = `${currentRotation}-${nextRotation}`;
+
+    if (type === 'I') {
+        kicks = (Game.SRS_KICKS_I as any)[key] || [[0, 0]];
+    } else if (type !== 'O') {
+        kicks = (Game.SRS_KICKS_JLSTZ as any)[key] || [[0, 0]];
     }
 
-    // console.log(this.activPiece.blocks);
+    let kicked = false;
+    for (const [offsetX, offsetY] of kicks) {
+        // Apply kick (Note: SRS Y is up-positive, but our board is down-positive, so we invert Y offset)
+        this.activPiece.x = originalX + offsetX;
+        this.activPiece.y = originalY - offsetY;
+
+        if (!this.hasCollision()) {
+            kicked = true;
+            break;
+        }
+    }
+
+    // Revert if all kicks failed
+    if (!kicked) {
+        this.activPiece.blocks = originalBlocks;
+        this.activPiece.x = originalX;
+        this.activPiece.y = originalY;
+        this.activPiece.rotation = originalRotation;
+    }
   }
 
   hasCollision(): boolean {
-    const playfield = this.playfield;
-    const { y: pieceY, x: pieceX, blocks } = this.activPiece;
-
-    for (let y = 0; y < blocks.length; y++) {
-      for (let x = 0; x < blocks[y].length; x++) {
-        if (
-          blocks[y][x] !== 0 && ((pieceY + y) >= 0) &&
-          ((playfield[pieceY + y] === undefined || playfield[pieceY + y][pieceX + x] === undefined) ||
-            (playfield[pieceY + y][pieceX + x] >= 1))
-        ) {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return this.hasCollisionPiece(this.activPiece);
   }
 
   lockPiece(): void {
@@ -272,10 +352,16 @@ export default class Game {
 
     for (let y = 0; y < blocks.length; y++) {
       for (let x = 0; x < blocks[y].length; x++) {
-        if (pieceY < 0) {
-          this.gameower = true;
-        } else if (blocks[y][x]) {
-          this.playfield[pieceY + y][pieceX + x] = blocks[y][x];
+        if (blocks[y][x]) {
+            // Check if game over (piece locked above the board)
+            if (pieceY + y < 0) {
+                this.gameower = true;
+                return;
+            }
+
+            if ((pieceY + y) < this.playfield.length) {
+                this.playfield[pieceY + y][pieceX + x] = blocks[y][x];
+            }
         }
       }
     }
@@ -284,6 +370,11 @@ export default class Game {
   updatePieces(): void {
     this.activPiece = this.nextPiece;
     this.nextPiece = this.createPiece();
+
+    // Check for immediate game over upon spawn
+    if (this.hasCollision()) {
+        this.gameower = true;
+    }
   }
 
   clearLine(): number {
@@ -304,7 +395,6 @@ export default class Game {
       }
       if (linesFull) {
         lines.unshift(y);
-        console.log(lines);
       }
     }
 
@@ -315,9 +405,7 @@ export default class Game {
       arr.fill(0);
       this.playfield.unshift(arr);
       this.lines += 1;
-      //this.updateScore(lines.length);
     }
-    //this.updateScore(lines.length);
 
     return lines.length;
   }
