@@ -779,12 +779,16 @@ export default class View {
           continue;
         }
         let colorBlockindex = playfield[row][colom];
-        let colorArray = this.currentTheme[colorBlockindex];
+        let colorArray = this.currentTheme[Math.abs(colorBlockindex)];
+        let alpha = 1.0;
+
         // Handle ghost pieces (negative values)
         if (colorBlockindex < 0) {
-            colorArray = this.currentTheme[Math.abs(colorBlockindex)];
-            // Optional: modify alpha or color for ghost piece if we had alpha support in shader/blending
+            alpha = 0.3;
         }
+
+        // Prepare RGBA color array
+        const colorRGBA = [...colorArray, alpha];
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -842,7 +846,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(colorArray)
+          new Float32Array(colorRGBA)
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
