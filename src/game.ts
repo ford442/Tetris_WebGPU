@@ -1,4 +1,4 @@
-interface Piece {
+export interface Piece {
   blocks: number[][];
   x: number;
   y: number;
@@ -6,11 +6,12 @@ interface Piece {
   type: string;
 }
 
-interface GameState {
+export interface GameState {
   score: number;
   level: number;
   lines: number;
   nextPiece: Piece;
+  holdPiece: Piece | null;
   isGameOwer: boolean;
   playfield: number[][];
 }
@@ -22,6 +23,12 @@ export default class Game {
   playfield!: number[][];
   activPiece!: Piece;
   nextPiece!: Piece;
+  holdPieceObj: Piece | null = null;
+  canHold: boolean = true;
+
+  // Lock Delay
+  lockTimer: number = 0;
+  readonly lockDelayTime: number = 500; // ms
 
   private static readonly SRS_KICKS_JLSTZ = {
     '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
@@ -53,9 +60,21 @@ export default class Game {
     return Math.floor(this.lines * 0.1);
   }
 
-  createPiece(): Piece {
-    const index = Math.floor(Math.random() * 7);
-    const type = 'IJLOSTZ'[index];
+  // Helper to reset piece position based on its type
+  resetPiecePosition(piece: Piece): void {
+      piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
+      piece.y = -2;
+      piece.rotation = 0;
+
+      // We might need to reset blocks rotation too if we modified them in place?
+      // Yes, rotatePiece modifies .blocks.
+      // So we should re-create blocks or reset them.
+      // Easiest is to re-create the piece structure based on type.
+      const freshPiece = this.createPieceByType(piece.type);
+      piece.blocks = freshPiece.blocks;
+  }
+
+  createPieceByType(type: string): Piece {
     const piece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type };
     switch (type) {
       case 'I':
@@ -110,13 +129,17 @@ export default class Game {
         ];
         break;
       default:
-        throw new Error('Что то пошло не так!');
+        throw new Error('Something went wrong!');
     }
-
     piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
-    piece.y = -2; // Start slightly above visible area
-
+    piece.y = -2;
     return piece;
+  }
+
+  createPiece(): Piece {
+    const index = Math.floor(Math.random() * 7);
+    const type = 'IJLOSTZ'[index];
+    return this.createPieceByType(type);
   }
 
   getState(): GameState {
@@ -158,7 +181,6 @@ export default class Game {
         for (let y = 0; y < blocks.length; y++) {
             for (let x = 0; x < blocks[y].length; x++) {
                 if (blocks[y][x] !== 0 && (pieceY + y) >= 0 && (pieceY + y) < 20) {
-                    // Only draw ghost if the cell is empty
                     if (playfield[pieceY + y][pieceX + x] === 0) {
                         playfield[pieceY + y][pieceX + x] = -blocks[y][x];
                     }
@@ -184,6 +206,7 @@ export default class Game {
       level: this.level,
       lines: this.lines,
       nextPiece: this.nextPiece,
+      holdPiece: this.holdPieceObj,
       isGameOwer: this.gameower,
       playfield
     }
@@ -228,15 +251,45 @@ export default class Game {
     this.lines = 0;
     this.gameower = false;
     this.playfield = Array.from({ length: 20 }, () => Array(10).fill(0));
+    this.holdPieceObj = null;
+    this.canHold = true;
+    this.lockTimer = 0;
 
     this.activPiece = this.createPiece();
     this.nextPiece = this.createPiece();
+  }
+
+  // Called every frame
+  update(dt: number): void {
+      if (this.gameower) return;
+
+      // Check if piece is on the ground
+      this.activPiece.y += 1;
+      const onGround = this.hasCollision();
+      this.activPiece.y -= 1;
+
+      if (onGround) {
+          this.lockTimer += dt;
+          if (this.lockTimer > this.lockDelayTime) {
+              this.lockPiece();
+              const linesScore = this.clearLine();
+              if (linesScore) {
+                  this.updateScore(linesScore);
+              }
+              this.updatePieces();
+          }
+      } else {
+          this.lockTimer = 0;
+      }
   }
 
   movePieceLeft(): void {
     this.activPiece.x -= 1;
     if (this.hasCollision()) {
       this.activPiece.x += 1;
+    } else {
+        // Successful move
+        this.resetLockTimerIfGrounded();
     }
   }
 
@@ -244,6 +297,9 @@ export default class Game {
     this.activPiece.x += 1;
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
+    } else {
+        // Successful move
+        this.resetLockTimerIfGrounded();
     }
   }
 
@@ -251,12 +307,14 @@ export default class Game {
     this.activPiece.y += 1;
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
-      this.lockPiece();
-      const linesScore = this.clearLine();
-      if (linesScore) {
-        this.updateScore(linesScore);
-      }
-      this.updatePieces();
+      // Do not lock here! lockTimer in update() handles it.
+      // But we can manually start the lock timer here if we want instant feedback?
+      // No, let the natural flow handle it.
+    } else {
+        // We moved down successfully
+        // We are inherently not on ground (or we just landed).
+        // If we just landed, next update() will start counting.
+        this.lockTimer = 0;
     }
   }
 
@@ -272,6 +330,29 @@ export default class Game {
           }
           this.updatePieces();
       }
+  }
+
+  hold(): void {
+      if (!this.canHold || this.gameower) return;
+
+      if (this.holdPieceObj === null) {
+          this.holdPieceObj = this.activPiece;
+          // Reset rotation and structure of held piece
+          this.resetPiecePosition(this.holdPieceObj);
+
+          this.activPiece = this.nextPiece;
+          this.nextPiece = this.createPiece();
+      } else {
+          const temp = this.activPiece;
+          this.activPiece = this.holdPieceObj;
+          this.holdPieceObj = temp;
+
+          this.resetPiecePosition(this.activPiece);
+          this.resetPiecePosition(this.holdPieceObj);
+      }
+
+      this.canHold = false;
+      this.lockTimer = 0;
   }
 
   rotatePiece(rightRurn: boolean = true): void {
@@ -340,7 +421,21 @@ export default class Game {
         this.activPiece.x = originalX;
         this.activPiece.y = originalY;
         this.activPiece.rotation = originalRotation;
+    } else {
+        // Successful rotation
+        this.resetLockTimerIfGrounded();
     }
+  }
+
+  resetLockTimerIfGrounded(): void {
+      // Check if we are now on the ground
+      this.activPiece.y += 1;
+      const onGround = this.hasCollision();
+      this.activPiece.y -= 1;
+
+      if (onGround) {
+          this.lockTimer = 0;
+      }
   }
 
   hasCollision(): boolean {
@@ -370,6 +465,8 @@ export default class Game {
   updatePieces(): void {
     this.activPiece = this.nextPiece;
     this.nextPiece = this.createPiece();
+    this.canHold = true;
+    this.lockTimer = 0;
 
     // Check for immediate game over upon spawn
     if (this.hasCollision()) {
