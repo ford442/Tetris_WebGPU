@@ -380,6 +380,7 @@ export default class View {
   }
 
   resize() {
+    if (!this.device) return;
     this.width = window.innerWidth;
     this.heigh = window.innerHeight;
     this.canvasWebGPU.width = this.width;
