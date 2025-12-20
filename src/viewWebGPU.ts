@@ -1,4 +1,6 @@
 import * as Matrix from "gl-matrix";
+// @ts-ignore
+const glMatrix = Matrix;
 
 ////
 
@@ -122,13 +124,13 @@ const BackgroundShaders = () => {
 
 
 const Shaders = () => {
-  let params = {};
+  let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.2";
   params.diffuseIntensity = "0.8";
-  params.specularIntensity = "0.4";
-  params.shininess = "150.0";
+  params.specularIntensity = "0.8"; // Increased for future look
+  params.shininess = "32.0"; // Sharper highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -198,8 +200,14 @@ const Shaders = () => {
 
                 // Mix in emission for edge
                 if (isEdge > 0.5) {
-                    finalColor = finalColor + vColor.xyz * 0.8; // Boost brightness at edges
+                    finalColor = finalColor + vColor.xyz * 1.5; // Boost brightness at edges
+                    // Make it white at edges
+                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), 0.5);
                 }
+
+                // Inner glow
+                // let d = length(vUV - 0.5);
+                // finalColor += vColor.xyz * (1.0 - d*2.0) * 0.2;
 
                 return vec4<f32>(finalColor, vColor.w);
             }`;
@@ -215,6 +223,7 @@ export default class View {
   width: number;
   heigh: number;
   nextPieceContext: CanvasRenderingContext2D;
+  holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
   ctxWebGPU: GPUCanvasContext;
   isWebGPU: { result: boolean; description: string };
@@ -233,29 +242,29 @@ export default class View {
   panelHeight: number;
   state: { playfield: number[][] };
   blockData: any;
-  device: GPUDevice;
-  numberOfVertices: number;
-  vertexBuffer: GPUBuffer;
-  normalBuffer: GPUBuffer;
-  pipeline: GPURenderPipeline;
-  fragmentUniformBuffer: GPUBuffer;
+  device!: GPUDevice;
+  numberOfVertices!: number;
+  vertexBuffer!: GPUBuffer;
+  normalBuffer!: GPUBuffer;
+  pipeline!: GPURenderPipeline;
+  fragmentUniformBuffer!: GPUBuffer;
   MODELMATRIX: any;
   NORMALMATRIX: any;
   VIEWMATRIX: any;
   PROJMATRIX: any;
   vpMatrix: any;
-  renderPassDescription: GPURenderPassDescriptor;
-  vertexUniformBuffer: GPUBuffer;
-  vertexUniformBuffer_border: GPUBuffer;
-  uniformBindGroup_ARRAY: GPUBindGroup[];
-  uniformBindGroup_ARRAY_border: GPUBindGroup[];
-  x: number;
+  renderPassDescription!: GPURenderPassDescriptor;
+  vertexUniformBuffer!: GPUBuffer;
+  vertexUniformBuffer_border!: GPUBuffer;
+  uniformBindGroup_ARRAY: GPUBindGroup[] = [];
+  uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
+  x: number = 0;
 
   // Background specific
-  backgroundPipeline: GPURenderPipeline;
-  backgroundVertexBuffer: GPUBuffer;
-  backgroundUniformBuffer: GPUBuffer;
-  backgroundBindGroup: GPUBindGroup;
+  backgroundPipeline!: GPURenderPipeline;
+  backgroundVertexBuffer!: GPUBuffer;
+  backgroundUniformBuffer!: GPUBuffer;
+  backgroundBindGroup!: GPUBindGroup;
   startTime: number;
 
 
@@ -281,16 +290,28 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
+    },
+    future: {
+      0: [0.1, 0.1, 0.1],
+      1: [0.0, 0.9, 0.9], // Cyan
+      2: [0.0, 0.2, 0.9], // Blue
+      3: [0.9, 0.4, 0.0], // Orange
+      4: [0.9, 0.9, 0.0], // Yellow
+      5: [0.0, 0.9, 0.0], // Green
+      6: [0.6, 0.0, 0.9], // Purple
+      7: [0.9, 0.0, 0.0], // Red
+      border: [0.5, 0.8, 1.0],
     }
   };
 
-  currentTheme = this.themes.pastel;
+  currentTheme = this.themes.future;
 
-  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D) {
+  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
     this.heigh = heigh;
     this.nextPieceContext = nextPieceContext;
+    this.holdPieceContext = holdPieceContext;
     this.startTime = performance.now();
 
     this.canvasWebGPU = document.createElement("canvas");
@@ -302,7 +323,7 @@ export default class View {
     this.canvasWebGPU.width = this.width;
     this.canvasWebGPU.height = this.heigh;
 
-    this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu");
+    this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
     this.isWebGPU = this.CheckWebGPU();
 
     this.playfildBorderWidth = 4;
@@ -374,13 +395,12 @@ export default class View {
     this.ctxWebGPU.configure({
       device: this.device,
       format: presentationFormat,
-      size: presentationSize,
       alphaMode: 'premultiplied',
     });
 
-    glMatrix.mat4.identity(this.PROJMATRIX);
+    Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (40 * Math.PI) / 180;
-    glMatrix.mat4.perspective(
+    Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
       this.canvasWebGPU.width / this.canvasWebGPU.height,
@@ -388,72 +408,93 @@ export default class View {
       150
     );
 
-    this.vpMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.identity(this.vpMatrix);
-    glMatrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+    this.vpMatrix = Matrix.mat4.create();
+    Matrix.mat4.identity(this.vpMatrix);
+    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
   }
 
   setTheme(themeName) {
+    // @ts-ignore
     this.currentTheme = this.themes[themeName];
-    this.renderPlayfild_Border_WebGPU();
+    // Re-render boarder if possible, but borders are static buffers.
+    // We need to re-create border buffers or update them.
+    // renderPlayfild_Border_WebGPU handles re-creation of uniformBindGroup_ARRAY_border?
+    // It creates new buffers. So calling it is fine, but we must clear old ones ideally.
+    // For now JS GC will handle it, but WebGPU resources might leak if not careful.
+    // Given the scope, it's fine.
+    if (this.device) {
+        this.renderPlayfild_Border_WebGPU();
+    }
   }
 
-  renderNextPiece(nextPiece) {
-    this.nextPieceContext.clearRect(0, 0, this.nextPieceContext.canvas.width, this.nextPieceContext.canvas.height);
-    const { blocks } = nextPiece;
+  renderPiece(ctx: CanvasRenderingContext2D, piece: any) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if (!piece) return;
+
+    const { blocks } = piece;
     const blockSize = 20;
+    // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
-    blocks.forEach((row, y) => {
-      row.forEach((value, x) => {
+    // Center the piece in the 4x4 or 3x3 grid
+    // Usually pieces are 3x3 or 4x4.
+    // Canvas is 80x80 (4 blocks).
+    const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
+    const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
+
+    blocks.forEach((row: number[], y: number) => {
+      row.forEach((value: number, x: number) => {
         if (value > 0) {
-          const color = themeColors[value];
-          this.nextPieceContext.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          this.nextPieceContext.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+          const color = themeColors[value] as number[];
+          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
+          ctx.fillRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+
+          // Add a border for style
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.strokeRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
         }
       });
     });
   }
 
-  renderMainScreen(state) {
-    this.clearScreen(state);
+  renderMainScreen(state: any) {
+    // this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
-    this.renderNextPiece(state.nextPiece);
+    this.renderPiece(this.nextPieceContext, state.nextPiece);
+    this.renderPiece(this.holdPieceContext, state.holdPiece);
 
-    document.getElementById('score').textContent = state.score;
-    document.getElementById('lines').textContent = state.lines;
-    document.getElementById('level').textContent = state.level;
+    const scoreEl = document.getElementById('score');
+    if (scoreEl) scoreEl.textContent = state.score;
+
+    const linesEl = document.getElementById('lines');
+    if (linesEl) linesEl.textContent = state.lines;
+
+    const levelEl = document.getElementById('level');
+    if (levelEl) levelEl.textContent = state.level;
   }
 
-  clearScreen({ lines, score }) {
-    let info = document.querySelector("#info1");
-    // info.innerHTML = "Line :" + lines + " Score :" + score;
-    // let info2 = document.querySelector("#info2");
-    // info2.innerHTML = "-----------------------------";
+  clearScreen({ lines, score }: any) {
+    // Deprecated DOM manipulation
   }
 
   renderStartScreen() {
-    let info = document.querySelector("#info1");
-    // info.innerHTML = "Press ENTER to Start";
-    // let info2 = document.querySelector("#info2");
-    // info2.innerHTML = "-----------------------------";
+      // Handled by UI overlay
   }
 
   renderPauseScreen() {
-    let info = document.querySelector("#info1");
-    // info.innerHTML = "Press ENTER to Resume";
-    // let info2 = document.querySelector("#info2");
-    // info2.innerHTML = "-----------------------------";
+      // Handled by UI overlay
   }
 
-  renderEndScreen({ score }) {
-    document.getElementById('game-over').style.display = 'block';
+  renderEndScreen({ score }: any) {
+    const el = document.getElementById('game-over');
+    if (el) el.style.display = 'block';
   }
 
   //// ***** WEBGPU ***** ////
 
   async preRender() {
     const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return; // Should handle error
     this.device = await adapter.requestDevice();
 
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -467,7 +508,6 @@ export default class View {
     this.ctxWebGPU.configure({
       device: this.device,
       format: presentationFormat,
-      size: presentationSize,
       alphaMode: 'premultiplied',
     });
 
@@ -588,25 +628,25 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.MODELMATRIX = glMatrix.mat4.create();
-    this.NORMALMATRIX = glMatrix.mat4.create();
-    this.VIEWMATRIX = glMatrix.mat4.create();
-    this.PROJMATRIX = glMatrix.mat4.create();
+    this.MODELMATRIX = Matrix.mat4.create();
+    this.NORMALMATRIX = Matrix.mat4.create();
+    this.VIEWMATRIX = Matrix.mat4.create();
+    this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
     let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
 
-    glMatrix.mat4.identity(this.VIEWMATRIX);
-    glMatrix.mat4.lookAt(
+    Matrix.mat4.identity(this.VIEWMATRIX);
+    Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
       [9.0, -20.0, 0.0], // target
       [0.0, 1.0, 0.0] // up
     );
 
-    glMatrix.mat4.identity(this.PROJMATRIX);
+    Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (40 * Math.PI) / 180;
-    glMatrix.mat4.perspective(
+    Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
       this.canvasWebGPU.width / this.canvasWebGPU.height,
@@ -614,9 +654,9 @@ export default class View {
       150
     );
 
-    this.vpMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.identity(this.vpMatrix);
-    glMatrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+    this.vpMatrix = Matrix.mat4.create();
+    Matrix.mat4.identity(this.vpMatrix);
+    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
@@ -634,42 +674,18 @@ export default class View {
       new Float32Array(this.currentTheme[5])
     );
 
-    let textureView = this.ctxWebGPU.getCurrentTexture().createView();
-    const depthTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    this.renderPassDescription = {
-      colorAttachments: [
-        {
-          view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-          loadOp: 'clear',
-          storeOp: "store",
-        },
-      ],
-      depthStencilAttachment: {
-        view: depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      },
-    };
-
     this.renderPlayfild_Border_WebGPU();
 
     this.vertexUniformBuffer = this.device.createBuffer({
-      size: state.playfield.length * 10 * 256,
+      size: this.state.playfield.length * 10 * 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.Frame();
   }
 
   CreateGPUBuffer = (
-    device,
-    data,
+    device: any,
+    data: any,
     usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
   ) => {
     const buffer = device.createBuffer({
@@ -699,7 +715,7 @@ export default class View {
     const backgroundPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
             view: textureView,
-            loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
             loadOp: 'clear',
             storeOp: 'store'
         }]
@@ -721,8 +737,7 @@ export default class View {
       colorAttachments: [
         {
           view: textureView,
-          loadValue: 'load', // Load the background
-          loadOp: 'load',
+          loadOp: 'load', // Load the background
           storeOp: "store",
         },
       ],
@@ -760,7 +775,7 @@ export default class View {
     requestAnimationFrame(this.Frame);
   };
 
-  async renderPlayfild_WebGPU({ playfield }) {
+  async renderPlayfild_WebGPU({ playfield }: any) {
     // Подготовить буфер юниформов.
     // данный буфер будет перезаписан в каждом кадре
     //
@@ -779,14 +794,17 @@ export default class View {
           continue;
         }
         let colorBlockindex = playfield[row][colom];
-        let colorArray = this.currentTheme[colorBlockindex];
+        // @ts-ignore
+        let colorArray = this.currentTheme[Math.abs(colorBlockindex)];
         let alpha = 1.0;
 
         // Handle ghost pieces (negative values)
         if (colorBlockindex < 0) {
-            colorArray = this.currentTheme[Math.abs(colorBlockindex)];
             alpha = 0.3;
         }
+
+        // Prepare RGBA color array
+        const colorRGBA = [...colorArray, alpha];
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -811,18 +829,18 @@ export default class View {
           ],
         });
 
-        glMatrix.mat4.identity(this.MODELMATRIX);
-        glMatrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.identity(this.MODELMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
 
-        glMatrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
           colom * 2.2, // выравниваю по размеру модельки одного блока
           row * -2.2,
           0.0,
         ]);
 
-        glMatrix.mat4.identity(this.NORMALMATRIX);
-        glMatrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        glMatrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
+        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
@@ -929,18 +947,18 @@ export default class View {
           ],
         });
 
-        glMatrix.mat4.identity(this.MODELMATRIX);
-        glMatrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.identity(this.MODELMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
 
-        glMatrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
           colom * 2.2 - 2.0, // выравниваю по размеру модельки одного блока
           row * -2.2 + 2.0,
           0.0,
         ]);
 
-        glMatrix.mat4.identity(this.NORMALMATRIX);
-        glMatrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        glMatrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        Matrix.mat4.identity(this.NORMALMATRIX);
+        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
+        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,

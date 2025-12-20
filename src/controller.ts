@@ -1,13 +1,35 @@
 import Game from "./game.js";
 import View from "./viewWebGPU.js";
 
+const DAS = 160; // Delayed Auto Shift (ms)
+const ARR = 30;  // Auto Repeat Rate (ms)
+
 export default class Controller {
   game: Game;
   view: View;
   viewWebGPU: View;
   isPlaying: boolean;
   gameLoopID: number | null;
-  intervalID: number | null;
+  intervalID: number | null; // For gravity
+
+  // Input state
+  keys: { [key: string]: boolean } = {
+    ArrowLeft: false,
+    ArrowRight: false,
+    ArrowDown: false,
+    ArrowUp: false,
+    Space: false,
+    Enter: false,
+    KeyC: false,
+    ShiftLeft: false,
+    ShiftRight: false
+  };
+
+  keyTimers: { [key: string]: number } = {
+    ArrowLeft: 0,
+    ArrowRight: 0,
+    ArrowDown: 0
+  };
 
   constructor(game: Game, view: View, viewWebGPU: View) {
     this.game = game;
@@ -18,22 +40,27 @@ export default class Controller {
     this.intervalID = null;
 
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
+    document.addEventListener("keyup", this.handleKeyUp.bind(this));
+
     this.play();
   }
 
+  // Called by gravity timer
   update(): void {
     this.game.movePieceDown();
     this.updateView();
   }
 
   play(): void {
+    if (this.isPlaying) return;
     this.isPlaying = true;
     this.startTimer();
     this.updateView();
-    this.gameLoop(this);
+    this.gameLoop();
   }
 
   pause(): void {
+    if (!this.isPlaying) return;
     this.isPlaying = false;
     this.stopTimer();
     this.updateView();
@@ -41,16 +68,16 @@ export default class Controller {
   }
 
   startTimer(): void {
+    this.stopTimer();
     const speed = 1000 - this.game.getState().level * 100;
+    const intervalTime = speed > 50 ? speed : 50; // Cap max speed
 
-    if (!this.intervalID) {
-      this.intervalID = setInterval(
-        () => {
-          this.update();
-        },
-        speed > 0 ? speed : 100
-      );
-    }
+    this.intervalID = setInterval(
+      () => {
+        this.update();
+      },
+      intervalTime
+    ) as any;
   }
 
   stopTimer(): void {
@@ -63,13 +90,17 @@ export default class Controller {
   updateView(): void {
     const state = this.game.getState();
 
+    // Check game over
     if (state.isGameOwer) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
+      this.stopTimer();
     } else if (!this.isPlaying) {
       this.view.renderPauseScreen();
     } else {
       this.view.renderMainScreen(state);
+      // Sync WebGPU state immediately on logic update
+      this.viewWebGPU.state = state;
     }
   }
 
@@ -79,7 +110,8 @@ export default class Controller {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    const state = this.game.getState();
+    // Map older keyCodes if necessary, or just use code
+    let code = event.code;
 
     switch (event.keyCode) {
       case 13: // ENTER
@@ -115,22 +147,120 @@ export default class Controller {
     }
   }
 
-  gameLoop(thisRL: Controller): void {
-    let dt = 0;
-    let old_time = 0;
+  handleKeyUp(event: KeyboardEvent): void {
+      let code = event.code;
+      // Fallback
+      if (!code) {
+        if (event.keyCode === 37) code = 'ArrowLeft';
+        if (event.keyCode === 38) code = 'ArrowUp';
+        if (event.keyCode === 39) code = 'ArrowRight';
+        if (event.keyCode === 40) code = 'ArrowDown';
+        if (event.keyCode === 32) code = 'Space';
+        if (event.keyCode === 13) code = 'Enter';
+    }
 
-    const animate = function (time: number) {
-      if (!old_time) old_time = time;
-      if (Math.abs(time - old_time) >= 1000 / 30) {
-        const stateForWebGPU = thisRL.game.getState();
-        thisRL.viewWebGPU.state = stateForWebGPU;
-        old_time = time;
+      if (this.keys.hasOwnProperty(code)) {
+          this.keys[code] = false;
+          // Reset timer on release
+          if (this.keyTimers.hasOwnProperty(code)) {
+              this.keyTimers[code] = 0;
+          }
       }
-      if (thisRL.isPlaying == false) {
-        return 0;
+  }
+
+  onKeyPress(code: string): void {
+      switch (code) {
+          case 'ArrowLeft':
+              this.game.movePieceLeft();
+              this.keyTimers.ArrowLeft = 0;
+              this.updateView();
+              break;
+          case 'ArrowRight':
+              this.game.movePieceRight();
+              this.keyTimers.ArrowRight = 0;
+              this.updateView();
+              break;
+          case 'ArrowUp':
+              this.game.rotatePiece();
+              this.updateView();
+              break;
+          case 'ArrowDown':
+              this.game.movePieceDown();
+              this.keyTimers.ArrowDown = 0;
+              this.updateView();
+              break;
+          case 'Space':
+              this.game.hardDrop();
+              this.updateView();
+              break;
+          case 'KeyC':
+          case 'ShiftLeft':
+          case 'ShiftRight':
+              this.game.hold();
+              this.updateView();
+              break;
       }
-      window.requestAnimationFrame(animate);
+  }
+
+  gameLoop(): void {
+    let lastTime = performance.now();
+
+    const animate = (time: number) => {
+      if (!this.isPlaying) {
+          // If paused/gameover, we can stop the loop or just return and not request next frame.
+          // Better to stop and restart in play().
+          return;
+      }
+
+      const dt = time - lastTime;
+      lastTime = time;
+
+      this.handleInput(dt);
+      this.game.update(dt);
+
+      // WebGPU update can happen here too if it needs continuous animation (like background)
+      // The viewWebGPU.Frame() method handles its own loop, but we need to push state to it.
+      // Actually viewWebGPU.Frame calls requestAnimationFrame itself recursively.
+      // But we update `viewWebGPU.state` in `updateView()`.
+
+      requestAnimationFrame(animate);
     };
-    animate(0);
+
+    requestAnimationFrame(animate);
+  }
+
+  handleInput(dt: number): void {
+      // Horizontal Movement
+      if (this.keys.ArrowLeft) {
+          this.keyTimers.ArrowLeft += dt;
+          if (this.keyTimers.ArrowLeft > DAS) {
+              while (this.keyTimers.ArrowLeft > DAS + ARR) {
+                  this.game.movePieceLeft();
+                  this.keyTimers.ArrowLeft -= ARR;
+                  this.updateView();
+              }
+          }
+      } else if (this.keys.ArrowRight) {
+          this.keyTimers.ArrowRight += dt;
+          if (this.keyTimers.ArrowRight > DAS) {
+              while (this.keyTimers.ArrowRight > DAS + ARR) {
+                  this.game.movePieceRight();
+                  this.keyTimers.ArrowRight -= ARR;
+                  this.updateView();
+              }
+          }
+      }
+
+      // Soft Drop
+      if (this.keys.ArrowDown) {
+          this.keyTimers.ArrowDown += dt;
+          // Soft drop usually has a much shorter DAS/ARR or none at all (instant repeat)
+          // Let's use a shorter interval for soft drop, e.g. ARR / 2 or just ARR
+          if (this.keyTimers.ArrowDown > ARR) { // No DAS for soft drop usually, just speed
+             this.game.movePieceDown();
+             this.keyTimers.ArrowDown = 0;
+             this.updateView();
+          }
+      }
   }
 }

@@ -1,4 +1,135 @@
 body {
-  font-size: 10px; /* размер текста */
-  background: transparent !important;
+  font-family: 'Play', sans-serif;
+  margin: 0;
+  overflow: hidden;
+  color: white;
+  user-select: none;
+  /* Background handled by WebGPU canvas */
+}
+
+/* UI Container overlay on top of WebGPU canvas */
+#ui-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Let clicks pass through to canvas if needed, but we have buttons */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+h1 {
+    font-size: 3rem;
+    margin: 0 0 20px 0;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    pointer-events: auto;
+}
+
+.main-layout {
+    display: flex;
+    justify-content: space-between;
+    width: 80%;
+    max-width: 800px;
+    height: 80%;
+    pointer-events: none;
+}
+
+.left-panel, .right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    pointer-events: auto; /* Enable interaction with buttons */
+}
+
+.panel-box {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    backdrop-filter: blur(5px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.panel-label {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+    color: #aaa;
+    letter-spacing: 2px;
+}
+
+.panel-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 0;
+}
+
+button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: all 0.2s;
+    margin: 5px;
+    pointer-events: auto;
+}
+
+button:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+#game-over {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 4rem;
+    font-weight: bold;
+    color: #ff3333;
+    text-shadow: 0 0 20px black;
+    z-index: 100;
+    background: rgba(0,0,0,0.8);
+    padding: 40px;
+    border-radius: 10px;
+    border: 2px solid #ff3333;
+}
+
+canvas {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Themes */
+.pastel-theme .panel-box {
+    border-color: rgba(255, 182, 193, 0.5);
+}
+
+.neon-theme .panel-box {
+    border-color: rgba(0, 255, 255, 0.5);
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.futuristic-theme .panel-box {
+    border-color: rgba(100, 200, 255, 0.8);
+    background: rgba(10, 20, 40, 0.7);
+    box-shadow: 0 0 15px rgba(0, 150, 255, 0.3);
+    border-radius: 0;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.futuristic-theme h1 {
+    font-family: 'Courier New', Courier, monospace; /* Placeholder for a tech font */
+    letter-spacing: 5px;
 }
