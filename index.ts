@@ -60,6 +60,8 @@ uiContainer.innerHTML = `
   </div>
 
   <div id="game-over">GAME OVER</div>
+  <div id="info1"></div>
+  <div id="info2"></div>
 `;
 
 // Styles are in css/style.css, we should probably update them too.
