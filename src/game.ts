@@ -209,6 +209,26 @@ export default class Game {
         }
     }
 
+    // Calculate Ghost Piece
+    if (!this.gameower) {
+      const ghostY = this.getGhostY();
+      const { x: pieceX, blocks } = this.activPiece;
+
+      for (let y = 0; y < blocks.length; y++) {
+        for (let x = 0; x < blocks[y].length; x++) {
+          if (blocks[y][x] && (ghostY + y) >= 0) {
+            // Only draw ghost if the cell is empty (0)
+            // Note: collision logic ensures ghost doesn't overlap locked blocks,
+            // but we check just in case to avoid overwriting locked blocks in the view
+            if (playfield[ghostY + y][pieceX + x] === 0) {
+              playfield[ghostY + y][pieceX + x] = -blocks[y][x]; // Negative value for ghost
+            }
+          }
+        }
+      }
+    }
+
+    // this.playfield = playfield;
     return {
       score: this.score,
       level: this.level,
@@ -220,38 +240,30 @@ export default class Game {
     }
   }
 
-  getGhostPiece(): Piece | null {
-      if (this.gameower) return null;
-      const ghost = { ...this.activPiece, blocks: this.activPiece.blocks.map(row => [...row]) };
-
-      while (!this.hasCollisionPiece(ghost)) {
-          ghost.y++;
-      }
-      ghost.y--; // Back up one step
-      return ghost;
+  getGhostY(): number {
+    const originalY = this.activPiece.y;
+    while (!this.hasCollision()) {
+      this.activPiece.y++;
+    }
+    const ghostY = this.activPiece.y - 1;
+    this.activPiece.y = originalY;
+    return ghostY;
   }
 
-  hasCollisionPiece(piece: Piece): boolean {
-    const playfield = this.playfield;
-    const { y: pieceY, x: pieceX, blocks } = piece;
-
-    for (let y = 0; y < blocks.length; y++) {
-      for (let x = 0; x < blocks[y].length; x++) {
-        if (blocks[y][x] !== 0) {
-            const boardY = pieceY + y;
-            const boardX = pieceX + x;
-
-            if (boardY >= 20 || boardX < 0 || boardX >= 10) {
-                return true;
-            }
-
-            if (boardY >= 0 && playfield[boardY][boardX] !== 0) {
-                return true;
-            }
+  hardDrop(): void {
+    const ghostY = this.getGhostY();
+    this.activPiece.y = ghostY;
+    // Force a collision check which should lead to locking
+    this.activPiece.y += 1; // Move into collision
+    if (this.hasCollision()) {
+        this.activPiece.y -= 1; // Back to ghost position
+        this.lockPiece();
+        const linesScore = this.clearLine();
+        if (linesScore) {
+            this.updateScore(linesScore);
         }
-      }
+        this.updatePieces();
     }
-    return false;
   }
 
   reset(): void {

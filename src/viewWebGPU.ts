@@ -560,16 +560,16 @@ export default class View {
             format: presentationFormat,
             blend: {
               color: {
-                  srcFactor: 'src-alpha',
-                  dstFactor: 'one-minus-src-alpha',
-                  operation: 'add',
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
               },
               alpha: {
-                  srcFactor: 'one',
-                  dstFactor: 'one-minus-src-alpha',
-                  operation: 'add',
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
               },
-            }
+            },
           },
         ],
       },
@@ -793,18 +793,13 @@ export default class View {
         if (!playfield[row][colom]) {
           continue;
         }
-        let colorBlockindex = playfield[row][colom];
-        // @ts-ignore
-        let colorArray = this.currentTheme[Math.abs(colorBlockindex)];
-        let alpha = 1.0;
+        let value = playfield[row][colom];
+        let colorBlockindex = Math.abs(value);
+        let alpha = value < 0 ? 0.3 : 1.0;
 
-        // Handle ghost pieces (negative values)
-        if (colorBlockindex < 0) {
-            alpha = 0.3;
-        }
-
-        // Prepare RGBA color array
-        const colorRGBA = [...colorArray, alpha];
+        let color = this.currentTheme[colorBlockindex];
+        // If it's a ghost piece, we might want to ensure it has a color even if the index is somehow weird
+        if (!color) color = this.currentTheme[0];
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -862,7 +857,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array([...colorArray, alpha])
+          new Float32Array([...color, alpha])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);

@@ -141,7 +141,7 @@ export default class Controller {
         this.updateView();
         break;
       case 32: // SPACE
-        this.game.dropPiece();
+        this.game.hardDrop();
         this.updateView();
         break;
     }
