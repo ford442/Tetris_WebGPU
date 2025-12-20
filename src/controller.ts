@@ -113,36 +113,37 @@ export default class Controller {
     // Map older keyCodes if necessary, or just use code
     let code = event.code;
 
-    // Simple fallback if code is missing (rare)
-    if (!code) {
-        if (event.keyCode === 37) code = 'ArrowLeft';
-        if (event.keyCode === 38) code = 'ArrowUp';
-        if (event.keyCode === 39) code = 'ArrowRight';
-        if (event.keyCode === 40) code = 'ArrowDown';
-        if (event.keyCode === 32) code = 'Space';
-        if (event.keyCode === 13) code = 'Enter';
-    }
+    switch (event.keyCode) {
+      case 13: // ENTER
+        if (state.isGameOwer) {
+          this.reset();
+        } else if (this.isPlaying) {
+          this.pause();
+        } else {
+          this.play();
+        }
 
-    if (code === 'Enter') {
-         const state = this.game.getState();
-         if (state.isGameOwer) {
-             this.reset();
-         } else if (this.isPlaying) {
-             this.pause();
-         } else {
-             this.play();
-         }
-         return;
-    }
-
-    if (!this.isPlaying) return;
-
-    if (this.keys.hasOwnProperty(code)) {
-       if (!this.keys[code]) {
-           // Initial Press
-           this.keys[code] = true;
-           this.onKeyPress(code);
-       }
+        break;
+      case 37:
+        this.game.movePieceLeft();
+        this.updateView();
+        break;
+      case 38:
+        this.game.rotatePiece();
+        this.updateView();
+        break;
+      case 39:
+        this.game.movePieceRight();
+        this.updateView();
+        break;
+      case 40:
+        this.game.movePieceDown();
+        this.updateView();
+        break;
+      case 32: // SPACE
+        this.game.dropPiece();
+        this.updateView();
+        break;
     }
   }
 

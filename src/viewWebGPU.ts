@@ -624,7 +624,7 @@ export default class View {
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 48,
+      size: 64, // Increased size to be safe, though we only use 48 bytes currently
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -862,7 +862,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(colorRGBA)
+          new Float32Array([...colorArray, alpha])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -980,8 +980,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          // @ts-ignore
-          new Float32Array(this.currentTheme.border)
+          new Float32Array([...this.currentTheme.border, 1.0])
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
