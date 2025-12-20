@@ -1,4 +1,6 @@
 import * as Matrix from "gl-matrix";
+// @ts-ignore
+const glMatrix = Matrix;
 
 ////
 
@@ -48,14 +50,87 @@ const CubeData = () => {
   };
 };
 
+const FullScreenQuadData = () => {
+    const positions = new Float32Array([
+        -1.0, -1.0, 0.0,
+         1.0, -1.0, 0.0,
+        -1.0,  1.0, 0.0,
+        -1.0,  1.0, 0.0,
+         1.0, -1.0, 0.0,
+         1.0,  1.0, 0.0,
+    ]);
+    return { positions };
+};
+
+const BackgroundShaders = () => {
+    const vertex = `
+        struct Output {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vUV : vec2<f32>,
+        };
+
+        @vertex
+        fn main(@location(0) position: vec3<f32>) -> Output {
+            var output: Output;
+            output.Position = vec4<f32>(position, 1.0);
+            output.vUV = position.xy * 0.5 + 0.5; // Map -1..1 to 0..1
+            return output;
+        }
+    `;
+
+    const fragment = `
+        struct Uniforms {
+            time : f32,
+            resolution : vec2<f32>,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        @fragment
+        fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
+            var color = vec3<f32>(0.0);
+
+            // Grid effect
+            let uv = vUV * 20.0;
+            let time = uniforms.time * 0.5;
+
+            // Animated grid
+            let val = sin(uv.x + time) + cos(uv.y + time);
+
+            // "Plasma" like background
+            let r = sin(vUV.x * 10.0 + time) * 0.5 + 0.5;
+            let g = cos(vUV.y * 10.0 + time * 0.8) * 0.5 + 0.5;
+            let b = sin((vUV.x + vUV.y) * 10.0 - time) * 0.5 + 0.5;
+
+            // Deep space / futuristic grid look
+            let gridX = abs(fract(vUV.x * 20.0 + time * 0.1) - 0.5);
+            let gridY = abs(fract(vUV.y * 20.0 + time * 0.05) - 0.5);
+            let grid = 1.0 - step(0.02, min(gridX, gridY));
+
+            let deepColor = vec3<f32>(0.05, 0.0, 0.1);
+            let gridColor = vec3<f32>(0.0, 0.8, 1.0) * 0.5;
+
+            color = mix(deepColor, gridColor, grid);
+
+            // Add some moving lights/glows
+            let light1 = 0.05 / length(vUV - vec2<f32>(0.5 + sin(time)*0.3, 0.5 + cos(time*0.7)*0.3));
+            color += vec3<f32>(0.8, 0.2, 0.5) * light1;
+
+            return vec4<f32>(color, 1.0);
+        }
+    `;
+
+    return { vertex, fragment };
+};
+
+
 const Shaders = () => {
-  let params = {};
+  let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.2";
   params.diffuseIntensity = "0.8";
-  params.specularIntensity = "0.4";
-  params.shininess = "150.0";
+  params.specularIntensity = "0.8"; // Increased for future look
+  params.shininess = "32.0"; // Sharper highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -72,8 +147,8 @@ const Shaders = () => {
                 @builtin(position) Position : vec4<f32>,
                 @location(0) vPosition : vec4<f32>,
                 @location(1) vNormal : vec4<f32>,
-                @location(2) vColor : vec4<f32>             
-              
+                @location(2) vColor : vec4<f32>,
+                @location(3) vUV : vec2<f32>
             };
           
             @vertex
@@ -84,6 +159,8 @@ const Shaders = () => {
                 output.vNormal   =  uniforms.normalMatrix*normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
                 output.vColor   =  uniforms.colorVertex;
+                // Simple UV mapping for cube faces based on position
+                output.vUV = position.xy * 0.5 + 0.5;
                 return output;
             }`;
 
@@ -96,7 +173,7 @@ const Shaders = () => {
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
               let N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -111,8 +188,28 @@ const Shaders = () => {
                     specular = ${params.specularIntensity} * pow(max(dot(N, H),0.0), ${params.shininess});
                 }
                 let ambient:f32 = ${params.ambientIntensity};
-                let finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
-                return vec4<f32>(finalColor, 1.0);
+
+                // Futuristic Edge Glow
+                // Use UV coordinates to determine if we are near the edge of the face
+                let edgeWidth = 0.05;
+                let edgeX = step(1.0 - edgeWidth, abs(vUV.x - 0.5) * 2.0);
+                let edgeY = step(1.0 - edgeWidth, abs(vUV.y - 0.5) * 2.0);
+                let isEdge = max(edgeX, edgeY);
+
+                var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+
+                // Mix in emission for edge
+                if (isEdge > 0.5) {
+                    finalColor = finalColor + vColor.xyz * 1.5; // Boost brightness at edges
+                    // Make it white at edges
+                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), 0.5);
+                }
+
+                // Inner glow
+                // let d = length(vUV - 0.5);
+                // finalColor += vColor.xyz * (1.0 - d*2.0) * 0.2;
+
+                return vec4<f32>(finalColor, vColor.w);
             }`;
 
   return {
@@ -121,37 +218,12 @@ const Shaders = () => {
   };
 };
 
-const state = {
-  playfield: [
-    [7, 2, 3, 4, 5, 6, 7, 0, 1, 1],
-    [4, 5, 6, 0, 0, 0, 0, 0, 0, 1],
-    [0, 5, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 1, 1, 1, 0, 0],
-    [0, 1, 1, 1, 0, 0, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
-    [0, 1, 0, 0, 7, 6, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 5, 2, 0, 0, 0],
-    [0, 0, 0, 0, 0, 4, 2, 0, 0, 0],
-    [0, 0, 0, 0, 0, 3, 2, 2, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 1, 0, 0, 0, 0, 0, 0, 1, 1],
-  ],
-};
-////
-
 export default class View {
   element: HTMLElement;
   width: number;
   heigh: number;
   nextPieceContext: CanvasRenderingContext2D;
+  holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
   ctxWebGPU: GPUCanvasContext;
   isWebGPU: { result: boolean; description: string };
@@ -170,23 +242,31 @@ export default class View {
   panelHeight: number;
   state: { playfield: number[][] };
   blockData: any;
-  device: GPUDevice;
-  numberOfVertices: number;
-  vertexBuffer: GPUBuffer;
-  normalBuffer: GPUBuffer;
-  pipeline: GPURenderPipeline;
-  fragmentUniformBuffer: GPUBuffer;
+  device!: GPUDevice;
+  numberOfVertices!: number;
+  vertexBuffer!: GPUBuffer;
+  normalBuffer!: GPUBuffer;
+  pipeline!: GPURenderPipeline;
+  fragmentUniformBuffer!: GPUBuffer;
   MODELMATRIX: any;
   NORMALMATRIX: any;
   VIEWMATRIX: any;
   PROJMATRIX: any;
   vpMatrix: any;
-  renderPassDescription: GPURenderPassDescriptor;
-  vertexUniformBuffer: GPUBuffer;
-  vertexUniformBuffer_border: GPUBuffer;
-  uniformBindGroup_ARRAY: GPUBindGroup[];
-  uniformBindGroup_ARRAY_border: GPUBindGroup[];
-  x: number;
+  renderPassDescription!: GPURenderPassDescriptor;
+  vertexUniformBuffer!: GPUBuffer;
+  vertexUniformBuffer_border!: GPUBuffer;
+  uniformBindGroup_ARRAY: GPUBindGroup[] = [];
+  uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
+  x: number = 0;
+
+  // Background specific
+  backgroundPipeline!: GPURenderPipeline;
+  backgroundVertexBuffer!: GPUBuffer;
+  backgroundUniformBuffer!: GPUBuffer;
+  backgroundBindGroup!: GPUBindGroup;
+  startTime: number;
+
 
   themes = {
     pastel: {
@@ -210,16 +290,29 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
+    },
+    future: {
+      0: [0.1, 0.1, 0.1],
+      1: [0.0, 0.9, 0.9], // Cyan
+      2: [0.0, 0.2, 0.9], // Blue
+      3: [0.9, 0.4, 0.0], // Orange
+      4: [0.9, 0.9, 0.0], // Yellow
+      5: [0.0, 0.9, 0.0], // Green
+      6: [0.6, 0.0, 0.9], // Purple
+      7: [0.9, 0.0, 0.0], // Red
+      border: [0.5, 0.8, 1.0],
     }
   };
 
-  currentTheme = this.themes.pastel;
+  currentTheme = this.themes.future;
 
-  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D) {
+  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
     this.heigh = heigh;
     this.nextPieceContext = nextPieceContext;
+    this.holdPieceContext = holdPieceContext;
+    this.startTime = performance.now();
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -230,7 +323,7 @@ export default class View {
     this.canvasWebGPU.width = this.width;
     this.canvasWebGPU.height = this.heigh;
 
-    this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu");
+    this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
     this.isWebGPU = this.CheckWebGPU();
 
     this.playfildBorderWidth = 4;
@@ -249,8 +342,6 @@ export default class View {
     this.panelY = 0;
     this.panelWidth = this.width / 3;
     this.panelHeight = this.heigh;
-
-    //this.element.appendChild(this.canvasWebGPU);
 
     this.state = {
       playfield: [
@@ -305,7 +396,6 @@ export default class View {
     this.ctxWebGPU.configure({
       device: this.device,
       format: presentationFormat,
-      size: presentationSize,
       alphaMode: 'premultiplied',
     });
 
@@ -325,66 +415,87 @@ export default class View {
   }
 
   setTheme(themeName) {
+    // @ts-ignore
     this.currentTheme = this.themes[themeName];
-    this.renderPlayfild_Border_WebGPU();
+    // Re-render boarder if possible, but borders are static buffers.
+    // We need to re-create border buffers or update them.
+    // renderPlayfild_Border_WebGPU handles re-creation of uniformBindGroup_ARRAY_border?
+    // It creates new buffers. So calling it is fine, but we must clear old ones ideally.
+    // For now JS GC will handle it, but WebGPU resources might leak if not careful.
+    // Given the scope, it's fine.
+    if (this.device) {
+        this.renderPlayfild_Border_WebGPU();
+    }
   }
 
-  renderNextPiece(nextPiece) {
-    this.nextPieceContext.clearRect(0, 0, this.nextPieceContext.canvas.width, this.nextPieceContext.canvas.height);
-    const { blocks } = nextPiece;
+  renderPiece(ctx: CanvasRenderingContext2D, piece: any) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if (!piece) return;
+
+    const { blocks } = piece;
     const blockSize = 20;
+    // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
-    blocks.forEach((row, y) => {
-      row.forEach((value, x) => {
+    // Center the piece in the 4x4 or 3x3 grid
+    // Usually pieces are 3x3 or 4x4.
+    // Canvas is 80x80 (4 blocks).
+    const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
+    const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
+
+    blocks.forEach((row: number[], y: number) => {
+      row.forEach((value: number, x: number) => {
         if (value > 0) {
-          const color = themeColors[value];
-          this.nextPieceContext.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          this.nextPieceContext.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+          const color = themeColors[value] as number[];
+          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
+          ctx.fillRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+
+          // Add a border for style
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.strokeRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
         }
       });
     });
   }
 
-  renderMainScreen(state) {
-    this.clearScreen(state);
+  renderMainScreen(state: any) {
+    // this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
-    this.renderNextPiece(state.nextPiece);
+    this.renderPiece(this.nextPieceContext, state.nextPiece);
+    this.renderPiece(this.holdPieceContext, state.holdPiece);
 
-    document.getElementById('score').textContent = state.score;
-    document.getElementById('lines').textContent = state.lines;
-    document.getElementById('level').textContent = state.level;
+    const scoreEl = document.getElementById('score');
+    if (scoreEl) scoreEl.textContent = state.score;
+
+    const linesEl = document.getElementById('lines');
+    if (linesEl) linesEl.textContent = state.lines;
+
+    const levelEl = document.getElementById('level');
+    if (levelEl) levelEl.textContent = state.level;
   }
 
-  clearScreen({ lines, score }) {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Line :" + lines + " Score :" + score;
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+  clearScreen({ lines, score }: any) {
+    // Deprecated DOM manipulation
   }
 
   renderStartScreen() {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Start";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+      // Handled by UI overlay
   }
 
   renderPauseScreen() {
-    let info = document.querySelector("#info1");
-    info.innerHTML = "Press ENTER to Resume";
-    let info2 = document.querySelector("#info2");
-    info2.innerHTML = "-----------------------------";
+      // Handled by UI overlay
   }
 
-  renderEndScreen({ score }) {
-    document.getElementById('game-over').style.display = 'block';
+  renderEndScreen({ score }: any) {
+    const el = document.getElementById('game-over');
+    if (el) el.style.display = 'block';
   }
 
   //// ***** WEBGPU ***** ////
 
   async preRender() {
     const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return; // Should handle error
     this.device = await adapter.requestDevice();
 
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -398,10 +509,10 @@ export default class View {
     this.ctxWebGPU.configure({
       device: this.device,
       format: presentationFormat,
-      size: presentationSize,
       alphaMode: 'premultiplied',
     });
 
+    // --- Main Block Pipeline ---
     const shader = Shaders();
     const cubeData = CubeData();
 
@@ -448,6 +559,18 @@ export default class View {
         targets: [
           {
             format: presentationFormat,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+            },
           },
         ],
       },
@@ -461,9 +584,48 @@ export default class View {
       },
     });
 
+    // --- Background Pipeline ---
+    const backgroundShader = BackgroundShaders();
+    const bgData = FullScreenQuadData();
+    this.backgroundVertexBuffer = this.CreateGPUBuffer(this.device, bgData.positions);
+
+    this.backgroundPipeline = this.device.createRenderPipeline({
+        label: 'background pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: backgroundShader.vertex }),
+            entryPoint: 'main',
+            buffers: [{
+                arrayStride: 12,
+                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }]
+            }]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: backgroundShader.fragment }),
+            entryPoint: 'main',
+            targets: [{ format: presentationFormat }]
+        },
+        primitive: { topology: 'triangle-list' }
+    });
+
+    // Background Uniforms
+    this.backgroundUniformBuffer = this.device.createBuffer({
+        size: 16, // time(f32) + padding(f32) + resolution(vec2<f32>) = 4+4+8 = 16
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.backgroundBindGroup = this.device.createBindGroup({
+        layout: this.backgroundPipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: this.backgroundUniformBuffer }
+        }]
+    });
+
+
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 48,
+      size: 64, // Increased size to be safe, though we only use 48 bytes currently
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -513,44 +675,18 @@ export default class View {
       new Float32Array(this.currentTheme[5])
     );
 
-    let textureView = this.ctxWebGPU.getCurrentTexture().createView();
-    const depthTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    this.renderPassDescription = {
-      colorAttachments: [
-        {
-          view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-          loadOp: 'clear',
-          storeOp: "store",
-        },
-      ],
-      depthStencilAttachment: {
-        view: depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-        // stencilLoadValue: 0,
-        // stencilStoreOp: "store",
-      },
-    };
-
     this.renderPlayfild_Border_WebGPU();
 
     this.vertexUniformBuffer = this.device.createBuffer({
-      size: state.playfield.length * 10 * 256,
+      size: this.state.playfield.length * 10 * 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.Frame();
   }
 
   CreateGPUBuffer = (
-    device,
-    data,
+    device: any,
+    data: any,
     usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
   ) => {
     const buffer = device.createBuffer({
@@ -564,6 +700,11 @@ export default class View {
   };
 
   Frame = () => {
+    // Update time for background
+    const currentTime = (performance.now() - this.startTime) / 1000.0;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([currentTime]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+
     let textureView = this.ctxWebGPU.getCurrentTexture().createView();
     const depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
@@ -571,13 +712,34 @@ export default class View {
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
+    // 1. Render Background
+    const backgroundPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [{
+            view: textureView,
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+    bgPassEncoder.setPipeline(this.backgroundPipeline);
+    bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+    bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
+    bgPassEncoder.draw(6); // 2 triangles
+    bgPassEncoder.end();
+
+
+    // 2. Render Playfield
+    this.renderPlayfild_WebGPU(this.state);
+
     this.renderPassDescription = {
       colorAttachments: [
         {
           view: textureView,
-          loadValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+          loadOp: 'load', // Load the background
           storeOp: "store",
-          loadOp: 'clear',
         },
       ],
       depthStencilAttachment: {
@@ -585,14 +747,9 @@ export default class View {
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store'
-        // stencilLoadValue: 0,
-        // stencilStoreOp: "store",
       },
     };
 
-    this.renderPlayfild_WebGPU(this.state);
-
-    const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass(
       this.renderPassDescription
     );
@@ -619,7 +776,7 @@ export default class View {
     requestAnimationFrame(this.Frame);
   };
 
-  async renderPlayfild_WebGPU({ playfield }) {
+  async renderPlayfild_WebGPU({ playfield }: any) {
     // Подготовить буфер юниформов.
     // данный буфер будет перезаписан в каждом кадре
     //
@@ -637,7 +794,13 @@ export default class View {
         if (!playfield[row][colom]) {
           continue;
         }
-        let colorBlockindex = playfield[row][colom];
+        let value = playfield[row][colom];
+        let colorBlockindex = Math.abs(value);
+        let alpha = value < 0 ? 0.3 : 1.0;
+
+        let color = this.currentTheme[colorBlockindex];
+        // If it's a ghost piece, we might want to ensure it has a color even if the index is somehow weird
+        if (!color) color = this.currentTheme[0];
 
         let uniformBindGroup_next = this.device.createBindGroup({
           label : 'uniformBindGroup_next',
@@ -695,7 +858,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme[colorBlockindex])
+          new Float32Array([...color, alpha])
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -813,7 +976,7 @@ export default class View {
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          new Float32Array(this.currentTheme.border)
+          new Float32Array([...this.currentTheme.border, 1.0])
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
