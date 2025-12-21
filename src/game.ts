@@ -25,6 +25,7 @@ export default class Game {
   nextPiece!: Piece;
   holdPieceObj: Piece | null = null;
   canHold: boolean = true;
+  bag: string[] = [];
 
   // Lock Delay
   lockTimer: number = 0;
@@ -137,9 +138,21 @@ export default class Game {
   }
 
   createPiece(): Piece {
-    const index = Math.floor(Math.random() * 7);
-    const type = 'IJLOSTZ'[index];
+    if (this.bag.length === 0) {
+      this.generateBag();
+    }
+    const type = this.bag.shift()!;
     return this.createPieceByType(type);
+  }
+
+  generateBag(): void {
+    const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+    // Shuffle
+    for (let i = pieces.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
+    }
+    this.bag.push(...pieces);
   }
 
   getState(): GameState {

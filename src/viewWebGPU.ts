@@ -127,10 +127,10 @@ const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.2";
-  params.diffuseIntensity = "0.8";
-  params.specularIntensity = "0.8"; // Increased for future look
-  params.shininess = "32.0"; // Sharper highlights
+  params.ambientIntensity = "0.3"; // Slightly brighter ambient
+  params.diffuseIntensity = "0.9";
+  params.specularIntensity = "1.5"; // Much higher specular for glassy look
+  params.shininess = "64.0"; // Very sharp highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -191,18 +191,22 @@ const Shaders = () => {
 
                 // Futuristic Edge Glow
                 // Use UV coordinates to determine if we are near the edge of the face
-                let edgeWidth = 0.05;
-                let edgeX = step(1.0 - edgeWidth, abs(vUV.x - 0.5) * 2.0);
-                let edgeY = step(1.0 - edgeWidth, abs(vUV.y - 0.5) * 2.0);
-                let isEdge = max(edgeX, edgeY);
+                let uvCentered = abs(vUV - 0.5) * 2.0;
+                let edgeWidth = 0.1;
+                let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
+                let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
+                let edgeFactor = max(edgeFactorX, edgeFactorY);
 
                 var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
 
-                // Mix in emission for edge
-                if (isEdge > 0.5) {
-                    finalColor = finalColor + vColor.xyz * 1.5; // Boost brightness at edges
-                    // Make it white at edges
-                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), 0.5);
+                // Add rim lighting / fresnel effect for glassy look
+                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                finalColor += vec3<f32>(0.2, 0.4, 0.8) * fresnel * 0.5;
+
+                // Mix in emission for edge (smooth glow)
+                if (edgeFactor > 0.0) {
+                     let glowColor = mix(vColor.xyz, vec3<f32>(1.0), 0.8);
+                     finalColor = mix(finalColor, glowColor * 2.0, edgeFactor);
                 }
 
                 // Inner glow
@@ -267,6 +271,9 @@ export default class View {
   backgroundBindGroup!: GPUBindGroup;
   startTime: number;
 
+  // Video Background
+  videoElement: HTMLVideoElement;
+  isVideoPlaying: boolean = false;
 
   themes = {
     pastel: {
@@ -279,6 +286,7 @@ export default class View {
       6: [0.88, 0.75, 0.91], // T
       7: [1.0, 0.8, 0.82],   // Z
       border: [0.82, 0.77, 0.91],
+      backgroundVideo: null
     },
     neon: {
       0: [0.1, 0.1, 0.1],
@@ -290,6 +298,7 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
+      backgroundVideo: 'assets/video/bg1.mp4'
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -301,6 +310,7 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
+      backgroundVideo: 'assets/video/bg2.mp4'
     }
   };
 
@@ -313,6 +323,33 @@ export default class View {
     this.nextPieceContext = nextPieceContext;
     this.holdPieceContext = holdPieceContext;
     this.startTime = performance.now();
+
+    // Setup Video Element
+    this.videoElement = document.createElement('video');
+    this.videoElement.autoplay = true;
+    this.videoElement.loop = true;
+    this.videoElement.muted = true;
+    this.videoElement.style.position = 'absolute';
+    this.videoElement.style.top = '0';
+    this.videoElement.style.left = '0';
+    this.videoElement.style.width = '100%';
+    this.videoElement.style.height = '100%';
+    this.videoElement.style.objectFit = 'cover';
+    this.videoElement.style.zIndex = '-1'; // Behind canvas
+    this.videoElement.style.display = 'none';
+
+    // Fallback detection
+    this.videoElement.addEventListener('error', () => {
+        console.warn('Video background failed to load. Falling back to shader.');
+        this.isVideoPlaying = false;
+        this.videoElement.style.display = 'none';
+    });
+    this.videoElement.addEventListener('playing', () => {
+        this.isVideoPlaying = true;
+        this.videoElement.style.display = 'block';
+    });
+
+    this.element.appendChild(this.videoElement);
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -416,6 +453,26 @@ export default class View {
   setTheme(themeName) {
     // @ts-ignore
     this.currentTheme = this.themes[themeName];
+
+    // Handle Video Background
+    // @ts-ignore
+    const videoSrc = this.currentTheme.backgroundVideo;
+    this.isVideoPlaying = false; // Reset state
+    if (videoSrc) {
+        this.videoElement.src = videoSrc;
+        // Don't show immediately, wait for 'playing' event
+        this.videoElement.play().catch(e => {
+            console.log("Video autoplay failed", e);
+            // Fallback handled by catch + error listener
+            this.isVideoPlaying = false;
+            this.videoElement.style.display = 'none';
+        });
+    } else {
+        this.videoElement.pause();
+        this.videoElement.src = "";
+        this.videoElement.style.display = 'none';
+    }
+
     // Re-render boarder if possible, but borders are static buffers.
     // We need to re-create border buffers or update them.
     // renderPlayfild_Border_WebGPU handles re-creation of uniformBindGroup_ARRAY_border?
@@ -712,22 +769,33 @@ export default class View {
     });
 
     // 1. Render Background
+    // Only render procedural background if video is not active (or create a transparent pass)
+    // We use actual playback state to decide
+    const renderVideo = this.isVideoPlaying;
+
     const backgroundPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
             view: textureView,
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, // Transparent clear
             loadOp: 'clear',
             storeOp: 'store'
         }]
     };
 
     const commandEncoder = this.device.createCommandEncoder();
-    const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
-    bgPassEncoder.setPipeline(this.backgroundPipeline);
-    bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-    bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
-    bgPassEncoder.draw(6); // 2 triangles
-    bgPassEncoder.end();
+
+    if (!renderVideo) {
+        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        bgPassEncoder.setPipeline(this.backgroundPipeline);
+        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
+        bgPassEncoder.draw(6); // 2 triangles
+        bgPassEncoder.end();
+    } else {
+        // Video is playing, just clear transparency
+        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        bgPassEncoder.end();
+    }
 
 
     // 2. Render Playfield
