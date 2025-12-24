@@ -275,6 +275,10 @@ export default class View {
   videoElement: HTMLVideoElement;
   isVideoPlaying: boolean = false;
 
+  // Visual Effects
+  flashTimer: number = 0;
+  lockTimer: number = 0;
+
   themes = {
     pastel: {
       0: [0.3, 0.3, 0.3],
@@ -504,15 +508,35 @@ export default class View {
       row.forEach((value: number, x: number) => {
         if (value > 0) {
           const color = themeColors[value] as number[];
-          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          ctx.fillRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+          // Draw with gradient/bevel
+          const px = offsetX + x * blockSize;
+          const py = offsetY + y * blockSize;
+
+          const grd = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
+          grd.addColorStop(0, `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`);
+          grd.addColorStop(1, `rgb(${color[0] * 150}, ${color[1] * 150}, ${color[2] * 150})`);
+
+          ctx.fillStyle = grd;
+          ctx.fillRect(px, py, blockSize, blockSize);
+
+          // Inner highlight
+          ctx.fillStyle = 'rgba(255,255,255,0.3)';
+          ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
           // Add a border for style
           ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-          ctx.strokeRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+          ctx.strokeRect(px, py, blockSize, blockSize);
         }
       });
     });
+  }
+
+  onLineClear(lines: number) {
+      this.flashTimer = 1.0;
+  }
+
+  onLock() {
+      this.lockTimer = 0.5;
   }
 
   renderMainScreen(state: any) {
@@ -757,6 +781,13 @@ export default class View {
   };
 
   Frame = () => {
+    // Update visual effects
+    if (this.flashTimer > 0) this.flashTimer -= 0.05;
+    if (this.flashTimer < 0) this.flashTimer = 0;
+
+    if (this.lockTimer > 0) this.lockTimer -= 0.05;
+    if (this.lockTimer < 0) this.lockTimer = 0;
+
     // Update time for background
     const currentTime = (performance.now() - this.startTime) / 1000.0;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([currentTime]));
@@ -774,10 +805,25 @@ export default class View {
     // We use actual playback state to decide
     const renderVideo = this.isVideoPlaying;
 
+    // Flash effect color
+    let clearR = 0.0;
+    let clearG = 0.0;
+    let clearB = 0.0;
+
+    if (this.flashTimer > 0) {
+        // Flash white/gold on line clear
+        clearR = this.flashTimer * 0.5;
+        clearG = this.flashTimer * 0.5;
+        clearB = this.flashTimer * 0.2;
+    } else if (this.lockTimer > 0) {
+        // Slight blue flash on lock
+        clearB = this.lockTimer * 0.2;
+    }
+
     const backgroundPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
             view: textureView,
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, // Transparent clear
+            clearValue: { r: clearR, g: clearG, b: clearB, a: 0.0 }, // Transparent clear with effect
             loadOp: 'clear',
             storeOp: 'store'
         }]
