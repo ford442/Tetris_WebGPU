@@ -963,6 +963,7 @@ export default class View {
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
       ],
     };
@@ -970,9 +971,8 @@ export default class View {
     this.x += 0.01;
     const playfield_length = state_Border.playfield.length;
     // create uniform buffer and layout
-    // Расчитываем необходимый размер буфера  64 это количество не нулевых ячеек в state_Border.playfield
-    // 256 это выравнивание каждой BindGroup
-    const vertexUniformSizeBuffer = 64 * 256;
+    // Расчитываем необходимый размер буфера
+    const vertexUniformSizeBuffer = 200 * 256;
 
     this.vertexUniformBuffer_border = this.device.createBuffer({
       size: vertexUniformSizeBuffer,
@@ -1015,8 +1015,8 @@ export default class View {
         Matrix.mat4.identity(this.NORMALMATRIX);
 
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2 - 2.0, // выравниваю по размеру модельки одного блока
-          row * -2.2 + 2.0,
+          colom * 2.2 - 2.2, // выравниваю по размеру модельки одного блока
+          row * -2.2 + 2.2,
           0.0,
         ]);
 
