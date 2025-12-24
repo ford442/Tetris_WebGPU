@@ -31,6 +31,7 @@ export default class Game {
   lockTimer: number = 0;
   readonly lockDelayTime: number = 500; // ms
 
+  // @ts-ignore
   private static readonly SRS_KICKS_JLSTZ = {
     '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
     '1-0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
@@ -42,6 +43,7 @@ export default class Game {
     '0-3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]]
   };
 
+  // @ts-ignore
   private static readonly SRS_KICKS_I = {
     '0-1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
     '1-0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
@@ -370,7 +372,7 @@ export default class Game {
   rotatePiece(rightRurn: boolean = true): void {
     const blocks = this.activPiece.blocks;
     const length = blocks.length;
-    const type = this.activPiece.type;
+    // const type = this.activPiece.type; // Unused
     const currentRotation = this.activPiece.rotation;
     let nextRotation = rightRurn ? (currentRotation + 1) % 4 : (currentRotation + 3) % 4;
 
@@ -403,6 +405,8 @@ export default class Game {
 
     // Apply new blocks
     this.activPiece.blocks = temp;
+    this.activPiece.rotation = nextRotation; // Update rotation locally
+
     if (this.hasCollision()) {
         // Wall Kicks
         const kicks = [
@@ -413,8 +417,6 @@ export default class Game {
         ];
 
         let kicked = false;
-        const originalX = this.activPiece.x;
-        const originalY = this.activPiece.y;
 
         for (const [ox, oy] of kicks) {
             this.activPiece.x = originalX + ox;
@@ -429,33 +431,15 @@ export default class Game {
              // Revert everything
              this.activPiece.x = originalX;
              this.activPiece.y = originalY;
-             this.activPiece.blocks = blocks;
+             this.activPiece.blocks = originalBlocks;
+             this.activPiece.rotation = originalRotation;
+        } else {
+             // Successful kick
+             this.resetLockTimerIfGrounded();
         }
     } else {
-      //  this.activPiece.blocks = temp;
-    }
-
-    let kicked = false;
-    for (const [offsetX, offsetY] of kicks) {
-        // Apply kick (Note: SRS Y is up-positive, but our board is down-positive, so we invert Y offset)
-        this.activPiece.x = originalX + offsetX;
-        this.activPiece.y = originalY - offsetY;
-
-        if (!this.hasCollision()) {
-            kicked = true;
-            break;
-        }
-    }
-
-    // Revert if all kicks failed
-    if (!kicked) {
-        this.activPiece.blocks = originalBlocks;
-        this.activPiece.x = originalX;
-        this.activPiece.y = originalY;
-        this.activPiece.rotation = originalRotation;
-    } else {
-        // Successful rotation
-        this.resetLockTimerIfGrounded();
+       // Successful rotation (no kick needed)
+       this.resetLockTimerIfGrounded();
     }
   }
 
@@ -472,6 +456,34 @@ export default class Game {
 
   hasCollision(): boolean {
     return this.hasCollisionPiece(this.activPiece);
+  }
+
+  hasCollisionPiece(piece: Piece): boolean {
+    const { x: pieceX, y: pieceY, blocks } = piece;
+    for (let y = 0; y < blocks.length; y++) {
+      for (let x = 0; x < blocks[y].length; x++) {
+        if (blocks[y][x]) {
+          const targetX = pieceX + x;
+          const targetY = pieceY + y;
+
+          // Check bounds
+          // Left/Right
+          if (targetX < 0 || targetX >= this.playfield[0].length) {
+            return true;
+          }
+          // Bottom
+          if (targetY >= this.playfield.length) {
+            return true;
+          }
+
+          // Overlap with existing blocks
+          if (targetY >= 0 && this.playfield[targetY][targetX]) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   lockPiece(): void {
