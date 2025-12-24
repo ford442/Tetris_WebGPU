@@ -265,7 +265,8 @@ export default class Game {
     return ghostY;
   }
 
-  hardDrop(): void {
+  hardDrop(): { linesCleared: number, locked: boolean, gameOver: boolean } {
+    const result = { linesCleared: 0, locked: false, gameOver: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
     // Force a collision check which should lead to locking
@@ -273,12 +274,16 @@ export default class Game {
     if (this.hasCollision()) {
         this.activPiece.y -= 1; // Back to ghost position
         this.lockPiece();
+        result.locked = true;
         const linesScore = this.clearLine();
         if (linesScore) {
             this.updateScore(linesScore);
+            result.linesCleared = linesScore;
         }
         this.updatePieces();
+        if (this.gameower) result.gameOver = true;
     }
+    return result;
   }
 
   reset(): void {
@@ -295,8 +300,9 @@ export default class Game {
   }
 
   // Called every frame
-  update(dt: number): void {
-      if (this.gameower) return;
+  update(dt: number): { linesCleared: number, locked: boolean, gameOver: boolean } {
+      const result = { linesCleared: 0, locked: false, gameOver: false };
+      if (this.gameower) return result;
 
       // Check if piece is on the ground
       this.activPiece.y += 1;
@@ -307,15 +313,19 @@ export default class Game {
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
               this.lockPiece();
+              result.locked = true;
               const linesScore = this.clearLine();
               if (linesScore) {
                   this.updateScore(linesScore);
+                  result.linesCleared = linesScore;
               }
               this.updatePieces();
+              if (this.gameower) result.gameOver = true;
           }
       } else {
           this.lockTimer = 0;
       }
+      return result;
   }
 
   movePieceLeft(): void {
