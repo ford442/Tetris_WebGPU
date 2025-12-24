@@ -1,5 +1,6 @@
 import Game from "./game.js";
 import View from "./viewWebGPU.js";
+import SoundManager from "./sound.js";
 
 const DAS = 160; // Delayed Auto Shift (ms)
 const ARR = 30;  // Auto Repeat Rate (ms)
@@ -8,6 +9,7 @@ export default class Controller {
   game: Game;
   view: View;
   viewWebGPU: View;
+  soundManager: SoundManager;
   isPlaying: boolean;
   gameLoopID: number | null;
   intervalID: number | null; // For gravity
@@ -31,10 +33,11 @@ export default class Controller {
     ArrowDown: 0
   };
 
-  constructor(game: Game, view: View, viewWebGPU: View) {
+  constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
     this.game = game;
     this.view = view;
     this.viewWebGPU = viewWebGPU;
+    this.soundManager = soundManager;
     this.isPlaying = false;
     this.gameLoopID = null;
     this.intervalID = null;
@@ -126,22 +129,37 @@ export default class Controller {
         break;
       case 37:
         this.game.movePieceLeft();
+        this.soundManager.playMove();
         this.updateView();
         break;
       case 38:
         this.game.rotatePiece();
+        this.soundManager.playRotate();
         this.updateView();
         break;
       case 39:
         this.game.movePieceRight();
+        this.soundManager.playMove();
         this.updateView();
         break;
       case 40:
         this.game.movePieceDown();
+        this.soundManager.playMove();
         this.updateView();
         break;
       case 32: // SPACE
-        this.game.hardDrop();
+        const result = this.game.hardDrop();
+        this.soundManager.playHardDrop();
+        if (result.linesCleared > 0) {
+            this.soundManager.playLineClear(result.linesCleared);
+            this.viewWebGPU.onLineClear(result.linesCleared);
+        } else if (result.locked) {
+            this.soundManager.playLock();
+            this.viewWebGPU.onLock();
+        }
+        if (result.gameOver) {
+            this.soundManager.playGameOver();
+        }
         this.updateView();
         break;
     }
@@ -172,31 +190,45 @@ export default class Controller {
       switch (code) {
           case 'ArrowLeft':
               this.game.movePieceLeft();
+              this.soundManager.playMove();
               this.keyTimers.ArrowLeft = 0;
               this.updateView();
               break;
           case 'ArrowRight':
               this.game.movePieceRight();
+              this.soundManager.playMove();
               this.keyTimers.ArrowRight = 0;
               this.updateView();
               break;
           case 'ArrowUp':
               this.game.rotatePiece();
+              this.soundManager.playRotate();
               this.updateView();
               break;
           case 'ArrowDown':
               this.game.movePieceDown();
+              this.soundManager.playMove();
               this.keyTimers.ArrowDown = 0;
               this.updateView();
               break;
           case 'Space':
-              this.game.hardDrop();
+              const resultHD = this.game.hardDrop();
+              this.soundManager.playHardDrop();
+              if (resultHD.linesCleared > 0) {
+                  this.soundManager.playLineClear(resultHD.linesCleared);
+              } else if (resultHD.locked) {
+                  this.soundManager.playLock();
+              }
+              if (resultHD.gameOver) {
+                  this.soundManager.playGameOver();
+              }
               this.updateView();
               break;
           case 'KeyC':
           case 'ShiftLeft':
           case 'ShiftRight':
               this.game.hold();
+              this.soundManager.playMove();
               this.updateView();
               break;
       }
@@ -216,7 +248,17 @@ export default class Controller {
       lastTime = time;
 
       this.handleInput(dt);
-      this.game.update(dt);
+      const result = this.game.update(dt);
+      if (result.linesCleared > 0) {
+          this.soundManager.playLineClear(result.linesCleared);
+          this.viewWebGPU.onLineClear(result.linesCleared);
+      } else if (result.locked) {
+          this.soundManager.playLock();
+          this.viewWebGPU.onLock();
+      }
+      if (result.gameOver) {
+          this.soundManager.playGameOver();
+      }
 
       // WebGPU update can happen here too if it needs continuous animation (like background)
       // The viewWebGPU.Frame() method handles its own loop, but we need to push state to it.
