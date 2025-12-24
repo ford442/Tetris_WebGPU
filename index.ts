@@ -1,12 +1,14 @@
 import Game from "./src/game.js";
 import View from "./src/viewWebGPU.js";
 import Controller from "./src/controller.js";
+import SoundManager from "./src/sound.js";
 
 declare global {
   interface Window {
     game: Game;
     view: View;
     controller: Controller;
+    soundManager: SoundManager;
   }
 }
 
@@ -67,6 +69,7 @@ uiContainer.innerHTML = `
 // Styles are in css/style.css, we should probably update them too.
 
 const game = new Game();
+const soundManager = new SoundManager();
 const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 
@@ -80,7 +83,7 @@ const view = new View(
     holdPieceCtx
 );
 
-const controller = new Controller(game, view, view);
+const controller = new Controller(game, view, view, soundManager);
 
 document.getElementById('pastel-theme')!.addEventListener('click', () => {
   document.body.className = 'pastel-theme';
@@ -111,6 +114,7 @@ document.getElementById('pause-button')!.addEventListener('click', () => {
 window.game = game;
 window.view = view;
 window.controller = controller;
+window.soundManager = soundManager;
 
 // Set default
 document.getElementById('futuristic-theme')!.click();
