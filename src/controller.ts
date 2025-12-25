@@ -150,8 +150,8 @@ export default class Controller {
       case 32: // SPACE
         const result = this.game.hardDrop();
         this.soundManager.playHardDrop();
-        if (result.linesCleared > 0) {
-            this.soundManager.playLineClear(result.linesCleared);
+        if (result.linesCleared.length > 0) {
+            this.soundManager.playLineClear(result.linesCleared.length);
             this.viewWebGPU.onLineClear(result.linesCleared);
         } else if (result.locked) {
             this.soundManager.playLock();
@@ -214,10 +214,12 @@ export default class Controller {
           case 'Space':
               const resultHD = this.game.hardDrop();
               this.soundManager.playHardDrop();
-              if (resultHD.linesCleared > 0) {
-                  this.soundManager.playLineClear(resultHD.linesCleared);
+              if (resultHD.linesCleared.length > 0) {
+                  this.soundManager.playLineClear(resultHD.linesCleared.length);
+                  this.viewWebGPU.onLineClear(resultHD.linesCleared);
               } else if (resultHD.locked) {
                   this.soundManager.playLock();
+                  this.viewWebGPU.onLock();
               }
               if (resultHD.gameOver) {
                   this.soundManager.playGameOver();
@@ -249,8 +251,8 @@ export default class Controller {
 
       this.handleInput(dt);
       const result = this.game.update(dt);
-      if (result.linesCleared > 0) {
-          this.soundManager.playLineClear(result.linesCleared);
+      if (result.linesCleared.length > 0) {
+          this.soundManager.playLineClear(result.linesCleared.length);
           this.viewWebGPU.onLineClear(result.linesCleared);
       } else if (result.locked) {
           this.soundManager.playLock();
