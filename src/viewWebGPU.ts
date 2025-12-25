@@ -334,13 +334,9 @@ export default class View {
     this.videoElement.loop = true;
     this.videoElement.muted = true;
     this.videoElement.style.position = 'absolute';
-    this.videoElement.style.top = '0';
-    this.videoElement.style.left = '0';
-    this.videoElement.style.width = '100%';
-    this.videoElement.style.height = '100%';
-    this.videoElement.style.objectFit = 'cover';
     this.videoElement.style.zIndex = '-1'; // Behind canvas
     this.videoElement.style.display = 'none';
+    this.videoElement.style.objectFit = 'cover';
 
     // Fallback detection
     this.videoElement.addEventListener('error', () => {
@@ -384,6 +380,9 @@ export default class View {
     this.panelWidth = this.width / 3;
     this.panelHeight = this.heigh;
 
+    // Position video element to match playfield inner area
+    this.updateVideoPosition();
+
     this.state = {
       playfield: [
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -420,12 +419,29 @@ export default class View {
     }
   }
 
+  updateVideoPosition() {
+    // Position and size video to fit within the playfield inner area
+    this.videoElement.style.left = `${this.playfildX}px`;
+    this.videoElement.style.top = `${this.playfildY}px`;
+    this.videoElement.style.width = `${this.playfildInnerWidth}px`;
+    this.videoElement.style.height = `${this.playfildInnerHeight}px`;
+  }
+
   resize() {
     if (!this.device) return;
     this.width = window.innerWidth;
     this.heigh = window.innerHeight;
     this.canvasWebGPU.width = this.width;
     this.canvasWebGPU.height = this.heigh;
+
+    // Recalculate playfield dimensions
+    this.playfildWidth = (this.width * 2) / 3;
+    this.playfildHeight = this.heigh;
+    this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
+    this.playfildInnerHeight = this.playfildHeight - this.playfildBorderWidth * 2 - 2;
+
+    // Update video position with new dimensions
+    this.updateVideoPosition();
 
     const devicePixelRatio = window.devicePixelRatio || 1;
     const presentationSize = [
