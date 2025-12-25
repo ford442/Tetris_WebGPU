@@ -302,7 +302,7 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
-      backgroundVideo: 'assets/video/bg1.mp4'
+      backgroundVideo: './assets/video/bg1.mp4'
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -314,7 +314,7 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
-      backgroundVideo: 'assets/video/bg2.mp4'
+      backgroundVideo: './assets/video/bg2.mp4'
     }
   };
 
