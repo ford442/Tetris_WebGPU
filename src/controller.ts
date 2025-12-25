@@ -118,7 +118,7 @@ export default class Controller {
 
     switch (event.keyCode) {
       case 13: // ENTER
-        if (state.isGameOwer) {
+        if (this.game.gameower) {
           this.reset();
         } else if (this.isPlaying) {
           this.pause();
