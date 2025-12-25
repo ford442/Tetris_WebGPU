@@ -302,7 +302,7 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
-      backgroundVideo: './assets/video/bg1.mp4'
+      backgroundVideo: './assets/video/bg3.mp4'
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -314,7 +314,7 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
-      backgroundVideo: './assets/video/bg2.mp4'
+      backgroundVideo: './assets/video/bg3.mp4'
     }
   };
 
@@ -781,6 +781,8 @@ export default class View {
   };
 
   Frame = () => {
+    if (!this.device) return;
+
     // Update visual effects
     if (this.flashTimer > 0) this.flashTimer -= 0.05;
     if (this.flashTimer < 0) this.flashTimer = 0;
@@ -891,6 +893,8 @@ export default class View {
   };
 
   async renderPlayfild_WebGPU({ playfield }: any) {
+    if (!this.device) return;
+
     // Подготовить буфер юниформов.
     // данный буфер будет перезаписан в каждом кадре
     //
@@ -983,6 +987,8 @@ export default class View {
   }
 
   async renderPlayfild_Border_WebGPU() {
+    if (!this.device) return;
+
     // Подготовить буфер юниформов.
     // Для рамки игрового поля
     // данный буфер будет записан один раз и не меняеться в каждом кадре

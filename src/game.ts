@@ -565,4 +565,22 @@ export default class Game {
     this.score += lines * lines * 10;
     console.log('score = ' + this.score);
   }
+
+  hold(): void {
+      if (!this.canHold) return;
+
+      if (!this.holdPieceObj) {
+          this.holdPieceObj = this.activPiece;
+          this.activPiece = this.nextPiece;
+          this.nextPiece = this.createPiece();
+      } else {
+          const temp = this.activPiece;
+          this.activPiece = this.holdPieceObj;
+          this.holdPieceObj = temp;
+      }
+
+      this.resetPiecePosition(this.activPiece);
+      this.canHold = false;
+      this.lockTimer = 0;
+  }
 }
