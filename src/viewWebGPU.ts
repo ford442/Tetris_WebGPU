@@ -17,6 +17,17 @@ interface Themes {
   future: ThemeColors;
 }
 
+// Default level videos used across all themes
+const DEFAULT_LEVEL_VIDEOS = [
+  './assets/video/bg1.mp4',
+  './assets/video/bg2.mp4',
+  './assets/video/bg3.mp4',
+  './assets/video/bg4.mp4',
+  './assets/video/bg5.mp4',
+  './assets/video/bg6.mp4',
+  './assets/video/bg7.mp4'
+];
+
 const CubeData = () => {
   const positions = new Float32Array([
     // front
@@ -288,6 +299,7 @@ export default class View {
   videoElement: HTMLVideoElement;
   isVideoPlaying: boolean = false;
   currentLevel: number = 0;
+  currentVideoSrc: string = ''; // Track current video source for comparison
 
   // Visual Effects
   flashTimer: number = 0;
@@ -304,15 +316,7 @@ export default class View {
       6: [0.88, 0.75, 0.91], // T
       7: [1.0, 0.8, 0.82],   // Z
       border: [0.82, 0.77, 0.91],
-      levelVideos: [
-        './assets/video/bg1.mp4',
-        './assets/video/bg2.mp4',
-        './assets/video/bg3.mp4',
-        './assets/video/bg4.mp4',
-        './assets/video/bg5.mp4',
-        './assets/video/bg6.mp4',
-        './assets/video/bg7.mp4'
-      ]
+      levelVideos: DEFAULT_LEVEL_VIDEOS
     },
     neon: {
       0: [0.1, 0.1, 0.1],
@@ -324,15 +328,7 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
-      levelVideos: [
-        './assets/video/bg1.mp4',
-        './assets/video/bg2.mp4',
-        './assets/video/bg3.mp4',
-        './assets/video/bg4.mp4',
-        './assets/video/bg5.mp4',
-        './assets/video/bg6.mp4',
-        './assets/video/bg7.mp4'
-      ]
+      levelVideos: DEFAULT_LEVEL_VIDEOS
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -344,15 +340,7 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
-      levelVideos: [
-        './assets/video/bg1.mp4',
-        './assets/video/bg2.mp4',
-        './assets/video/bg3.mp4',
-        './assets/video/bg4.mp4',
-        './assets/video/bg5.mp4',
-        './assets/video/bg6.mp4',
-        './assets/video/bg7.mp4'
-      ]
+      levelVideos: DEFAULT_LEVEL_VIDEOS
     }
   };
 
@@ -481,11 +469,12 @@ export default class View {
     const videoIndex = Math.min(level, levelVideos.length - 1);
     const videoSrc = levelVideos[videoIndex];
 
-    // Only update if the source is different
-    if (this.videoElement.src && this.videoElement.src.endsWith(videoSrc)) {
+    // Only update if the source is different from what we're tracking
+    if (this.currentVideoSrc === videoSrc) {
       return; // Already playing the correct video
     }
 
+    this.currentVideoSrc = videoSrc;
     this.isVideoPlaying = false; // Reset state
     if (videoSrc) {
       this.videoElement.src = videoSrc;
