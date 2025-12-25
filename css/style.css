@@ -4,7 +4,7 @@ body {
   overflow: hidden;
   color: white;
   user-select: none;
-  background-color: #111; /* Fallback background */
+  background-color: #050510;
 }
 
 /* UI Container overlay on top of WebGPU canvas */

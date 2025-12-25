@@ -249,7 +249,7 @@ const Shaders = () => {
 export default class View {
   element: HTMLElement;
   width: number;
-  heigh: number;
+  height: number;
   nextPieceContext: CanvasRenderingContext2D;
   holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
@@ -346,10 +346,10 @@ export default class View {
 
   currentTheme = this.themes.future;
 
-  constructor(element: HTMLElement, width: number, heigh: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
+  constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
-    this.heigh = heigh;
+    this.height = height;
     this.nextPieceContext = nextPieceContext;
     this.holdPieceContext = holdPieceContext;
     this.startTime = performance.now();
@@ -384,7 +384,7 @@ export default class View {
     this.canvasWebGPU.style.left = '0';
     this.canvasWebGPU.style.pointerEvents = 'none';
     this.canvasWebGPU.width = this.width;
-    this.canvasWebGPU.height = this.heigh;
+    this.canvasWebGPU.height = this.height;
 
     this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
     this.isWebGPU = this.CheckWebGPU();
@@ -393,7 +393,7 @@ export default class View {
     this.playfildX = this.playfildBorderWidth + 1;
     this.playfildY = this.playfildBorderWidth + 1;
     this.playfildWidth = (this.width * 2) / 3;
-    this.playfildHeight = this.heigh;
+    this.playfildHeight = this.height;
     this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
     this.playfildInnerHeight =
       this.playfildHeight - this.playfildBorderWidth * 2 - 2;
@@ -404,7 +404,7 @@ export default class View {
     this.panelX = this.playfildWidth + 10;
     this.panelY = 0;
     this.panelWidth = this.width / 3;
-    this.panelHeight = this.heigh;
+    this.panelHeight = this.height;
 
     // Position video element to match playfield inner area
     this.updateVideoPosition();
@@ -446,11 +446,26 @@ export default class View {
   }
 
   updateVideoPosition() {
-    // Position and size video to fit within the playfield inner area
-    this.videoElement.style.left = `${this.playfildX}px`;
-    this.videoElement.style.top = `${this.playfildY}px`;
-    this.videoElement.style.width = `${this.playfildInnerWidth}px`;
-    this.videoElement.style.height = `${this.playfildInnerHeight}px`;
+    // 1. Calculate a "Portal" size that matches the Tetris aspect ratio (10 cols x 20 rows = 1:2)
+    // We base it on height to ensure it fits on screen
+    const portalHeight = this.height * 0.9; // 90% of screen height
+    const portalWidth = portalHeight * 0.5; // Aspect ratio 0.5 (10/20)
+
+    // 2. Center the video container on the screen
+    const centerX = (this.width - portalWidth) / 2;
+    const centerY = (this.height - portalHeight) / 2;
+
+    this.videoElement.style.left = `${centerX}px`;
+    this.videoElement.style.top = `${centerY}px`;
+    this.videoElement.style.width = `${portalWidth}px`;
+    this.videoElement.style.height = `${portalHeight}px`;
+
+    // 3. Ensure the video fills this portal completely
+    this.videoElement.style.objectFit = 'cover';
+
+    // 4. Optional: Add a border/glow to the video to frame the portal
+    this.videoElement.style.boxShadow = '0 0 50px rgba(0, 200, 255, 0.2)';
+    this.videoElement.style.borderRadius = '4px';
   }
 
   updateVideoForLevel(level: number) {
@@ -495,13 +510,13 @@ export default class View {
   resize() {
     if (!this.device) return;
     this.width = window.innerWidth;
-    this.heigh = window.innerHeight;
+    this.height = window.innerHeight;
     this.canvasWebGPU.width = this.width;
-    this.canvasWebGPU.height = this.heigh;
+    this.canvasWebGPU.height = this.height;
 
     // Recalculate playfield dimensions
     this.playfildWidth = (this.width * 2) / 3;
-    this.playfildHeight = this.heigh;
+    this.playfildHeight = this.height;
     this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
     this.playfildInnerHeight = this.playfildHeight - this.playfildBorderWidth * 2 - 2;
 
@@ -522,7 +537,7 @@ export default class View {
     });
 
     Matrix.mat4.identity(this.PROJMATRIX);
-    let fovy = (40 * Math.PI) / 180;
+    let fovy = (35 * Math.PI) / 180;
     Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
@@ -798,7 +813,7 @@ export default class View {
     );
 
     Matrix.mat4.identity(this.PROJMATRIX);
-    let fovy = (40 * Math.PI) / 180;
+    let fovy = (35 * Math.PI) / 180;
     Matrix.mat4.perspective(
       this.PROJMATRIX,
       fovy,
