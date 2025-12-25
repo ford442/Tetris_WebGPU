@@ -4,6 +4,19 @@ const glMatrix = Matrix;
 
 ////
 
+// Type definitions for themes
+interface ThemeColors {
+  [key: number]: number[];
+  border: number[];
+  levelVideos?: string[];
+}
+
+interface Themes {
+  pastel: ThemeColors;
+  neon: ThemeColors;
+  future: ThemeColors;
+}
+
 const CubeData = () => {
   const positions = new Float32Array([
     // front
@@ -280,7 +293,7 @@ export default class View {
   flashTimer: number = 0;
   lockTimer: number = 0;
 
-  themes = {
+  themes: Themes = {
     pastel: {
       0: [0.3, 0.3, 0.3],
       1: [0.69, 0.92, 0.95], // I
@@ -453,7 +466,6 @@ export default class View {
   }
 
   updateVideoForLevel(level: number) {
-    // @ts-ignore
     const levelVideos = this.currentTheme.levelVideos;
     
     if (!levelVideos || levelVideos.length === 0) {
@@ -465,7 +477,7 @@ export default class View {
       return;
     }
 
-    // Cap level to available videos (cycle through if level exceeds videos)
+    // Cap level to available videos (uses last video for levels exceeding array length)
     const videoIndex = Math.min(level, levelVideos.length - 1);
     const videoSrc = levelVideos[videoIndex];
 
@@ -535,15 +547,14 @@ export default class View {
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
   }
 
-  setTheme(themeName) {
-    // @ts-ignore
+  setTheme(themeName: keyof Themes) {
     this.currentTheme = this.themes[themeName];
     this.currentLevel = 0; // Reset to level 0 when theme changes
 
     // Handle Video Background - start with level 0 video
     this.updateVideoForLevel(0);
 
-    // Re-render boarder if possible, but borders are static buffers.
+    // Re-render border if possible, but borders are static buffers.
     // We need to re-create border buffers or update them.
     // renderPlayfild_Border_WebGPU handles re-creation of uniformBindGroup_ARRAY_border?
     // It creates new buffers. So calling it is fine, but we must clear old ones ideally.
