@@ -9,6 +9,7 @@ interface ThemeColors {
   [key: number]: number[];
   border: number[];
   levelVideos?: string[];
+  backgroundColors: number[][]; // [color1, color2, color3]
 }
 
 interface Themes {
@@ -170,48 +171,52 @@ const ParticleShaders = () => {
 
 const CubeData = () => {
   const positions = new Float32Array([
-    // front
-    -1, -1, 1, 1, -1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 1, -1, -1, 1,
-
-    // right
-    1, -1, 1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1,
-
-    // back
-    -1, -1, -1, -1, 1, -1, 1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1,
-
-    // left
-    -1, -1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, -1, -1, -1, -1, -1, 1,
-
-    // top
-    -1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 1, -1, -1, 1, -1, -1, 1, 1,
-
-    // bottom
-    -1, -1, 1, -1, -1, -1, 1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+    // Front face
+    -1, -1,  1,   1, -1,  1,   1,  1,  1,   1,  1,  1,  -1,  1,  1,  -1, -1,  1,
+    // Right face
+     1, -1,  1,   1, -1, -1,   1,  1, -1,   1,  1, -1,   1,  1,  1,   1, -1,  1,
+    // Back face
+    -1, -1, -1,  -1,  1, -1,   1,  1, -1,   1,  1, -1,   1, -1, -1,  -1, -1, -1,
+    // Left face
+    -1, -1,  1,  -1,  1,  1,  -1,  1, -1,  -1,  1, -1,  -1, -1, -1,  -1, -1,  1,
+    // Top face
+    -1,  1,  1,   1,  1,  1,   1,  1, -1,   1,  1, -1,  -1,  1, -1,  -1,  1,  1,
+    // Bottom face
+    -1, -1,  1,  -1, -1, -1,   1, -1, -1,   1, -1, -1,   1, -1,  1,  -1, -1,  1,
   ]);
+
   const normals = new Float32Array([
-    // front
-    0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
-
-    // right
-    1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,
-
-    // back
-    0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
-
-    // left
-    -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,
-
-    // top
-    0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0,
-
-    // bottom
-    0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0,
+    // Front
+    0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,
+    // Right
+    1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,
+    // Back
+    0, 0, -1,  0, 0, -1,  0, 0, -1,  0, 0, -1,  0, 0, -1,  0, 0, -1,
+    // Left
+    -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
+    // Top
+    0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,
+    // Bottom
+    0, -1, 0,  0, -1, 0,  0, -1, 0,  0, -1, 0,  0, -1, 0,  0, -1, 0,
   ]);
 
-  return {
-    positions,
-    normals,
-  };
+  // Add UV coordinates for texture mapping
+  const uvs = new Float32Array([
+    // Front
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+    // Right
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+    // Back
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+    // Left
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+    // Top
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+    // Bottom
+    0, 0,  1, 0,  1, 1,  1, 1,  0, 1,  0, 0,
+  ]);
+
+  return { positions, normals, uvs };
 };
 
 const FullScreenQuadData = () => {
@@ -244,42 +249,94 @@ const BackgroundShaders = () => {
 
     const fragment = `
         struct Uniforms {
-            time : f32,
-            resolution : vec2<f32>,
+            time: f32,
+            resolution: vec2<f32>,
+            color1: vec3<f32>,
+            color2: vec3<f32>,
+            color3: vec3<f32>,
         };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+        @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-            var color = vec3<f32>(0.0);
+          let time = uniforms.time * 0.3; // Slower, calmer animation
+          let uv = vUV;
 
-            // Grid effect
-            let uv = vUV * 20.0;
-            let time = uniforms.time * 0.5;
+          // Base deep space color
+          let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
 
-            // Animated grid
-            let val = sin(uv.x + time) + cos(uv.y + time);
+          // --- Multi-layer perspective grid ---
+          var grid = 0.0;
+          // Four layers of grids at different scales for depth
+          for (var layer: i32 = 0; layer < 4; layer++) {
+            let layer_f = f32(layer);
+            let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
+            let speed = 0.1 + layer_f * 0.05;
 
-            // "Plasma" like background
-            let r = sin(vUV.x * 10.0 + time) * 0.5 + 0.5;
-            let g = cos(vUV.y * 10.0 + time * 0.8) * 0.5 + 0.5;
-            let b = sin((vUV.x + vUV.y) * 10.0 - time) * 0.5 + 0.5;
+            // Perspective offset for each layer
+            let perspectiveOffset = vec2<f32>(
+              sin(time * speed) * (0.05 + layer_f * 0.02),
+              cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
+            );
 
-            // Deep space / futuristic grid look
-            let gridX = abs(fract(vUV.x * 20.0 + time * 0.1) - 0.5);
-            let gridY = abs(fract(vUV.y * 20.0 + time * 0.05) - 0.5);
-            let grid = 1.0 - step(0.02, min(gridX, gridY));
+            let gridUV = (uv - 0.5) * scale + perspectiveOffset;
 
-            let deepColor = vec3<f32>(0.05, 0.0, 0.1);
-            let gridColor = vec3<f32>(0.0, 0.8, 1.0) * 0.5;
+            // Smooth grid lines that get thinner with distance
+            let lineWidth = 0.02 / scale;
+            let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
+            let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
-            color = mix(deepColor, gridColor, grid);
+            // Combine X and Y lines, fade distant layers
+            let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
+            grid = max(grid, layerGrid);
+          }
 
-            // Add some moving lights/glows
-            let light1 = 0.05 / length(vUV - vec2<f32>(0.5 + sin(time)*0.3, 0.5 + cos(time*0.7)*0.3));
-            color += vec3<f32>(0.8, 0.2, 0.5) * light1;
+          // --- Dynamic neon color palette ---
+          // Cycle through cyberpunk colors
+          let colorCycle = sin(time * 0.5) * 0.5 + 0.5;
+          let neonCyan = uniforms.color1;
+          let neonPurple = uniforms.color2;
+          let neonBlue = uniforms.color3;
 
-            return vec4<f32>(color, 1.0);
+          let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
+
+          // --- Multiple orbiting light sources ---
+          var lights = vec3<f32>(0.0);
+          for (var i: i32 = 0; i < 3; i++) {
+            let idx = f32(i);
+            let angle = time * (0.3 + idx * 0.2) + idx * 2.094; // 120° separation
+            let radius = 0.25 + idx * 0.1;
+            let lightPos = vec2<f32>(
+              0.5 + cos(angle) * radius,
+              0.5 + sin(angle) * radius
+            );
+
+            // Quadratic falloff for realistic lighting
+            let dist = length(uv - lightPos);
+            let intensity = 0.08 / (dist * dist + 0.01);
+
+            // Each light has a different color
+            let lightColor = mix(neonCyan, neonPurple, sin(time + idx) * 0.5 + 0.5);
+            lights += lightColor * intensity;
+          }
+
+          // --- Global pulse effect ---
+          let pulse = sin(time * 1.5) * 0.15 + 0.85;
+
+          // Combine all elements
+          var finalColor = deepSpace;
+          finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
+          finalColor += lights;
+
+          // --- Vignette effect to focus on center ---
+          let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
+          finalColor *= vignette;
+
+          // --- Subtle film grain for texture ---
+          let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+          finalColor += (noise - 0.5) * 0.03;
+
+          return vec4<f32>(finalColor, 1.0);
         }
     `;
 
@@ -316,15 +373,14 @@ const Shaders = () => {
             };
           
             @vertex
-            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>) -> Output {
+            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
                 let mPosition:vec4<f32> = uniforms.modelMatrix * position;
                 output.vPosition = mPosition;
                 output.vNormal   =  uniforms.normalMatrix*normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
                 output.vColor   =  uniforms.colorVertex;
-                // Simple UV mapping for cube faces based on position
-                output.vUV = position.xy * 0.5 + 0.5;
+                output.vUV = uv;
                 return output;
             }`;
 
@@ -422,6 +478,7 @@ export default class View {
   numberOfVertices!: number;
   vertexBuffer!: GPUBuffer;
   normalBuffer!: GPUBuffer;
+  uvBuffer!: GPUBuffer; // Add UV buffer
   pipeline!: GPURenderPipeline;
   fragmentUniformBuffer!: GPUBuffer;
   MODELMATRIX: any;
@@ -472,7 +529,12 @@ export default class View {
       6: [0.88, 0.75, 0.91], // T
       7: [1.0, 0.8, 0.82],   // Z
       border: [0.82, 0.77, 0.91],
-      levelVideos: DEFAULT_LEVEL_VIDEOS
+      levelVideos: DEFAULT_LEVEL_VIDEOS,
+      backgroundColors: [
+        [1.0, 0.8, 0.82],   // Pink
+        [0.69, 0.92, 0.95], // Mint
+        [0.88, 0.75, 0.91]  // Lavender
+      ]
     },
     neon: {
       0: [0.1, 0.1, 0.1],
@@ -484,7 +546,12 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
-      levelVideos: DEFAULT_LEVEL_VIDEOS
+      levelVideos: DEFAULT_LEVEL_VIDEOS,
+      backgroundColors: [
+        [0.0, 0.9, 1.0], // Neon Cyan
+        [0.8, 0.3, 1.0], // Neon Purple
+        [0.2, 0.5, 1.0]  // Neon Blue
+      ]
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -496,7 +563,12 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
-      levelVideos: DEFAULT_LEVEL_VIDEOS
+      levelVideos: DEFAULT_LEVEL_VIDEOS,
+      backgroundColors: [
+        [0.0, 0.9, 0.9], // Cyan
+        [0.6, 0.0, 0.9], // Purple
+        [0.0, 0.2, 0.9]  // Deep Blue
+      ]
     }
   };
 
@@ -878,6 +950,7 @@ export default class View {
     this.numberOfVertices = cubeData.positions.length / 3;
     this.vertexBuffer = this.CreateGPUBuffer(this.device, cubeData.positions);
     this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
+    this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs); // Create UV buffer
 
     this.pipeline = this.device.createRenderPipeline({
       label: 'main pipeline',
@@ -904,6 +977,16 @@ export default class View {
               {
                 shaderLocation: 1,
                 format: "float32x3",
+                offset: 0,
+              },
+            ],
+          },
+          {
+            arrayStride: 8, // vec2<f32>
+            attributes: [
+              {
+                shaderLocation: 2,
+                format: "float32x2",
                 offset: 0,
               },
             ],
@@ -969,7 +1052,7 @@ export default class View {
 
     // Background Uniforms
     this.backgroundUniformBuffer = this.device.createBuffer({
-        size: 16, // time(f32) + padding(f32) + resolution(vec2<f32>) = 4+4+8 = 16
+        size: 64, // time(4)+pad(4)+res(8) + 3*colors(16*3=48) = 64
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1256,6 +1339,7 @@ export default class View {
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setVertexBuffer(0, this.vertexBuffer);
     passEncoder.setVertexBuffer(1, this.normalBuffer);
+    passEncoder.setVertexBuffer(2, this.uvBuffer);
 
     let length_of_uniformBindGroup_boder =
       this.uniformBindGroup_ARRAY_border.length;
