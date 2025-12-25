@@ -274,6 +274,7 @@ export default class View {
   // Video Background
   videoElement: HTMLVideoElement;
   isVideoPlaying: boolean = false;
+  currentLevel: number = 0;
 
   // Visual Effects
   flashTimer: number = 0;
@@ -290,7 +291,15 @@ export default class View {
       6: [0.88, 0.75, 0.91], // T
       7: [1.0, 0.8, 0.82],   // Z
       border: [0.82, 0.77, 0.91],
-      backgroundVideo: null
+      levelVideos: [
+        './assets/video/bg1.mp4',
+        './assets/video/bg2.mp4',
+        './assets/video/bg3.mp4',
+        './assets/video/bg4.mp4',
+        './assets/video/bg5.mp4',
+        './assets/video/bg6.mp4',
+        './assets/video/bg7.mp4'
+      ]
     },
     neon: {
       0: [0.1, 0.1, 0.1],
@@ -302,7 +311,15 @@ export default class View {
       6: [0.5, 0.0, 1.0], // Purple for T
       7: [1.0, 0.0, 0.0], // Red for Z
       border: [1.0, 1.0, 1.0],
-      backgroundVideo: './assets/video/bg3.mp4'
+      levelVideos: [
+        './assets/video/bg1.mp4',
+        './assets/video/bg2.mp4',
+        './assets/video/bg3.mp4',
+        './assets/video/bg4.mp4',
+        './assets/video/bg5.mp4',
+        './assets/video/bg6.mp4',
+        './assets/video/bg7.mp4'
+      ]
     },
     future: {
       0: [0.1, 0.1, 0.1],
@@ -314,7 +331,15 @@ export default class View {
       6: [0.6, 0.0, 0.9], // Purple
       7: [0.9, 0.0, 0.0], // Red
       border: [0.5, 0.8, 1.0],
-      backgroundVideo: './assets/video/bg3.mp4'
+      levelVideos: [
+        './assets/video/bg1.mp4',
+        './assets/video/bg2.mp4',
+        './assets/video/bg3.mp4',
+        './assets/video/bg4.mp4',
+        './assets/video/bg5.mp4',
+        './assets/video/bg6.mp4',
+        './assets/video/bg7.mp4'
+      ]
     }
   };
 
@@ -427,6 +452,45 @@ export default class View {
     this.videoElement.style.height = `${this.playfildInnerHeight}px`;
   }
 
+  updateVideoForLevel(level: number) {
+    // @ts-ignore
+    const levelVideos = this.currentTheme.levelVideos;
+    
+    if (!levelVideos || levelVideos.length === 0) {
+      // No videos configured for this theme
+      this.videoElement.pause();
+      this.videoElement.src = "";
+      this.videoElement.style.display = 'none';
+      this.isVideoPlaying = false;
+      return;
+    }
+
+    // Cap level to available videos (cycle through if level exceeds videos)
+    const videoIndex = Math.min(level, levelVideos.length - 1);
+    const videoSrc = levelVideos[videoIndex];
+
+    // Only update if the source is different
+    if (this.videoElement.src && this.videoElement.src.endsWith(videoSrc)) {
+      return; // Already playing the correct video
+    }
+
+    this.isVideoPlaying = false; // Reset state
+    if (videoSrc) {
+      this.videoElement.src = videoSrc;
+      // Don't show immediately, wait for 'playing' event
+      this.videoElement.play().catch(e => {
+        console.log("Video autoplay failed", e);
+        // Fallback handled by catch + error listener
+        this.isVideoPlaying = false;
+        this.videoElement.style.display = 'none';
+      });
+    } else {
+      this.videoElement.pause();
+      this.videoElement.src = "";
+      this.videoElement.style.display = 'none';
+    }
+  }
+
   resize() {
     if (!this.device) return;
     this.width = window.innerWidth;
@@ -474,25 +538,10 @@ export default class View {
   setTheme(themeName) {
     // @ts-ignore
     this.currentTheme = this.themes[themeName];
+    this.currentLevel = 0; // Reset to level 0 when theme changes
 
-    // Handle Video Background
-    // @ts-ignore
-    const videoSrc = this.currentTheme.backgroundVideo;
-    this.isVideoPlaying = false; // Reset state
-    if (videoSrc) {
-        this.videoElement.src = videoSrc;
-        // Don't show immediately, wait for 'playing' event
-        this.videoElement.play().catch(e => {
-            console.log("Video autoplay failed", e);
-            // Fallback handled by catch + error listener
-            this.isVideoPlaying = false;
-            this.videoElement.style.display = 'none';
-        });
-    } else {
-        this.videoElement.pause();
-        this.videoElement.src = "";
-        this.videoElement.style.display = 'none';
-    }
+    // Handle Video Background - start with level 0 video
+    this.updateVideoForLevel(0);
 
     // Re-render boarder if possible, but borders are static buffers.
     // We need to re-create border buffers or update them.
@@ -556,6 +605,12 @@ export default class View {
   }
 
   renderMainScreen(state: any) {
+    // Check if level has changed and update video accordingly
+    if (state.level !== this.currentLevel) {
+      this.currentLevel = state.level;
+      this.updateVideoForLevel(this.currentLevel);
+    }
+
     // this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
     this.renderPiece(this.nextPieceContext, state.nextPiece);
