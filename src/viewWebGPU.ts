@@ -28,6 +28,146 @@ const DEFAULT_LEVEL_VIDEOS = [
   './assets/video/bg7.mp4'
 ];
 
+interface Particle {
+    position: Float32Array; // x, y, z
+    velocity: Float32Array; // vx, vy, vz
+    color: Float32Array;    // r, g, b, a
+    life: number;           // remaining life (0-1)
+    scale: number;
+}
+
+const ParticleShaders = () => {
+    const vertex = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        struct VertexOutput {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) color : vec4<f32>,
+        };
+
+        struct Particle {
+            pos : vec3<f32>,
+            vel : vec3<f32>,
+            color : vec4<f32>,
+            life : f32,
+            scale : f32,
+        };
+
+        // This is a simplified approach where we pass particle data as a vertex buffer
+        // Ideally we would use instancing or compute shaders for simulation,
+        // but for simplicity we'll update buffer on CPU.
+
+        @vertex
+        fn main(
+            @location(0) particlePos : vec3<f32>,
+            @location(1) particleColor : vec4<f32>,
+            @location(2) particleScale : f32,
+            @builtin(vertex_index) vertexIndex : u32
+        ) -> VertexOutput {
+            var output : VertexOutput;
+
+            // Generate a quad from vertexIndex (0-5)
+            // 0: -1,-1
+            // 1:  1,-1
+            // 2: -1, 1
+            // 3: -1, 1
+            // 4:  1,-1
+            // 5:  1, 1
+
+            var pos = vec2<f32>(0.0);
+            if (vertexIndex == 0u) { pos = vec2<f32>(-1.0, -1.0); }
+            else if (vertexIndex == 1u) { pos = vec2<f32>( 1.0, -1.0); }
+            else if (vertexIndex == 2u) { pos = vec2<f32>(-1.0,  1.0); }
+            else if (vertexIndex == 3u) { pos = vec2<f32>(-1.0,  1.0); }
+            else if (vertexIndex == 4u) { pos = vec2<f32>( 1.0, -1.0); }
+            else if (vertexIndex == 5u) { pos = vec2<f32>( 1.0,  1.0); }
+
+            let worldPos = particlePos + vec3<f32>(pos * particleScale * 0.5, 0.0);
+            output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
+            output.color = particleColor;
+
+            return output;
+        }
+    `;
+
+    const fragment = `
+        @fragment
+        fn main(@location(0) color : vec4<f32>) -> @location(0) vec4<f32> {
+            // Simple circular particle
+            // Since we don't pass UVs, we can just output color or maybe distance from center if we did pass UVs
+            // For now, simple square points
+            return color;
+        }
+    `;
+
+    // Better approach: use point primitives or pass UVs.
+    // Let's refine the vertex shader to pass corner UVs.
+
+    const vertexRefined = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        struct VertexOutput {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) color : vec4<f32>,
+            @location(1) uv : vec2<f32>,
+        };
+
+        @vertex
+        fn main(
+            @location(0) particlePos : vec3<f32>,
+            @location(1) particleColor : vec4<f32>,
+            @location(2) particleScale : f32,
+            @builtin(vertex_index) vertexIndex : u32
+        ) -> VertexOutput {
+            var output : VertexOutput;
+
+            // 6 vertices per particle
+            let particleIdx = vertexIndex / 6u;
+            let cornerIdx = vertexIndex % 6u;
+
+            var pos = vec2<f32>(0.0);
+            var uv = vec2<f32>(0.0);
+
+            if (cornerIdx == 0u) { pos = vec2<f32>(-1.0, -1.0); uv = vec2<f32>(0.0, 0.0); }
+            else if (cornerIdx == 1u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
+            else if (cornerIdx == 2u) { pos = vec2<f32>(-1.0,  1.0); uv = vec2<f32>(0.0, 1.0); }
+            else if (cornerIdx == 3u) { pos = vec2<f32>(-1.0,  1.0); uv = vec2<f32>(0.0, 1.0); }
+            else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
+            else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
+
+            // Billboarding: Ideally we align with camera, but for now just XY plane is okay as camera is fixed
+            let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
+
+            output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
+            output.color = particleColor;
+            output.uv = uv;
+
+            return output;
+        }
+    `;
+
+    const fragmentRefined = `
+        @fragment
+        fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
+            let dist = length(uv - 0.5);
+            if (dist > 0.5) {
+                discard;
+            }
+            // Soft glow
+            let alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+            return vec4<f32>(color.rgb, color.a * alpha);
+        }
+    `;
+
+    return { vertex: vertexRefined, fragment: fragmentRefined };
+}
+
 const CubeData = () => {
   const positions = new Float32Array([
     // front
@@ -216,7 +356,7 @@ const Shaders = () => {
                 // Futuristic Edge Glow
                 // Use UV coordinates to determine if we are near the edge of the face
                 let uvCentered = abs(vUV - 0.5) * 2.0;
-                let edgeWidth = 0.1;
+                let edgeWidth = 0.05; // Sharper edge
                 let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
                 let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
                 let edgeFactor = max(edgeFactorX, edgeFactorY);
@@ -224,18 +364,26 @@ const Shaders = () => {
                 var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
 
                 // Add rim lighting / fresnel effect for glassy look
-                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                finalColor += vec3<f32>(0.2, 0.4, 0.8) * fresnel * 0.5;
+                // Enhanced fresnel power for more "gem-like" appearance
+                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+                finalColor += vec3<f32>(0.4, 0.6, 1.0) * fresnel * 0.8;
 
                 // Mix in emission for edge (smooth glow)
                 if (edgeFactor > 0.0) {
-                     let glowColor = mix(vColor.xyz, vec3<f32>(1.0), 0.8);
-                     finalColor = mix(finalColor, glowColor * 2.0, edgeFactor);
+                     let glowColor = mix(vColor.xyz, vec3<f32>(1.0), 0.5);
+                     // Pulsing edge
+                     // Note: We don't have time uniform here in main shader currently,
+                     // but we can make it static or assume constant high glow
+                     finalColor = mix(finalColor, glowColor * 2.5, edgeFactor);
                 }
 
-                // Inner glow
-                // let d = length(vUV - 0.5);
-                // finalColor += vColor.xyz * (1.0 - d*2.0) * 0.2;
+                // Inner lattice/grid pattern for tech look
+                let gridX = abs(fract(vUV.x * 2.0) - 0.5);
+                let gridY = abs(fract(vUV.y * 2.0) - 0.5);
+                let innerGrid = step(0.48, max(gridX, gridY));
+                if (innerGrid > 0.0) {
+                    finalColor += vColor.xyz * 0.3;
+                }
 
                 return vec4<f32>(finalColor, vColor.w);
             }`;
@@ -294,6 +442,14 @@ export default class View {
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
   startTime: number;
+
+  // Particles
+  particles: Particle[] = [];
+  particlePipeline!: GPURenderPipeline;
+  particleVertexBuffer!: GPUBuffer;
+  particleUniformBuffer!: GPUBuffer;
+  particleBindGroup!: GPUBindGroup;
+  maxParticles: number = 1000;
 
   // Video Background
   videoElement: HTMLVideoElement;
@@ -611,12 +767,48 @@ export default class View {
     });
   }
 
-  onLineClear(lines: number) {
+  onLineClear(lines: number[]) {
       this.flashTimer = 1.0;
+      // Emit particles for each cleared line
+      lines.forEach(y => {
+          // Calculate world position Y from grid Y
+          // Grid 0 is top. Grid 19 is bottom.
+          // In render logic: y = row * -2.2
+          // But wait, renderPlayfield_WebGPU uses: row * -2.2
+          // So line index y corresponds to world Y = y * -2.2
+          // And X center is roughly columns * 2.2 / 2
+          // col 0 = 0.0, col 9 = 9 * 2.2 = 19.8
+          // Center X = 10.0 approx
+
+          const worldY = y * -2.2;
+          const worldX = 4.5 * 2.2; // Center horizontally
+
+          this.emitParticles(worldX, worldY, 0.0, 50, [1.0, 0.8, 0.2, 1.0]); // Gold particles
+      });
   }
 
   onLock() {
       this.lockTimer = 0.5;
+      // Emit some subtle particles at active piece?
+      // We don't have active piece pos easily here without querying state again or tracking it.
+      // But we can just do a general flash.
+  }
+
+  emitParticles(x: number, y: number, z: number, count: number, color: number[]) {
+      for(let i=0; i<count; i++) {
+          if (this.particles.length >= this.maxParticles) break;
+
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 5.0 + 2.0;
+
+          this.particles.push({
+              position: new Float32Array([x, y, z]),
+              velocity: new Float32Array([Math.cos(angle)*speed, Math.sin(angle)*speed, (Math.random()-0.5)*5.0]),
+              color: new Float32Array(color),
+              life: 1.0,
+              scale: Math.random() * 0.5 + 0.2
+          });
+      }
   }
 
   renderMainScreen(state: any) {
@@ -789,6 +981,67 @@ export default class View {
         }]
     });
 
+    // --- Particle Pipeline ---
+    const particleShader = ParticleShaders();
+
+    this.particlePipeline = this.device.createRenderPipeline({
+        label: 'particle pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: particleShader.vertex }),
+            entryPoint: 'main',
+            buffers: [
+                // Interleaved buffer: pos(3) + color(4) + scale(1) = 8 floats = 32 bytes
+                {
+                    arrayStride: 32,
+                    stepMode: 'instance', // We are drawing quads (6 verts) per instance
+                    attributes: [
+                        { shaderLocation: 0, format: 'float32x3', offset: 0 },  // pos
+                        { shaderLocation: 1, format: 'float32x4', offset: 12 }, // color
+                        { shaderLocation: 2, format: 'float32',   offset: 28 }, // scale
+                    ]
+                }
+            ]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: particleShader.fragment }),
+            entryPoint: 'main',
+            targets: [{
+                format: presentationFormat,
+                blend: {
+                    color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' }, // Additive blending for glow
+                    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+                }
+            }]
+        },
+        primitive: { topology: 'triangle-list' },
+        depthStencil: {
+            format: 'depth24plus',
+            depthWriteEnabled: false, // Particles don't write to depth
+            depthCompare: 'less',
+        }
+    });
+
+    // Create initial particle buffer (enough for max particles)
+    // 32 bytes per particle * maxParticles
+    this.particleVertexBuffer = this.device.createBuffer({
+        size: 32 * this.maxParticles,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+
+    this.particleUniformBuffer = this.device.createBuffer({
+        size: 64, // Mat4 for ViewProjection
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.particleBindGroup = this.device.createBindGroup({
+        layout: this.particlePipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: this.particleUniformBuffer }
+        }]
+    });
+
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
@@ -868,6 +1121,7 @@ export default class View {
 
   Frame = () => {
     if (!this.device) return;
+    const dt = 1.0/60.0; // Approx dt
 
     // Update visual effects
     if (this.flashTimer > 0) this.flashTimer -= 0.05;
@@ -875,6 +1129,49 @@ export default class View {
 
     if (this.lockTimer > 0) this.lockTimer -= 0.05;
     if (this.lockTimer < 0) this.lockTimer = 0;
+
+    // Update particles
+    const activeParticles: number[] = [];
+    for(let i=this.particles.length-1; i>=0; i--) {
+        const p = this.particles[i];
+        p.life -= dt;
+        if (p.life > 0) {
+            // Update pos
+            p.position[0] += p.velocity[0] * dt;
+            p.position[1] += p.velocity[1] * dt;
+            p.position[2] += p.velocity[2] * dt;
+            // Gravity
+            p.velocity[1] -= 9.8 * dt;
+
+            // Build buffer data
+            activeParticles.push(i);
+        } else {
+            this.particles.splice(i, 1);
+        }
+    }
+
+    // Write particle buffer
+    if (this.particles.length > 0) {
+        const data = new Float32Array(this.particles.length * 8);
+        for(let i=0; i<this.particles.length; i++) {
+            const p = this.particles[i];
+            const offset = i * 8;
+            data[offset+0] = p.position[0];
+            data[offset+1] = p.position[1];
+            data[offset+2] = p.position[2];
+
+            data[offset+3] = p.color[0];
+            data[offset+4] = p.color[1];
+            data[offset+5] = p.color[2];
+            data[offset+6] = p.color[3] * p.life; // Fade out
+
+            data[offset+7] = p.scale * p.life; // Shrink
+        }
+        this.device.queue.writeBuffer(this.particleVertexBuffer, 0, data);
+
+        // Update uniforms for particles (sharing VP matrix)
+        this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
+    }
 
     // Update time for background
     const currentTime = (performance.now() - this.startTime) / 1000.0;
@@ -971,6 +1268,14 @@ export default class View {
     for (let index = 0; index < length_of_uniformBindGroup; index++) {
       passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY[index]);
       passEncoder.draw(this.numberOfVertices);
+    }
+
+    // Draw particles
+    if (this.particles.length > 0) {
+        passEncoder.setPipeline(this.particlePipeline);
+        passEncoder.setBindGroup(0, this.particleBindGroup);
+        passEncoder.setVertexBuffer(0, this.particleVertexBuffer);
+        passEncoder.draw(6, this.particles.length, 0, 0); // 6 vertices per instance, N instances
     }
 
     passEncoder.end();
