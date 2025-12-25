@@ -336,7 +336,7 @@ export default class View {
     this.videoElement.style.position = 'absolute';
     this.videoElement.style.zIndex = '-1'; // Behind canvas
     this.videoElement.style.display = 'none';
-    this.videoElement.style.objectFit = 'cover';
+    this.videoElement.style.objectFit = 'contain';
 
     // Fallback detection
     this.videoElement.addEventListener('error', () => {
