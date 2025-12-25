@@ -31,8 +31,7 @@ export default class Game {
   lockTimer: number = 0;
   readonly lockDelayTime: number = 500; // ms
 
-  // @ts-ignore
-  private static readonly SRS_KICKS_JLSTZ = {
+  private static readonly SRS_KICKS_JLSTZ: { [key: string]: number[][] } = {
     '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
     '1-0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
     '1-2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
@@ -43,8 +42,7 @@ export default class Game {
     '0-3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]]
   };
 
-  // @ts-ignore
-  private static readonly SRS_KICKS_I = {
+  private static readonly SRS_KICKS_I: { [key: string]: number[][] } = {
     '0-1': [[0, 0], [-2, 0], [1, 0], [-2, 1], [1, -2]],
     '1-0': [[0, 0], [2, 0], [-1, 0], [2, -1], [-1, 2]],
     '1-2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
@@ -265,8 +263,8 @@ export default class Game {
     return ghostY;
   }
 
-  hardDrop(): { linesCleared: number, locked: boolean, gameOver: boolean } {
-    const result = { linesCleared: 0, locked: false, gameOver: false };
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean } {
+    const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
     // Force a collision check which should lead to locking
@@ -276,8 +274,8 @@ export default class Game {
         this.lockPiece();
         result.locked = true;
         const linesScore = this.clearLine();
-        if (linesScore) {
-            this.updateScore(linesScore);
+        if (linesScore.length > 0) {
+            this.updateScore(linesScore.length);
             result.linesCleared = linesScore;
         }
         this.updatePieces();
@@ -300,8 +298,8 @@ export default class Game {
   }
 
   // Called every frame
-  update(dt: number): { linesCleared: number, locked: boolean, gameOver: boolean } {
-      const result = { linesCleared: 0, locked: false, gameOver: false };
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean } {
+      const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
       if (this.gameower) return result;
 
       // Check if piece is on the ground
@@ -315,8 +313,8 @@ export default class Game {
               this.lockPiece();
               result.locked = true;
               const linesScore = this.clearLine();
-              if (linesScore) {
-                  this.updateScore(linesScore);
+              if (linesScore.length > 0) {
+                  this.updateScore(linesScore.length);
                   result.linesCleared = linesScore;
               }
               this.updatePieces();
@@ -373,8 +371,8 @@ export default class Game {
     }
     this.lockPiece();
     const linesScore = this.clearLine();
-    if (linesScore) {
-      this.updateScore(linesScore);
+    if (linesScore.length > 0) {
+      this.updateScore(linesScore.length);
     }
     this.updatePieces();
   }
@@ -382,12 +380,15 @@ export default class Game {
   rotatePiece(rightRurn: boolean = true): void {
     const blocks = this.activPiece.blocks;
     const length = blocks.length;
-    // const type = this.activPiece.type; // Unused
+    const type = this.activPiece.type;
     const currentRotation = this.activPiece.rotation;
+    // Calculate next rotation index (0-3)
     let nextRotation = rightRurn ? (currentRotation + 1) % 4 : (currentRotation + 3) % 4;
 
-    const temp: number[][] = [];
+    // O piece does not rotate
+    if (type === 'O') return;
 
+    const temp: number[][] = [];
     for (let i = 0; i < length; i++) {
       temp[i] = new Array(length).fill(0);
     }
@@ -413,43 +414,67 @@ export default class Game {
     const originalY = this.activPiece.y;
     const originalRotation = this.activPiece.rotation;
 
-    // Apply new blocks
+    // Apply new blocks tentatively
     this.activPiece.blocks = temp;
-    this.activPiece.rotation = nextRotation; // Update rotation locally
+    this.activPiece.rotation = nextRotation;
 
-    if (this.hasCollision()) {
-        // Wall Kicks
-        const kicks = [
-            [1, 0], [-1, 0],  // Shift right/left
-            [0, -1],          // Shift up (floor kick)
-            [1, -1], [-1, -1], // Diagonal up
-            [2, 0], [-2, 0]   // Shift 2 (for I piece)
-        ];
+    if (!this.hasCollision()) {
+        // No collision, rotation successful immediately
+        this.resetLockTimerIfGrounded();
+        return;
+    }
 
-        let kicked = false;
+    // Collision detected, try Wall Kicks (SRS)
+    const key = `${currentRotation}-${nextRotation}`;
+    let kicks: number[][] = [];
 
-        for (const [ox, oy] of kicks) {
-            this.activPiece.x = originalX + ox;
-            this.activPiece.y = originalY + oy;
-            if (!this.hasCollision()) {
-                kicked = true;
-                break;
-            }
-        }
-
-        if (!kicked) {
-             // Revert everything
-             this.activPiece.x = originalX;
-             this.activPiece.y = originalY;
-             this.activPiece.blocks = originalBlocks;
-             this.activPiece.rotation = originalRotation;
-        } else {
-             // Successful kick
-             this.resetLockTimerIfGrounded();
-        }
+    if (type === 'I') {
+        kicks = Game.SRS_KICKS_I[key];
     } else {
-       // Successful rotation (no kick needed)
-       this.resetLockTimerIfGrounded();
+        kicks = Game.SRS_KICKS_JLSTZ[key];
+    }
+
+    if (!kicks) {
+        // Should not happen if tables are complete
+        this.activPiece.blocks = originalBlocks;
+        this.activPiece.rotation = originalRotation;
+        return;
+    }
+
+    let kicked = false;
+
+    // Iterate through kicks (test 1 is 0,0 which we already failed, but the array includes it usually?)
+    // The arrays in SRS_KICKS_... include [0,0] as the first element.
+    // Since we already checked [0,0] (implicit basic rotation), we could skip it,
+    // but checking it again is harmless and keeps logic simple.
+
+    for (const [ox, oy] of kicks) {
+        this.activPiece.x = originalX + ox;
+        this.activPiece.y = originalY + oy; // Remember Y is down-positive, but our table is already adapted?
+        // Wait, earlier I confirmed the table in src/game.ts matches Wiki but with Y inverted?
+        // Let's re-verify.
+        // Wiki 0->R (0->1) for J: (0,0), (-1,0), (-1,+1), (0,-2), (-1,-2)
+        // Code: [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]]
+        // Wiki +y is Up. Code +y is Down.
+        // So Wiki +1 (Up) -> Code -1 (Up).
+        // Wiki -2 (Down) -> Code +2 (Down).
+        // Matches! So we just add them.
+
+        if (!this.hasCollision()) {
+            kicked = true;
+            break;
+        }
+    }
+
+    if (!kicked) {
+        // Revert everything
+        this.activPiece.x = originalX;
+        this.activPiece.y = originalY;
+        this.activPiece.blocks = originalBlocks;
+        this.activPiece.rotation = originalRotation;
+    } else {
+        // Successful kick
+        this.resetLockTimerIfGrounded();
     }
   }
 
@@ -528,7 +553,7 @@ export default class Game {
     }
   }
 
-  clearLine(): number {
+  clearLine(): number[] {
     let lines: number[] = [];
     let playfield = this.playfield;
 
@@ -558,7 +583,7 @@ export default class Game {
       this.lines += 1;
     }
 
-    return lines.length;
+    return lines;
   }
 
   updateScore(lines: number): void {
