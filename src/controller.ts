@@ -148,8 +148,17 @@ export default class Controller {
         this.updateView();
         break;
       case 32: // SPACE
+        // Calculate drop distance for visual effect
+        const ghostY = this.game.getGhostY();
+        const dropDist = ghostY - this.game.activPiece.y;
+        const currentX = this.game.activPiece.x;
+
         const result = this.game.hardDrop();
         this.soundManager.playHardDrop();
+
+        // Trigger hard drop visual
+        this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist);
+
         if (result.linesCleared.length > 0) {
             this.soundManager.playLineClear(result.linesCleared.length);
             this.viewWebGPU.onLineClear(result.linesCleared);
@@ -212,8 +221,17 @@ export default class Controller {
               this.updateView();
               break;
           case 'Space':
+              // Calculate drop distance for visual effect
+              const ghostY2 = this.game.getGhostY();
+              const dropDist2 = ghostY2 - this.game.activPiece.y;
+              const currentX2 = this.game.activPiece.x;
+
               const resultHD = this.game.hardDrop();
               this.soundManager.playHardDrop();
+
+              // Trigger hard drop visual
+              this.viewWebGPU.onHardDrop(currentX2, ghostY2, dropDist2);
+
               if (resultHD.linesCleared.length > 0) {
                   this.soundManager.playLineClear(resultHD.linesCleared.length);
                   this.viewWebGPU.onLineClear(resultHD.linesCleared);
