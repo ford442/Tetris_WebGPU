@@ -388,7 +388,8 @@ const Shaders = () => {
             struct Uniforms {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
-                color : vec4<f32>
+                color : vec4<f32>,
+                time : f32, // Added time
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -399,7 +400,10 @@ const Shaders = () => {
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
-                let diffuse:f32 = 0.8 * max(dot(N, L), 0.0);
+
+                // Enhanced lighting
+                let diffuse:f32 = 0.9 * max(dot(N, L), 0.0);
+
                 var specular:f32;
                 var isp:i32 = ${params.isPhong};
                 if(isp == 1){
@@ -410,35 +414,45 @@ const Shaders = () => {
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // Futuristic Edge Glow
-                // Use UV coordinates to determine if we are near the edge of the face
                 let uvCentered = abs(vUV - 0.5) * 2.0;
-                let edgeWidth = 0.05; // Sharper edge
+                let edgeWidth = 0.05;
                 let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
                 let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
                 let edgeFactor = max(edgeFactorX, edgeFactorY);
 
                 var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
 
-                // Add rim lighting / fresnel effect for glassy look
-                // Enhanced fresnel power for more "gem-like" appearance
-                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-                finalColor += vec3<f32>(0.4, 0.6, 1.0) * fresnel * 0.8;
+                // Enhanced fresnel (gem-like)
+                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                // Iridescent fresnel
+                let fresnelColor = vec3<f32>(0.5, 0.8, 1.0) * fresnel * 1.5;
+                finalColor += fresnelColor;
 
-                // Mix in emission for edge (smooth glow)
+                // Pulsing edge glow using time
+                let pulse = sin(uniforms.time * 2.0) * 0.2 + 0.8;
+
                 if (edgeFactor > 0.0) {
                      let glowColor = mix(vColor.xyz, vec3<f32>(1.0), 0.5);
-                     // Pulsing edge
-                     // Note: We don't have time uniform here in main shader currently,
-                     // but we can make it static or assume constant high glow
-                     finalColor = mix(finalColor, glowColor * 2.5, edgeFactor);
+                     finalColor = mix(finalColor, glowColor * 3.0 * pulse, edgeFactor);
                 }
 
-                // Inner lattice/grid pattern for tech look
-                let gridX = abs(fract(vUV.x * 2.0) - 0.5);
-                let gridY = abs(fract(vUV.y * 2.0) - 0.5);
-                let innerGrid = step(0.48, max(gridX, gridY));
-                if (innerGrid > 0.0) {
-                    finalColor += vColor.xyz * 0.3;
+                // Ghost piece logic (transparency < 0.9)
+                if (vColor.w < 0.9) {
+                    // Wireframe / Hologram look
+                    // Discard inner fill mostly
+                    let ghostAlpha = edgeFactor * 0.8 + 0.1; // Mostly edges
+                    // Add scanline
+                    let ghostScan = sin(vUV.y * 50.0 + uniforms.time * 5.0) * 0.5 + 0.5;
+                    finalColor += vec3<f32>(0.2, 0.8, 1.0) * ghostScan * 0.5;
+
+                    return vec4<f32>(finalColor, ghostAlpha * vColor.w);
+                }
+
+                // Animated inner lattice/grid
+                // Tech scanline effect
+                let scanline = sin(vUV.y * 20.0 - uniforms.time * 2.0) * 0.5 + 0.5;
+                if (scanline > 0.9) {
+                    finalColor += vColor.xyz * 0.2;
                 }
 
                 return vec4<f32>(finalColor, vColor.w);
@@ -517,6 +531,8 @@ export default class View {
   // Visual Effects
   flashTimer: number = 0;
   lockTimer: number = 0;
+  shakeTimer: number = 0;
+  shakeMagnitude: number = 0;
 
   themes: Themes = {
     pastel: {
@@ -841,17 +857,11 @@ export default class View {
 
   onLineClear(lines: number[]) {
       this.flashTimer = 1.0;
+      this.shakeTimer = 0.5; // Shake on line clear
+      this.shakeMagnitude = 0.5;
+
       // Emit particles for each cleared line
       lines.forEach(y => {
-          // Calculate world position Y from grid Y
-          // Grid 0 is top. Grid 19 is bottom.
-          // In render logic: y = row * -2.2
-          // But wait, renderPlayfield_WebGPU uses: row * -2.2
-          // So line index y corresponds to world Y = y * -2.2
-          // And X center is roughly columns * 2.2 / 2
-          // col 0 = 0.0, col 9 = 9 * 2.2 = 19.8
-          // Center X = 10.0 approx
-
           const worldY = y * -2.2;
           const worldX = 4.5 * 2.2; // Center horizontally
 
@@ -861,9 +871,29 @@ export default class View {
 
   onLock() {
       this.lockTimer = 0.5;
-      // Emit some subtle particles at active piece?
-      // We don't have active piece pos easily here without querying state again or tracking it.
-      // But we can just do a general flash.
+      this.shakeTimer = 0.2; // Slight shake on lock
+      this.shakeMagnitude = 0.2;
+  }
+
+  onHardDrop(x: number, y: number, distance: number) {
+      // Create a vertical trail of particles
+      // x is column index (0-9)
+      // y is target row index (0-19)
+      // distance is number of blocks dropped
+
+      const worldX = x * 2.2;
+      // Start from top of drop
+      const startRow = y - distance;
+
+      for(let i=0; i<distance; i++) {
+          const r = startRow + i;
+          const worldY = r * -2.2;
+          // Emit a few particles per block traveled
+          this.emitParticles(worldX, worldY, 0.0, 5, [0.5, 0.8, 1.0, 0.8]);
+      }
+
+      this.shakeTimer = 0.3;
+      this.shakeMagnitude = 0.3;
   }
 
   emitParticles(x: number, y: number, z: number, count: number, color: number[]) {
@@ -1128,7 +1158,7 @@ export default class View {
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 64, // Increased size to be safe, though we only use 48 bytes currently
+      size: 80, // Need more space for time (offset 48) + padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -1138,6 +1168,14 @@ export default class View {
     this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
+    // Apply shake
+    if (this.shakeTimer > 0) {
+        const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
+        const shakeY = (Math.random() - 0.5) * this.shakeMagnitude;
+        eyePosition[0] += shakeX;
+        eyePosition[1] += shakeY;
+    }
+
     let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
 
     Matrix.mat4.identity(this.VIEWMATRIX);
@@ -1165,12 +1203,12 @@ export default class View {
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       0,
-      new Float32Array(eyePosition)
+      lightPosition
     );
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       16,
-      lightPosition
+      new Float32Array(eyePosition)
     );
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
@@ -1207,11 +1245,14 @@ export default class View {
     const dt = 1.0/60.0; // Approx dt
 
     // Update visual effects
-    if (this.flashTimer > 0) this.flashTimer -= 0.05;
+    if (this.flashTimer > 0) this.flashTimer -= dt;
     if (this.flashTimer < 0) this.flashTimer = 0;
 
-    if (this.lockTimer > 0) this.lockTimer -= 0.05;
+    if (this.lockTimer > 0) this.lockTimer -= dt;
     if (this.lockTimer < 0) this.lockTimer = 0;
+
+    if (this.shakeTimer > 0) this.shakeTimer -= dt;
+    if (this.shakeTimer < 0) this.shakeTimer = 0;
 
     // Update particles
     const activeParticles: number[] = [];
@@ -1256,10 +1297,16 @@ export default class View {
         this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     }
 
-    // Update time for background
+    // Update time for background and blocks
     const currentTime = (performance.now() - this.startTime) / 1000.0;
+
+    // Background time
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([currentTime]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+
+    // Block shader time (global update once per frame)
+    // 48 is the offset for 'time' in fragmentUniformBuffer
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([currentTime]));
 
     let textureView = this.ctxWebGPU.getCurrentTexture().createView();
     const depthTexture = this.device.createTexture({
@@ -1412,7 +1459,7 @@ export default class View {
               resource: {
                 buffer: this.fragmentUniformBuffer,
                 offset: 0,
-                size: 48,
+                size: 64, // Updated size to include time
               },
             },
           ],
@@ -1532,7 +1579,7 @@ export default class View {
               resource: {
                 buffer: this.fragmentUniformBuffer,
                 offset: 0,
-                size: 48,
+                size: 64,
               },
             },
           ],
