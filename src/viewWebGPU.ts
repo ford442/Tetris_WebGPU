@@ -47,75 +47,6 @@ const ParticleShaders = () => {
         struct VertexOutput {
             @builtin(position) Position : vec4<f32>,
             @location(0) color : vec4<f32>,
-        };
-
-        struct Particle {
-            pos : vec3<f32>,
-            vel : vec3<f32>,
-            color : vec4<f32>,
-            life : f32,
-            scale : f32,
-        };
-
-        // This is a simplified approach where we pass particle data as a vertex buffer
-        // Ideally we would use instancing or compute shaders for simulation,
-        // but for simplicity we'll update buffer on CPU.
-
-        @vertex
-        fn main(
-            @location(0) particlePos : vec3<f32>,
-            @location(1) particleColor : vec4<f32>,
-            @location(2) particleScale : f32,
-            @builtin(vertex_index) vertexIndex : u32
-        ) -> VertexOutput {
-            var output : VertexOutput;
-
-            // Generate a quad from vertexIndex (0-5)
-            // 0: -1,-1
-            // 1:  1,-1
-            // 2: -1, 1
-            // 3: -1, 1
-            // 4:  1,-1
-            // 5:  1, 1
-
-            var pos = vec2<f32>(0.0);
-            if (vertexIndex == 0u) { pos = vec2<f32>(-1.0, -1.0); }
-            else if (vertexIndex == 1u) { pos = vec2<f32>( 1.0, -1.0); }
-            else if (vertexIndex == 2u) { pos = vec2<f32>(-1.0,  1.0); }
-            else if (vertexIndex == 3u) { pos = vec2<f32>(-1.0,  1.0); }
-            else if (vertexIndex == 4u) { pos = vec2<f32>( 1.0, -1.0); }
-            else if (vertexIndex == 5u) { pos = vec2<f32>( 1.0,  1.0); }
-
-            let worldPos = particlePos + vec3<f32>(pos * particleScale * 0.5, 0.0);
-            output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
-            output.color = particleColor;
-
-            return output;
-        }
-    `;
-
-    const fragment = `
-        @fragment
-        fn main(@location(0) color : vec4<f32>) -> @location(0) vec4<f32> {
-            // Simple circular particle
-            // Since we don't pass UVs, we can just output color or maybe distance from center if we did pass UVs
-            // For now, simple square points
-            return color;
-        }
-    `;
-
-    // Better approach: use point primitives or pass UVs.
-    // Let's refine the vertex shader to pass corner UVs.
-
-    const vertexRefined = `
-        struct Uniforms {
-            viewProjectionMatrix : mat4x4<f32>,
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
-
-        struct VertexOutput {
-            @builtin(position) Position : vec4<f32>,
-            @location(0) color : vec4<f32>,
             @location(1) uv : vec2<f32>,
         };
 
@@ -128,8 +59,7 @@ const ParticleShaders = () => {
         ) -> VertexOutput {
             var output : VertexOutput;
 
-            // 6 vertices per particle
-            let particleIdx = vertexIndex / 6u;
+            // 6 vertices per particle (quad)
             let cornerIdx = vertexIndex % 6u;
 
             var pos = vec2<f32>(0.0);
@@ -142,7 +72,9 @@ const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
-            // Billboarding: Ideally we align with camera, but for now just XY plane is okay as camera is fixed
+            // Billboarding: Align with camera plane (simple XY approximation for this fixed view)
+            // For a true billboard in a perspective camera, we'd need the camera Up/Right vectors,
+            // but since the camera is mostly fixed looking at Z, this works reasonably well.
             let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
@@ -153,20 +85,31 @@ const ParticleShaders = () => {
         }
     `;
 
-    const fragmentRefined = `
+    const fragment = `
         @fragment
         fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            let dist = length(uv - 0.5);
-            if (dist > 0.5) {
+            let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
+            if (dist > 1.0) {
                 discard;
             }
-            // Soft glow
-            let alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-            return vec4<f32>(color.rgb, color.a * alpha);
+
+            // "Hot Core" effect
+            // Intense center, rapid falloff
+            let intensity = exp(-dist * 3.0);
+
+            // Sparkle shape (cross)
+            let uvCentered = abs(uv - 0.5);
+            let cross = max(1.0 - smoothstep(0.0, 0.4, uvCentered.x), 1.0 - smoothstep(0.0, 0.4, uvCentered.y));
+
+            // Combine
+            let alpha = intensity + cross * 0.5;
+            let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
+
+            return vec4<f32>(color.rgb * 1.5, finalAlpha); // Boost brightness
         }
     `;
 
-    return { vertex: vertexRefined, fragment: fragmentRefined };
+    return { vertex, fragment };
 }
 
 const CubeData = () => {
@@ -348,10 +291,10 @@ const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.3"; // Slightly brighter ambient
+  params.ambientIntensity = "0.4"; // Slightly brighter ambient
   params.diffuseIntensity = "0.9";
-  params.specularIntensity = "1.5"; // Much higher specular for glassy look
-  params.shininess = "64.0"; // Very sharp highlights
+  params.specularIntensity = "2.0"; // High specular for glass/crystal
+  params.shininess = "128.0"; // Very sharp highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -396,12 +339,12 @@ const Shaders = () => {
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
-              let N:vec3<f32> = normalize(vNormal.xyz);
+                let N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // Enhanced lighting
+                // --- Lighting ---
                 let diffuse:f32 = 0.9 * max(dot(N, L), 0.0);
 
                 var specular:f32;
@@ -413,46 +356,60 @@ const Shaders = () => {
                 }
                 let ambient:f32 = ${params.ambientIntensity};
 
-                // Futuristic Edge Glow
+                // --- Base Color Calculation ---
+                var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+
+                // --- Fresnel Effect (Iridescent Rim Light) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                // Shift fresnel color based on time and view angle for "cyber" look
+                let fresnelColor = mix(vec3<f32>(0.0, 0.8, 1.0), vec3<f32>(1.0, 0.0, 0.8), sin(uniforms.time + vPosition.y * 0.1) * 0.5 + 0.5);
+                finalColor += fresnelColor * fresnelTerm * 1.5;
+
+                // --- Inner Tech Lattice / Grid ---
+                // Create a grid pattern on the face
+                let uvScale = 4.0;
+                let gridUV = fract(vUV * uvScale);
+                let gridThickness = 0.05;
+                // Correctly use smoothstep(low, high, x)
+                let gridLineX = smoothstep(0.0, gridThickness, gridUV.x) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.x));
+                let gridLineY = smoothstep(0.0, gridThickness, gridUV.y) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.y));
+
+                // Invert to get lines
+                let gridLines = 1.0 - (gridLineX * gridLineY);
+
+                // Pulsing energy in the grid
+                let energyPulse = sin(uniforms.time * 3.0 - vPosition.y) * 0.5 + 0.5;
+                if (gridLines > 0.5) {
+                   finalColor += vColor.xyz * energyPulse * 0.8;
+                }
+
+                // --- Edge Glow ---
                 let uvCentered = abs(vUV - 0.5) * 2.0;
                 let edgeWidth = 0.05;
                 let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
                 let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
                 let edgeFactor = max(edgeFactorX, edgeFactorY);
 
-                var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
-
-                // Enhanced fresnel (gem-like)
-                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                // Iridescent fresnel
-                let fresnelColor = vec3<f32>(0.5, 0.8, 1.0) * fresnel * 1.5;
-                finalColor += fresnelColor;
-
-                // Pulsing edge glow using time
-                let pulse = sin(uniforms.time * 2.0) * 0.2 + 0.8;
-
                 if (edgeFactor > 0.0) {
-                     let glowColor = mix(vColor.xyz, vec3<f32>(1.0), 0.5);
-                     finalColor = mix(finalColor, glowColor * 3.0 * pulse, edgeFactor);
+                     let glowColor = vec3<f32>(1.0, 1.0, 1.0); // White hot edges
+                     finalColor = mix(finalColor, glowColor, edgeFactor * 0.8);
                 }
 
-                // Ghost piece logic (transparency < 0.9)
+                // --- Ghost Piece Rendering (Alpha < 0.9) ---
                 if (vColor.w < 0.9) {
-                    // Wireframe / Hologram look
-                    // Discard inner fill mostly
-                    let ghostAlpha = edgeFactor * 0.8 + 0.1; // Mostly edges
-                    // Add scanline
-                    let ghostScan = sin(vUV.y * 50.0 + uniforms.time * 5.0) * 0.5 + 0.5;
-                    finalColor += vec3<f32>(0.2, 0.8, 1.0) * ghostScan * 0.5;
+                    // Holographic Wireframe
+                    let ghostPulse = sin(uniforms.time * 8.0) * 0.3 + 0.5; // Fast pulse
 
-                    return vec4<f32>(finalColor, ghostAlpha * vColor.w);
-                }
+                    // Only draw edges and a faint scanline
+                    let ghostAlpha = edgeFactor * 1.0 + 0.05;
 
-                // Animated inner lattice/grid
-                // Tech scanline effect
-                let scanline = sin(vUV.y * 20.0 - uniforms.time * 2.0) * 0.5 + 0.5;
-                if (scanline > 0.9) {
-                    finalColor += vColor.xyz * 0.2;
+                    // Scanline
+                    let scanline = sin(vUV.y * 50.0 + uniforms.time * 5.0) * 0.5 + 0.5;
+                    let hologramColor = mix(vColor.xyz, vec3<f32>(0.5, 0.9, 1.0), 0.5); // Cyan tint
+
+                    finalColor = hologramColor + vec3<f32>(scanline * 0.3);
+
+                    return vec4<f32>(finalColor, ghostAlpha * vColor.w * ghostPulse);
                 }
 
                 return vec4<f32>(finalColor, vColor.w);
@@ -520,7 +477,7 @@ export default class View {
   particleVertexBuffer!: GPUBuffer;
   particleUniformBuffer!: GPUBuffer;
   particleBindGroup!: GPUBindGroup;
-  maxParticles: number = 1000;
+  maxParticles: number = 2000; // Increased limit
 
   // Video Background
   videoElement: HTMLVideoElement;
@@ -865,22 +822,19 @@ export default class View {
           const worldY = y * -2.2;
           const worldX = 4.5 * 2.2; // Center horizontally
 
-          this.emitParticles(worldX, worldY, 0.0, 50, [1.0, 0.8, 0.2, 1.0]); // Gold particles
+          // More particles, gold/white explosion
+          this.emitParticles(worldX, worldY, 0.0, 100, [1.0, 0.9, 0.5, 1.0]);
       });
   }
 
   onLock() {
-      this.lockTimer = 0.5;
-      this.shakeTimer = 0.2; // Slight shake on lock
-      this.shakeMagnitude = 0.2;
+      this.lockTimer = 0.3;
+      this.shakeTimer = 0.1;
+      this.shakeMagnitude = 0.1;
   }
 
   onHardDrop(x: number, y: number, distance: number) {
       // Create a vertical trail of particles
-      // x is column index (0-9)
-      // y is target row index (0-19)
-      // distance is number of blocks dropped
-
       const worldX = x * 2.2;
       // Start from top of drop
       const startRow = y - distance;
@@ -888,9 +842,12 @@ export default class View {
       for(let i=0; i<distance; i++) {
           const r = startRow + i;
           const worldY = r * -2.2;
-          // Emit a few particles per block traveled
-          this.emitParticles(worldX, worldY, 0.0, 5, [0.5, 0.8, 1.0, 0.8]);
+          // More particles per block, blue/cyan trail
+          this.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.8, 1.0, 0.8]);
       }
+
+      // Impact particles at bottom
+      this.emitParticles(worldX, y * -2.2, 0.0, 20, [0.8, 0.9, 1.0, 1.0]);
 
       this.shakeTimer = 0.3;
       this.shakeMagnitude = 0.3;
@@ -901,14 +858,18 @@ export default class View {
           if (this.particles.length >= this.maxParticles) break;
 
           const angle = Math.random() * Math.PI * 2;
-          const speed = Math.random() * 5.0 + 2.0;
+          const speed = Math.random() * 8.0 + 2.0;
 
           this.particles.push({
               position: new Float32Array([x, y, z]),
-              velocity: new Float32Array([Math.cos(angle)*speed, Math.sin(angle)*speed, (Math.random()-0.5)*5.0]),
+              velocity: new Float32Array([
+                  Math.cos(angle)*speed,
+                  Math.sin(angle)*speed + 5.0, // Upward bias
+                  (Math.random()-0.5)*10.0
+              ]),
               color: new Float32Array(color),
-              life: 1.0,
-              scale: Math.random() * 0.5 + 0.2
+              life: 1.0 + Math.random() * 0.5,
+              scale: Math.random() * 0.4 + 0.1
           });
       }
   }
@@ -1264,8 +1225,17 @@ export default class View {
             p.position[0] += p.velocity[0] * dt;
             p.position[1] += p.velocity[1] * dt;
             p.position[2] += p.velocity[2] * dt;
-            // Gravity
+
+            // Gravity with some turbulence
             p.velocity[1] -= 9.8 * dt;
+
+            // Simple drag
+            p.velocity[0] *= 0.98;
+            p.velocity[2] *= 0.98;
+
+            // Add turbulence
+            p.velocity[0] += (Math.random() - 0.5) * 2.0 * dt;
+            p.velocity[2] += (Math.random() - 0.5) * 2.0 * dt;
 
             // Build buffer data
             activeParticles.push(i);
