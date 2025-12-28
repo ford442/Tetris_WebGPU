@@ -95,17 +95,28 @@ const ParticleShaders = () => {
 
             // "Hot Core" effect
             // Intense center, rapid falloff
-            let intensity = exp(-dist * 3.0);
+            let intensity = exp(-dist * 4.0); // Sharper core
 
-            // Sparkle shape (cross)
+            // Sparkle shape (star)
             let uvCentered = abs(uv - 0.5);
-            let cross = max(1.0 - smoothstep(0.0, 0.4, uvCentered.x), 1.0 - smoothstep(0.0, 0.4, uvCentered.y));
+            // Rotate UV 45 degrees for second cross
+            let rot = 0.7071;
+            let uvr = vec2<f32>(
+                uvCentered.x * rot - uvCentered.y * rot,
+                uvCentered.x * rot + uvCentered.y * rot
+            );
+            let uvrCentered = abs(uvr);
+
+            let cross1 = max(1.0 - smoothstep(0.0, 0.3, uvCentered.x), 1.0 - smoothstep(0.0, 0.3, uvCentered.y));
+            let cross2 = max(1.0 - smoothstep(0.0, 0.3, uvrCentered.x), 1.0 - smoothstep(0.0, 0.3, uvrCentered.y));
+
+            let sparkle = max(cross1, cross2 * 0.7); // Main cross + smaller diagonal cross
 
             // Combine
-            let alpha = intensity + cross * 0.5;
+            let alpha = intensity + sparkle * 0.6;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            return vec4<f32>(color.rgb * 1.5, finalAlpha); // Boost brightness
+            return vec4<f32>(color.rgb * 2.0, finalAlpha); // Boost brightness
         }
     `;
 
@@ -348,68 +359,82 @@ const Shaders = () => {
                 let diffuse:f32 = 0.9 * max(dot(N, L), 0.0);
 
                 var specular:f32;
-                var isp:i32 = ${params.isPhong};
-                if(isp == 1){
-                    specular = ${params.specularIntensity} * pow(max(dot(V, reflect(-L, N)),0.0), ${params.shininess});
-                } else {
-                    specular = ${params.specularIntensity} * pow(max(dot(N, H),0.0), ${params.shininess});
-                }
+                // Blinn-Phong
+                specular = ${params.specularIntensity} * pow(max(dot(N, H),0.0), ${params.shininess});
+
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- Base Color Calculation ---
-                var finalColor:vec3<f32> = vColor.xyz * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+                var baseColor = vColor.xyz;
+
+                // Make colors a bit more vibrant
+                // baseColor = pow(baseColor, vec3<f32>(0.8));
+
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
 
                 // --- Fresnel Effect (Iridescent Rim Light) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                // Shift fresnel color based on time and view angle for "cyber" look
-                let fresnelColor = mix(vec3<f32>(0.0, 0.8, 1.0), vec3<f32>(1.0, 0.0, 0.8), sin(uniforms.time + vPosition.y * 0.1) * 0.5 + 0.5);
-                finalColor += fresnelColor * fresnelTerm * 1.5;
+                let fresnelPower = 3.0;
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), fresnelPower);
+
+                // Iridescent color based on view angle and time
+                let iriColor = vec3<f32>(
+                    0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5),
+                    0.5 + 0.5 * sin(uniforms.time * 0.8 + vPosition.y * 0.5 + 2.0),
+                    0.5 + 0.5 * sin(uniforms.time * 1.2 + vPosition.z * 0.5 + 4.0)
+                );
+
+                finalColor += iriColor * fresnelTerm * 2.0;
 
                 // --- Inner Tech Lattice / Grid ---
-                // Create a grid pattern on the face
                 let uvScale = 4.0;
                 let gridUV = fract(vUV * uvScale);
                 let gridThickness = 0.05;
-                // Correctly use smoothstep(low, high, x)
+
                 let gridLineX = smoothstep(0.0, gridThickness, gridUV.x) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.x));
                 let gridLineY = smoothstep(0.0, gridThickness, gridUV.y) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.y));
-
-                // Invert to get lines
                 let gridLines = 1.0 - (gridLineX * gridLineY);
 
                 // Pulsing energy in the grid
                 let energyPulse = sin(uniforms.time * 3.0 - vPosition.y) * 0.5 + 0.5;
                 if (gridLines > 0.5) {
-                   finalColor += vColor.xyz * energyPulse * 0.8;
+                   // Add a "deep" glow to the grid lines
+                   finalColor += baseColor * energyPulse * 1.2;
+                   finalColor += vec3<f32>(0.8, 0.9, 1.0) * energyPulse * 0.5; // White hot core
                 }
 
                 // --- Edge Glow ---
                 let uvCentered = abs(vUV - 0.5) * 2.0;
-                let edgeWidth = 0.05;
+                let edgeWidth = 0.08; // Slightly thicker
                 let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
                 let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
                 let edgeFactor = max(edgeFactorX, edgeFactorY);
 
                 if (edgeFactor > 0.0) {
-                     let glowColor = vec3<f32>(1.0, 1.0, 1.0); // White hot edges
-                     finalColor = mix(finalColor, glowColor, edgeFactor * 0.8);
+                     let glowColor = vec3<f32>(1.0, 1.0, 1.0);
+                     finalColor = mix(finalColor, glowColor, edgeFactor * 0.9);
                 }
 
                 // --- Ghost Piece Rendering (Alpha < 0.9) ---
                 if (vColor.w < 0.9) {
                     // Holographic Wireframe
-                    let ghostPulse = sin(uniforms.time * 8.0) * 0.3 + 0.5; // Fast pulse
+                    let ghostPulse = sin(uniforms.time * 8.0) * 0.3 + 0.5;
 
-                    // Only draw edges and a faint scanline
-                    let ghostAlpha = edgeFactor * 1.0 + 0.05;
+                    // Scanline effect
+                    let scanline = step(0.5, sin(vUV.y * 50.0 + uniforms.time * 5.0));
 
-                    // Scanline
-                    let scanline = sin(vUV.y * 50.0 + uniforms.time * 5.0) * 0.5 + 0.5;
-                    let hologramColor = mix(vColor.xyz, vec3<f32>(0.5, 0.9, 1.0), 0.5); // Cyan tint
+                    // Glitch offset
+                    let glitch = step(0.98, sin(uniforms.time * 20.0 + vUV.y * 10.0));
 
-                    finalColor = hologramColor + vec3<f32>(scanline * 0.3);
+                    let ghostColor = mix(vColor.xyz, vec3<f32>(0.0, 1.0, 1.0), 0.5); // Cyan tint
 
-                    return vec4<f32>(finalColor, ghostAlpha * vColor.w * ghostPulse);
+                    // Only edges + scanlines
+                    var finalGhost = ghostColor * (edgeFactor + scanline * 0.2);
+
+                    if (glitch > 0.5) {
+                        finalGhost += vec3<f32>(1.0); // White flash
+                    }
+
+                    return vec4<f32>(finalGhost, 0.4 * ghostPulse);
                 }
 
                 return vec4<f32>(finalColor, vColor.w);
@@ -477,7 +502,7 @@ export default class View {
   particleVertexBuffer!: GPUBuffer;
   particleUniformBuffer!: GPUBuffer;
   particleBindGroup!: GPUBindGroup;
-  maxParticles: number = 2000; // Increased limit
+  maxParticles: number = 4000; // Increased limit
 
   // Video Background
   videoElement: HTMLVideoElement;
@@ -779,9 +804,6 @@ export default class View {
     // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
-    // Center the piece in the 4x4 or 3x3 grid
-    // Usually pieces are 3x3 or 4x4.
-    // Canvas is 80x80 (4 blocks).
     const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
     const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
 
@@ -789,24 +811,40 @@ export default class View {
       row.forEach((value: number, x: number) => {
         if (value > 0) {
           const color = themeColors[value] as number[];
-          // Draw with gradient/bevel
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          const grd = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
-          grd.addColorStop(0, `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`);
-          grd.addColorStop(1, `rgb(${color[0] * 150}, ${color[1] * 150}, ${color[2] * 150})`);
-
-          ctx.fillStyle = grd;
+          // Main fill
+          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
           ctx.fillRect(px, py, blockSize, blockSize);
 
-          // Inner highlight
-          ctx.fillStyle = 'rgba(255,255,255,0.3)';
-          ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+          // Top/Left Highlight (Bevel)
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.beginPath();
+          ctx.moveTo(px, py + blockSize);
+          ctx.lineTo(px, py);
+          ctx.lineTo(px + blockSize, py);
+          ctx.lineTo(px + blockSize - 4, py + 4);
+          ctx.lineTo(px + 4, py + 4);
+          ctx.lineTo(px + 4, py + blockSize - 4);
+          ctx.closePath();
+          ctx.fill();
 
-          // Add a border for style
-          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-          ctx.strokeRect(px, py, blockSize, blockSize);
+          // Bottom/Right Shadow (Bevel)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.beginPath();
+          ctx.moveTo(px + blockSize, py);
+          ctx.lineTo(px + blockSize, py + blockSize);
+          ctx.lineTo(px, py + blockSize);
+          ctx.lineTo(px + 4, py + blockSize - 4);
+          ctx.lineTo(px + blockSize - 4, py + blockSize - 4);
+          ctx.lineTo(px + blockSize - 4, py + 4);
+          ctx.closePath();
+          ctx.fill();
+
+          // Center Highlight
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fillRect(px + 5, py + 5, blockSize - 10, blockSize - 10);
         }
       });
     });
@@ -849,8 +887,9 @@ export default class View {
       // Impact particles at bottom
       this.emitParticles(worldX, y * -2.2, 0.0, 20, [0.8, 0.9, 1.0, 1.0]);
 
-      this.shakeTimer = 0.3;
-      this.shakeMagnitude = 0.3;
+      // Increase shake
+      this.shakeTimer = 0.4;
+      this.shakeMagnitude = 0.5; // Stronger shake
   }
 
   emitParticles(x: number, y: number, z: number, count: number, color: number[]) {
