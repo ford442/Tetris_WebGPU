@@ -350,7 +350,38 @@ const Shaders = () => {
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
-                let N:vec3<f32> = normalize(vNormal.xyz);
+                // --- Fake Beveling ---
+                // Perturb normal based on UV edge distance
+                var N:vec3<f32> = normalize(vNormal.xyz);
+
+                // Approximate tangent space basis from normal
+                // (Assumes axis-aligned cubes mostly)
+                var tangent = vec3<f32>(1.0, 0.0, 0.0);
+                if (abs(N.x) > 0.9) { tangent = vec3<f32>(0.0, 1.0, 0.0); }
+                let bitangent = cross(N, tangent);
+                tangent = cross(bitangent, N);
+
+                let bevelSize = 0.1;
+                let bevelStrength = 0.5;
+
+                // Simple UV based perturbation
+                let dx = (vUV.x - 0.5) * 2.0; // -1 to 1
+                let dy = (vUV.y - 0.5) * 2.0; // -1 to 1
+
+                // Tilt normal at edges
+                if (abs(dx) > (1.0 - bevelSize)) {
+                    let signX = sign(dx);
+                    // This is rough approximation, assuming tangent aligns with U
+                    N = normalize(N + tangent * signX * bevelStrength * (abs(dx) - (1.0-bevelSize))/bevelSize);
+                }
+                if (abs(dy) > (1.0 - bevelSize)) {
+                    let signY = sign(dy);
+                    // This is rough approximation, assuming bitangent aligns with V
+                    // Note: UV orientation varies by face in CubeData, this might be flipped on some faces but gives visual interest regardless
+                    N = normalize(N - bitangent * signY * bevelStrength * (abs(dy) - (1.0-bevelSize))/bevelSize);
+                }
+
+
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
@@ -376,19 +407,26 @@ const Shaders = () => {
                 let fresnelPower = 3.0;
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), fresnelPower);
 
-                // Iridescent color based on view angle and time
-                let iriColor = vec3<f32>(
-                    0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5),
-                    0.5 + 0.5 * sin(uniforms.time * 0.8 + vPosition.y * 0.5 + 2.0),
-                    0.5 + 0.5 * sin(uniforms.time * 1.2 + vPosition.z * 0.5 + 4.0)
-                );
+                // Chromatic Aberration for Fresnel
+                let offset = 0.05;
+                let iriColorR = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5);
+                let iriColorG = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5 + offset);
+                let iriColorB = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5 + offset * 2.0);
 
-                finalColor += iriColor * fresnelTerm * 2.0;
+                let iriColor = vec3<f32>(iriColorR, iriColorG, iriColorB);
+
+                finalColor += iriColor * fresnelTerm * 2.5;
 
                 // --- Inner Tech Lattice / Grid ---
                 let uvScale = 4.0;
                 let gridUV = fract(vUV * uvScale);
                 let gridThickness = 0.05;
+
+                // Secondary finer grid
+                let subGridUV = fract(vUV * uvScale * 4.0);
+                let subGridLineX = smoothstep(0.0, 0.02, subGridUV.x) * (1.0 - smoothstep(1.0 - 0.02, 1.0, subGridUV.x));
+                let subGridLineY = smoothstep(0.0, 0.02, subGridUV.y) * (1.0 - smoothstep(1.0 - 0.02, 1.0, subGridUV.y));
+                let subGridLines = 1.0 - (subGridLineX * subGridLineY);
 
                 let gridLineX = smoothstep(0.0, gridThickness, gridUV.x) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.x));
                 let gridLineY = smoothstep(0.0, gridThickness, gridUV.y) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.y));
@@ -400,6 +438,11 @@ const Shaders = () => {
                    // Add a "deep" glow to the grid lines
                    finalColor += baseColor * energyPulse * 1.2;
                    finalColor += vec3<f32>(0.8, 0.9, 1.0) * energyPulse * 0.5; // White hot core
+                }
+
+                if (subGridLines > 0.5 && gridLines < 0.5) {
+                    // Faint subgrid
+                    finalColor += baseColor * 0.2;
                 }
 
                 // --- Edge Glow ---
@@ -889,7 +932,7 @@ export default class View {
 
       // Increase shake
       this.shakeTimer = 0.4;
-      this.shakeMagnitude = 0.5; // Stronger shake
+      this.shakeMagnitude = 0.8; // Stronger shake
   }
 
   emitParticles(x: number, y: number, z: number, count: number, color: number[]) {
