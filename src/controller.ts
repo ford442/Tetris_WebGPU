@@ -5,6 +5,9 @@ import SoundManager from "./sound.js";
 const DAS = 160; // Delayed Auto Shift (ms)
 const ARR = 30;  // Auto Repeat Rate (ms)
 
+// Logical actions
+type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
+
 export default class Controller {
   game: Game;
   view: View;
@@ -14,23 +17,35 @@ export default class Controller {
   gameLoopID: number | null;
   intervalID: number | null; // For gravity
 
-  // Input state
-  keys: { [key: string]: boolean } = {
-    ArrowLeft: false,
-    ArrowRight: false,
-    ArrowDown: false,
-    ArrowUp: false,
-    Space: false,
-    Enter: false,
-    KeyC: false,
-    ShiftLeft: false,
-    ShiftRight: false
+  // Key state (Physical)
+  keys: { [key: string]: boolean } = {};
+
+  // Timers for logical actions
+  actionTimers: { [key in Action]?: number } = {
+    left: 0,
+    right: 0,
+    down: 0
   };
 
-  keyTimers: { [key: string]: number } = {
-    ArrowLeft: 0,
-    ArrowRight: 0,
-    ArrowDown: 0
+  // Mapping from physical key codes to logical actions
+  keyMap: { [key: string]: Action } = {
+    // Standard Arrows
+    'ArrowLeft': 'left',
+    'ArrowRight': 'right',
+    'ArrowDown': 'down',
+    'ArrowUp': 'rotateCW',
+    'Space': 'hardDrop',
+    'KeyC': 'hold',
+    'ShiftLeft': 'hold',
+    'ShiftRight': 'hold',
+
+    // WASD + KL
+    'KeyA': 'left',
+    'KeyD': 'right',
+    'KeyS': 'down',
+    'KeyW': 'hardDrop',
+    'KeyK': 'rotateCCW',
+    'KeyL': 'rotateCW'
   };
 
   constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
@@ -102,7 +117,6 @@ export default class Controller {
       this.view.renderPauseScreen();
     } else {
       this.view.renderMainScreen(state);
-      // Sync WebGPU state immediately on logic update
       this.viewWebGPU.state = state;
     }
   }
@@ -113,11 +127,12 @@ export default class Controller {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    // Map older keyCodes if necessary, or just use code
-    let code = event.code;
+    if (event.repeat) return; // Ignore auto-repeat, we handle it manually for movement
 
-    switch (event.keyCode) {
-      case 13: // ENTER
+    const code = event.code;
+
+    // Global keys (Enter)
+    if (code === 'Enter' || event.keyCode === 13) {
         if (this.game.gameower) {
           this.reset();
         } else if (this.isPlaying) {
@@ -125,128 +140,109 @@ export default class Controller {
         } else {
           this.play();
         }
+        return;
+    }
 
-        break;
-      case 37:
-        this.game.movePieceLeft();
-        this.soundManager.playMove();
-        this.updateView();
-        break;
-      case 38:
-        this.game.rotatePiece();
-        this.soundManager.playRotate();
-        this.updateView();
-        break;
-      case 39:
-        this.game.movePieceRight();
-        this.soundManager.playMove();
-        this.updateView();
-        break;
-      case 40:
-        this.game.movePieceDown();
-        this.soundManager.playMove();
-        this.updateView();
-        break;
-      case 32: // SPACE
-        // Calculate drop distance for visual effect
-        const ghostY = this.game.getGhostY();
-        const dropDist = ghostY - this.game.activPiece.y;
-        const currentX = this.game.activPiece.x;
+    if (!this.isPlaying) return;
 
-        const result = this.game.hardDrop();
-        this.soundManager.playHardDrop();
+    // Map key to action
+    const action = this.keyMap[code];
+    if (!action) return;
 
-        // Trigger hard drop visual
-        this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist);
+    this.keys[code] = true;
 
-        if (result.linesCleared.length > 0) {
-            this.soundManager.playLineClear(result.linesCleared.length);
-            this.viewWebGPU.onLineClear(result.linesCleared);
-        } else if (result.locked) {
-            this.soundManager.playLock();
-            this.viewWebGPU.onLock();
-        }
-        if (result.gameOver) {
-            this.soundManager.playGameOver();
-        }
-        this.updateView();
-        break;
+    // Handle initial press actions
+    switch (action) {
+        case 'left':
+            this.game.movePieceLeft();
+            this.soundManager.playMove();
+            this.actionTimers.left = 0;
+            this.updateView();
+            break;
+        case 'right':
+            this.game.movePieceRight();
+            this.soundManager.playMove();
+            this.actionTimers.right = 0;
+            this.updateView();
+            break;
+        case 'down':
+            this.game.movePieceDown();
+            this.soundManager.playMove();
+            this.actionTimers.down = 0;
+            this.updateView();
+            break;
+        case 'rotateCW':
+            this.game.rotatePiece(true);
+            this.soundManager.playRotate();
+            this.updateView();
+            break;
+        case 'rotateCCW':
+            this.game.rotatePiece(false);
+            this.soundManager.playRotate();
+            this.updateView();
+            break;
+        case 'hardDrop':
+            this.performHardDrop();
+            break;
+        case 'hold':
+            this.game.hold();
+            this.soundManager.playMove();
+            this.updateView();
+            break;
     }
   }
 
   handleKeyUp(event: KeyboardEvent): void {
-      let code = event.code;
-      // Fallback
-      if (!code) {
-        if (event.keyCode === 37) code = 'ArrowLeft';
-        if (event.keyCode === 38) code = 'ArrowUp';
-        if (event.keyCode === 39) code = 'ArrowRight';
-        if (event.keyCode === 40) code = 'ArrowDown';
-        if (event.keyCode === 32) code = 'Space';
-        if (event.keyCode === 13) code = 'Enter';
+    const code = event.code;
+    if (this.keys[code]) {
+        this.keys[code] = false;
     }
-
-      if (this.keys.hasOwnProperty(code)) {
-          this.keys[code] = false;
-          // Reset timer on release
-          if (this.keyTimers.hasOwnProperty(code)) {
-              this.keyTimers[code] = 0;
-          }
-      }
   }
 
+  // Legacy support for virtual key presses (if any)
   onKeyPress(code: string): void {
-      switch (code) {
-          case 'ArrowLeft':
+      // Map virtual codes to physical ones if needed, or just map to actions
+      // Assuming 'code' matches keyMap keys like 'ArrowLeft'
+      // Or if it passes 'Left' etc, we might need mapping.
+      // The original code used 'ArrowLeft' etc.
+
+      const action = this.keyMap[code];
+      if (!action) return;
+
+      // Simulate logic similar to handleKeyDown but without event object
+      switch (action) {
+          case 'left':
               this.game.movePieceLeft();
               this.soundManager.playMove();
-              this.keyTimers.ArrowLeft = 0;
+              this.actionTimers.left = 0;
               this.updateView();
               break;
-          case 'ArrowRight':
+          case 'right':
               this.game.movePieceRight();
               this.soundManager.playMove();
-              this.keyTimers.ArrowRight = 0;
+              this.actionTimers.right = 0;
               this.updateView();
               break;
-          case 'ArrowUp':
-              this.game.rotatePiece();
+          case 'down':
+              this.game.movePieceDown();
+              this.soundManager.playMove();
+              this.actionTimers.down = 0;
+              this.updateView();
+              break;
+          case 'rotateCW':
+              this.game.rotatePiece(true);
               this.soundManager.playRotate();
               this.updateView();
               break;
-          case 'ArrowDown':
-              this.game.movePieceDown();
-              this.soundManager.playMove();
-              this.keyTimers.ArrowDown = 0;
+          case 'rotateCCW':
+              this.game.rotatePiece(false);
+              this.soundManager.playRotate();
               this.updateView();
               break;
-          case 'Space':
-              // Calculate drop distance for visual effect
-              const ghostY2 = this.game.getGhostY();
-              const dropDist2 = ghostY2 - this.game.activPiece.y;
-              const currentX2 = this.game.activPiece.x;
-
-              const resultHD = this.game.hardDrop();
-              this.soundManager.playHardDrop();
-
-              // Trigger hard drop visual
-              this.viewWebGPU.onHardDrop(currentX2, ghostY2, dropDist2);
-
-              if (resultHD.linesCleared.length > 0) {
-                  this.soundManager.playLineClear(resultHD.linesCleared.length);
-                  this.viewWebGPU.onLineClear(resultHD.linesCleared);
-              } else if (resultHD.locked) {
-                  this.soundManager.playLock();
-                  this.viewWebGPU.onLock();
-              }
-              if (resultHD.gameOver) {
-                  this.soundManager.playGameOver();
-              }
-              this.updateView();
+          case 'hardDrop':
+              this.performHardDrop();
               break;
-          case 'KeyC':
-          case 'ShiftLeft':
-          case 'ShiftRight':
+          case 'hold':
               this.game.hold();
               this.soundManager.playMove();
               this.updateView();
@@ -254,13 +250,34 @@ export default class Controller {
       }
   }
 
+  performHardDrop(): void {
+      const ghostY = this.game.getGhostY();
+      const dropDist = ghostY - this.game.activPiece.y;
+      const currentX = this.game.activPiece.x;
+
+      const result = this.game.hardDrop();
+      this.soundManager.playHardDrop();
+
+      this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist);
+
+      if (result.linesCleared.length > 0) {
+          this.soundManager.playLineClear(result.linesCleared.length);
+          this.viewWebGPU.onLineClear(result.linesCleared);
+      } else if (result.locked) {
+          this.soundManager.playLock();
+          this.viewWebGPU.onLock();
+      }
+      if (result.gameOver) {
+          this.soundManager.playGameOver();
+      }
+      this.updateView();
+  }
+
   gameLoop(): void {
     let lastTime = performance.now();
 
     const animate = (time: number) => {
       if (!this.isPlaying) {
-          // If paused/gameover, we can stop the loop or just return and not request next frame.
-          // Better to stop and restart in play().
           return;
       }
 
@@ -280,49 +297,87 @@ export default class Controller {
           this.soundManager.playGameOver();
       }
 
-      // WebGPU update can happen here too if it needs continuous animation (like background)
-      // The viewWebGPU.Frame() method handles its own loop, but we need to push state to it.
-      // Actually viewWebGPU.Frame calls requestAnimationFrame itself recursively.
-      // But we update `viewWebGPU.state` in `updateView()`.
-
       requestAnimationFrame(animate);
     };
 
     requestAnimationFrame(animate);
   }
 
+  // Helper to check if any key for a logical action is pressed
+  isActionPressed(action: Action): boolean {
+      for (const key in this.keys) {
+          if (this.keys[key] && this.keyMap[key] === action) {
+              return true;
+          }
+      }
+      return false;
+  }
+
   handleInput(dt: number): void {
       // Horizontal Movement
-      if (this.keys.ArrowLeft) {
-          this.keyTimers.ArrowLeft += dt;
-          if (this.keyTimers.ArrowLeft > DAS) {
-              while (this.keyTimers.ArrowLeft > DAS + ARR) {
+      // Prioritize Left if pressed, else Right.
+      // If both pressed, original code prioritized Left (by `if` order).
+      if (this.isActionPressed('left')) {
+          this.actionTimers.left! += dt;
+          if (this.actionTimers.left! > DAS) {
+              while (this.actionTimers.left! > DAS + ARR) {
                   this.game.movePieceLeft();
-                  this.keyTimers.ArrowLeft -= ARR;
+                  this.actionTimers.left! -= ARR;
                   this.updateView();
               }
           }
-      } else if (this.keys.ArrowRight) {
-          this.keyTimers.ArrowRight += dt;
-          if (this.keyTimers.ArrowRight > DAS) {
-              while (this.keyTimers.ArrowRight > DAS + ARR) {
+      } else if (this.isActionPressed('right')) { // Changed to else if to match SOCD behavior
+          this.actionTimers.right! += dt;
+          if (this.actionTimers.right! > DAS) {
+              while (this.actionTimers.right! > DAS + ARR) {
                   this.game.movePieceRight();
-                  this.keyTimers.ArrowRight -= ARR;
+                  this.actionTimers.right! -= ARR;
                   this.updateView();
               }
           }
+      } else {
+          // Reset both if neither pressed?
+          // Actually, if I release Left, 'left' becomes false, so I should reset timer.
+          // But here if I'm holding Right, 'left' is false, so I enter 'else if'.
+          // Wait, if I hold Left, I enter first block. Right timer is NOT reset?
+          // If I then release Left and hold Right, Right timer starts from where it left off?
+          // The original code:
+          // if (keys.ArrowLeft) { ... } else if (keys.ArrowRight) { ... }
+          // It did NOT reset timers in the else block.
+          // However, handleKeyUp resets timers to 0.
+          // So I don't need to reset timers here manually if handleKeyUp does it.
+          // Let's check handleKeyUp.
+      }
+
+      // Additional safety: if key is not pressed, timer should be 0?
+      // handleKeyUp sets it to 0. But we have multiple keys for one action.
+      // If I release 'ArrowLeft' but hold 'KeyA', action is still true. Timer continues.
+      // If I release BOTH, action is false.
+      // Where do I reset the logical timer?
+      // In handleKeyUp, I only reset if the specific key map matches?
+      // In my new handleKeyUp:
+      // if (this.keys[code]) { this.keys[code] = false; }
+      // I removed the timer reset logic from handleKeyUp!
+      // This is a BUG in my previous draft.
+
+      // Fix: Reset logical timer if the action becomes inactive.
+      if (!this.isActionPressed('left')) {
+          this.actionTimers.left = 0;
+      }
+      if (!this.isActionPressed('right')) {
+          this.actionTimers.right = 0;
       }
 
       // Soft Drop
-      if (this.keys.ArrowDown) {
-          this.keyTimers.ArrowDown += dt;
-          // Soft drop usually has a much shorter DAS/ARR or none at all (instant repeat)
-          // Let's use a shorter interval for soft drop, e.g. ARR / 2 or just ARR
-          if (this.keyTimers.ArrowDown > ARR) { // No DAS for soft drop usually, just speed
+      if (this.isActionPressed('down')) {
+          this.actionTimers.down! += dt;
+          if (this.actionTimers.down! > ARR) {
              this.game.movePieceDown();
-             this.keyTimers.ArrowDown = 0;
+             this.actionTimers.down = 0;
              this.updateView();
           }
+      } else {
+          this.actionTimers.down = 0;
       }
   }
 }
