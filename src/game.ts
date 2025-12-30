@@ -31,6 +31,10 @@ export default class Game {
   lockTimer: number = 0;
   readonly lockDelayTime: number = 500; // ms
 
+  // Extended Placement (Infinity-like behavior)
+  lockResets: number = 0;
+  readonly maxLockResets: number = 15;
+
   private static readonly SRS_KICKS_JLSTZ: { [key: string]: number[][] } = {
     '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
     '1-0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
@@ -332,7 +336,7 @@ export default class Game {
       this.activPiece.x += 1;
     } else {
         // Successful move
-        this.resetLockTimerIfGrounded();
+        this.handleMoveReset();
     }
   }
 
@@ -342,7 +346,7 @@ export default class Game {
       this.activPiece.x -= 1;
     } else {
         // Successful move
-        this.resetLockTimerIfGrounded();
+        this.handleMoveReset();
     }
   }
 
@@ -350,14 +354,16 @@ export default class Game {
     this.activPiece.y += 1;
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
-      // Do not lock here! lockTimer in update() handles it.
-      // But we can manually start the lock timer here if we want instant feedback?
-      // No, let the natural flow handle it.
     } else {
         // We moved down successfully
-        // We are inherently not on ground (or we just landed).
-        // If we just landed, next update() will start counting.
+        // Moving down always resets the lock timer in standard Tetris,
+        // effectively giving you infinite time if you keep falling slowly?
+        // Actually, step reset is usually separate from move reset.
+        // But for simplicity, we treat it as a valid move that resets if grounded.
         this.lockTimer = 0;
+        // Note: Moving down usually doesn't consume the "15 move limit" in some guidelines,
+        // but here we will just let it reset timer without consuming reset counter to be generous?
+        // Or consume it? Let's NOT consume reset counter for gravity/soft drop.
     }
   }
 
@@ -474,18 +480,21 @@ export default class Game {
         this.activPiece.rotation = originalRotation;
     } else {
         // Successful kick
-        this.resetLockTimerIfGrounded();
+        this.handleMoveReset();
     }
   }
 
-  resetLockTimerIfGrounded(): void {
+  handleMoveReset(): void {
       // Check if we are now on the ground
       this.activPiece.y += 1;
       const onGround = this.hasCollision();
       this.activPiece.y -= 1;
 
       if (onGround) {
-          this.lockTimer = 0;
+          if (this.lockResets < this.maxLockResets) {
+              this.lockTimer = 0;
+              this.lockResets++;
+          }
       }
   }
 
@@ -546,6 +555,7 @@ export default class Game {
     this.nextPiece = this.createPiece();
     this.canHold = true;
     this.lockTimer = 0;
+    this.lockResets = 0;
 
     // Check for immediate game over upon spawn
     if (this.hasCollision()) {
