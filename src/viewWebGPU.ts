@@ -343,141 +343,136 @@ const Shaders = () => {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
                 color : vec4<f32>,
-                time : f32, // Added time
+                time : f32,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
-                // --- Fake Beveling ---
-                // Perturb normal based on UV edge distance
+                // --- Beveled Normal Logic ---
                 var N:vec3<f32> = normalize(vNormal.xyz);
 
-                // Approximate tangent space basis from normal
-                // (Assumes axis-aligned cubes mostly)
+                // Tangent basis for perturbations
                 var tangent = vec3<f32>(1.0, 0.0, 0.0);
                 if (abs(N.x) > 0.9) { tangent = vec3<f32>(0.0, 1.0, 0.0); }
                 let bitangent = cross(N, tangent);
                 tangent = cross(bitangent, N);
 
-                let bevelSize = 0.1;
-                let bevelStrength = 0.5;
+                let bevelSize = 0.15; // Smooth bevel
+                let bevelStrength = 0.8;
 
-                // Simple UV based perturbation
-                let dx = (vUV.x - 0.5) * 2.0; // -1 to 1
-                let dy = (vUV.y - 0.5) * 2.0; // -1 to 1
+                let dx = (vUV.x - 0.5) * 2.0;
+                let dy = (vUV.y - 0.5) * 2.0;
 
-                // Tilt normal at edges
+                // Smooth rounded corners normal bending
                 if (abs(dx) > (1.0 - bevelSize)) {
                     let signX = sign(dx);
-                    // This is rough approximation, assuming tangent aligns with U
-                    N = normalize(N + tangent * signX * bevelStrength * (abs(dx) - (1.0-bevelSize))/bevelSize);
+                    let dist = (abs(dx) - (1.0 - bevelSize)) / bevelSize;
+                    N = normalize(N + tangent * signX * bevelStrength * dist);
                 }
                 if (abs(dy) > (1.0 - bevelSize)) {
                     let signY = sign(dy);
-                    // This is rough approximation, assuming bitangent aligns with V
-                    // Note: UV orientation varies by face in CubeData, this might be flipped on some faces but gives visual interest regardless
-                    N = normalize(N - bitangent * signY * bevelStrength * (abs(dy) - (1.0-bevelSize))/bevelSize);
+                    let dist = (abs(dy) - (1.0 - bevelSize)) / bevelSize;
+                    N = normalize(N - bitangent * signY * bevelStrength * dist);
                 }
-
 
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // --- Lighting ---
-                let diffuse:f32 = 0.9 * max(dot(N, L), 0.0);
+                // --- Improved Lighting Model ---
+                let diffuse:f32 = max(dot(N, L), 0.0);
 
-                var specular:f32;
-                // Blinn-Phong
-                specular = ${params.specularIntensity} * pow(max(dot(N, H),0.0), ${params.shininess});
+                // Sharp specular for "glassy" look
+                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
+
+                // Add secondary broad specular for "glossy plastic"
+                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
 
                 let ambient:f32 = ${params.ambientIntensity};
 
-                // --- Base Color Calculation ---
                 var baseColor = vColor.xyz;
 
-                // Make colors a bit more vibrant
-                // baseColor = pow(baseColor, vec3<f32>(0.8));
+                // --- Tech Lattice Procedural Texture ---
+                // Primary Grid (Chip traces)
+                let uvScale = 3.0;
+                let uvGrid = vUV * uvScale;
+                let gridPos = fract(uvGrid);
+                let gridId = floor(uvGrid);
 
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor}*specular;
+                // Circuitry pattern logic
+                let gridThick = 0.08;
+                let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
+                let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
+                let isTrace = max(lineX, lineY);
 
-                // --- Fresnel Effect (Iridescent Rim Light) ---
-                let fresnelPower = 3.0;
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), fresnelPower);
+                // Pulse effect moving across the block
+                let pulsePos = (sin(uniforms.time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5) * 0.5 + 0.5);
+                let traceGlow = isTrace * pulsePos * 2.0;
 
-                // Chromatic Aberration for Fresnel
-                let offset = 0.05;
-                let iriColorR = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5);
-                let iriColorG = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5 + offset);
-                let iriColorB = 0.5 + 0.5 * sin(uniforms.time + vPosition.x * 0.5 + offset * 2.0);
+                // Micro-noise for texture
+                let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 
-                let iriColor = vec3<f32>(iriColorR, iriColorG, iriColorB);
-
-                finalColor += iriColor * fresnelTerm * 2.5;
-
-                // --- Inner Tech Lattice / Grid ---
-                let uvScale = 4.0;
-                let gridUV = fract(vUV * uvScale);
-                let gridThickness = 0.05;
-
-                // Secondary finer grid
-                let subGridUV = fract(vUV * uvScale * 4.0);
-                let subGridLineX = smoothstep(0.0, 0.02, subGridUV.x) * (1.0 - smoothstep(1.0 - 0.02, 1.0, subGridUV.x));
-                let subGridLineY = smoothstep(0.0, 0.02, subGridUV.y) * (1.0 - smoothstep(1.0 - 0.02, 1.0, subGridUV.y));
-                let subGridLines = 1.0 - (subGridLineX * subGridLineY);
-
-                let gridLineX = smoothstep(0.0, gridThickness, gridUV.x) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.x));
-                let gridLineY = smoothstep(0.0, gridThickness, gridUV.y) * (1.0 - smoothstep(1.0 - gridThickness, 1.0, gridUV.y));
-                let gridLines = 1.0 - (gridLineX * gridLineY);
-
-                // Pulsing energy in the grid
-                let energyPulse = sin(uniforms.time * 3.0 - vPosition.y) * 0.5 + 0.5;
-                if (gridLines > 0.5) {
-                   // Add a "deep" glow to the grid lines
-                   finalColor += baseColor * energyPulse * 1.2;
-                   finalColor += vec3<f32>(0.8, 0.9, 1.0) * energyPulse * 0.5; // White hot core
+                // Mix texture into base color
+                // Darken traces, lighten spaces slightly
+                if (isTrace > 0.5) {
+                    baseColor *= 0.6; // Darker grooves
+                } else {
+                    baseColor += vec3<f32>(noise * 0.05); // Subtle grain
                 }
 
-                if (subGridLines > 0.5 && gridLines < 0.5) {
-                    // Faint subgrid
-                    finalColor += baseColor * 0.2;
+                // --- Composition ---
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular * 1.5;
+
+                // --- Emissive Traces ---
+                // Traces glow with the block color + white hot core
+                if (isTrace > 0.5) {
+                    finalColor += baseColor * traceGlow;
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.3; // White hot
                 }
 
-                // --- Edge Glow ---
-                let uvCentered = abs(vUV - 0.5) * 2.0;
-                let edgeWidth = 0.08; // Slightly thicker
-                let edgeFactorX = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.x);
-                let edgeFactorY = smoothstep(1.0 - edgeWidth, 1.0, uvCentered.y);
-                let edgeFactor = max(edgeFactorX, edgeFactorY);
+                // --- Fresnel Rim Light (Cyberpunk Edge) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+                let rimColor = vec3<f32>(0.5, 0.8, 1.0); // Cyan rim default
 
-                if (edgeFactor > 0.0) {
-                     let glowColor = vec3<f32>(1.0, 1.0, 1.0);
-                     finalColor = mix(finalColor, glowColor, edgeFactor * 0.9);
-                }
+                // Iridescent variation
+                let hueShift = sin(uniforms.time + vPosition.z) * 0.2;
+                rimColor += vec3<f32>(hueShift, -hueShift, 0.0);
 
-                // --- Ghost Piece Rendering (Alpha < 0.9) ---
+                finalColor += rimColor * fresnelTerm * 2.0;
+
+                // --- Edge Highlight (Rounded Corner Glow) ---
+                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist);
+                finalColor += vec3<f32>(1.0) * edgeGlow * 0.5;
+
+                // --- GHOST PIECE RENDERING (Alpha < 0.9) ---
                 if (vColor.w < 0.9) {
-                    // Holographic Wireframe
-                    let ghostPulse = sin(uniforms.time * 8.0) * 0.3 + 0.5;
+                    // Digital glitch effect
+                    let time = uniforms.time;
+                    let scanY = fract(vUV.y * 10.0 - time * 2.0);
+                    let scanline = smoothstep(0.4, 0.5, scanY) * (1.0 - smoothstep(0.5, 0.6, scanY));
 
-                    // Scanline effect
-                    let scanline = step(0.5, sin(vUV.y * 50.0 + uniforms.time * 5.0));
+                    // Wireframe edges
+                    let wire = edgeGlow;
 
-                    // Glitch offset
-                    let glitch = step(0.98, sin(uniforms.time * 20.0 + vUV.y * 10.0));
+                    // Hexagon pattern for ghost
+                    let hexUV = vUV * 5.0;
+                    let hexX = abs(fract(hexUV.x) - 0.5);
+                    let hexY = abs(fract(hexUV.y) - 0.5);
+                    let hex = step(0.4, max(hexX, hexY));
 
-                    let ghostColor = mix(vColor.xyz, vec3<f32>(0.0, 1.0, 1.0), 0.5); // Cyan tint
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.7);
 
-                    // Only edges + scanlines
-                    var finalGhost = ghostColor * (edgeFactor + scanline * 0.2);
+                    var ghostFinal = ghostBase * wire * 2.0; // Bright edges
+                    ghostFinal += ghostBase * scanline * 0.5; // Scanlines
+                    ghostFinal += ghostBase * (1.0 - hex) * 0.1; // Faint hex pattern interior
 
-                    if (glitch > 0.5) {
-                        finalGhost += vec3<f32>(1.0); // White flash
-                    }
+                    // Pulse alpha
+                    let pulse = 0.3 + 0.2 * sin(time * 5.0);
 
-                    return vec4<f32>(finalGhost, 0.4 * ghostPulse);
+                    return vec4<f32>(ghostFinal, pulse);
                 }
 
                 return vec4<f32>(finalColor, vColor.w);
@@ -901,17 +896,30 @@ export default class View {
       // Emit particles for each cleared line
       lines.forEach(y => {
           const worldY = y * -2.2;
-          const worldX = 4.5 * 2.2; // Center horizontally
-
-          // More particles, gold/white explosion
-          this.emitParticles(worldX, worldY, 0.0, 100, [1.0, 0.9, 0.5, 1.0]);
+          // Sweep across the line
+          for (let c=0; c<10; c++) {
+              const worldX = c * 2.2;
+              // Mix of Gold and Cyan for victory feel
+              const color = Math.random() > 0.5 ? [1.0, 0.9, 0.2, 1.0] : [0.2, 1.0, 0.9, 1.0];
+              this.emitParticles(worldX, worldY, 0.0, 20, color);
+          }
       });
   }
 
   onLock() {
       this.lockTimer = 0.3;
-      this.shakeTimer = 0.1;
-      this.shakeMagnitude = 0.1;
+      this.shakeTimer = 0.15;
+      this.shakeMagnitude = 0.2;
+
+      // Small sparks at lock position? (Requires X/Y context, which onLock doesn't have passed yet)
+      // For now, just screen shake.
+  }
+
+  onHold() {
+      // Visual feedback for hold
+      this.flashTimer = 0.2; // Quick flash
+      // Maybe some particles at the center?
+      this.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]); // Purple flash
   }
 
   onHardDrop(x: number, y: number, distance: number) {
@@ -924,15 +932,39 @@ export default class View {
           const r = startRow + i;
           const worldY = r * -2.2;
           // More particles per block, blue/cyan trail
-          this.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.8, 1.0, 0.8]);
+          // Vary the X slightly for a thicker trail
+          this.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.8, 1.0, 0.8]);
       }
 
-      // Impact particles at bottom
-      this.emitParticles(worldX, y * -2.2, 0.0, 20, [0.8, 0.9, 1.0, 1.0]);
+      // Impact particles at bottom - SHOCKWAVE style
+      // Emit in a ring
+      const impactY = y * -2.2;
+      for (let i=0; i<40; i++) {
+          const angle = (i / 40) * Math.PI * 2;
+          const speed = 15.0;
+          this.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
+      }
 
       // Increase shake
-      this.shakeTimer = 0.4;
-      this.shakeMagnitude = 0.8; // Stronger shake
+      this.shakeTimer = 0.2; // Shorter, sharper shake
+      this.shakeMagnitude = 1.2; // Stronger kick
+  }
+
+  // Helper for radial explosions
+  emitParticlesRadial(x: number, y: number, z: number, angle: number, speed: number, color: number[]) {
+        if (this.particles.length >= this.maxParticles) return;
+
+        this.particles.push({
+            position: new Float32Array([x, y, z]),
+            velocity: new Float32Array([
+                Math.cos(angle)*speed,
+                Math.sin(angle)*speed * 0.5, // Flattened ring
+                (Math.random()-0.5)*5.0
+            ]),
+            color: new Float32Array(color),
+            life: 0.5 + Math.random() * 0.3, // Short life
+            scale: Math.random() * 0.3 + 0.2
+        });
   }
 
   emitParticles(x: number, y: number, z: number, count: number, color: number[]) {

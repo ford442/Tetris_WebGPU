@@ -2,8 +2,8 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 160; // Delayed Auto Shift (ms)
-const ARR = 30;  // Auto Repeat Rate (ms)
+const DAS = 133; // Delayed Auto Shift (ms) - Snappier
+const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -185,9 +185,12 @@ export default class Controller {
             this.performHardDrop();
             break;
         case 'hold':
-            this.game.hold();
-            this.soundManager.playMove();
-            this.updateView();
+            if (this.game.canHold) {
+                this.game.hold();
+                this.soundManager.playMove();
+                this.viewWebGPU.onHold(); // Trigger visual feedback
+                this.updateView();
+            }
             break;
     }
   }
