@@ -107,16 +107,23 @@ const ParticleShaders = () => {
             );
             let uvrCentered = abs(uvr);
 
-            let cross1 = max(1.0 - smoothstep(0.0, 0.3, uvCentered.x), 1.0 - smoothstep(0.0, 0.3, uvCentered.y));
-            let cross2 = max(1.0 - smoothstep(0.0, 0.3, uvrCentered.x), 1.0 - smoothstep(0.0, 0.3, uvrCentered.y));
+            // Create a soft glowing core
+            let core = exp(-length(uv - 0.5) * 5.0);
 
-            let sparkle = max(cross1, cross2 * 0.7); // Main cross + smaller diagonal cross
+            // Create sharp rays
+            let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
+            let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
+
+            let sparkle = max(cross1, cross2 * 0.5);
 
             // Combine
-            let alpha = intensity + sparkle * 0.6;
+            let alpha = intensity + core * 0.5 + sparkle * 0.8;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            return vec4<f32>(color.rgb * 2.0, finalAlpha); // Boost brightness
+            // Add a slight hue shift based on life for variety
+            let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
+
+            return vec4<f32>(hueShift * 2.5, finalAlpha); // Boost brightness
         }
     `;
 
@@ -302,10 +309,10 @@ const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.4"; // Slightly brighter ambient
-  params.diffuseIntensity = "0.9";
-  params.specularIntensity = "2.0"; // High specular for glass/crystal
-  params.shininess = "128.0"; // Very sharp highlights
+  params.ambientIntensity = "0.5"; // Brighter ambient for better visibility
+  params.diffuseIntensity = "1.0";
+  params.specularIntensity = "2.5"; // Very glossy
+  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -394,85 +401,106 @@ const Shaders = () => {
 
                 var baseColor = vColor.xyz;
 
-                // --- Tech Lattice Procedural Texture ---
-                // Primary Grid (Chip traces)
+                // --- Premium Tech Pattern ---
+                // Subtle hexagonal grid overlay
+                let hexScale = 4.0;
+                let uvHex = vUV * hexScale;
+                // Skew for hex look
+                let r = vec2<f32>(1.0, 1.73);
+                let h = r * 0.5;
+                let a = mod(uvHex, r) - h;
+                let b = mod(uvHex - h, r) - h;
+                let guv = dot(a, a) < dot(b, b) ? a : b;
+
+                // Distance to hex center
+                let hexDist = length(guv);
+                let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
+
+                // Circuit Traces (keep original logic but refined)
                 let uvScale = 3.0;
                 let uvGrid = vUV * uvScale;
                 let gridPos = fract(uvGrid);
-                let gridId = floor(uvGrid);
-
-                // Circuitry pattern logic
-                let gridThick = 0.08;
+                let gridThick = 0.05; // Thinner, cleaner lines
                 let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                // Pulse effect moving across the block
-                let pulsePos = (sin(uniforms.time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5) * 0.5 + 0.5);
-                let traceGlow = isTrace * pulsePos * 2.0;
+                // Pulse effect
+                let time = uniforms.time;
+                let pulsePos = sin(time * 1.5 + vPosition.y * 0.8 + vPosition.x * 0.8) * 0.5 + 0.5;
 
-                // Micro-noise for texture
+                // Surface finish
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 
-                // Mix texture into base color
-                // Darken traces, lighten spaces slightly
+                // Apply texture
+                if (hexEdge > 0.5) {
+                   baseColor *= 0.95; // Subtle hex pattern indentation
+                }
+
                 if (isTrace > 0.5) {
-                    baseColor *= 0.6; // Darker grooves
+                    baseColor *= 0.5; // Deep grooves
                 } else {
-                    baseColor += vec3<f32>(noise * 0.05); // Subtle grain
+                    // Crystalline noise sparkle
+                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
+                    baseColor += vec3<f32>(sparkle);
                 }
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular * 1.5;
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
-                // --- Emissive Traces ---
-                // Traces glow with the block color + white hot core
+                // --- Emissive Elements ---
+                // Traces glow intensely
                 if (isTrace > 0.5) {
-                    finalColor += baseColor * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.3; // White hot
+                    let traceGlow = pulsePos * 3.0;
+                    finalColor += vColor.rgb * traceGlow;
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.5; // White hot core
+                }
+                // Hex corners glow slightly
+                if (hexDist < 0.1) {
+                    finalColor += vColor.rgb * 0.5 * pulsePos;
                 }
 
-                // --- Fresnel Rim Light (Cyberpunk Edge) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5);
-                let rimColor = vec3<f32>(0.5, 0.8, 1.0); // Cyan rim default
+                // --- Fresnel Rim Light (Enhanced) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper
+                let rimColor = vec3<f32>(0.2, 0.8, 1.0); // Cyan/Ice rim
 
-                // Iridescent variation
-                let hueShift = sin(uniforms.time + vPosition.z) * 0.2;
-                rimColor += vec3<f32>(hueShift, -hueShift, 0.0);
+                // Chromatic Aberration on Rim
+                let rimR = rimColor.r * (1.0 + 0.1 * sin(time + vPosition.y));
+                let rimG = rimColor.g;
+                let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
 
-                finalColor += rimColor * fresnelTerm * 2.0;
+                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
 
-                // --- Edge Highlight (Rounded Corner Glow) ---
+                // --- Edge Highlight ---
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.5;
+                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
+                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
 
-                // --- GHOST PIECE RENDERING (Alpha < 0.9) ---
+                // --- GHOST PIECE RENDERING ---
                 if (vColor.w < 0.9) {
-                    // Digital glitch effect
-                    let time = uniforms.time;
-                    let scanY = fract(vUV.y * 10.0 - time * 2.0);
-                    let scanline = smoothstep(0.4, 0.5, scanY) * (1.0 - smoothstep(0.5, 0.6, scanY));
+                    // Hologram effect
+                    let scanY = fract(vUV.y * 20.0 - time * 3.0);
+                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
-                    // Wireframe edges
+                    // Wireframe
                     let wire = edgeGlow;
 
-                    // Hexagon pattern for ghost
-                    let hexUV = vUV * 5.0;
-                    let hexX = abs(fract(hexUV.x) - 0.5);
-                    let hexY = abs(fract(hexUV.y) - 0.5);
-                    let hex = step(0.4, max(hexX, hexY));
+                    // Internal grid
+                    let internalGrid = isTrace;
 
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.7);
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
 
-                    var ghostFinal = ghostBase * wire * 2.0; // Bright edges
-                    ghostFinal += ghostBase * scanline * 0.5; // Scanlines
-                    ghostFinal += ghostBase * (1.0 - hex) * 0.1; // Faint hex pattern interior
+                    var ghostFinal = ghostBase * wire * 3.0; // Very bright edges
+                    ghostFinal += ghostBase * internalGrid * 1.0; // Glowing internal structure
+                    ghostFinal += ghostBase * scanline * 0.8; // Scanlines
+
+                    // Flicker
+                    let flicker = 0.8 + 0.2 * sin(time * 30.0);
 
                     // Pulse alpha
-                    let pulse = 0.3 + 0.2 * sin(time * 5.0);
+                    let pulse = 0.2 + 0.15 * sin(time * 4.0);
 
-                    return vec4<f32>(ghostFinal, pulse);
+                    return vec4<f32>(ghostFinal * flicker, pulse);
                 }
 
                 return vec4<f32>(finalColor, vColor.w);
@@ -524,6 +552,7 @@ export default class View {
   vertexUniformBuffer!: GPUBuffer;
   vertexUniformBuffer_border!: GPUBuffer;
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
+  uniformBindGroup_CACHE: GPUBindGroup[] = []; // Cache for dynamic blocks
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
 
@@ -900,8 +929,14 @@ export default class View {
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
               // Mix of Gold and Cyan for victory feel
-              const color = Math.random() > 0.5 ? [1.0, 0.9, 0.2, 1.0] : [0.2, 1.0, 0.9, 1.0];
-              this.emitParticles(worldX, worldY, 0.0, 20, color);
+              // Add variety based on line count
+              const isTetris = lines.length === 4;
+              const color = isTetris
+                  ? [1.0, 0.8, 0.0, 1.0] // GOLD for Tetris
+                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple for normal
+
+              const count = isTetris ? 40 : 20;
+              this.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
   }
@@ -972,18 +1007,19 @@ export default class View {
           if (this.particles.length >= this.maxParticles) break;
 
           const angle = Math.random() * Math.PI * 2;
-          const speed = Math.random() * 8.0 + 2.0;
+          // More explosive speed
+          const speed = Math.random() * 12.0 + 2.0;
 
           this.particles.push({
               position: new Float32Array([x, y, z]),
               velocity: new Float32Array([
                   Math.cos(angle)*speed,
-                  Math.sin(angle)*speed + 5.0, // Upward bias
-                  (Math.random()-0.5)*10.0
+                  Math.sin(angle)*speed + 8.0, // Stronger Upward bias
+                  (Math.random()-0.5)*15.0
               ]),
               color: new Float32Array(color),
-              life: 1.0 + Math.random() * 0.5,
-              scale: Math.random() * 0.4 + 0.1
+              life: 0.8 + Math.random() * 0.6,
+              scale: Math.random() * 0.3 + 0.15
           });
       }
   }
@@ -1297,6 +1333,38 @@ export default class View {
       size: this.state.playfield.length * 10 * 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+
+    // --- Pre-create BindGroups for Dynamic Blocks (Cache) ---
+    // Max blocks = 20 rows * 10 cols = 200
+    // Each block uses a 256-byte slice of the uniform buffer
+    const maxBlocks = 200;
+    this.uniformBindGroup_CACHE = [];
+    for (let i = 0; i < maxBlocks; i++) {
+        const bindGroup = this.device.createBindGroup({
+            label: `block_bindgroup_${i}`,
+            layout: this.pipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.vertexUniformBuffer,
+                        offset: i * 256,
+                        size: 208, // Data size is smaller than alignment
+                    },
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.fragmentUniformBuffer,
+                        offset: 0,
+                        size: 80, // Updated size matches creation
+                    },
+                },
+            ],
+        });
+        this.uniformBindGroup_CACHE.push(bindGroup);
+    }
+
     this.Frame();
   }
 
@@ -1501,59 +1569,36 @@ export default class View {
   async renderPlayfild_WebGPU({ playfield }: any) {
     if (!this.device) return;
 
-    // Подготовить буфер юниформов.
-    // данный буфер будет перезаписан в каждом кадре
-    //
-
     this.x += 0.01;
-    // Размер буфера нужен тольок для тех ячеен в которых значение отлично от ноль
-    // но для просто ты Я беру обший размер массива
     const playfield_length = playfield.length;
 
     this.uniformBindGroup_ARRAY = [];
-    let offset_ARRAY = 0;
+    let blockIndex = 0; // Index for retrieving from CACHE
 
     for (let row = 0; row < playfield_length; row++) {
       for (let colom = 0; colom < playfield[row].length; colom++) {
         if (!playfield[row][colom]) {
           continue;
         }
+        // Safety check: ensure we don't exceed cache
+        if (blockIndex >= this.uniformBindGroup_CACHE.length) break;
+
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
         let alpha = value < 0 ? 0.3 : 1.0;
 
         let color = this.currentTheme[colorBlockindex];
-        // If it's a ghost piece, we might want to ensure it has a color even if the index is somehow weird
         if (!color) color = this.currentTheme[0];
 
-        let uniformBindGroup_next = this.device.createBindGroup({
-          label : 'uniformBindGroup_next',
-          layout: this.pipeline.getBindGroupLayout(0),
-          entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: this.vertexUniformBuffer,
-                offset: offset_ARRAY,
-                size: 208,
-              },
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: this.fragmentUniformBuffer,
-                offset: 0,
-                size: 64, // Updated size to include time
-              },
-            },
-          ],
-        });
+        // Retrieve pre-created bindgroup
+        let uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
+        const offset_ARRAY = blockIndex * 256;
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
 
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2, // выравниваю по размеру модельки одного блока
+          colom * 2.2,
           row * -2.2,
           0.0,
         ]);
@@ -1562,6 +1607,7 @@ export default class View {
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
+        // Write to the specific slice of the buffer
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 0,
@@ -1587,7 +1633,7 @@ export default class View {
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
 
-        offset_ARRAY += 256;
+        blockIndex++;
       }
     }
   }
