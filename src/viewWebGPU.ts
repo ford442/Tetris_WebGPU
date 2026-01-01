@@ -192,6 +192,48 @@ const FullScreenQuadData = () => {
     return { positions };
 };
 
+const GridData = () => {
+    const positions: number[] = [];
+    // Vertical lines
+    const yTop = 1.1;
+    const yBottom = -42.9;
+    for (let i = 1; i <= 9; i++) {
+        const x = i * 2.2 - 1.1;
+        positions.push(x, yTop, -0.5); // Slightly behind blocks
+        positions.push(x, yBottom, -0.5);
+    }
+    // Horizontal lines
+    const xLeft = -1.1;
+    const xRight = 20.9;
+    for (let j = 1; j <= 19; j++) {
+        const y = j * -2.2 + 1.1;
+        positions.push(xLeft, y, -0.5);
+        positions.push(xRight, y, -0.5);
+    }
+    return new Float32Array(positions);
+};
+
+const GridShader = () => {
+    const vertex = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        @vertex
+        fn main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
+            return uniforms.viewProjectionMatrix * vec4<f32>(position, 1.0);
+        }
+    `;
+    const fragment = `
+        @fragment
+        fn main() -> @location(0) vec4<f32> {
+            return vec4<f32>(1.0, 1.0, 1.0, 0.08); // Very faint white
+        }
+    `;
+    return { vertex, fragment };
+};
+
 const BackgroundShaders = () => {
     const vertex = `
         struct Output {
@@ -479,7 +521,7 @@ const Shaders = () => {
                 // --- GHOST PIECE RENDERING ---
                 if (vColor.w < 0.9) {
                     // Hologram effect
-                    let scanY = fract(vUV.y * 20.0 - time * 3.0);
+                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
                     // Wireframe
@@ -488,17 +530,18 @@ const Shaders = () => {
                     // Internal grid
                     let internalGrid = isTrace;
 
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
+                    // Shift ghost color towards Cyan/White for better visibility
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
 
-                    var ghostFinal = ghostBase * wire * 3.0; // Very bright edges
-                    ghostFinal += ghostBase * internalGrid * 1.0; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 0.8; // Scanlines
+                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
+                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
+                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
 
-                    // Flicker
-                    let flicker = 0.8 + 0.2 * sin(time * 30.0);
+                    // Flicker - High frequency tech glitch
+                    let flicker = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
 
-                    // Pulse alpha
-                    let pulse = 0.2 + 0.15 * sin(time * 4.0);
+                    // Pulse alpha - More visible range
+                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
@@ -555,6 +598,12 @@ export default class View {
   uniformBindGroup_CACHE: GPUBindGroup[] = []; // Cache for dynamic blocks
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
+
+  // Grid
+  gridPipeline!: GPURenderPipeline;
+  gridVertexBuffer!: GPUBuffer;
+  gridVertexCount!: number;
+  gridBindGroup!: GPUBindGroup;
 
   // Background specific
   backgroundPipeline!: GPURenderPipeline;
@@ -859,6 +908,11 @@ export default class View {
     // Given the scope, it's fine.
     if (this.device) {
         this.renderPlayfild_Border_WebGPU();
+        // Update background colors
+        const bgColors = this.currentTheme.backgroundColors;
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
     }
   }
 
@@ -1205,6 +1259,49 @@ export default class View {
         }]
     });
 
+    // Initialize background colors
+    const bgColors = this.currentTheme.backgroundColors;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
+
+    // --- Grid Pipeline ---
+    const gridShader = GridShader();
+    const gridData = GridData();
+    this.gridVertexCount = gridData.length / 3;
+    this.gridVertexBuffer = this.CreateGPUBuffer(this.device, gridData);
+
+    this.gridPipeline = this.device.createRenderPipeline({
+        label: 'grid pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: gridShader.vertex }),
+            entryPoint: 'main',
+            buffers: [{
+                arrayStride: 12,
+                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }]
+            }]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: gridShader.fragment }),
+            entryPoint: 'main',
+            targets: [{
+                format: presentationFormat,
+                blend: {
+                    color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+                }
+            }]
+        },
+        primitive: { topology: 'line-list' },
+        depthStencil: {
+            format: "depth24plus",
+            depthWriteEnabled: false,
+            depthCompare: "less",
+        }
+    });
+
+
     // --- Particle Pipeline ---
     const particleShader = ParticleShaders();
 
@@ -1260,6 +1357,15 @@ export default class View {
 
     this.particleBindGroup = this.device.createBindGroup({
         layout: this.particlePipeline.getBindGroupLayout(0),
+        entries: [{
+            binding: 0,
+            resource: { buffer: this.particleUniformBuffer }
+        }]
+    });
+
+    // Reuse particle uniform buffer for Grid (it needs VP matrix too)
+    this.gridBindGroup = this.device.createBindGroup({
+        layout: this.gridPipeline.getBindGroupLayout(0),
         entries: [{
             binding: 0,
             resource: { buffer: this.particleUniformBuffer }
@@ -1397,6 +1503,43 @@ export default class View {
     if (this.shakeTimer > 0) this.shakeTimer -= dt;
     if (this.shakeTimer < 0) this.shakeTimer = 0;
 
+    // --- Camera Sway & Shake ---
+    const time = (performance.now() - this.startTime) / 1000.0;
+
+    // Base position
+    let camX = 0.0;
+    let camY = -20.0;
+    let camZ = 75.0;
+
+    // "Breathing" sway
+    camX += Math.sin(time * 0.2) * 2.0;
+    camY += Math.cos(time * 0.3) * 1.0;
+
+    // Apply Shake
+    if (this.shakeTimer > 0) {
+        camX += (Math.random() - 0.5) * this.shakeMagnitude;
+        camY += (Math.random() - 0.5) * this.shakeMagnitude;
+    }
+
+    const eyePosition = new Float32Array([camX, camY, camZ]);
+
+    Matrix.mat4.lookAt(
+      this.VIEWMATRIX,
+      eyePosition,
+      [9.0, -20.0, 0.0], // target
+      [0.0, 1.0, 0.0] // up
+    );
+
+    // Update VP Matrix
+    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+
+    // Update Fragment Uniforms (eyePosition at offset 16)
+    this.device.queue.writeBuffer(
+      this.fragmentUniformBuffer,
+      16,
+      eyePosition
+    );
+
     // Update particles
     const activeParticles: number[] = [];
     for(let i=this.particles.length-1; i>=0; i--) {
@@ -1444,21 +1587,21 @@ export default class View {
             data[offset+7] = p.scale * p.life; // Shrink
         }
         this.device.queue.writeBuffer(this.particleVertexBuffer, 0, data);
-
-        // Update uniforms for particles (sharing VP matrix)
-        this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     }
 
+    // Update uniforms for particles & grid (sharing VP matrix)
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
+
     // Update time for background and blocks
-    const currentTime = (performance.now() - this.startTime) / 1000.0;
+    // used 'time' calculated at start of frame
 
     // Background time
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([currentTime]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
 
     // Block shader time (global update once per frame)
     // 48 is the offset for 'time' in fragmentUniformBuffer
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([currentTime]));
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
 
     let textureView = this.ctxWebGPU.getCurrentTexture().createView();
     const depthTexture = this.device.createTexture({
@@ -1534,6 +1677,12 @@ export default class View {
     const passEncoder = commandEncoder.beginRenderPass(
       this.renderPassDescription
     );
+
+    // Render Grid first (behind blocks, but depth tested)
+    passEncoder.setPipeline(this.gridPipeline);
+    passEncoder.setBindGroup(0, this.gridBindGroup);
+    passEncoder.setVertexBuffer(0, this.gridVertexBuffer);
+    passEncoder.draw(this.gridVertexCount);
 
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setVertexBuffer(0, this.vertexBuffer);
