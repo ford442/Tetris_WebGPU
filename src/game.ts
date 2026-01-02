@@ -597,7 +597,10 @@ export default class Game {
   }
 
   updateScore(lines: number): void {
-    this.score += lines * lines * 10;
+    // Standard scoring: 100, 300, 500, 800 * (level + 1)
+    const baseScores = [0, 100, 300, 500, 800];
+    const scoreMultiplier = baseScores[lines] || 0;
+    this.score += scoreMultiplier * (this.level + 1);
     console.log('score = ' + this.score);
   }
 

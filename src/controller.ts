@@ -4,6 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 133; // Delayed Auto Shift (ms) - Snappier
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
+const ARR_HORIZ = 25; // Slightly slower for horizontal to control movement better
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -323,18 +324,20 @@ export default class Controller {
       if (this.isActionPressed('left')) {
           this.actionTimers.left! += dt;
           if (this.actionTimers.left! > DAS) {
-              while (this.actionTimers.left! > DAS + ARR) {
+              while (this.actionTimers.left! > DAS + ARR_HORIZ) {
                   this.game.movePieceLeft();
-                  this.actionTimers.left! -= ARR;
+                  this.soundManager.playMove();
+                  this.actionTimers.left! -= ARR_HORIZ;
                   this.updateView();
               }
           }
       } else if (this.isActionPressed('right')) { // Changed to else if to match SOCD behavior
           this.actionTimers.right! += dt;
           if (this.actionTimers.right! > DAS) {
-              while (this.actionTimers.right! > DAS + ARR) {
+              while (this.actionTimers.right! > DAS + ARR_HORIZ) {
                   this.game.movePieceRight();
-                  this.actionTimers.right! -= ARR;
+                  this.soundManager.playMove();
+                  this.actionTimers.right! -= ARR_HORIZ;
                   this.updateView();
               }
           }
@@ -376,6 +379,9 @@ export default class Controller {
           this.actionTimers.down! += dt;
           if (this.actionTimers.down! > ARR) {
              this.game.movePieceDown();
+             // Only play sound periodically for soft drop to avoid buzzing?
+             // Or just let it buzz (classic behavior)
+             this.soundManager.playMove();
              this.actionTimers.down = 0;
              this.updateView();
           }

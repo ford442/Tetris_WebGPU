@@ -458,7 +458,7 @@ const Shaders = () => {
                 let hexDist = length(guv);
                 let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
 
-                // Circuit Traces (keep original logic but refined)
+                // Circuit Traces
                 let uvScale = 3.0;
                 let uvGrid = vUV * uvScale;
                 let gridPos = fract(uvGrid);
@@ -467,9 +467,9 @@ const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                // Pulse effect
+                // Pulse effect - Faster and more intense
                 let time = uniforms.time;
-                let pulsePos = sin(time * 1.5 + vPosition.y * 0.8 + vPosition.x * 0.8) * 0.5 + 0.5;
+                let pulsePos = sin(time * 3.0 + vPosition.y * 1.0 + vPosition.x * 1.0) * 0.5 + 0.5;
 
                 // Surface finish
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
@@ -480,10 +480,10 @@ const Shaders = () => {
                 }
 
                 if (isTrace > 0.5) {
-                    baseColor *= 0.5; // Deep grooves
+                    baseColor *= 0.4; // Deeper grooves
                 } else {
-                    // Crystalline noise sparkle
-                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
+                    // Crystalline noise sparkle - Increased frequency
+                    let sparkle = step(0.97, noise) * 0.8 * (sin(time * 8.0 + vPosition.x * 12.0) * 0.5 + 0.5);
                     baseColor += vec3<f32>(sparkle);
                 }
 
@@ -493,35 +493,36 @@ const Shaders = () => {
                 // --- Emissive Elements ---
                 // Traces glow intensely
                 if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 3.0;
+                    let traceGlow = pulsePos * 4.0; // Brighter glow
                     finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.5; // White hot core
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.6; // White hot core
                 }
                 // Hex corners glow slightly
                 if (hexDist < 0.1) {
-                    finalColor += vColor.rgb * 0.5 * pulsePos;
+                    finalColor += vColor.rgb * 0.8 * pulsePos;
                 }
 
-                // --- Fresnel Rim Light (Enhanced) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper
-                let rimColor = vec3<f32>(0.2, 0.8, 1.0); // Cyan/Ice rim
+                // --- Fresnel Rim Light (Super Enhanced) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5); // Wider rim
+                let rimColor = vec3<f32>(0.2, 0.9, 1.0); // Cyan/Ice rim
 
                 // Chromatic Aberration on Rim
-                let rimR = rimColor.r * (1.0 + 0.1 * sin(time + vPosition.y));
+                let rimR = rimColor.r * (1.0 + 0.2 * sin(time * 2.0 + vPosition.y));
                 let rimG = rimColor.g;
-                let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
+                let rimB = rimColor.b * (1.0 + 0.2 * cos(time * 2.0 + vPosition.y));
 
-                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
+                // Add rim light with boost
+                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 4.0;
 
                 // --- Edge Highlight ---
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
+                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist);
+                finalColor += vec3<f32>(1.0) * edgeGlow * 1.0; // Brighter, wider edges
 
-                // --- GHOST PIECE RENDERING ---
+                // --- GHOST PIECE RENDERING (Enhanced) ---
                 if (vColor.w < 0.9) {
                     // Hologram effect
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
+                    let scanY = fract(vUV.y * 40.0 - time * 8.0); // Faster scanlines
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
                     // Wireframe
@@ -531,17 +532,20 @@ const Shaders = () => {
                     let internalGrid = isTrace;
 
                     // Shift ghost color towards Cyan/White for better visibility
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.7);
 
-                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
-                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
+                    var ghostFinal = ghostBase * wire * 5.0; // Very bright edges
+                    ghostFinal += ghostBase * internalGrid * 3.0; // Glowing internal structure
+                    ghostFinal += ghostBase * scanline * 2.0; // Stronger scanlines
+
+                    // Fill body slightly
+                    ghostFinal += ghostBase * 0.2;
 
                     // Flicker - High frequency tech glitch
                     let flicker = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
 
                     // Pulse alpha - More visible range
-                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
+                    let pulse = 0.5 + 0.2 * sin(time * 6.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
@@ -989,7 +993,7 @@ export default class View {
                   ? [1.0, 0.8, 0.0, 1.0] // GOLD for Tetris
                   : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple for normal
 
-              const count = isTetris ? 40 : 20;
+              const count = isTetris ? 50 : 25; // More particles
               this.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
