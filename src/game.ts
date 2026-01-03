@@ -426,8 +426,8 @@ export default class Game {
 
     if (!this.hasCollision()) {
         // No collision, rotation successful immediately
-        this.resetLockTimerIfGrounded();
-        return;
+      this.handleMoveReset();
+      return;
     }
 
     // Collision detected, try Wall Kicks (SRS)
