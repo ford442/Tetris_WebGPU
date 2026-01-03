@@ -169,10 +169,13 @@ export default class View {
 
   resize() {
     if (!this.device) return;
+    const dpr = window.devicePixelRatio || 1;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.canvasWebGPU.width = this.width;
-    this.canvasWebGPU.height = this.height;
+
+    // Set internal resolution higher than CSS resolution
+    this.canvasWebGPU.width = this.width * dpr;
+    this.canvasWebGPU.height = this.height * dpr;
 
     // Recalculate playfield dimensions
     this.playfildWidth = (this.width * 2) / 3;
@@ -183,11 +186,6 @@ export default class View {
     // Update video position with new dimensions
     this.visualEffects.updateVideoPosition(this.width, this.height);
 
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const presentationSize = [
-      this.canvasWebGPU.width * devicePixelRatio,
-      this.canvasWebGPU.height * devicePixelRatio,
-    ];
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
     this.ctxWebGPU.configure({
@@ -448,11 +446,10 @@ export default class View {
     if (!adapter) return; // Should handle error
     this.device = await adapter.requestDevice();
 
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const presentationSize = [
-      this.canvasWebGPU.width * devicePixelRatio,
-      this.canvasWebGPU.height * devicePixelRatio,
-    ];
+    const dpr = window.devicePixelRatio || 1;
+    this.canvasWebGPU.width = this.width * dpr;
+    this.canvasWebGPU.height = this.height * dpr;
+
    // const presentationFormat = this.ctxWebGPU.getPreferredFormat(adapter);
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
@@ -1073,7 +1070,7 @@ export default class View {
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        let alpha = value < 0 ? 0.3 : 1.0;
+        let alpha = value < 0 ? 0.3 : 0.85; // 0.85 allows 15% of the video to show through
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
