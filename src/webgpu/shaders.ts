@@ -481,7 +481,12 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
 
                 // --- GHOST PIECE RENDERING ---
-                if (vColor.w < 0.9) {
+                // Ghost piece logic (usually alpha ~0.3) needs to be distinct from our new semi-transparent blocks (alpha 0.85)
+                // Let's assume ghost piece uses a much lower alpha threshold or distinct logic.
+                // But wait, user set blocks to 0.85. Previously blocks were 1.0.
+                // Ghost pieces are handled in game logic, but here we check vColor.w.
+                // If ghost piece alpha < 0.8, we use ghost logic.
+                if (vColor.w < 0.4) {
                     // Hologram effect
                     let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
@@ -509,7 +514,13 @@ export const Shaders = () => {
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
 
-                return vec4<f32>(finalColor, vColor.w);
+                // --- Smart Transparency for Blocks ---
+                // Keep base material semi-transparent (0.85), but make features opaque (1.0)
+                let baseAlpha = vColor.w;
+                let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
+                let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
+
+                return vec4<f32>(finalColor, finalAlpha);
             }`;
 
   return {
