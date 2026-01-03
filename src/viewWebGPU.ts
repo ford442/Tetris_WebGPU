@@ -524,8 +524,8 @@ const Shaders = () => {
                 // Skew for hex look
                 let r = vec2<f32>(1.0, 1.73);
                 let h = r * 0.5;
-                let a = mod(uvHex, r) - h;
-                let b = mod(uvHex - h, r) - h;
+                let a = (uvHex - r * floor(uvHex / r)) - h;
+                let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
                 let guv = select(b, a, dot(a, a) < dot(b, b));
 
                 // Distance to hex center
