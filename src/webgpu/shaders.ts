@@ -66,7 +66,7 @@ export const PostProcessShaders = () => {
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
-            // let a = textureSample(myTexture, mySampler, finalUV).a;
+            let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap)
             let color = vec3<f32>(r, g, b);
@@ -75,7 +75,7 @@ export const PostProcessShaders = () => {
                 // color += color * 0.2;
             }
 
-            return vec4<f32>(color, 1.0);
+            return vec4<f32>(color, a);
         }
     `;
 
