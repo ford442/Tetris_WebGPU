@@ -57,7 +57,7 @@ uiContainer.innerHTML = `
           <div class="control-buttons panel-box">
             <button id="start-button">START</button>
             <button id="pause-button">PAUSE</button>
-            <button id="glitch-button">FX: ON</button>
+            <button id="glitch-button">FX: OFF</button>
           </div>
       </div>
   </div>
@@ -125,4 +125,4 @@ window.controller = controller;
 window.soundManager = soundManager;
 
 // Set default
-document.getElementById('futuristic-theme')!.click();
+document.getElementById('neon-theme')!.click();
