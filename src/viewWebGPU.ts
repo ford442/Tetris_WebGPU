@@ -526,7 +526,7 @@ const Shaders = () => {
                 let h = r * 0.5;
                 let a = mod(uvHex, r) - h;
                 let b = mod(uvHex - h, r) - h;
-                let guv = dot(a, a) < dot(b, b) ? a : b;
+                let guv = select(b, a, dot(a, a) < dot(b, b));
 
                 // Distance to hex center
                 let hexDist = length(guv);
