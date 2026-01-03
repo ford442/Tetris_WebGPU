@@ -73,6 +73,7 @@ export default class View {
   postProcessBindGroup!: GPUBindGroup;
   postProcessUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
+  depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
   // Particles
@@ -203,6 +204,16 @@ export default class View {
         size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
         format: presentationFormat,
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    // Recreate depth texture
+    if (this.depthTexture) {
+        this.depthTexture.destroy();
+    }
+    this.depthTexture = this.device.createTexture({
+      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+      format: "depth24plus",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
     // Recreate bindgroup with new texture
@@ -725,6 +736,12 @@ export default class View {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
 
+    this.depthTexture = this.device.createTexture({
+      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+      format: "depth24plus",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
     this.postProcessBindGroup = this.device.createBindGroup({
         layout: this.postProcessPipeline.getBindGroupLayout(0),
         entries: [
@@ -934,11 +951,7 @@ export default class View {
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
-    const depthTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
+    // const depthTexture = this.device.createTexture({ ... });
 
     // 1. Render Background
     const renderVideo = this.visualEffects.isVideoPlaying;
@@ -977,7 +990,7 @@ export default class View {
           storeOp: "store",
       }],
       depthStencilAttachment: {
-        view: depthTexture.createView(),
+        view: this.depthTexture.createView(),
         depthClearValue: 1.0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store'
