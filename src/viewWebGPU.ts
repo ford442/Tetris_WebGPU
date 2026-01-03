@@ -680,7 +680,7 @@ export default class View {
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
 
-  useGlitch: boolean = true;
+  useGlitch: boolean = false;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -780,7 +780,7 @@ export default class View {
     }
   };
 
-  currentTheme = this.themes.future;
+  currentTheme = this.themes.neon;
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
