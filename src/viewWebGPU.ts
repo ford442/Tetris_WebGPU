@@ -29,6 +29,80 @@ const DEFAULT_LEVEL_VIDEOS = [
   './assets/video/bg7.mp4'
 ];
 
+const PostProcessShaders = () => {
+    const vertex = `
+        struct VertexOutput {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) uv : vec2<f32>,
+        };
+
+        @vertex
+        fn main(@location(0) position : vec3<f32>) -> VertexOutput {
+            var output : VertexOutput;
+            output.Position = vec4<f32>(position, 1.0);
+            output.uv = position.xy * 0.5 + 0.5;
+            output.uv.y = 1.0 - output.uv.y; // Flip Y for texture sampling
+            return output;
+        }
+    `;
+
+    const fragment = `
+        struct Uniforms {
+            time: f32,
+            shockwaveCenter: vec2<f32>,
+            shockwaveTime: f32,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+        @binding(1) @group(0) var mySampler: sampler;
+        @binding(2) @group(0) var myTexture: texture_2d<f32>;
+
+        @fragment
+        fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
+            var finalUV = uv;
+
+            // Shockwave
+            let center = uniforms.shockwaveCenter;
+            let time = uniforms.shockwaveTime;
+
+            // Simple ripple
+            if (time > 0.0 && time < 1.0) {
+                let dist = distance(uv, center);
+                let radius = time * 1.5;
+                let width = 0.15;
+                let diff = dist - radius;
+
+                if (abs(diff) < width) {
+                    // Cosine wave for smooth ripple
+                    let angle = (diff / width) * 3.14159;
+                    let distortion = cos(angle) * 0.03 * (1.0 - time);
+                    let dir = normalize(uv - center);
+                    finalUV -= dir * distortion;
+                }
+            }
+
+            // Chromatic Aberration
+            let distFromCenter = distance(uv, vec2<f32>(0.5));
+            let aberration = distFromCenter * 0.015;
+
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
+            var g = textureSample(myTexture, mySampler, finalUV).g;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
+            // let a = textureSample(myTexture, mySampler, finalUV).a;
+
+            // Bloom-ish boost (cheap)
+            let color = vec3<f32>(r, g, b);
+            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+            if (luminance > 0.8) {
+                // color += color * 0.2;
+            }
+
+            return vec4<f32>(color, 1.0);
+        }
+    `;
+
+    return { vertex, fragment };
+};
+
 interface Particle {
     position: Float32Array; // x, y, z
     velocity: Float32Array; // vx, vy, vz
@@ -612,6 +686,17 @@ export default class View {
   backgroundBindGroup!: GPUBindGroup;
   startTime: number;
 
+  // Post Processing
+  postProcessPipeline!: GPURenderPipeline;
+  postProcessBindGroup!: GPUBindGroup;
+  postProcessUniformBuffer!: GPUBuffer;
+  offscreenTexture!: GPUTexture;
+  sampler!: GPUSampler;
+
+  // Shockwave state
+  shockwaveTimer: number = 0;
+  shockwaveCenter: number[] = [0.5, 0.5];
+
   // Particles
   particles: Particle[] = [];
   particlePipeline!: GPURenderPipeline;
@@ -878,6 +963,28 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
+    // Recreate offscreen texture
+    if (this.offscreenTexture) {
+        this.offscreenTexture.destroy();
+    }
+    this.offscreenTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        format: presentationFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    // Recreate bindgroup with new texture
+    if (this.postProcessPipeline) {
+        this.postProcessBindGroup = this.device.createBindGroup({
+            layout: this.postProcessPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: this.offscreenTexture.createView() }
+            ]
+        });
+    }
+
     Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (35 * Math.PI) / 180;
     Matrix.mat4.perspective(
@@ -1025,8 +1132,7 @@ export default class View {
           this.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.8, 1.0, 0.8]);
       }
 
-      // Impact particles at bottom - SHOCKWAVE style
-      // Emit in a ring
+      // Impact particles at bottom
       const impactY = y * -2.2;
       for (let i=0; i<40; i++) {
           const angle = (i / 40) * Math.PI * 2;
@@ -1034,9 +1140,58 @@ export default class View {
           this.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
+      // Trigger Shockwave Effect
+      // Convert world pos to screen UV (approximate)
+      // World: X [0..22], Y [1.1..-42.9]
+      // Camera looks at center ~[10, -20]
+      // Projecting accurately requires VP matrix, but we can approximate for effect
+      // Viewport is centered.
+      // X: 0 is left edge of board? No, board is centered in view?
+      // playfield starts at playfildX...
+      // Let's use a simpler heuristic: Center of screen is (0.5, 0.5) corresponding to (10, -20) roughly.
+
+      // Better: Use normalized device coordinates from world position if possible?
+      // Or just map world X/Y to 0..1 range manually based on camera FOV/Dist.
+
+      // Map worldX (0..22) to UV x
+      // Map impactY (0..-44) to UV y
+
+      // Camera at Z=75, looking at Z=0.
+      // Visible width at Z=0 with FOV 35deg vertical?
+      // tan(17.5) * 75 * 2 = height
+      // 0.315 * 150 = 47.25 units height.
+      // Width = Height * Aspect. Screen aspect varies.
+
+      // Let's guess/tune:
+      // Center Y (-20) -> 0.5
+      // Height ~48 units.
+      // -20 +/- 24 -> -44 to +4.
+      // impactY range -44 (bottom) to 0 (top).
+      // So impactY maps directly to UV y?
+      // y_uv = 1.0 - (impactY - (-44)) / 48?
+      // No, World Y is up-positive? No, logic is y-down positive in Game, but worldY is y * -2.2?
+      // In Game: y=0 (top) -> worldY = 0.
+      // y=20 (bottom) -> worldY = -44.
+      // So World Y is Up-Positive (WebGPU coord system)?
+      // In View: yTop = 1.1, yBottom = -42.9.
+      // So Top is Positive, Bottom is Negative.
+      // UV y=0 is Top.
+
+      const camY = -20.0;
+      const camZ = 75.0;
+      const fov = (35 * Math.PI) / 180;
+      const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
+      const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+
+      const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
+      const uvY = 0.5 - (impactY - camY) / visibleHeight;
+
+      this.shockwaveCenter = [uvX, uvY];
+      this.shockwaveTimer = 0.01; // Start effect
+
       // Increase shake
-      this.shakeTimer = 0.2; // Shorter, sharper shake
-      this.shakeMagnitude = 1.2; // Stronger kick
+      this.shakeTimer = 0.2;
+      this.shakeMagnitude = 1.2;
   }
 
   // Helper for radial explosions
@@ -1372,6 +1527,55 @@ export default class View {
         }]
     });
 
+    // --- Post Process Pipeline ---
+    const ppShader = PostProcessShaders();
+
+    this.postProcessPipeline = this.device.createRenderPipeline({
+        label: 'post process pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: ppShader.vertex }),
+            entryPoint: 'main',
+            buffers: [{
+                arrayStride: 12,
+                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] // reuse FullScreenQuadData
+            }]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: ppShader.fragment }),
+            entryPoint: 'main',
+            targets: [{ format: presentationFormat }]
+        },
+        primitive: { topology: 'triangle-list' }
+    });
+
+    this.postProcessUniformBuffer = this.device.createBuffer({
+        size: 32, // time(4) + pad + center(8) + time_shock(4) -> 16 + padding
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.sampler = this.device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+    });
+
+    // Offscreen Texture creation handled in Resize/Frame logic or here initially
+    // We need to create it initially too
+    this.offscreenTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        format: presentationFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    this.postProcessBindGroup = this.device.createBindGroup({
+        layout: this.postProcessPipeline.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
+            { binding: 1, resource: this.sampler },
+            { binding: 2, resource: this.offscreenTexture.createView() }
+        ]
+    });
+
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
@@ -1603,7 +1807,19 @@ export default class View {
     // 48 is the offset for 'time' in fragmentUniformBuffer
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
 
-    let textureView = this.ctxWebGPU.getCurrentTexture().createView();
+    // Update Shockwave Uniforms
+    if (this.shockwaveTimer > 0) {
+        this.shockwaveTimer += dt * 0.8; // Speed
+        if (this.shockwaveTimer > 1.0) this.shockwaveTimer = 0.0;
+    }
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
+        time, 0,
+        this.shockwaveCenter[0], this.shockwaveCenter[1],
+        this.shockwaveTimer, 0, 0, 0
+    ]));
+
+    // *** Render Pass 1: Draw Scene to Offscreen Texture ***
+    const textureViewOffscreen = this.offscreenTexture.createView();
     const depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
       format: "depth24plus",
@@ -1611,29 +1827,21 @@ export default class View {
     });
 
     // 1. Render Background
-    // Only render procedural background if video is not active (or create a transparent pass)
-    // We use actual playback state to decide
     const renderVideo = this.isVideoPlaying;
-
-    // Flash effect color
-    let clearR = 0.0;
-    let clearG = 0.0;
-    let clearB = 0.0;
+    let clearR = 0.0, clearG = 0.0, clearB = 0.0;
 
     if (this.flashTimer > 0) {
-        // Flash white/gold on line clear
         clearR = this.flashTimer * 0.5;
         clearG = this.flashTimer * 0.5;
         clearB = this.flashTimer * 0.2;
     } else if (this.lockTimer > 0) {
-        // Slight blue flash on lock
         clearB = this.lockTimer * 0.2;
     }
 
     const backgroundPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
-            view: textureView,
-            clearValue: { r: clearR, g: clearG, b: clearB, a: 0.0 }, // Transparent clear with effect
+            view: textureViewOffscreen,
+            clearValue: { r: clearR, g: clearG, b: clearB, a: 0.0 },
             loadOp: 'clear',
             storeOp: 'store'
         }]
@@ -1646,26 +1854,22 @@ export default class View {
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
-        bgPassEncoder.draw(6); // 2 triangles
+        bgPassEncoder.draw(6);
         bgPassEncoder.end();
     } else {
-        // Video is playing, just clear transparency
         const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
         bgPassEncoder.end();
     }
-
 
     // 2. Render Playfield
     this.renderPlayfild_WebGPU(this.state);
 
     this.renderPassDescription = {
-      colorAttachments: [
-        {
-          view: textureView,
-          loadOp: 'load', // Load the background
+      colorAttachments: [{
+          view: textureViewOffscreen,
+          loadOp: 'load',
           storeOp: "store",
-        },
-      ],
+      }],
       depthStencilAttachment: {
         view: depthTexture.createView(),
         depthClearValue: 1.0,
@@ -1674,11 +1878,9 @@ export default class View {
       },
     };
 
-    const passEncoder = commandEncoder.beginRenderPass(
-      this.renderPassDescription
-    );
+    const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
 
-    // Render Grid first (behind blocks, but depth tested)
+    // Render Grid
     passEncoder.setPipeline(this.gridPipeline);
     passEncoder.setBindGroup(0, this.gridBindGroup);
     passEncoder.setVertexBuffer(0, this.gridVertexBuffer);
@@ -1689,8 +1891,7 @@ export default class View {
     passEncoder.setVertexBuffer(1, this.normalBuffer);
     passEncoder.setVertexBuffer(2, this.uvBuffer);
 
-    let length_of_uniformBindGroup_boder =
-      this.uniformBindGroup_ARRAY_border.length;
+    let length_of_uniformBindGroup_boder = this.uniformBindGroup_ARRAY_border.length;
     for (let index = 0; index < length_of_uniformBindGroup_boder; index++) {
       passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY_border[index]);
       passEncoder.draw(this.numberOfVertices);
@@ -1707,10 +1908,29 @@ export default class View {
         passEncoder.setPipeline(this.particlePipeline);
         passEncoder.setBindGroup(0, this.particleBindGroup);
         passEncoder.setVertexBuffer(0, this.particleVertexBuffer);
-        passEncoder.draw(6, this.particles.length, 0, 0); // 6 vertices per instance, N instances
+        passEncoder.draw(6, this.particles.length, 0, 0);
     }
-
     passEncoder.end();
+
+    // *** Render Pass 2: Post Processing ***
+    const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
+    const ppPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [{
+            view: textureViewScreen,
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
+    const ppPassEncoder = commandEncoder.beginRenderPass(ppPassDescriptor);
+    ppPassEncoder.setPipeline(this.postProcessPipeline);
+    ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
+    // Reuse background vertex buffer (quad)
+    ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+    ppPassEncoder.draw(6);
+    ppPassEncoder.end();
+
     this.device.queue.submit([commandEncoder.finish()]);
     requestAnimationFrame(this.Frame);
   };
