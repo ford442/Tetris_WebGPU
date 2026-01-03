@@ -111,7 +111,7 @@ export default class Controller {
     const state = this.game.getState();
 
     // Check game over
-    if (state.isGameOwer) {
+    if (state.isGameOver) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
       this.stopTimer();
@@ -135,7 +135,7 @@ export default class Controller {
 
     // Global keys (Enter)
     if (code === 'Enter' || event.keyCode === 13) {
-        if (this.game.gameower) {
+        if (this.game.gameOver) {
           this.reset();
         } else if (this.isPlaying) {
           this.pause();
