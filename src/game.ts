@@ -9,12 +9,12 @@ export interface GameState {
   lines: number;
   nextPiece: Piece;
   holdPiece: Piece | null;
-  isGameOwer: boolean;
+  isGameOver: boolean;
   playfield: number[][];
 }
 
 export default class Game {
-  gameower!: boolean;
+  gameOver!: boolean;
   playfield!: number[][];
   activPiece!: Piece;
   nextPiece!: Piece;
@@ -131,7 +131,7 @@ export default class Game {
     }
 
     // Calculate Ghost Piece
-    if (!this.gameower) {
+    if (!this.gameOver) {
       const ghostY = this.getGhostY();
       const { x: pieceX, blocks } = this.activPiece;
 
@@ -156,7 +156,7 @@ export default class Game {
       lines: this.lines,
       nextPiece: this.nextPiece,
       holdPiece: this.holdPieceObj,
-      isGameOwer: this.gameower,
+      isGameOver: this.gameOver,
       playfield
     }
   }
@@ -181,14 +181,14 @@ export default class Game {
             result.linesCleared = linesScore;
         }
         this.updatePieces();
-        if (this.gameower) result.gameOver = true;
+        if (this.gameOver) result.gameOver = true;
     }
     return result;
   }
 
   reset(): void {
     this.scoringSystem.reset();
-    this.gameower = false;
+    this.gameOver = false;
     this.playfield = Array.from({ length: 20 }, () => Array(10).fill(0));
     this.collisionDetector.updatePlayfield(this.playfield);
     this.holdPieceObj = null;
@@ -202,7 +202,7 @@ export default class Game {
   // Called every frame
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean } {
       const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
-      if (this.gameower) return result;
+      if (this.gameOver) return result;
 
       // Check if piece is on the ground
       this.activPiece.y += 1;
@@ -220,7 +220,7 @@ export default class Game {
                   result.linesCleared = linesScore;
               }
               this.updatePieces();
-              if (this.gameower) result.gameOver = true;
+              if (this.gameOver) result.gameOver = true;
           }
       } else {
           this.lockTimer = 0;
@@ -388,7 +388,7 @@ export default class Game {
         if (blocks[y][x]) {
             // Check if game over (piece locked above the board)
             if (pieceY + y < 0) {
-                this.gameower = true;
+                this.gameOver = true;
                 return;
             }
 
@@ -409,7 +409,7 @@ export default class Game {
 
     // Check for immediate game over upon spawn
     if (this.hasCollision()) {
-        this.gameower = true;
+        this.gameOver = true;
     }
   }
 
