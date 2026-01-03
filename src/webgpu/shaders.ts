@@ -361,33 +361,7 @@ export const Shaders = () => {
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
-                // --- Beveled Normal Logic ---
                 var N:vec3<f32> = normalize(vNormal.xyz);
-
-                // Tangent basis for perturbations
-                var tangent = vec3<f32>(1.0, 0.0, 0.0);
-                if (abs(N.x) > 0.9) { tangent = vec3<f32>(0.0, 1.0, 0.0); }
-                let bitangent = cross(N, tangent);
-                tangent = cross(bitangent, N);
-
-                let bevelSize = 0.15; // Smooth bevel
-                let bevelStrength = 0.8;
-
-                let dx = (vUV.x - 0.5) * 2.0;
-                let dy = (vUV.y - 0.5) * 2.0;
-
-                // Smooth rounded corners normal bending
-                if (abs(dx) > (1.0 - bevelSize)) {
-                    let signX = sign(dx);
-                    let dist = (abs(dx) - (1.0 - bevelSize)) / bevelSize;
-                    N = normalize(N + tangent * signX * bevelStrength * dist);
-                }
-                if (abs(dy) > (1.0 - bevelSize)) {
-                    let signY = sign(dy);
-                    let dist = (abs(dy) - (1.0 - bevelSize)) / bevelSize;
-                    N = normalize(N - bitangent * signY * bevelStrength * dist);
-                }
-
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
