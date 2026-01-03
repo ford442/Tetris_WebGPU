@@ -43,7 +43,9 @@ export default class Controller {
     'KeyA': 'left',
     'KeyD': 'right',
     'KeyS': 'down',
-    'KeyW': 'hardDrop',
+    'KeyW': 'down',
+    'KeyQ': 'rotateCCW',
+    'KeyE': 'rotateCW',
     'KeyK': 'rotateCCW',
     'KeyL': 'rotateCW'
   };
