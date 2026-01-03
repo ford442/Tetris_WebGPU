@@ -49,6 +49,7 @@ const PostProcessShaders = () => {
     const fragment = `
         struct Uniforms {
             time: f32,
+            useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
         };
@@ -63,8 +64,12 @@ const PostProcessShaders = () => {
             // Shockwave
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
+            let useGlitch = uniforms.useGlitch;
 
-            // Simple ripple
+            // Simple ripple (Only if glitch is on? Or shockwave is physical?)
+            // Shockwave is physical feedback, maybe keep it even if glitch is off?
+            // But usually "glitch effects" implies all distortions.
+            // Let's keep shockwave as it is "impact" not "glitch".
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
                 let radius = time * 1.5;
@@ -82,7 +87,7 @@ const PostProcessShaders = () => {
 
             // Chromatic Aberration
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = distFromCenter * 0.015;
+            let aberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
@@ -467,6 +472,7 @@ const Shaders = () => {
                 eyePosition : vec4<f32>,
                 color : vec4<f32>,
                 time : f32,
+                useGlitch: f32,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -612,7 +618,8 @@ const Shaders = () => {
                     ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
 
                     // Flicker - High frequency tech glitch
-                    let flicker = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
+                    let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
+                    let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
 
                     // Pulse alpha - More visible range
                     let pulse = 0.35 + 0.15 * sin(time * 6.0);
@@ -672,6 +679,8 @@ export default class View {
   uniformBindGroup_CACHE: GPUBindGroup[] = []; // Cache for dynamic blocks
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
+
+  useGlitch: boolean = true;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -893,6 +902,10 @@ export default class View {
     // 4. Optional: Add a border/glow to the video to frame the portal
     this.videoElement.style.boxShadow = '0 0 50px rgba(0, 200, 255, 0.2)';
     this.videoElement.style.borderRadius = '4px';
+  }
+
+  toggleGlitch() {
+    this.useGlitch = !this.useGlitch;
   }
 
   updateVideoForLevel(level: number) {
@@ -1579,7 +1592,7 @@ export default class View {
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 80, // Need more space for time (offset 48) + padding
+      size: 96, // Increased to accommodate useGlitch (offset 52)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -1635,6 +1648,12 @@ export default class View {
       this.fragmentUniformBuffer,
       32,
       new Float32Array(this.currentTheme[5])
+    );
+    // Initial glitch state
+    this.device.queue.writeBuffer(
+      this.fragmentUniformBuffer,
+      52,
+      new Float32Array([this.useGlitch ? 1.0 : 0.0])
     );
 
     this.renderPlayfild_Border_WebGPU();
@@ -1806,6 +1825,8 @@ export default class View {
     // Block shader time (global update once per frame)
     // 48 is the offset for 'time' in fragmentUniformBuffer
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
+    // Update glitch state for blocks
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
 
     // Update Shockwave Uniforms
     if (this.shockwaveTimer > 0) {
@@ -1813,7 +1834,7 @@ export default class View {
         if (this.shockwaveTimer > 1.0) this.shockwaveTimer = 0.0;
     }
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
-        time, 0,
+        time, this.useGlitch ? 1.0 : 0.0,
         this.shockwaveCenter[0], this.shockwaveCenter[1],
         this.shockwaveTimer, 0, 0, 0
     ]));

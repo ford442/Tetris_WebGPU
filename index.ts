@@ -57,6 +57,7 @@ uiContainer.innerHTML = `
           <div class="control-buttons panel-box">
             <button id="start-button">START</button>
             <button id="pause-button">PAUSE</button>
+            <button id="glitch-button">FX: ON</button>
           </div>
       </div>
   </div>
@@ -109,6 +110,13 @@ document.getElementById('start-button')!.addEventListener('click', () => {
 document.getElementById('pause-button')!.addEventListener('click', () => {
     controller.pause();
     (document.getElementById('pause-button') as HTMLButtonElement).blur();
+});
+
+document.getElementById('glitch-button')!.addEventListener('click', (e) => {
+    view.toggleGlitch();
+    const btn = e.target as HTMLButtonElement;
+    btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
+    btn.blur();
 });
 
 window.game = game;
