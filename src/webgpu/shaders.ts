@@ -369,7 +369,7 @@ export const Shaders = () => {
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -461,11 +461,14 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
 
                 // --- Geometric Edge Highlight (Fresnel-based) ---
+                const EDGE_THRESHOLD = 0.7; // Sharp threshold for edge detection
+                const SILHOUETTE_THRESHOLD = 0.3; // Threshold for silhouette detection
+                
                 let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 6.0);
-                let edgeGlow = edgeFresnel * step(0.7, edgeFresnel); // Sharp threshold
+                let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
                 
                 // Only apply to silhouette edges, not internal faces
-                let isSilhouette = step(0.3, abs(dot(N, V)));
+                let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
                 finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.0;
 
                 // --- GHOST PIECE RENDERING ---
