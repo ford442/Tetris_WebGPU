@@ -760,7 +760,7 @@ export default class View {
     this.VIEWMATRIX = Matrix.mat4.create();
     this.PROJMATRIX = Matrix.mat4.create();
 
-    let eyePosition = [0.0, -20.0, 75.0];
+    let eyePosition = [9.9, -20.9, 85.0];
     // Apply shake
     if (this.shakeTimer > 0) {
         const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
@@ -775,7 +775,7 @@ export default class View {
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
-      [9.0, -20.0, 0.0], // target
+      [9.9, -20.9, 0.0], // target
       [0.0, 1.0, 0.0] // up
     );
 
@@ -882,9 +882,9 @@ export default class View {
     const time = (performance.now() - this.startTime) / 1000.0;
 
     // Base position
-    let camX = 0.0;
-    let camY = -20.0;
-    let camZ = 75.0;
+    let camX = 9.9;
+    let camY = -20.9;
+    let camZ = 85.0;
 
     // "Breathing" sway
     camX += Math.sin(time * 0.2) * 2.0;
@@ -900,7 +900,7 @@ export default class View {
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
-      [9.0, -20.0, 0.0], // target
+      [9.9, -20.9, 0.0], // target
       [0.0, 1.0, 0.0] // up
     );
 
