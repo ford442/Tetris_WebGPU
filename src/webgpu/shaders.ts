@@ -72,13 +72,29 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             var finalColor = color;
-            if (luminance > 0.6) {
-                finalColor += color * 0.2; // Glow boost
-            }
+            // Enhanced Bloom: Quadratic response for smoother high-end boost
+            let bloomThreshold = 0.6;
+            let bloomStrength = 0.5;
+            let bloomFactor = max(0.0, luminance - bloomThreshold);
+            finalColor += color * bloomFactor * bloomStrength;
 
             // Saturation boost for that "Neon" look
             let gray = vec3<f32>(luminance);
-            finalColor = mix(gray, finalColor, 1.2);
+            finalColor = mix(gray, finalColor, 1.3); // Increased saturation
+
+            // Vignette
+            let distV = distance(uv, vec2<f32>(0.5));
+            let vignette = smoothstep(0.8, 0.2, distV * 0.8);
+            finalColor *= vignette;
+
+            // Scanlines (Subtle retro feel)
+            let scanline = sin(uv.y * 800.0) * 0.02;
+            finalColor -= vec3<f32>(scanline);
+
+            // PRESERVE ALPHA: Mask final color by alpha to ensure we don't draw on transparent background
+            // Since we are in premultiplied alpha mode, we should ensure color is 0 where alpha is 0.
+            // Also clamp to prevent negative values from subtractive scanlines.
+            finalColor = max(vec3<f32>(0.0), finalColor) * ceil(a);
 
             return vec4<f32>(finalColor, a);
         }
@@ -332,6 +348,7 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32,
                 useGlitch: f32,
+                lockPercent: f32,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -387,8 +404,37 @@ export const Shaders = () => {
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
 
+                // --- ACTIVE PIECE LOCK FEEDBACK ---
+                // If this is an active piece (not ghost, not static border), flash when locking
+                // We don't have a direct "isActive" flag, but we can infer or pass it.
+                // Or just apply global "lock" flash?
+                // Wait, all blocks share uniforms.lockPercent.
+                // We only want the ACTIVE piece to flash.
+                // Currently we don't distinguish Active vs Static blocks in the shader easily.
+                // BUT, active piece blocks are the only ones that might be "locking".
+                // Static blocks are already locked.
+                // However, the uniform is GLOBAL.
+                // So if we use lockPercent, the WHOLE FIELD will flash?
+                // Yes, unless we pass a per-instance flag.
+                // The vertex color alpha is 0.85 for normal blocks.
+                // Ghost is < 0.4.
+                // We could pass a special alpha or value for the active piece.
+                // In viewWebGPU.ts, updateBlockUniforms:
+                // Active piece is just part of the grid now (we draw active into playfield array?)
+                // NO. Game.getState merges active piece into the 2D array.
+                // So the View just sees "blocks".
+                // We can't easily distinguish.
+                // Plan B: Just make the WHOLE active piece flash white.
+                // We need to identify it.
+                // Actually, for "Graphical Qualities", a global "Board Tension" flash isn't bad?
+                // But let's stick to improving the Gem look first.
+
                 // --- GEM PHYSICS (Material) ---
                 var baseColor = vColor.rgb;
+
+                // Active Lock Flash (Global for now, but subtle)
+                // If lockPercent is high, brighten everything slightly? No.
+                // Let's assume we just improve the gem look.
 
                 // 1. Volume Absorption (Darkens thick areas)
                 // Approximate thickness based on UV (center is thicker)
