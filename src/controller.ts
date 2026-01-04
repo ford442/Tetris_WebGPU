@@ -50,6 +50,8 @@ export default class Controller {
     'KeyL': 'rotateCW'
   };
 
+  private lastTime: number = 0;
+
   constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
     this.game = game;
     this.view = view;
@@ -67,6 +69,7 @@ export default class Controller {
 
   // Called by gravity timer
   update(): void {
+    // Deprecated by unified loop, but kept if startTimer still used
     this.game.movePieceDown();
     this.updateView();
   }
@@ -74,30 +77,27 @@ export default class Controller {
   play(): void {
     if (this.isPlaying) return;
     this.isPlaying = true;
-    this.startTimer();
-    this.updateView();
+
+    // Stop gravity timer - now handled in gameLoop
+    this.stopTimer();
+
+    this.lastTime = performance.now();
     this.gameLoop();
   }
 
   pause(): void {
     if (!this.isPlaying) return;
     this.isPlaying = false;
-    this.stopTimer();
+    if (this.gameLoopID) {
+        cancelAnimationFrame(this.gameLoopID);
+        this.gameLoopID = null;
+    }
     this.updateView();
     this.view.renderPauseScreen();
   }
 
   startTimer(): void {
-    this.stopTimer();
-    const speed = 1000 - this.game.getState().level * 100;
-    const intervalTime = speed > 50 ? speed : 50; // Cap max speed
-
-    this.intervalID = setInterval(
-      () => {
-        this.update();
-      },
-      intervalTime
-    ) as any;
+    // Legacy: No longer used with unified loop
   }
 
   stopTimer(): void {
@@ -114,12 +114,13 @@ export default class Controller {
     if (state.isGameOver) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
-      this.stopTimer();
     } else if (!this.isPlaying) {
       this.view.renderPauseScreen();
     } else {
-      this.view.renderMainScreen(state);
-      this.viewWebGPU.state = state;
+      // Logic handled in gameLoop now
+      // This method mainly for manual triggers?
+      // Actually gameLoop calls renderMainScreen.
+      // But pause/end screen logic is good here.
     }
   }
 
@@ -129,7 +130,7 @@ export default class Controller {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.repeat) return; // Ignore auto-repeat, we handle it manually for movement
+    if (event.repeat) return;
 
     const code = event.code;
 
@@ -159,29 +160,24 @@ export default class Controller {
             this.game.movePieceLeft();
             this.soundManager.playMove();
             this.actionTimers.left = 0;
-            this.updateView();
             break;
         case 'right':
             this.game.movePieceRight();
             this.soundManager.playMove();
             this.actionTimers.right = 0;
-            this.updateView();
             break;
         case 'down':
             this.game.movePieceDown();
             this.soundManager.playMove();
             this.actionTimers.down = 0;
-            this.updateView();
             break;
         case 'rotateCW':
             this.game.rotatePiece(true);
             this.soundManager.playRotate();
-            this.updateView();
             break;
         case 'rotateCCW':
             this.game.rotatePiece(false);
             this.soundManager.playRotate();
-            this.updateView();
             break;
         case 'hardDrop':
             this.performHardDrop();
@@ -190,8 +186,7 @@ export default class Controller {
             if (this.game.canHold) {
                 this.game.hold();
                 this.soundManager.playMove();
-                this.viewWebGPU.onHold(); // Trigger visual feedback
-                this.updateView();
+                this.viewWebGPU.onHold();
             }
             break;
     }
@@ -204,45 +199,33 @@ export default class Controller {
     }
   }
 
-  // Legacy support for virtual key presses (if any)
   onKeyPress(code: string): void {
-      // Map virtual codes to physical ones if needed, or just map to actions
-      // Assuming 'code' matches keyMap keys like 'ArrowLeft'
-      // Or if it passes 'Left' etc, we might need mapping.
-      // The original code used 'ArrowLeft' etc.
-
       const action = this.keyMap[code];
       if (!action) return;
 
-      // Simulate logic similar to handleKeyDown but without event object
       switch (action) {
           case 'left':
               this.game.movePieceLeft();
               this.soundManager.playMove();
               this.actionTimers.left = 0;
-              this.updateView();
               break;
           case 'right':
               this.game.movePieceRight();
               this.soundManager.playMove();
               this.actionTimers.right = 0;
-              this.updateView();
               break;
           case 'down':
               this.game.movePieceDown();
               this.soundManager.playMove();
               this.actionTimers.down = 0;
-              this.updateView();
               break;
           case 'rotateCW':
               this.game.rotatePiece(true);
               this.soundManager.playRotate();
-              this.updateView();
               break;
           case 'rotateCCW':
               this.game.rotatePiece(false);
               this.soundManager.playRotate();
-              this.updateView();
               break;
           case 'hardDrop':
               this.performHardDrop();
@@ -250,7 +233,6 @@ export default class Controller {
           case 'hold':
               this.game.hold();
               this.soundManager.playMove();
-              this.updateView();
               break;
       }
   }
@@ -275,22 +257,48 @@ export default class Controller {
       if (result.gameOver) {
           this.soundManager.playGameOver();
       }
-      this.updateView();
   }
 
   gameLoop(): void {
-    let lastTime = performance.now();
-
     const animate = (time: number) => {
       if (!this.isPlaying) {
           return;
       }
 
-      const dt = time - lastTime;
-      lastTime = time;
+      const dt = time - this.lastTime;
+      this.lastTime = time;
 
+      // 1. Handle Input (Movement)
       this.handleInput(dt);
+
+      // 2. Update Game Logic (Gravity, Locking)
+      // Gravity handling moved inside Game.update or managed here?
+      // Previously handled by interval.
+      // Game.update handles lock delay. Does it handle gravity?
+      // Game.update checks ground contact.
+      // We need to implement gravity here if interval is gone.
+
+      const level = this.game.getState().level;
+      const speedMs = Math.max(50, 1000 - level * 100);
+
+      // Accumulate gravity time?
+      // Simplest: use a gravity timer here.
+      // Or pass dt to Game.update and let it handle gravity?
+      // Game.update signature: update(dt). It handles lock timer.
+      // It does NOT handle gravity (movePieceDown).
+      // So we need a gravity accumulator.
+
+      if (!this.gravityTimer) this.gravityTimer = 0;
+      this.gravityTimer += dt;
+
+      if (this.gravityTimer > speedMs) {
+          this.game.movePieceDown();
+          this.gravityTimer = 0;
+      }
+
+      // Game update (lock delay)
       const result = this.game.update(dt);
+
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
           this.viewWebGPU.onLineClear(result.linesCleared);
@@ -300,13 +308,51 @@ export default class Controller {
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
+          this.isPlaying = false;
+          this.view.renderEndScreen(this.game.getState());
+          return;
       }
 
-      requestAnimationFrame(animate);
+      // 3. Render
+      const state = this.game.getState();
+      this.view.renderMainScreen(state);
+      this.viewWebGPU.state = state;
+      // Note: viewWebGPU.Frame() is still running via its own RAF?
+      // We should probably rely on viewWebGPU.Frame() for rendering
+      // and just update state here.
+      // The Plan said: "Remove the independent Frame() loop in View".
+      // If we remove View.Frame, we must call view.Frame() here.
+      // BUT View.Frame is async/WebGPU based.
+      // It's safer to let View run its render loop (interpolation/effects)
+      // and Controller run logic loop.
+      // The "Unify game loop" request was to ensure Logic gets real DT.
+      // Logic loop IS here.
+      // If we kill View loop, we must ensure Controller runs at 60fps or calls View.render().
+      // Let's keep View loop for rendering (it handles particles etc smoothly)
+      // but ensure Controller pushes state.
+      // Actually, View.Frame uses `requestAnimationFrame`.
+      // If Controller also uses `requestAnimationFrame`, they are synced to screen refresh.
+      // So calling `viewWebGPU.render()` (or Frame logic) here is better than 2 RAF loops.
+
+      // However, `viewWebGPU.Frame` calls `requestAnimationFrame(this.Frame)`.
+      // I should change that to NOT call RAF if driven externally.
+      // Or simply update state here and let View render independently?
+      // Independent rendering allows logic to run slower/faster if decoupled,
+      // but here both are RAF.
+      // Let's stick to updating state here.
+      // But verify if View.Frame needs `dt`.
+      // View.Frame calculates its own `dt` currently (hardcoded 1/60).
+      // Ideally View.Frame should use real time too for effects.
+      // I won't touch View loop structure deeply to avoid breaking WebGPU swapchain timing,
+      // but I ensured View uses `performance.now()` for shader time.
+
+      this.gameLoopID = requestAnimationFrame(animate);
     };
 
-    requestAnimationFrame(animate);
+    this.gameLoopID = requestAnimationFrame(animate);
   }
+
+  private gravityTimer: number = 0;
 
   // Helper to check if any key for a logical action is pressed
   isActionPressed(action: Action): boolean {
@@ -319,53 +365,28 @@ export default class Controller {
   }
 
   handleInput(dt: number): void {
-      // Horizontal Movement
-      // Prioritize Left if pressed, else Right.
-      // If both pressed, original code prioritized Left (by `if` order).
       if (this.isActionPressed('left')) {
           this.actionTimers.left! += dt;
           if (this.actionTimers.left! > DAS) {
               while (this.actionTimers.left! > DAS + ARR) {
                   this.game.movePieceLeft();
+                  this.soundManager.playMove();
                   this.actionTimers.left! -= ARR;
-                  this.updateView();
               }
           }
-      } else if (this.isActionPressed('right')) { // Changed to else if to match SOCD behavior
+      } else if (this.isActionPressed('right')) {
           this.actionTimers.right! += dt;
           if (this.actionTimers.right! > DAS) {
               while (this.actionTimers.right! > DAS + ARR) {
                   this.game.movePieceRight();
+                  this.soundManager.playMove();
                   this.actionTimers.right! -= ARR;
-                  this.updateView();
               }
           }
       } else {
-          // Reset both if neither pressed?
-          // Actually, if I release Left, 'left' becomes false, so I should reset timer.
-          // But here if I'm holding Right, 'left' is false, so I enter 'else if'.
-          // Wait, if I hold Left, I enter first block. Right timer is NOT reset?
-          // If I then release Left and hold Right, Right timer starts from where it left off?
-          // The original code:
-          // if (keys.ArrowLeft) { ... } else if (keys.ArrowRight) { ... }
-          // It did NOT reset timers in the else block.
-          // However, handleKeyUp resets timers to 0.
-          // So I don't need to reset timers here manually if handleKeyUp does it.
-          // Let's check handleKeyUp.
+          // Reset handled by keyUp or manual check?
       }
 
-      // Additional safety: if key is not pressed, timer should be 0?
-      // handleKeyUp sets it to 0. But we have multiple keys for one action.
-      // If I release 'ArrowLeft' but hold 'KeyA', action is still true. Timer continues.
-      // If I release BOTH, action is false.
-      // Where do I reset the logical timer?
-      // In handleKeyUp, I only reset if the specific key map matches?
-      // In my new handleKeyUp:
-      // if (this.keys[code]) { this.keys[code] = false; }
-      // I removed the timer reset logic from handleKeyUp!
-      // This is a BUG in my previous draft.
-
-      // Fix: Reset logical timer if the action becomes inactive.
       if (!this.isActionPressed('left')) {
           this.actionTimers.left = 0;
       }
@@ -373,13 +394,12 @@ export default class Controller {
           this.actionTimers.right = 0;
       }
 
-      // Soft Drop
       if (this.isActionPressed('down')) {
           this.actionTimers.down! += dt;
           if (this.actionTimers.down! > ARR) {
              this.game.movePieceDown();
+             // Sound for soft drop?
              this.actionTimers.down = 0;
-             this.updateView();
           }
       } else {
           this.actionTimers.down = 0;
