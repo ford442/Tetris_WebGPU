@@ -124,7 +124,8 @@ export default class View {
     this.canvasWebGPU.height = this.height;
 
     this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
-    this.isWebGPU = this.CheckWebGPU();
+    this.isWebGPU = { result: false, description: "Checking..." };
+    this.CheckWebGPU(); // Async update
 
     this.playfildBorderWidth = 4;
     this.playfildX = this.playfildBorderWidth + 1;
@@ -185,20 +186,23 @@ export default class View {
     }
   }
 
-  CheckWebGPU() {
-    let result = {
-      result: false,
-      description: "",
-    };
-
-    if (!navigator.gpu) {
-      result.description =
-        "WebGPU is not supported by your browser. Please visit <a href='https://webgpu.io'>webgpu.io</a> to see the current implementation status.";
-      return result;
-    }
-
-    result.result = true;
-    return result;
+  async CheckWebGPU() {
+      if (!navigator.gpu) {
+          this.isWebGPU = { result: false, description: "WebGPU not supported in this browser." };
+          return this.isWebGPU;
+      }
+      try {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (!adapter) {
+              this.isWebGPU = { result: false, description: "No appropriate GPU adapter found." };
+              return this.isWebGPU;
+          }
+          this.isWebGPU = { result: true, description: "WebGPU enabled." };
+          return this.isWebGPU;
+      } catch (e) {
+          this.isWebGPU = { result: false, description: "WebGPU error: " + e };
+          return this.isWebGPU;
+      }
   }
 
   resize() {
@@ -375,6 +379,7 @@ export default class View {
   onLineClear(lines: number[]) {
       this.visualEffects.triggerFlash(1.0);
       this.visualEffects.triggerShake(0.5, 0.5);
+      this.visualEffects.triggerAberration(1.0);
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -433,6 +438,7 @@ export default class View {
 
       this.visualEffects.triggerShockwave([uvX, uvY]);
       this.visualEffects.triggerShake(1.2, 0.2);
+      this.visualEffects.triggerAberration(1.5);
   }
 
   renderMainScreen(state: any) {
@@ -888,7 +894,7 @@ export default class View {
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, this.useGlitch ? 1.0 : 0.0,
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
-        this.visualEffects.shockwaveTimer, 0, 0, 0
+        this.visualEffects.shockwaveTimer, this.visualEffects.aberrationIntensity, 0, 0
     ]));
 
     const textureViewOffscreen = this.offscreenTexture.createView();

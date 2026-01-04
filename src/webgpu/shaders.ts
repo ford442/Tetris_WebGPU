@@ -26,6 +26,7 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
+            aberrationStrength: f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -39,6 +40,7 @@ export const PostProcessShaders = () => {
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
             let useGlitch = uniforms.useGlitch;
+            let aberrationStrength = uniforms.aberrationStrength;
 
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
@@ -54,23 +56,31 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Chromatic Aberration
+            // Chromatic Aberration (Glitch + Dynamic Impact)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            let glitchAberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            let totalAberration = glitchAberration + aberrationStrength * 0.02 * (1.0 + distFromCenter);
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap)
+            // Bloom-ish boost / Saturation
+            // Boost bright neon colors
             let color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            // if (luminance > 0.8) {
-            //     color += color * 0.2;
-            // }
 
-            return vec4<f32>(color, a);
+            var finalColor = color;
+            if (luminance > 0.6) {
+                finalColor += color * 0.2; // Glow boost
+            }
+
+            // Saturation boost for that "Neon" look
+            let gray = vec3<f32>(luminance);
+            finalColor = mix(gray, finalColor, 1.2);
+
+            return vec4<f32>(finalColor, a);
         }
     `;
 
