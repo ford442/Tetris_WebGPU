@@ -9,9 +9,10 @@ export const CubeData = () => {
   const uvs: number[] = [];
 
   // Configuration for smoothness
-  const segments = 8;     // Higher = smoother (8 is good balance)
-  const radius = 0.15;    // Size of the rounded corner
-  const boxSize = 1.0 - radius; // Inner flat box size
+  const segments = 16;     // Increased for Gem Quality
+  const radius = 0.2;      // Larger radius for rounded gem
+  const boxSize = 1.0 - radius;
+  const bevel = 0.02;      // Micro-bevel for flat faces
 
   // Helper to add a single vertex with "Spherified Box" logic
   const pushVertex = (x: number, y: number, z: number, u: number, v: number) => {
@@ -36,6 +37,15 @@ export const CubeData = () => {
        if (ax >= ay && ax >= az) nx = Math.sign(x);
        else if (ay >= ax && ay >= az) ny = Math.sign(y);
        else nz = Math.sign(z);
+
+       // Apply Micro-Bevel to flat faces for light catching
+       // We slightly inset the "inner" point based on thickness?
+       // Or just use the normal.
+       // Actually, we are displacing "from inner box". If len=0, we are ON the inner box surface.
+       // The "radius" is added below.
+       // To bevel, we want flat faces to be slightly angled or the transition to be sharper?
+       // For now, let's keep it simple as rounding provides good highlights.
+
     } else {
        // We are on a rounded corner/edge
        nx = dx / len; ny = dy / len; nz = dz / len;
@@ -64,7 +74,6 @@ export const CubeData = () => {
         const qb = (v1 * 2 - 1) * vDir;
 
         // Define the 4 corners of the quad
-        // We map u/v/w axes to x/y/z dynamically
         const getP = (a: number, b: number) => {
            const p: any = { [uAxis]: a, [vAxis]: b, [wAxis]: wVal };
            return p;
