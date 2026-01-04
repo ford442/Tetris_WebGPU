@@ -59,20 +59,29 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Chromatic Aberration
+            // Chromatic Aberration - distance-aware and less aggressive
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            let aberration = select(0.0, distFromCenter * 0.008, useGlitch > 0.5); // Reduced from 0.015
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap)
-            let color = vec3<f32>(r, g, b);
-            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            if (luminance > 0.8) {
-                // color += color * 0.2;
+            var color = vec3<f32>(r, g, b);
+
+            // Add subtle sharpening filter when glitch is OFF
+            if (useGlitch < 0.5) {
+                let texelSize = vec2<f32>(1.0 / 800.0, 1.0 / 600.0); // Approximation, will be overridden if uniforms available
+                let center = textureSample(myTexture, mySampler, finalUV).rgb;
+                let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
+                let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
+                let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
+                let west = textureSample(myTexture, mySampler, finalUV - vec2<f32>(texelSize.x, 0.0)).rgb;
+                
+                // Simple Laplacian sharpen
+                let sharpened = center * 5.0 - (north + south + east + west);
+                color = mix(color, sharpened, 0.3);
             }
 
             return vec4<f32>(color, a);
@@ -359,7 +368,7 @@ export const Shaders = () => {
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -369,13 +378,14 @@ export const Shaders = () => {
                 // --- Improved Lighting Model ---
                 let diffuse:f32 = max(dot(N, L), 0.0);
 
-                // Sharp specular for "glassy" look
-                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
+                // Primary sharp specular (polished)
+                let specularSharp:f32 = pow(max(dot(N, H), 0.0), ${params.shininess}) * 3.0;
 
-                // Add secondary broad specular for "glossy plastic"
-                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
+                // Secondary broad specular (clear coat)
+                let specularClear:f32 = pow(max(dot(N, H), 0.0), 16.0) * 0.5;
 
-                let ambient:f32 = ${params.ambientIntensity};
+                // Enhanced ambient with darker base for more contrast
+                let ambient:f32 = 0.3;
 
                 var baseColor = vColor.xyz;
 
@@ -424,7 +434,7 @@ export const Shaders = () => {
                 }
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
 
                 // --- Emissive Elements ---
                 // Traces glow intensely
@@ -449,10 +459,13 @@ export const Shaders = () => {
 
                 finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
 
-                // --- Edge Highlight ---
-                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
+                // --- Geometric Edge Highlight (Fresnel-based) ---
+                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 6.0);
+                let edgeGlow = edgeFresnel * step(0.7, edgeFresnel); // Sharp threshold
+                
+                // Only apply to silhouette edges, not internal faces
+                let isSilhouette = step(0.3, abs(dot(N, V)));
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.0;
 
                 // --- GHOST PIECE RENDERING ---
                 // Ghost piece logic (usually alpha ~0.3) needs to be distinct from our new semi-transparent blocks (alpha 0.85)
@@ -465,8 +478,9 @@ export const Shaders = () => {
                     let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
-                    // Wireframe
-                    let wire = edgeGlow;
+                    // Wireframe - use fresnel for ghost as well
+                    let ghostFresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                    let wire = ghostFresnel;
 
                     // Internal grid
                     let internalGrid = isTrace;
@@ -491,7 +505,10 @@ export const Shaders = () => {
                 // --- Smart Transparency for Blocks ---
                 // Keep base material semi-transparent (0.85), but make features opaque (1.0)
                 let baseAlpha = vColor.w;
-                let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
+                // Use UV-based edge for feature opacity (not the same as highlight)
+                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                let uvEdgeFeature = smoothstep(0.9, 1.0, uvEdgeDist);
+                let featureAlpha = max(isTrace, max(uvEdgeFeature, hexEdge));
                 let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
 
                 return vec4<f32>(finalColor, finalAlpha);
