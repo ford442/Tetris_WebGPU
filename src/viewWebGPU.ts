@@ -126,7 +126,6 @@ export default class View {
 
     this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
     this.isWebGPU = { result: false, description: "Checking..." };
-    this.CheckWebGPU(); // Async update
 
     this.playfildBorderWidth = 4;
     this.playfildX = this.playfildBorderWidth + 1;
@@ -176,15 +175,29 @@ export default class View {
     // Border is fixed size around 60 blocks, give it safe 100
     this.borderUniformData = new ArrayBuffer(100 * this.BLOCK_UNIFORM_SIZE);
 
-    if (this.isWebGPU.result) {
-      this.element.appendChild(this.canvasWebGPU);
-      this.preRender();
-      window.addEventListener('resize', this.resize.bind(this));
-    } else {
-      let divError = document.createElement("div");
-      divError.innerText = this.isWebGPU.description;
-      this.element.appendChild(divError);
-    }
+    // Create a temporary loading/error message
+    let divStatus = document.createElement("div");
+    divStatus.innerText = this.isWebGPU.description;
+    this.element.appendChild(divStatus);
+
+    // Call async check and handle result when it resolves
+    this.CheckWebGPU().then((status) => {
+        // Remove status message
+        if (divStatus.parentNode) {
+            divStatus.parentNode.removeChild(divStatus);
+        }
+
+        if (status.result) {
+            this.element.appendChild(this.canvasWebGPU);
+            this.preRender();
+            window.addEventListener('resize', this.resize.bind(this));
+        } else {
+            let divError = document.createElement("div");
+            divError.innerText = status.description;
+            divError.style.color = "red";
+            this.element.appendChild(divError);
+        }
+    });
   }
 
   async CheckWebGPU() {
@@ -973,10 +986,8 @@ export default class View {
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
-    const commandEncoder = this.device.createCommandEncoder();
-
     // 2. Render Playfield
-    this.renderPlayfild_WebGPU(this.state);
+    const blockCount = this.updateBlockUniforms(this.state);
 
     this.renderPassDescription = {
       colorAttachments: [{
