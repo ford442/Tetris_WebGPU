@@ -11,6 +11,8 @@ export interface GameState {
   holdPiece: Piece | null;
   isGameOver: boolean;
   playfield: number[][]; // View still expects 2D array for now
+  lockTimer: number;
+  lockDelayTime: number;
 }
 
 export default class Game {
@@ -132,7 +134,9 @@ export default class Game {
       nextPiece: this.nextPiece,
       holdPiece: this.holdPieceObj,
       isGameOver: this.gameOver,
-      playfield: playfield2D
+      playfield: playfield2D,
+      lockTimer: this.lockTimer,
+      lockDelayTime: this.lockDelayTime
     }
   }
 
