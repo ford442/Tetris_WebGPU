@@ -322,7 +322,7 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.5"; // Brighter ambient for better visibility
+  // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
   params.diffuseIntensity = "1.0";
   params.specularIntensity = "2.5"; // Very glossy
   params.shininess = "256.0"; // Extremely sharp, like polished gemstone
