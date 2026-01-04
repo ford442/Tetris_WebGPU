@@ -175,6 +175,12 @@ export default class View {
     // Border is fixed size around 60 blocks, give it safe 100
     this.borderUniformData = new ArrayBuffer(100 * this.BLOCK_UNIFORM_SIZE);
 
+    this.MODELMATRIX = Matrix.mat4.create();
+    this.NORMALMATRIX = Matrix.mat4.create();
+    this.VIEWMATRIX = Matrix.mat4.create();
+    this.PROJMATRIX = Matrix.mat4.create();
+    this.vpMatrix = Matrix.mat4.create();
+
     // Create a temporary loading/error message
     let divStatus = document.createElement("div");
     divStatus.innerText = this.isWebGPU.description;
@@ -810,11 +816,6 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.MODELMATRIX = Matrix.mat4.create();
-    this.NORMALMATRIX = Matrix.mat4.create();
-    this.VIEWMATRIX = Matrix.mat4.create();
-    this.PROJMATRIX = Matrix.mat4.create();
-
     let eyePosition = [9.9, -20.9, 85.0];
     if (this.shakeTimer > 0) {
         const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
@@ -832,7 +833,6 @@ export default class View {
     let fovy = (35 * Math.PI) / 180;
     Matrix.mat4.perspective(this.PROJMATRIX, fovy, this.canvasWebGPU.width / this.canvasWebGPU.height, 1, 150);
 
-    this.vpMatrix = Matrix.mat4.create();
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, lightPosition);
