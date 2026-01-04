@@ -185,6 +185,22 @@ export default class View {
     }
   }
 
+  CheckWebGPU() {
+    let result = {
+      result: false,
+      description: "",
+    };
+
+    if (!navigator.gpu) {
+      result.description =
+        "WebGPU is not supported by your browser. Please visit <a href='https://webgpu.io'>webgpu.io</a> to see the current implementation status.";
+      return result;
+    }
+
+    result.result = true;
+    return result;
+  }
+
   resize() {
     if (!this.device) return;
     const dpr = window.devicePixelRatio || 1;
