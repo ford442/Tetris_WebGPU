@@ -26,6 +26,7 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
+            aberrationStrength: f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -39,11 +40,8 @@ export const PostProcessShaders = () => {
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
             let useGlitch = uniforms.useGlitch;
+            let aberrationStrength = uniforms.aberrationStrength;
 
-            // Simple ripple (Only if glitch is on? Or shockwave is physical?)
-            // Shockwave is physical feedback, maybe keep it even if glitch is off?
-            // But usually "glitch effects" implies all distortions.
-            // Let's keep shockwave as it is "impact" not "glitch".
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
                 let radius = time * 1.5;
@@ -51,7 +49,6 @@ export const PostProcessShaders = () => {
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
-                    // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * 0.03 * (1.0 - time);
                     let dir = normalize(uv - center);
@@ -63,9 +60,9 @@ export const PostProcessShaders = () => {
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             let aberration = select(0.0, distFromCenter * 0.008, useGlitch > 0.5); // Reduced from 0.015
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             var color = vec3<f32>(r, g, b);
@@ -85,7 +82,32 @@ export const PostProcessShaders = () => {
                 color = mix(color, sharpened, 0.3);
             }
 
-            return vec4<f32>(color, a);
+            var finalColor = color;
+            // Enhanced Bloom: Quadratic response for smoother high-end boost
+            let bloomThreshold = 0.6;
+            let bloomStrength = 0.5;
+            let bloomFactor = max(0.0, luminance - bloomThreshold);
+            finalColor += color * bloomFactor * bloomStrength;
+
+            // Saturation boost for that "Neon" look
+            let gray = vec3<f32>(luminance);
+            finalColor = mix(gray, finalColor, 1.3); // Increased saturation
+
+            // Vignette
+            let distV = distance(uv, vec2<f32>(0.5));
+            let vignette = smoothstep(0.8, 0.2, distV * 0.8);
+            finalColor *= vignette;
+
+            // Scanlines (Subtle retro feel)
+            let scanline = sin(uv.y * 800.0) * 0.02;
+            finalColor -= vec3<f32>(scanline);
+
+            // PRESERVE ALPHA: Mask final color by alpha to ensure we don't draw on transparent background
+            // Since we are in premultiplied alpha mode, we should ensure color is 0 where alpha is 0.
+            // Also clamp to prevent negative values from subtractive scanlines.
+            finalColor = max(vec3<f32>(0.0), finalColor) * ceil(a);
+
+            return vec4<f32>(finalColor, a);
         }
     `;
 
@@ -114,7 +136,6 @@ export const ParticleShaders = () => {
         ) -> VertexOutput {
             var output : VertexOutput;
 
-            // 6 vertices per particle (quad)
             let cornerIdx = vertexIndex % 6u;
 
             var pos = vec2<f32>(0.0);
@@ -127,9 +148,6 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
-            // Billboarding: Align with camera plane (simple XY approximation for this fixed view)
-            // For a true billboard in a perspective camera, we'd need the camera Up/Right vectors,
-            // but since the camera is mostly fixed looking at Z, this works reasonably well.
             let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
@@ -143,18 +161,14 @@ export const ParticleShaders = () => {
     const fragment = `
         @fragment
         fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
+            let dist = length(uv - 0.5) * 2.0;
             if (dist > 1.0) {
                 discard;
             }
 
-            // "Hot Core" effect
-            // Intense center, rapid falloff
-            let intensity = exp(-dist * 4.0); // Sharper core
+            let intensity = exp(-dist * 4.0);
 
-            // Sparkle shape (star)
             let uvCentered = abs(uv - 0.5);
-            // Rotate UV 45 degrees for second cross
             let rot = 0.7071;
             let uvr = vec2<f32>(
                 uvCentered.x * rot - uvCentered.y * rot,
@@ -162,23 +176,19 @@ export const ParticleShaders = () => {
             );
             let uvrCentered = abs(uvr);
 
-            // Create a soft glowing core
             let core = exp(-length(uv - 0.5) * 5.0);
 
-            // Create sharp rays
             let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
             let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
 
             let sparkle = max(cross1, cross2 * 0.5);
 
-            // Combine
             let alpha = intensity + core * 0.5 + sparkle * 0.8;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            // Add a slight hue shift based on life for variety
             let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
 
-            return vec4<f32>(hueShift * 2.5, finalAlpha); // Boost brightness
+            return vec4<f32>(hueShift * 2.5, finalAlpha);
         }
     `;
 
@@ -200,7 +210,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.08); // Very faint white
+            return vec4<f32>(1.0, 1.0, 1.0, 0.08);
         }
     `;
     return { vertex, fragment };
@@ -217,7 +227,7 @@ export const BackgroundShaders = () => {
         fn main(@location(0) position: vec3<f32>) -> Output {
             var output: Output;
             output.Position = vec4<f32>(position, 1.0);
-            output.vUV = position.xy * 0.5 + 0.5; // Map -1..1 to 0..1
+            output.vUV = position.xy * 0.5 + 0.5;
             return output;
         }
     `;
@@ -234,21 +244,16 @@ export const BackgroundShaders = () => {
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-          let time = uniforms.time * 0.3; // Slower, calmer animation
+          let time = uniforms.time * 0.3;
           let uv = vUV;
-
-          // Base deep space color
           let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
 
-          // --- Multi-layer perspective grid ---
           var grid = 0.0;
-          // Four layers of grids at different scales for depth
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
-            let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
+            let scale = exp2(layer_f);
             let speed = 0.1 + layer_f * 0.05;
 
-            // Perspective offset for each layer
             let perspectiveOffset = vec2<f32>(
               sin(time * speed) * (0.05 + layer_f * 0.02),
               cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
@@ -256,18 +261,14 @@ export const BackgroundShaders = () => {
 
             let gridUV = (uv - 0.5) * scale + perspectiveOffset;
 
-            // Smooth grid lines that get thinner with distance
             let lineWidth = 0.02 / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
-            // Combine X and Y lines, fade distant layers
             let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
             grid = max(grid, layerGrid);
           }
 
-          // --- Dynamic neon color palette ---
-          // Cycle through cyberpunk colors
           let colorCycle = sin(time * 0.5) * 0.5 + 0.5;
           let neonCyan = uniforms.color1;
           let neonPurple = uniforms.color2;
@@ -275,39 +276,31 @@ export const BackgroundShaders = () => {
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
-          // --- Multiple orbiting light sources ---
           var lights = vec3<f32>(0.0);
           for (var i: i32 = 0; i < 3; i++) {
             let idx = f32(i);
-            let angle = time * (0.3 + idx * 0.2) + idx * 2.094; // 120° separation
+            let angle = time * (0.3 + idx * 0.2) + idx * 2.094;
             let radius = 0.25 + idx * 0.1;
             let lightPos = vec2<f32>(
               0.5 + cos(angle) * radius,
               0.5 + sin(angle) * radius
             );
 
-            // Quadratic falloff for realistic lighting
             let dist = length(uv - lightPos);
             let intensity = 0.08 / (dist * dist + 0.01);
-
-            // Each light has a different color
             let lightColor = mix(neonCyan, neonPurple, sin(time + idx) * 0.5 + 0.5);
             lights += lightColor * intensity;
           }
 
-          // --- Global pulse effect ---
           let pulse = sin(time * 1.5) * 0.15 + 0.85;
 
-          // Combine all elements
           var finalColor = deepSpace;
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;
 
-          // --- Vignette effect to focus on center ---
           let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
           finalColor *= vignette;
 
-          // --- Subtle film grain for texture ---
           let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
           finalColor += (noise - 0.5) * 0.03;
 
@@ -327,7 +320,6 @@ export const Shaders = () => {
   params.specularIntensity = "2.5"; // Very glossy
   params.shininess = "256.0"; // Extremely sharp, like polished gemstone
   params.specularColor = "(1.0, 1.0, 1.0)";
-  params.isPhong = "1";
 
   const vertex = `
             struct Uniforms {
@@ -347,17 +339,24 @@ export const Shaders = () => {
             };
           
             @vertex
-            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
+            fn main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
-                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+
+                // Construct vec4 with w=1.0 for Position (Point)
+                let mPosition:vec4<f32> = uniforms.modelMatrix * vec4<f32>(position, 1.0);
+
                 output.vPosition = mPosition;
-                output.vNormal   =  uniforms.normalMatrix*normal;
+
+                // Construct vec4 with w=0.0 for Normal (Direction) - Critical Fix!
+                output.vNormal   = uniforms.normalMatrix * vec4<f32>(normal, 0.0);
+
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
-                output.vColor   =  uniforms.colorVertex;
+                output.vColor    = uniforms.colorVertex;
                 output.vUV = uv;
                 return output;
             }`;
 
+  // TECH GEMS: Merged Tech Lattice + Gem Physics
   const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
@@ -365,6 +364,7 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32,
                 useGlitch: f32,
+                lockPercent: f32,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -394,22 +394,19 @@ export const Shaders = () => {
                 // Subtle hexagonal grid overlay
                 let hexScale = 4.0;
                 let uvHex = vUV * hexScale;
-                // Skew for hex look
                 let r = vec2<f32>(1.0, 1.73);
                 let h = r * 0.5;
                 let a = (uvHex - r * floor(uvHex / r)) - h;
                 let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
                 let guv = select(b, a, dot(a, a) < dot(b, b));
-
-                // Distance to hex center
                 let hexDist = length(guv);
-                let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
+                let hexEdge = smoothstep(0.45, 0.5, hexDist);
 
-                // Circuit Traces (keep original logic but refined)
+                // Circuit Traces
                 let uvScale = 3.0;
                 let uvGrid = vUV * uvScale;
                 let gridPos = fract(uvGrid);
-                let gridThick = 0.05; // Thinner, cleaner lines
+                let gridThick = 0.05;
                 let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
@@ -472,14 +469,10 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.0;
 
                 // --- GHOST PIECE RENDERING ---
-                // Ghost piece logic (usually alpha ~0.3) needs to be distinct from our new semi-transparent blocks (alpha 0.85)
-                // Let's assume ghost piece uses a much lower alpha threshold or distinct logic.
-                // But wait, user set blocks to 0.85. Previously blocks were 1.0.
-                // Ghost pieces are handled in game logic, but here we check vColor.w.
-                // If ghost piece alpha < 0.8, we use ghost logic.
+                // If alpha is low, use ghost logic (hologram)
                 if (vColor.w < 0.4) {
-                    // Hologram effect
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
+                    let time = uniforms.time;
+                    let scanY = fract(vUV.y * 30.0 - time * 5.0);
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
                     // Wireframe - use fresnel for ghost as well
@@ -489,18 +482,13 @@ export const Shaders = () => {
                     // Internal grid
                     let internalGrid = isTrace;
 
-                    // Shift ghost color towards Cyan/White for better visibility
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
+                    var ghostFinal = ghostBase * edgeGlow * 4.0;
+                    ghostFinal += ghostBase * isTrace * 2.0;
+                    ghostFinal += ghostBase * scanline * 1.5;
 
-                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
-                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
-
-                    // Flicker - High frequency tech glitch
                     let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
                     let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
-
-                    // Pulse alpha - More visible range
                     let pulse = 0.35 + 0.15 * sin(time * 6.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
