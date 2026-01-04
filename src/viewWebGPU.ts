@@ -73,6 +73,7 @@ export default class View {
   postProcessBindGroup!: GPUBindGroup;
   postProcessUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
+  msaaTexture!: GPUTexture; // MSAA texture for anti-aliasing
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
@@ -194,17 +195,28 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    // Recreate offscreen texture
+    // Recreate offscreen texture with higher precision
     if (this.offscreenTexture) {
         this.offscreenTexture.destroy();
     }
     this.offscreenTexture = this.device.createTexture({
         size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
+        format: 'rgba16float', // Higher precision format
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
 
-    // Recreate depth texture
+    // Recreate MSAA texture
+    if (this.msaaTexture) {
+        this.msaaTexture.destroy();
+    }
+    this.msaaTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        sampleCount: 4, // 4x MSAA
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    // Recreate depth texture with MSAA
     if (this.depthTexture) {
         this.depthTexture.destroy();
     }
@@ -212,6 +224,7 @@ export default class View {
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4, // MSAA for depth as well
     });
 
     // Recreate bindgroup with new texture
@@ -516,7 +529,7 @@ export default class View {
         entryPoint: "main",
         targets: [
           {
-            format: presentationFormat,
+            format: 'rgba16float', // Higher precision format
             blend: {
               color: {
                 srcFactor: "src-alpha",
@@ -540,6 +553,9 @@ export default class View {
         depthWriteEnabled: true,
         depthCompare: "less",
       },
+      multisample: {
+        count: 4, // 4x MSAA
+      },
     });
 
     // --- Background Pipeline ---
@@ -561,7 +577,7 @@ export default class View {
         fragment: {
             module: this.device.createShaderModule({ code: backgroundShader.fragment }),
             entryPoint: 'main',
-            targets: [{ format: presentationFormat }]
+            targets: [{ format: 'rgba16float' }] // Higher precision format
         },
         primitive: { topology: 'triangle-list' }
     });
@@ -607,7 +623,7 @@ export default class View {
             module: this.device.createShaderModule({ code: gridShader.fragment }),
             entryPoint: 'main',
             targets: [{
-                format: presentationFormat,
+                format: 'rgba16float', // Higher precision format
                 blend: {
                     color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
                     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
@@ -619,6 +635,9 @@ export default class View {
             format: "depth24plus",
             depthWriteEnabled: false,
             depthCompare: "less",
+        },
+        multisample: {
+            count: 4, // 4x MSAA
         }
     });
 
@@ -649,7 +668,7 @@ export default class View {
             module: this.device.createShaderModule({ code: particleShader.fragment }),
             entryPoint: 'main',
             targets: [{
-                format: presentationFormat,
+                format: 'rgba16float', // Higher precision format
                 blend: {
                     color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' }, // Additive blending for glow
                     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
@@ -661,6 +680,9 @@ export default class View {
             format: 'depth24plus',
             depthWriteEnabled: false, // Particles don't write to depth
             depthCompare: 'less',
+        },
+        multisample: {
+            count: 4, // 4x MSAA
         }
     });
 
@@ -723,20 +745,30 @@ export default class View {
     this.sampler = this.device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
+        mipmapFilter: 'linear', // Use if you have mipmaps
+        maxAnisotropy: 16, // Critical for angled surfaces
     });
 
-    // Offscreen Texture creation handled in Resize/Frame logic or here initially
-    // We need to create it initially too
+    // Offscreen Texture creation with higher precision format
     this.offscreenTexture = this.device.createTexture({
         size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
+        format: 'rgba16float', // Higher precision format
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    // MSAA Texture for anti-aliasing
+    this.msaaTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        sampleCount: 4, // 4x MSAA
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
     this.depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4, // MSAA for depth as well
     });
 
     this.postProcessBindGroup = this.device.createBindGroup({
@@ -982,7 +1014,8 @@ export default class View {
 
     this.renderPassDescription = {
       colorAttachments: [{
-          view: textureViewOffscreen,
+          view: this.msaaTexture.createView(), // Render to MSAA texture
+          resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
           loadOp: 'load',
           storeOp: "store",
       }],
