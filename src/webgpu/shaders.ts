@@ -56,20 +56,31 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Chromatic Aberration (Glitch + Dynamic Impact)
+            // Chromatic Aberration - distance-aware and less aggressive
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let glitchAberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
-            let totalAberration = glitchAberration + aberrationStrength * 0.02 * (1.0 + distFromCenter);
+            let aberration = select(0.0, distFromCenter * 0.008, useGlitch > 0.5); // Reduced from 0.015
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost / Saturation
-            // Boost bright neon colors
-            let color = vec3<f32>(r, g, b);
-            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+            var color = vec3<f32>(r, g, b);
+
+            // Add subtle sharpening filter when glitch is OFF
+            if (useGlitch < 0.5) {
+                let texSize = vec2<f32>(textureDimensions(myTexture));
+                let texelSize = 1.0 / texSize;
+                let center = color; // Reuse already sampled color
+                let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
+                let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
+                let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
+                let west = textureSample(myTexture, mySampler, finalUV - vec2<f32>(texelSize.x, 0.0)).rgb;
+                
+                // Simple Laplacian sharpen
+                let sharpened = center * 5.0 - (north + south + east + west);
+                color = mix(color, sharpened, 0.3);
+            }
 
             var finalColor = color;
             // Enhanced Bloom: Quadratic response for smoother high-end boost
@@ -302,7 +313,12 @@ export const BackgroundShaders = () => {
 
 export const Shaders = () => {
   let params: any = {};
-  params.ambientIntensity = "0.5";
+  // define default input values:
+  params.color = "(0.0, 1.0, 0.0)";
+  // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
+  params.diffuseIntensity = "1.0";
+  params.specularIntensity = "2.5"; // Very glossy
+  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
   params.specularColor = "(1.0, 1.0, 1.0)";
 
   const vertex = `
@@ -353,14 +369,28 @@ export const Shaders = () => {
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // --- TECH PATTERN (Base Texture) ---
+                // --- Improved Lighting Model ---
+                let diffuse:f32 = max(dot(N, L), 0.0);
+
+                // Primary sharp specular (polished)
+                let specularSharp:f32 = pow(max(dot(N, H), 0.0), ${params.shininess}) * 3.0;
+
+                // Secondary broad specular (clear coat)
+                let specularClear:f32 = pow(max(dot(N, H), 0.0), 16.0) * 0.5;
+
+                // Enhanced ambient with darker base for more contrast
+                let ambient:f32 = 0.3;
+
+                var baseColor = vColor.xyz;
+
+                // --- Premium Tech Pattern ---
                 // Subtle hexagonal grid overlay
                 let hexScale = 4.0;
                 let uvHex = vUV * hexScale;
@@ -381,6 +411,63 @@ export const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
+                // Pulse effect
+                let time = uniforms.time;
+                let pulsePos = sin(time * 1.5 + vPosition.y * 0.8 + vPosition.x * 0.8) * 0.5 + 0.5;
+
+                // Surface finish
+                let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+
+                // Apply texture
+                if (hexEdge > 0.5) {
+                   baseColor *= 0.95; // Subtle hex pattern indentation
+                }
+
+                if (isTrace > 0.5) {
+                    baseColor *= 0.5; // Deep grooves
+                } else {
+                    // Crystalline noise sparkle
+                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
+                    baseColor += vec3<f32>(sparkle);
+                }
+
+                // --- Composition ---
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
+
+                // --- Emissive Elements ---
+                // Traces glow intensely
+                if (isTrace > 0.5) {
+                    let traceGlow = pulsePos * 3.0;
+                    finalColor += vColor.rgb * traceGlow;
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.5; // White hot core
+                }
+                // Hex corners glow slightly
+                if (hexDist < 0.1) {
+                    finalColor += vColor.rgb * 0.5 * pulsePos;
+                }
+
+                // --- Fresnel Rim Light (Enhanced) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper
+                let rimColor = vec3<f32>(0.2, 0.8, 1.0); // Cyan/Ice rim
+
+                // Chromatic Aberration on Rim
+                let rimR = rimColor.r * (1.0 + 0.1 * sin(time + vPosition.y));
+                let rimG = rimColor.g;
+                let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
+
+                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
+
+                // --- Geometric Edge Highlight (Fresnel-based) ---
+                const EDGE_THRESHOLD = 0.7; // Sharp threshold for edge detection
+                const SILHOUETTE_THRESHOLD = 0.3; // Threshold for silhouette detection
+                
+                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 6.0);
+                let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
+                
+                // Only apply to silhouette edges, not internal faces
+                let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.0;
+
                 // --- GHOST PIECE RENDERING ---
                 // If alpha is low, use ghost logic (hologram)
                 if (vColor.w < 0.4) {
@@ -388,9 +475,12 @@ export const Shaders = () => {
                     let scanY = fract(vUV.y * 30.0 - time * 5.0);
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
-                    // Wireframe logic for ghost
-                    let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                    let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
+                    // Wireframe - use fresnel for ghost as well
+                    let ghostFresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                    let wire = ghostFresnel;
+
+                    // Internal grid
+                    let internalGrid = isTrace;
 
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
                     var ghostFinal = ghostBase * edgeGlow * 4.0;
@@ -404,94 +494,14 @@ export const Shaders = () => {
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
 
-                // --- ACTIVE PIECE LOCK FEEDBACK ---
-                // If this is an active piece (not ghost, not static border), flash when locking
-                // We don't have a direct "isActive" flag, but we can infer or pass it.
-                // Or just apply global "lock" flash?
-                // Wait, all blocks share uniforms.lockPercent.
-                // We only want the ACTIVE piece to flash.
-                // Currently we don't distinguish Active vs Static blocks in the shader easily.
-                // BUT, active piece blocks are the only ones that might be "locking".
-                // Static blocks are already locked.
-                // However, the uniform is GLOBAL.
-                // So if we use lockPercent, the WHOLE FIELD will flash?
-                // Yes, unless we pass a per-instance flag.
-                // The vertex color alpha is 0.85 for normal blocks.
-                // Ghost is < 0.4.
-                // We could pass a special alpha or value for the active piece.
-                // In viewWebGPU.ts, updateBlockUniforms:
-                // Active piece is just part of the grid now (we draw active into playfield array?)
-                // NO. Game.getState merges active piece into the 2D array.
-                // So the View just sees "blocks".
-                // We can't easily distinguish.
-                // Plan B: Just make the WHOLE active piece flash white.
-                // We need to identify it.
-                // Actually, for "Graphical Qualities", a global "Board Tension" flash isn't bad?
-                // But let's stick to improving the Gem look first.
-
-                // --- GEM PHYSICS (Material) ---
-                var baseColor = vColor.rgb;
-
-                // Active Lock Flash (Global for now, but subtle)
-                // If lockPercent is high, brighten everything slightly? No.
-                // Let's assume we just improve the gem look.
-
-                // 1. Volume Absorption (Darkens thick areas)
-                // Approximate thickness based on UV (center is thicker)
-                let thickness = 1.0 - length(vUV - 0.5) * 0.5;
-                let absorption = vec3<f32>(0.8, 0.9, 1.2);
-                baseColor *= exp(-absorption * (1.0 - thickness));
-
-                // 2. Tech Texture Application
-                // Apply tech patterns as indentations/details on the gem
-                if (hexEdge > 0.5) { baseColor *= 0.95; } // Subtle hex indent
-                if (isTrace > 0.5) { baseColor *= 0.6; } // Deep grooves for traces
-
-                // --- LIGHTING ---
-                let diffuse = max(dot(N, L), 0.0);
-                let ambient = ${params.ambientIntensity};
-
-                // 3. Multi-lobe Specular
-                let specularSharp = pow(max(dot(N, H), 0.0), 256.0) * 4.0;
-                let specularBroad = pow(max(dot(N, H), 0.0), 32.0) * 0.5;
-                let specularColor = mix(vec3<f32>(1.0), baseColor * 1.5, 0.3); // Tinted specular
-                let specular = specularSharp + specularBroad;
-
-                // 4. Fresnel Dispersion (Chromatic Aberration on edges)
-                let iorR = 1.45; let iorG = 1.46; let iorB = 1.47;
-                let fresnelR = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (iorR - 1.0) / (iorR + 1.0);
-                let fresnelG = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (iorG - 1.0) / (iorG + 1.0);
-                let fresnelB = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (iorB - 1.0) / (iorB + 1.0);
-                let rimColor = vec3<f32>(fresnelR, fresnelG, fresnelB) * 4.0; // Boosted rim
-
-                // 5. Internal Glow (Subsurface approximation)
-                let internalGlow = pow(max(dot(-N, V), 0.0), 2.0) * 0.5;
-                let time = uniforms.time;
-                let pulsePos = sin(time * 1.5 + vPosition.x * 5.0) * 0.5 + 0.5;
-                internalGlow *= pulsePos;
-
-                // Emissive Traces (Tech feature)
-                if (isTrace > 0.5) {
-                    internalGlow += 2.0 * pulsePos; // Glowing circuits
-                }
-
-                let glowColor = baseColor * 2.0 + vec3<f32>(0.2, 0.4, 0.6) * fresnelG;
-
-                // --- COMPOSITION ---
-                var finalColor = baseColor * (ambient + diffuse) + specularColor * specular;
-                finalColor += rimColor;
-                finalColor += glowColor * internalGlow;
-
-                // --- SMART ALPHA ---
-                // Edges are more reflective (opaque), center more transmissive
-                let fresnelOpacity = 1.0 - (fresnelR + fresnelG + fresnelB) / 3.0;
-
-                // Ensure traces and edges are visible
-                let featureOpacity = max(isTrace, hexEdge * 0.5);
-
-                // Base alpha modified by thickness and fresnel
-                let alpha = vColor.w * fresnelOpacity * thickness;
-                let finalAlpha = clamp(max(alpha, featureOpacity), 0.0, 1.0);
+                // --- Smart Transparency for Blocks ---
+                // Keep base material semi-transparent (0.85), but make features opaque (1.0)
+                let baseAlpha = vColor.w;
+                // Use UV-based edge for feature opacity (not the same as highlight)
+                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                let uvEdgeFeature = smoothstep(0.9, 1.0, uvEdgeDist);
+                let featureAlpha = max(isTrace, max(uvEdgeFeature, hexEdge));
+                let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
 
                 return vec4<f32>(finalColor, finalAlpha);
             }`;
