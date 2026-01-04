@@ -579,7 +579,10 @@ export default class View {
             entryPoint: 'main',
             targets: [{ format: 'rgba16float' }] // Higher precision format
         },
-        primitive: { topology: 'triangle-list' }
+        primitive: { topology: 'triangle-list' },
+        multisample: {
+            count: 4, // 4x MSAA to match render pass
+        }
     });
 
     // Background Uniforms
@@ -978,36 +981,14 @@ export default class View {
         this.visualEffects.shockwaveTimer, 0, 0, 0
     ]));
 
-    // *** Render Pass 1: Draw Scene to Offscreen Texture ***
+    // *** Render Pass 1: Draw Scene to Offscreen Texture with MSAA ***
     const textureViewOffscreen = this.offscreenTexture.createView();
-    // const depthTexture = this.device.createTexture({ ... });
 
-    // 1. Render Background
+    // Render everything in a single MSAA pass
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
-    const backgroundPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewOffscreen,
-            clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
-
     const commandEncoder = this.device.createCommandEncoder();
-
-    if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
-        bgPassEncoder.setPipeline(this.backgroundPipeline);
-        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-        bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
-        bgPassEncoder.draw(6);
-        bgPassEncoder.end();
-    } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
-        bgPassEncoder.end();
-    }
 
     // 2. Render Playfield
     this.renderPlayfild_WebGPU(this.state);
@@ -1016,7 +997,8 @@ export default class View {
       colorAttachments: [{
           view: this.msaaTexture.createView(), // Render to MSAA texture
           resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
-          loadOp: 'load',
+          clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
+          loadOp: 'clear', // Must clear MSAA textures
           storeOp: "store",
       }],
       depthStencilAttachment: {
@@ -1028,6 +1010,14 @@ export default class View {
     };
 
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
+
+    // Render Background first (if not using video)
+    if (!renderVideo) {
+        passEncoder.setPipeline(this.backgroundPipeline);
+        passEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        passEncoder.setBindGroup(0, this.backgroundBindGroup);
+        passEncoder.draw(6);
+    }
 
     // Render Grid
     passEncoder.setPipeline(this.gridPipeline);
