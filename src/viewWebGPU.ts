@@ -390,11 +390,22 @@ export default class View {
               // Mix of Gold and Cyan for victory feel
               // Add variety based on line count
               const isTetris = lines.length === 4;
-              const color = isTetris
-                  ? [1.0, 0.8, 0.0, 1.0] // GOLD for Tetris
-                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple for normal
+              // Rainbow palette for Tetris, specific colors for singles/doubles/triples
+              let color = [0.0, 1.0, 1.0, 1.0]; // Cyan default
+              if (isTetris) {
+                  const hue = (worldX + 11.0) / 22.0; // Gradient across board
+                  // Simple HSV to RGB approximation or just cycling colors
+                  if (hue < 0.33) color = [1.0, 0.2, 0.2, 1.0]; // Red
+                  else if (hue < 0.66) color = [0.2, 1.0, 0.2, 1.0]; // Green
+                  else color = [0.2, 0.2, 1.0, 1.0]; // Blue
+                  // Mix with Gold
+                  color = [color[0]*0.5 + 0.5, color[1]*0.5 + 0.4, color[2]*0.5, 1.0];
+              } else {
+                  // Random Neon
+                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.0, 1.0, 1.0]);
+              }
 
-              const count = isTetris ? 40 : 20;
+              const count = isTetris ? 60 : 30; // Increased particle count
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
@@ -414,17 +425,21 @@ export default class View {
       const worldX = x * 2.2;
       const startRow = y - distance;
 
+      // Trail particles
       for(let i=0; i<distance; i++) {
           const r = startRow + i;
           const worldY = r * -2.2;
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.8, 1.0, 0.8]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.9, 1.0, 0.5]);
       }
 
+      // Impact Splash
       const impactY = y * -2.2;
-      for (let i=0; i<40; i++) {
-          const angle = (i / 40) * Math.PI * 2;
-          const speed = 15.0;
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
+      for (let i=0; i<60; i++) {
+          const angle = (i / 60) * Math.PI * 2;
+          const speed = 15.0 + Math.random() * 10.0;
+          // White/Cyan Splash
+          const color = Math.random() > 0.5 ? [1.0, 1.0, 1.0, 1.0] : [0.0, 1.0, 1.0, 1.0];
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, color);
       }
 
       const camY = -20.0;
@@ -772,8 +787,13 @@ export default class View {
 
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, lightPosition);
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, new Float32Array(eyePosition));
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 32, new Float32Array(this.currentTheme[5]));
+    // Pad color to vec4 (R, G, B, 1.0)
+    const themeColor = [...this.currentTheme[5]];
+    if (themeColor.length === 3) themeColor.push(1.0);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 32, new Float32Array(themeColor));
+
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+    // Padding/New Uniforms: 56, 60 available
 
     // --- BORDER INITIALIZATION (STATIC) ---
     this.createBorderBuffers();
@@ -895,6 +915,14 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+
+    // Calculate Lock Percent
+    let lockPercent = 0.0;
+    if (this.state && (this.state as any).lockTimer !== undefined && (this.state as any).lockDelayTime > 0) {
+        lockPercent = (this.state as any).lockTimer / (this.state as any).lockDelayTime;
+    }
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
+
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, this.useGlitch ? 1.0 : 0.0,
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],

@@ -4,6 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 133; // Delayed Auto Shift (ms) - Snappier
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
+const SOFT_DROP_SPEED = 2; // Sonic Drop: Instant move every 2ms (effectively instant but controllable)
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -396,10 +397,16 @@ export default class Controller {
 
       if (this.isActionPressed('down')) {
           this.actionTimers.down! += dt;
-          if (this.actionTimers.down! > ARR) {
-             this.game.movePieceDown();
-             // Sound for soft drop?
-             this.actionTimers.down = 0;
+          if (this.actionTimers.down! > SOFT_DROP_SPEED) {
+             // Sonic Drop: Allow multiple steps per frame if dt is large
+             let steps = Math.floor(this.actionTimers.down! / SOFT_DROP_SPEED);
+             this.actionTimers.down! %= SOFT_DROP_SPEED;
+
+             for (let i = 0; i < steps; i++) {
+                 this.game.movePieceDown();
+                 // Optionally break if collision/lock happens to avoid tunneling or weird state?
+                 // movePieceDown() handles collision checks internally.
+             }
           }
       } else {
           this.actionTimers.down = 0;
