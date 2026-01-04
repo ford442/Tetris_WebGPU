@@ -72,8 +72,9 @@ export const PostProcessShaders = () => {
 
             // Add subtle sharpening filter when glitch is OFF
             if (useGlitch < 0.5) {
-                let texelSize = vec2<f32>(1.0 / 800.0, 1.0 / 600.0); // Approximation, will be overridden if uniforms available
-                let center = textureSample(myTexture, mySampler, finalUV).rgb;
+                let texSize = vec2<f32>(textureDimensions(myTexture));
+                let texelSize = 1.0 / texSize;
+                let center = color; // Reuse already sampled color
                 let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
                 let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
                 let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
