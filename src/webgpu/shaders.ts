@@ -307,13 +307,19 @@ export const Shaders = () => {
             };
           
             @vertex
-            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
+            fn main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
-                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+
+                // Construct vec4 with w=1.0 for Position (Point)
+                let mPosition:vec4<f32> = uniforms.modelMatrix * vec4<f32>(position, 1.0);
+
                 output.vPosition = mPosition;
-                output.vNormal   =  uniforms.normalMatrix*normal;
+
+                // Construct vec4 with w=0.0 for Normal (Direction) - Critical Fix!
+                output.vNormal   = uniforms.normalMatrix * vec4<f32>(normal, 0.0);
+
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
-                output.vColor   =  uniforms.colorVertex;
+                output.vColor    = uniforms.colorVertex;
                 output.vUV = uv;
                 return output;
             }`;
