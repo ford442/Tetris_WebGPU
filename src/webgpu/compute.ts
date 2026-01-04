@@ -55,6 +55,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   );
   p.velocity += noiseVal * 10.0 * dt; // Strength of turbulence
 
+  // Explosive radial force at start of life
+  if (p.life > p.maxLife * 0.9) {
+      p.velocity *= 1.05; // Accelerate initially
+  }
+
   // Update Position
   p.position += p.velocity * dt;
 
