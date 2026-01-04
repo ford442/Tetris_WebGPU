@@ -9,6 +9,7 @@ export interface Piece {
   y: number;
   rotation: number; // 0: Spawn, 1: Right, 2: 180, 3: Left
   type: string;
+  getBounds?(): { minX: number, maxX: number, minY: number, maxY: number };
 }
 
 export class PieceGenerator {
@@ -73,6 +74,25 @@ export class PieceGenerator {
     }
     piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
     piece.y = -2;
+
+    // Attach getBounds method
+    piece.getBounds = function() {
+      let minX = this.blocks[0].length, maxX = 0;
+      let minY = this.blocks.length, maxY = 0;
+
+      for (let y = 0; y < this.blocks.length; y++) {
+        for (let x = 0; x < this.blocks[y].length; x++) {
+          if (this.blocks[y][x]) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+
     return piece;
   }
 
@@ -102,5 +122,9 @@ export class PieceGenerator {
     // Re-create blocks based on type to reset rotation
     const freshPiece = this.createPieceByType(piece.type);
     piece.blocks = freshPiece.blocks;
+    // ensure method is attached to reused object if needed, or just copy blocks
+    if (freshPiece.getBounds) {
+        piece.getBounds = freshPiece.getBounds;
+    }
   }
 }

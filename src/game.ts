@@ -10,12 +10,15 @@ export interface GameState {
   nextPiece: Piece;
   holdPiece: Piece | null;
   isGameOver: boolean;
-  playfield: number[][];
+  playfield: number[][]; // View still expects 2D array for now
 }
 
 export default class Game {
   gameOver!: boolean;
-  playfield!: number[][];
+  playfield!: Int8Array; // Optimized
+  readonly playfieldWidth = 10;
+  readonly playfieldHeight = 20;
+
   activPiece!: Piece;
   nextPiece!: Piece;
   holdPieceObj: Piece | null = null;
@@ -36,7 +39,7 @@ export default class Game {
 
   constructor() {
     this.pieceGenerator = new PieceGenerator();
-    this.playfield = Array.from({ length: 20 }, () => Array(10).fill(0));
+    this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
     this.collisionDetector = new CollisionDetector(this.playfield);
     this.scoringSystem = new ScoringSystem();
     this.reset();
@@ -54,6 +57,17 @@ export default class Game {
     return this.scoringSystem.level;
   }
 
+  // Helper for TypedArray access
+  getCell(x: number, y: number): number {
+      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
+      return this.playfield[y * this.playfieldWidth + x];
+  }
+
+  setCell(x: number, y: number, value: number): void {
+      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return;
+      this.playfield[y * this.playfieldWidth + x] = value;
+  }
+
   // Helper to reset piece position based on its type
   resetPiecePosition(piece: Piece): void {
       this.pieceGenerator.resetPiecePosition(piece);
@@ -64,92 +78,53 @@ export default class Game {
   }
 
   getState(): GameState {
-    const playfield: number[][] = [];
-
-    // 1. Copy locked blocks
-    for (let y = 0; y < this.playfield.length; y++) {
-      playfield[y] = [];
-      for (let x = 0; x < this.playfield[y].length; x++) {
-        playfield[y][x] = this.playfield[y][x];
-      }
-    }
-
-    // 2. Calculate and Draw Ghost Piece
-    // Clone active piece position
-    let ghostY = this.activPiece.y;
-    const ghostX = this.activPiece.x;
-    const blocks = this.activPiece.blocks;
-
-    // Move ghost down until collision
-    // Temporarily move active piece to check collision
-    const originalY = this.activPiece.y;
-
-    while(true) {
-        this.activPiece.y++;
-        if (this.hasCollision()) {
-            this.activPiece.y--;
-            ghostY = this.activPiece.y;
-            break;
+    // Reconstruct 2D array for View (could optimize view to use flat array later)
+    const playfield2D: number[][] = [];
+    for (let y = 0; y < this.playfieldHeight; y++) {
+        const row = new Array(this.playfieldWidth);
+        for (let x = 0; x < this.playfieldWidth; x++) {
+            row[x] = this.getCell(x, y);
         }
+        playfield2D.push(row);
     }
-    this.activPiece.y = originalY; // Restore
 
-    // Draw Ghost (negative values)
-    for (let y = 0; y < blocks.length; y++) {
-        for (let x = 0; x < blocks[y].length; x++) {
-            if (blocks[y][x]) {
-                const targetY = ghostY + y;
-                const targetX = ghostX + x;
-                // Only draw if within bounds and cell is empty (don't overwrite locked blocks,
-                // though ghost shouldn't overlap locked blocks by definition of collision)
-                if (targetY >= 0 && targetY < playfield.length &&
-                    targetX >= 0 && targetX < playfield[0].length) {
-                        // Use negative value for ghost
-                        // If there is already a block there, we might overlap?
-                        // Ghost is only valid where there is no block.
-                        if (playfield[targetY][targetX] === 0) {
-                             playfield[targetY][targetX] = -blocks[y][x];
-                        }
+    if (!this.gameOver) {
+        // 1. Draw Ghost Piece (ONCE)
+        const ghostY = this.getGhostY();
+        const { x: pieceX, blocks } = this.activPiece;
+
+        // Draw Ghost (negative values)
+        for (let y = 0; y < blocks.length; y++) {
+            for (let x = 0; x < blocks[y].length; x++) {
+                if (blocks[y][x]) {
+                    const targetY = ghostY + y;
+                    const targetX = pieceX + x;
+                    if (targetY >= 0 && targetY < this.playfieldHeight &&
+                        targetX >= 0 && targetX < this.playfieldWidth) {
+                         if (playfield2D[targetY][targetX] === 0) {
+                             playfield2D[targetY][targetX] = -blocks[y][x];
+                         }
+                    }
+                }
+            }
+        }
+
+        // 2. Draw Active Piece
+        const { y: pY, x: pX } = this.activPiece; // Rename to avoid conflict
+        for (let y = 0; y < blocks.length; y++) {
+            for (let x = 0; x < blocks[y].length; x++) {
+                if (blocks[y][x]) {
+                     const targetY = pY + y;
+                     const targetX = pX + x;
+                     if (targetY >= 0 && targetY < this.playfieldHeight &&
+                         targetX >= 0 && targetX < this.playfieldWidth) {
+                            playfield2D[targetY][targetX] = blocks[y][x];
+                     }
                 }
             }
         }
     }
 
-    // 3. Draw Active Piece
-    const { y: pieceY, x: pieceX } = this.activPiece;
-    for (let y = 0; y < blocks.length; y++) {
-        for (let x = 0; x < blocks[y].length; x++) {
-            if (blocks[y][x]) {
-                 const targetY = pieceY + y;
-                 const targetX = pieceX + x;
-                 if (targetY >= 0 && targetY < playfield.length &&
-                     targetX >= 0 && targetX < playfield[0].length) {
-                        playfield[targetY][targetX] = blocks[y][x];
-                 }
-            }
-        }
-    }
-
-    // Calculate Ghost Piece
-    if (!this.gameOver) {
-      const ghostY = this.getGhostY();
-      const { x: pieceX, blocks } = this.activPiece;
-
-      for (let y = 0; y < blocks.length; y++) {
-        for (let x = 0; x < blocks[y].length; x++) {
-          if (blocks[y][x] && (ghostY + y) >= 0) {
-            // Only draw ghost if the cell is empty (0)
-            // Note: collision logic ensures ghost doesn't overlap locked blocks,
-            // but we check just in case to avoid overwriting locked blocks in the view
-            if (playfield[ghostY + y][pieceX + x] === 0) {
-              playfield[ghostY + y][pieceX + x] = -blocks[y][x]; // Negative value for ghost
-            }
-          }
-        }
-      }
-    }
-
-    // this.playfield = playfield;
     return {
       score: this.score,
       level: this.level,
@@ -157,7 +132,7 @@ export default class Game {
       nextPiece: this.nextPiece,
       holdPiece: this.holdPieceObj,
       isGameOver: this.gameOver,
-      playfield
+      playfield: playfield2D
     }
   }
 
@@ -169,27 +144,25 @@ export default class Game {
     const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
-    // Force a collision check which should lead to locking
-    this.activPiece.y += 1; // Move into collision
-    if (this.hasCollision()) {
-        this.activPiece.y -= 1; // Back to ghost position
-        this.lockPiece();
-        result.locked = true;
-        const linesScore = this.clearLine();
-        if (linesScore.length > 0) {
-            this.scoringSystem.updateScore(linesScore.length);
-            result.linesCleared = linesScore;
-        }
-        this.updatePieces();
-        if (this.gameOver) result.gameOver = true;
+
+    // Force lock
+    this.lockPiece();
+    result.locked = true;
+    const linesScore = this.clearLine();
+    if (linesScore.length > 0) {
+        this.scoringSystem.updateScore(linesScore.length);
+        result.linesCleared = linesScore;
     }
+    this.updatePieces();
+    if (this.gameOver) result.gameOver = true;
+
     return result;
   }
 
   reset(): void {
     this.scoringSystem.reset();
     this.gameOver = false;
-    this.playfield = Array.from({ length: 20 }, () => Array(10).fill(0));
+    this.playfield.fill(0); // Efficient clear
     this.collisionDetector.updatePlayfield(this.playfield);
     this.holdPieceObj = null;
     this.canHold = true;
@@ -210,6 +183,9 @@ export default class Game {
       this.activPiece.y -= 1;
 
       if (onGround) {
+          // dt is in milliseconds (from Controller) or seconds?
+          // Controller passes (time - lastTime) which is ms.
+          // lockDelayTime is 500ms.
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
               this.lockPiece();
@@ -233,7 +209,6 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x += 1;
     } else {
-        // Successful move
         this.handleMoveReset();
     }
   }
@@ -243,7 +218,6 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
     } else {
-        // Successful move
         this.handleMoveReset();
     }
   }
@@ -253,19 +227,15 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
     } else {
-        // We moved down successfully
-        // Moving down always resets the lock timer in standard Tetris,
-        // effectively giving you infinite time if you keep falling slowly?
-        // Actually, step reset is usually separate from move reset.
-        // But for simplicity, we treat it as a valid move that resets if grounded.
         this.lockTimer = 0;
-        // Note: Moving down usually doesn't consume the "15 move limit" in some guidelines,
-        // but here we will just let it reset timer without consuming reset counter to be generous?
-        // Or consume it? Let's NOT consume reset counter for gravity/soft drop.
     }
   }
 
   dropPiece(): void {
+      // Soft drop instant? Or hard drop?
+      // Assuming this is used for some legacy drop logic, but hardDrop is separate.
+      // Let's keep it but use hardDrop logic if intent is instant.
+      // But usually 'dropPiece' means 'Soft Drop all the way'?
     while (true) {
       this.activPiece.y += 1;
       if (this.hasCollision()) {
@@ -276,90 +246,52 @@ export default class Game {
     this.lockPiece();
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-      this.updateScore(linesScore.length);
+      this.scoringSystem.updateScore(linesScore.length);
     }
     this.updatePieces();
   }
 
   rotatePiece(rightRurn: boolean = true): void {
     const blocks = this.activPiece.blocks;
-    const length = blocks.length;
     const type = this.activPiece.type;
     const currentRotation = this.activPiece.rotation;
-    // Calculate next rotation index (0-3)
     let nextRotation = rightRurn ? (currentRotation + 1) % 4 : (currentRotation + 3) % 4;
 
-    // O piece does not rotate
     if (type === 'O') return;
 
-    // Perform basic rotation
-    const temp = rotatePieceBlocks(blocks, rightRurn);
+    // Use temp piece for testing rotation to avoid mutation
+    const tempPiece = { ...this.activPiece }; // shallow clone
+    tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
+    tempPiece.rotation = nextRotation;
 
-    // Store original state
-    const originalBlocks = this.activPiece.blocks;
-    const originalX = this.activPiece.x;
-    const originalY = this.activPiece.y;
-    const originalRotation = this.activPiece.rotation;
-
-    // Apply new blocks tentatively
-    this.activPiece.blocks = temp;
-    this.activPiece.rotation = nextRotation;
-
-    if (!this.hasCollision()) {
-        // No collision, rotation successful immediately
+    if (!this.hasCollisionPiece(tempPiece)) {
+      this.activPiece.blocks = tempPiece.blocks;
+      this.activPiece.rotation = tempPiece.rotation;
       this.handleMoveReset();
       return;
     }
 
-    // Collision detected, try Wall Kicks (SRS)
+    // Wall Kicks
     const kicks = getWallKicks(type, currentRotation, nextRotation);
-
-    if (!kicks || kicks.length === 0) {
-        // Should not happen if tables are complete
-        this.activPiece.blocks = originalBlocks;
-        this.activPiece.rotation = originalRotation;
-        return;
-    }
-
-    let kicked = false;
-
-    // Iterate through kicks (test 1 is 0,0 which we already failed, but the array includes it usually?)
-    // The arrays in SRS_KICKS_... include [0,0] as the first element.
-    // Since we already checked [0,0] (implicit basic rotation), we could skip it,
-    // but checking it again is harmless and keeps logic simple.
+    if (!kicks || kicks.length === 0) return;
 
     for (const [ox, oy] of kicks) {
-        this.activPiece.x = originalX + ox;
-        this.activPiece.y = originalY + oy; // Remember Y is down-positive, but our table is already adapted?
-        // Wait, earlier I confirmed the table in src/game.ts matches Wiki but with Y inverted?
-        // Let's re-verify.
-        // Wiki 0->R (0->1) for J: (0,0), (-1,0), (-1,+1), (0,-2), (-1,-2)
-        // Code: [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]]
-        // Wiki +y is Up. Code +y is Down.
-        // So Wiki +1 (Up) -> Code -1 (Up).
-        // Wiki -2 (Down) -> Code +2 (Down).
-        // Matches! So we just add them.
+        tempPiece.x = this.activPiece.x + ox;
+        tempPiece.y = this.activPiece.y + oy;
 
-        if (!this.hasCollision()) {
-            kicked = true;
-            break;
+        if (!this.hasCollisionPiece(tempPiece)) {
+            // Apply successful kick
+            this.activPiece.x = tempPiece.x;
+            this.activPiece.y = tempPiece.y;
+            this.activPiece.blocks = tempPiece.blocks;
+            this.activPiece.rotation = tempPiece.rotation;
+            this.handleMoveReset();
+            return;
         }
-    }
-
-    if (!kicked) {
-        // Revert everything
-        this.activPiece.x = originalX;
-        this.activPiece.y = originalY;
-        this.activPiece.blocks = originalBlocks;
-        this.activPiece.rotation = originalRotation;
-    } else {
-        // Successful kick
-        this.handleMoveReset();
     }
   }
 
   handleMoveReset(): void {
-      // Check if we are now on the ground
       this.activPiece.y += 1;
       const onGround = this.hasCollision();
       this.activPiece.y -= 1;
@@ -386,15 +318,11 @@ export default class Game {
     for (let y = 0; y < blocks.length; y++) {
       for (let x = 0; x < blocks[y].length; x++) {
         if (blocks[y][x]) {
-            // Check if game over (piece locked above the board)
             if (pieceY + y < 0) {
                 this.gameOver = true;
                 return;
             }
-
-            if ((pieceY + y) < this.playfield.length) {
-                this.playfield[pieceY + y][pieceX + x] = blocks[y][x];
-            }
+            this.setCell(pieceX + x, pieceY + y, blocks[y][x]);
         }
       }
     }
@@ -407,14 +335,56 @@ export default class Game {
     this.lockTimer = 0;
     this.lockResets = 0;
 
-    // Check for immediate game over upon spawn
     if (this.hasCollision()) {
         this.gameOver = true;
     }
   }
 
   clearLine(): number[] {
-    return this.scoringSystem.clearLines(this.playfield);
+    // Optimized line clearing for flat array
+    const linesCleared: number[] = [];
+    const width = this.playfieldWidth;
+    const height = this.playfieldHeight;
+
+    // Check lines from top to bottom
+    for (let y = 0; y < height; y++) {
+        let full = true;
+        for (let x = 0; x < width; x++) {
+            if (this.getCell(x, y) === 0) {
+                full = false;
+                break;
+            }
+        }
+        if (full) {
+            linesCleared.push(y);
+        }
+    }
+
+    if (linesCleared.length > 0) {
+        // Remove lines
+        // We can do this in place or by shifting
+        // Easier to reconstruct: Iterate from bottom up, copying rows that aren't cleared
+        const newPlayfield = new Int8Array(width * height);
+        let targetY = height - 1;
+
+        for (let y = height - 1; y >= 0; y--) {
+            if (!linesCleared.includes(y)) {
+                // Copy row y to targetY
+                const start = y * width;
+                const end = start + width;
+                // TypedArray.set or just loop
+                for(let k=0; k<width; k++) {
+                    newPlayfield[targetY * width + k] = this.playfield[start + k];
+                }
+                targetY--;
+            }
+        }
+        // Fill remaining top rows with 0 (already 0 by default)
+        this.playfield = newPlayfield;
+        this.collisionDetector.updatePlayfield(this.playfield);
+    }
+
+    return linesCleared;
   }
 
   hold(): void {
@@ -431,7 +401,9 @@ export default class Game {
       }
 
       this.resetPiecePosition(this.activPiece);
+      this.resetPiecePosition(this.holdPieceObj); // Fixed: Reset held piece too
       this.canHold = false;
       this.lockTimer = 0;
+      this.lockResets = 0;
   }
 }
