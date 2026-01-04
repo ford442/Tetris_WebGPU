@@ -73,6 +73,7 @@ export default class View {
   postProcessBindGroup!: GPUBindGroup;
   postProcessUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
+  msaaTexture!: GPUTexture; // MSAA texture for anti-aliasing
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
@@ -238,38 +239,48 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    // Recreate offscreen texture ONLY if size changed (which we checked above,
-    // but the texture creation depends on canvas size which did change)
+    // Recreate offscreen texture with higher precision
     if (this.offscreenTexture) {
-        if (this.offscreenTexture.width !== this.canvasWebGPU.width ||
-            this.offscreenTexture.height !== this.canvasWebGPU.height) {
+        this.offscreenTexture.destroy();
+    }
+    this.offscreenTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        format: 'rgba16float', // Higher precision format
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
 
-            this.offscreenTexture.destroy();
-            this.offscreenTexture = this.device.createTexture({
-                size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-                format: presentationFormat,
-                usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-            });
+    // Recreate MSAA texture
+    if (this.msaaTexture) {
+        this.msaaTexture.destroy();
+    }
+    this.msaaTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        sampleCount: 4, // 4x MSAA
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
 
-            if (this.depthTexture) this.depthTexture.destroy();
-            this.depthTexture = this.device.createTexture({
-              size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-              format: "depth24plus",
-              usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+    // Recreate depth texture with MSAA
+    if (this.depthTexture) {
+        this.depthTexture.destroy();
+    }
+    this.depthTexture = this.device.createTexture({
+      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+      format: "depth24plus",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4, // MSAA for depth as well
+    });
 
-             // Recreate bindgroup with new texture
-            if (this.postProcessPipeline) {
-                this.postProcessBindGroup = this.device.createBindGroup({
-                    layout: this.postProcessPipeline.getBindGroupLayout(0),
-                    entries: [
-                        { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
-                        { binding: 1, resource: this.sampler },
-                        { binding: 2, resource: this.offscreenTexture.createView() }
-                    ]
-                });
-            }
-        }
+    // Recreate bindgroup with new texture
+    if (this.postProcessPipeline) {
+        this.postProcessBindGroup = this.device.createBindGroup({
+            layout: this.postProcessPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: this.offscreenTexture.createView() }
+            ]
+        });
     }
 
     Matrix.mat4.identity(this.PROJMATRIX);
@@ -547,8 +558,9 @@ export default class View {
       fragment: {
         module: this.device.createShaderModule({ code: shader.fragment }),
         entryPoint: "main",
-        targets: [{
-            format: presentationFormat,
+        targets: [
+          {
+            format: 'rgba16float', // Higher precision format
             blend: {
               color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
               alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
@@ -560,6 +572,9 @@ export default class View {
         format: "depth24plus",
         depthWriteEnabled: true,
         depthCompare: "less",
+      },
+      multisample: {
+        count: 4, // 4x MSAA
       },
     });
 
@@ -579,9 +594,12 @@ export default class View {
         fragment: {
             module: this.device.createShaderModule({ code: backgroundShader.fragment }),
             entryPoint: 'main',
-            targets: [{ format: presentationFormat }]
+            targets: [{ format: 'rgba16float' }] // Higher precision format
         },
-        primitive: { topology: 'triangle-list' }
+        primitive: { topology: 'triangle-list' },
+        multisample: {
+            count: 4, // 4x MSAA to match render pass
+        }
     });
 
     this.backgroundUniformBuffer = this.device.createBuffer({
@@ -617,7 +635,7 @@ export default class View {
             module: this.device.createShaderModule({ code: gridShader.fragment }),
             entryPoint: 'main',
             targets: [{
-                format: presentationFormat,
+                format: 'rgba16float', // Higher precision format
                 blend: {
                     color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
                     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
@@ -625,7 +643,14 @@ export default class View {
             }]
         },
         primitive: { topology: 'line-list' },
-        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" }
+        depthStencil: {
+            format: "depth24plus",
+            depthWriteEnabled: false,
+            depthCompare: "less",
+        },
+        multisample: {
+            count: 4, // 4x MSAA
+        }
     });
 
 
@@ -653,7 +678,7 @@ export default class View {
             module: this.device.createShaderModule({ code: particleShader.fragment }),
             entryPoint: 'main',
             targets: [{
-                format: presentationFormat,
+                format: 'rgba16float', // Higher precision format
                 blend: {
                     color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
                     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
@@ -661,16 +686,13 @@ export default class View {
             }]
         },
         primitive: { topology: 'triangle-list' },
-        depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' }
-    });
-
-    // --- Particle Compute Pipeline ---
-    this.particleComputePipeline = this.device.createComputePipeline({
-        label: 'particle compute pipeline',
-        layout: 'auto',
-        compute: {
-            module: this.device.createShaderModule({ code: ParticleComputeShader }),
-            entryPoint: 'main'
+        depthStencil: {
+            format: 'depth24plus',
+            depthWriteEnabled: false, // Particles don't write to depth
+            depthCompare: 'less',
+        },
+        multisample: {
+            count: 4, // 4x MSAA
         }
     });
 
@@ -732,18 +754,33 @@ export default class View {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this.sampler = this.device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+        mipmapFilter: 'linear', // Use if you have mipmaps
+        maxAnisotropy: 16, // Critical for angled surfaces
+    });
 
+    // Offscreen Texture creation with higher precision format
     this.offscreenTexture = this.device.createTexture({
         size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
+        format: 'rgba16float', // Higher precision format
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+
+    // MSAA Texture for anti-aliasing
+    this.msaaTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        sampleCount: 4, // 4x MSAA
+        format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
     this.depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4, // MSAA for depth as well
     });
 
     this.postProcessBindGroup = this.device.createBindGroup({
@@ -929,38 +966,24 @@ export default class View {
         this.visualEffects.shockwaveTimer, this.visualEffects.aberrationIntensity, 0, 0
     ]));
 
+    // *** Render Pass 1: Draw Scene to Offscreen Texture with MSAA ***
     const textureViewOffscreen = this.offscreenTexture.createView();
+
+    // Render everything in a single MSAA pass
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
-    const backgroundPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewOffscreen,
-            clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    const commandEncoder = this.device.createCommandEncoder();
 
-    if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
-        bgPassEncoder.setPipeline(this.backgroundPipeline);
-        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-        bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
-        bgPassEncoder.draw(6);
-        bgPassEncoder.end();
-    } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
-        bgPassEncoder.end();
-    }
-
-    // Prepare block data (Batch Update)
-    const blockCount = this.updateBlockUniforms(this.state);
+    // 2. Render Playfield
+    this.renderPlayfild_WebGPU(this.state);
 
     this.renderPassDescription = {
       colorAttachments: [{
-          view: textureViewOffscreen,
-          loadOp: 'load',
+          view: this.msaaTexture.createView(), // Render to MSAA texture
+          resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
+          clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
+          loadOp: 'clear', // Must clear MSAA textures
           storeOp: "store",
       }],
       depthStencilAttachment: {
@@ -972,6 +995,14 @@ export default class View {
     };
 
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
+
+    // Render Background first (if not using video)
+    if (!renderVideo) {
+        passEncoder.setPipeline(this.backgroundPipeline);
+        passEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        passEncoder.setBindGroup(0, this.backgroundBindGroup);
+        passEncoder.draw(6);
+    }
 
     // Render Grid
     passEncoder.setPipeline(this.gridPipeline);
