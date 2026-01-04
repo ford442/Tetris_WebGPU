@@ -441,13 +441,17 @@ export default class View {
       this.visualEffects.triggerAberration(1.5);
   }
 
+  renderPlayfield_WebGPU(state: any) {
+    this.state = state;
+  }
+
   renderMainScreen(state: any) {
     if (state.level !== this.visualEffects.currentLevel) {
       this.visualEffects.currentLevel = state.level;
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
     }
 
-    this.renderPlayfild_WebGPU(state);
+    this.renderPlayfield_WebGPU(state);
     this.renderPiece(this.nextPieceContext, state.nextPiece);
     this.renderPiece(this.holdPieceContext, state.holdPiece);
 
