@@ -333,7 +333,7 @@ export const Shaders = () => {
             struct Output {
                 @builtin(position) Position : vec4<f32>,
                 @location(0) vPosition : vec4<f32>,
-                @location(1) vNormal : vec4<f32>,
+                @location(1) @interpolate(flat) vNormal : vec4<f32>,
                 @location(2) vColor : vec4<f32>,
                 @location(3) vUV : vec2<f32>
             };
