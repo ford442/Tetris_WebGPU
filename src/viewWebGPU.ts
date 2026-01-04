@@ -736,6 +736,16 @@ export default class View {
         entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }]
     });
 
+    // --- Particle Compute Pipeline ---
+    this.particleComputePipeline = this.device.createComputePipeline({
+        label: 'particle compute pipeline',
+        layout: 'auto',
+        compute: {
+            module: this.device.createShaderModule({ code: ParticleComputeShader }),
+            entryPoint: 'main',
+        },
+    });
+
     this.particleComputeBindGroup = this.device.createBindGroup({
         layout: this.particleComputePipeline.getBindGroupLayout(0),
         entries: [
