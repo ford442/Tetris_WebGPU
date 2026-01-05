@@ -25,9 +25,10 @@ export class WasmCore {
     };
 
     try {
-        // Fetch and instantiate the WASM module (strict path)
+        // Fetch and instantiate the WASM module (try root and relative paths)
         const candidates = [
-            './release.wasm'
+            './release.wasm',
+            '/release.wasm'
         ];
         let buffer: ArrayBuffer | null = null;
         let fetchedUrl = '';
@@ -58,37 +59,47 @@ export class WasmCore {
 
         const module = await WebAssembly.instantiate(buffer, imports);
 
-        // Ensure memory exists and is large enough
-        const maybeMemory = module.instance.exports.memory;
-        if (!maybeMemory || !(maybeMemory instanceof WebAssembly.Memory) || maybeMemory.buffer.byteLength < 200) {
-            throw new Error("WASM memory missing or too small");
+        // Capture exports and diagnostics
+        this.instance.exports = module.instance.exports || {};
+        const exportedKeys = Object.keys(this.instance.exports);
+
+        // Diagnostic: Check memory export
+        const maybeMemory = this.instance.exports.memory;
+        if (!maybeMemory || !(maybeMemory instanceof WebAssembly.Memory)) {
+            console.error("WASM Exports found (no memory):", exportedKeys);
+            throw new Error("WASM module did not export 'memory'. Ensure build used --exportMemory flag.");
         }
 
-        this.instance.exports = module.instance.exports;
         this.instance.wasmMemory = maybeMemory as WebAssembly.Memory;
+
+        // Validate memory size
+        if (this.instance.wasmMemory.buffer.byteLength < 200) {
+            throw new Error(`WASM memory too small: ${this.instance.wasmMemory.buffer.byteLength} bytes`);
+        }
 
         // CRITICAL: Create a view on the first 200 bytes (10x20 grid)
         this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
 
         console.log("WASM Physics Core Initialized from", fetchedUrl);
     } catch (e) {
-        console.warn("WASM failed to load:", e);
-        // Propagate error so the caller (index.ts) can decide how to handle fallback
-        throw e;
+        // Log detailed diagnostics and continue so the application can use the JS fallback
+        console.warn("WASM Init Failed (Using JS Fallback):", e);
+        // Swallow the error intentionally - Game.ts will fallback to JS memory if needed
     }
   }
 
   static get(): WasmCore {
-    if (!this.instance) throw new Error("WasmCore not initialized!");
+    if (!this.instance) this.instance = new WasmCore();
     return this.instance;
   }
 
   // --- API Wrappers ---
 
   checkCollision(coords: {x: number, y: number}[], offsetX: number, offsetY: number): boolean {
-    // Unroll the loop for standard 4-block tetromino
-    // Passing integers is much faster than passing arrays/objects to WASM
-    return this.exports.checkPieceCollision(
+    const core = WasmCore.instance;
+    if (!core || !core.exports || !core.exports.checkPieceCollision) return false;
+
+    return core.exports.checkPieceCollision(
       coords[0].x + offsetX, coords[0].y + offsetY,
       coords[1].x + offsetX, coords[1].y + offsetY,
       coords[2].x + offsetX, coords[2].y + offsetY,

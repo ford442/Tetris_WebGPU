@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "asbuild:debug": "mkdir -p build && asc assembly/index.ts --target debug --outFile build/debug.wasm",
-    "asbuild:release": "mkdir -p build && asc assembly/index.ts --target release --outFile build/release.wasm",
+    "asbuild:debug": "mkdir -p build && asc assembly/index.ts --target debug --exportMemory --outFile build/debug.wasm && mkdir -p public && cp build/debug.wasm public/debug.wasm",
+    "asbuild:release": "mkdir -p build && asc assembly/index.ts --target release --exportMemory --outFile build/release.wasm && mkdir -p public && cp build/release.wasm public/release.wasm",
     "build:all": "npm run asbuild:release && npm run build",
     "pretest": "npm run asbuild:release || true",
     "test": "vitest run"
