@@ -318,7 +318,7 @@ export default class View {
   }
 
   toggleGlitch() {
-    this.useGlitch = !this.useGlitch;
+    // No-op: glitch effect disabled
   }
 
   setTheme(themeName: keyof Themes) {
@@ -789,7 +789,7 @@ export default class View {
     });
 
     this.postProcessUniformBuffer = this.device.createBuffer({
-        size: 32,
+        size: 64,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -862,7 +862,7 @@ export default class View {
     if (themeColor.length === 3) themeColor.push(1.0);
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 32, new Float32Array(themeColor));
 
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([0.0]));
     // Padding/New Uniforms: 56, 60 available
 
     // --- BORDER INITIALIZATION (STATIC) ---
@@ -984,7 +984,7 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([0.0]));
 
     // Calculate Lock Percent
     let lockPercent = 0.0;
@@ -993,18 +993,32 @@ export default class View {
     }
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
 
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
-        time, this.useGlitch ? 1.0 : 0.0,
-        this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
-        this.visualEffects.shockwaveTimer, this.visualEffects.aberrationIntensity, 0, 0
-    ]));
+    // Calculate flash intensity (0..1) from visualEffects.flashTimer, clamped to valid range
+    const flashIntensity = Math.max(0, Math.min(this.visualEffects.flashTimer, 1.0));
+    // Purple-ish flash color
+    const flashColor = [0.6, 0.4, 0.8];
+
+    // Build post-process uniform data with explicit layout (16 floats = 64 bytes)
+    const postProcessUniforms = [
+        time,                                           // index 0, byte 0: time
+        0.0,                                            // index 1, byte 4: useGlitch (disabled)
+        this.visualEffects.shockwaveCenter[0],        // index 2, byte 8: shockwaveCenter.x
+        this.visualEffects.shockwaveCenter[1],        // index 3, byte 12: shockwaveCenter.y
+        this.visualEffects.shockwaveTimer,            // index 4, byte 16: shockwaveTime
+        this.visualEffects.aberrationIntensity,       // index 5, byte 20: aberrationStrength
+        0, 0,                                          // index 6-7, byte 24-28: padding1
+        flashIntensity,                                // index 8, byte 32: flashIntensity
+        0, 0, 0,                                       // index 9-11, byte 36-44: padding2
+        flashColor[0], flashColor[1], flashColor[2],  // index 12-14, byte 48-56: flashColor
+        0                                              // index 15, byte 60: padding
+    ];
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array(postProcessUniforms));
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture with MSAA ***
     const textureViewOffscreen = this.offscreenTexture.createView();
 
     // Render everything in a single MSAA pass
     const renderVideo = this.visualEffects.isVideoPlaying;
-    const clearColors = this.visualEffects.getClearColors();
 
     // 2. Render Playfield
     const blockCount = this.updateBlockUniforms(this.state);
@@ -1013,7 +1027,7 @@ export default class View {
       colorAttachments: [{
           view: this.msaaTexture.createView(), // Render to MSAA texture
           resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
-          clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, // Stable black clear
           loadOp: 'clear', // Must clear MSAA textures
           storeOp: "store",
       }],
