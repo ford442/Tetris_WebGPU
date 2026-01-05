@@ -538,3 +538,70 @@ export const Shaders = () => {
     fragment,
   };
 };
+
+export const VideoBackgroundShader = () => {
+    const vertex = `
+        struct Output {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vUV : vec2<f32>,
+        };
+
+        @vertex
+        fn main(@location(0) position: vec3<f32>) -> Output {
+            var output: Output;
+            output.Position = vec4<f32>(position, 1.0);
+            output.vUV = position.xy * 0.5 + 0.5;
+            // output.vUV.y = 1.0 - output.vUV.y; // Uncomment if video is upside down
+            return output;
+        }
+    `;
+
+    const fragment = `
+        struct Uniforms {
+            time: f32,
+            shockwaveCenter: vec2<f32>,
+            shockwaveTime: f32,
+            aberrationStrength: f32,
+        };
+        @binding(0) @group(0) var<uniform> uniforms: Uniforms;
+        @binding(1) @group(0) var mySampler: sampler;
+        @binding(2) @group(0) var myVideo: texture_external;
+
+        @fragment
+        fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
+            var uv = vUV;
+
+            // Shockwave Logic
+            let center = uniforms.shockwaveCenter;
+            let time = uniforms.shockwaveTime;
+
+            if (time > 0.0 && time < 1.0) {
+                let dist = distance(uv, center);
+                let radius = time * 1.5;
+                let width = 0.15;
+                let diff = dist - radius;
+
+                if (abs(diff) < width) {
+                    let angle = (diff / width) * 3.14159;
+                    let distortion = cos(angle) * 0.03 * (1.0 - time);
+                    let dir = normalize(uv - center);
+                    uv -= dir * distortion;
+                }
+            }
+
+            // Chromatic Aberration & Sampling
+            let strength = uniforms.aberrationStrength * 0.02;
+
+            let red = textureSampleBaseClampToEdge(myVideo, mySampler, uv + vec2<f32>(strength, 0.0)).r;
+            let green = textureSampleBaseClampToEdge(myVideo, mySampler, uv).g;
+            let blue = textureSampleBaseClampToEdge(myVideo, mySampler, uv - vec2<f32>(strength, 0.0)).b;
+
+            // Optional Scanline
+            let scanline = sin(uv.y * 800.0 + uniforms.time * 10.0) * 0.02;
+
+            return vec4<f32>(red - scanline, green - scanline, blue - scanline, 1.0);
+        }
+    `;
+
+    return { vertex, fragment };
+};
