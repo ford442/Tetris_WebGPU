@@ -71,7 +71,11 @@ uiContainer.innerHTML = `
 // Styles are in css/style.css, we should probably update them too.
 
 (async () => {
-  await WasmCore.init();
+  try {
+    await WasmCore.init();
+  } catch (e) {
+    console.warn("WASM failed to initialize in index.ts (continuing with JS fallback):", e);
+  }
 
   const game = new Game();
   const soundManager = new SoundManager();
