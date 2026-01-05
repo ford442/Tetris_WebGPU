@@ -64,7 +64,8 @@ export const PostProcessShaders = () => {
 
             // Chromatic Aberration - distance-aware and less aggressive
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = select(0.0, distFromCenter * 0.008, useGlitch > 0.5); // Reduced from 0.015
+            let aberration = distFromCenter * 0.01; // Passive lens distortion
+            aberration = select(aberration, aberration * 2.0, useGlitch > 0.5);
             let totalAberration = aberration + aberrationStrength;
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
@@ -96,7 +97,7 @@ export const PostProcessShaders = () => {
 
             // Enhanced Bloom: Quadratic response for smoother high-end boost
             let bloomThreshold = 0.6;
-            let bloomStrength = 0.5;
+            let bloomStrength = 0.7; // Increased bloom
             let bloomFactor = max(0.0, luminance - bloomThreshold);
             finalColor += color * bloomFactor * bloomStrength;
 
@@ -343,9 +344,9 @@ export const Shaders = () => {
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
   // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
-  params.diffuseIntensity = "1.0";
-  params.specularIntensity = "2.5"; // Very glossy
-  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
+  params.diffuseIntensity = "1.2"; // Slightly brighter diffuse
+  params.specularIntensity = "3.5"; // Even glossier
+  params.shininess = "300.0"; // Sharp highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
 
   const vertex = `
@@ -485,38 +486,55 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
 
                 // --- Geometric Edge Highlight (Fresnel-based) ---
-                const EDGE_THRESHOLD = 0.7; // Sharp threshold for edge detection
-                const SILHOUETTE_THRESHOLD = 0.3; // Threshold for silhouette detection
+                const EDGE_THRESHOLD = 0.6; // Sharp threshold for edge detection
+                const SILHOUETTE_THRESHOLD = 0.2; // Threshold for silhouette detection
                 
-                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 6.0);
+                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
                 let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
                 
                 // Only apply to silhouette edges, not internal faces
                 let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
-                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.0;
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.5;
+
+                // --- Active Piece Lock Pulse ---
+                // If lockPercent > 0, we pulse the color
+                let lockP = uniforms.lockPercent;
+                if (lockP > 0.0 && vColor.w > 0.8) {
+                   let pulseSpeed = 10.0 + lockP * 20.0; // Gets faster
+                   let whiteFlash = sin(uniforms.time * pulseSpeed) * 0.5 + 0.5;
+                   // Mix white based on lock progress (0 at start, up to 0.5 at end)
+                   let intensity = lockP * 0.6 * whiteFlash;
+                   finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), intensity);
+                }
 
                 // --- GHOST PIECE RENDERING ---
                 // If alpha is low, use ghost logic (hologram)
                 if (vColor.w < 0.4) {
                     let time = uniforms.time;
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0);
-                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
+                    // Scrolling digital rain effect
+                    let scanY = fract(vUV.y * 20.0 - time * 2.0);
+                    let scanline = smoothstep(0.1, 0.5, scanY) * (1.0 - smoothstep(0.5, 0.9, scanY));
 
-                    // Wireframe - use fresnel for ghost as well
-                    let ghostFresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                    let wire = ghostFresnel;
+                    // Hex pattern for ghost
+                    let ghostHex = hexEdge;
 
-                    // Internal grid
-                    let internalGrid = isTrace;
+                    let ghostBase = vColor.rgb * 1.5; // Brighten base color
 
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
-                    var ghostFinal = ghostBase * edgeGlow * 4.0;
-                    ghostFinal += ghostBase * isTrace * 2.0;
-                    ghostFinal += ghostBase * scanline * 1.5;
+                    // Wireframe edges
+                    var ghostFinal = ghostBase * edgeGlow * 3.0;
 
-                    let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
-                    let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
-                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
+                    // Add scrolling scanlines
+                    ghostFinal += vec3<f32>(0.8, 0.9, 1.0) * scanline * 0.8;
+
+                    // Add hex pattern
+                    ghostFinal += ghostBase * ghostHex * 0.5;
+
+                    // Hologram flicker
+                    let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+                    let flicker = 0.85 + 0.15 * sin(time * 30.0 + noise * 10.0);
+
+                    // Pulse alpha
+                    let pulse = 0.25 + 0.1 * sin(time * 3.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
