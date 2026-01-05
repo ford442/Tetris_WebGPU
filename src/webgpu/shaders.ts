@@ -84,6 +84,10 @@ export const PostProcessShaders = () => {
             }
 
             var finalColor = color;
+
+            // Calculate luminance for Bloom and Saturation
+            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+
             // Enhanced Bloom: Quadratic response for smoother high-end boost
             let bloomThreshold = 0.6;
             let bloomStrength = 0.5;
