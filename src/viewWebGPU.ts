@@ -998,14 +998,21 @@ export default class View {
     // Purple-ish flash color
     const flashColor = [0.6, 0.4, 0.8];
 
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
-        time, 0.0, // useGlitch disabled
-        this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
-        this.visualEffects.shockwaveTimer, this.visualEffects.aberrationIntensity, 
-        0, 0, // padding for alignment
-        flashIntensity, 0, 0, 0, // flashIntensity + padding to vec4
-        flashColor[0], flashColor[1], flashColor[2], 0 // flashColor as vec3 + padding
-    ]));
+    // Build post-process uniform data with explicit layout (16 floats = 64 bytes)
+    const postProcessUniforms = [
+        time,                                           // offset 0: time
+        0.0,                                            // offset 4: useGlitch (disabled)
+        this.visualEffects.shockwaveCenter[0],        // offset 8: shockwaveCenter.x
+        this.visualEffects.shockwaveCenter[1],        // offset 12: shockwaveCenter.y
+        this.visualEffects.shockwaveTimer,            // offset 16: shockwaveTime
+        this.visualEffects.aberrationIntensity,       // offset 20: aberrationStrength
+        0, 0,                                          // offset 24-28: padding1
+        flashIntensity,                                // offset 32: flashIntensity
+        0, 0, 0,                                       // offset 36-44: padding2
+        flashColor[0], flashColor[1], flashColor[2],  // offset 48-56: flashColor
+        0                                              // offset 60: padding
+    ];
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array(postProcessUniforms));
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture with MSAA ***
     const textureViewOffscreen = this.offscreenTexture.createView();
