@@ -64,7 +64,7 @@ export const PostProcessShaders = () => {
 
             // Chromatic Aberration - distance-aware and less aggressive
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = distFromCenter * 0.01; // Passive lens distortion
+            var aberration = distFromCenter * 0.01; // Passive lens distortion (mutable)
             aberration = select(aberration, aberration * 2.0, useGlitch > 0.5);
             let totalAberration = aberration + aberrationStrength;
 
@@ -675,7 +675,8 @@ export const VideoBackgroundShader = () => {
                     // RGB Split / Aberration
                     videoColor.r += waveIntensity * 0.3;
                     videoColor.b -= waveIntensity * 0.3;
-                    videoColor.rgb += celebration;
+                    // WGSL does not allow writing to a swizzled vec3 directly; assign full vec4
+                    videoColor = vec4<f32>(videoColor.rgb + celebration, videoColor.a);
                 }
             }
 
