@@ -135,6 +135,7 @@ export default class View {
     // Initialize subsystems
     this.particleSystem = new ParticleSystem();
     this.visualEffects = new VisualEffects(element, width, height);
+    this.visualEffects.flashTimer = 0.0; // ensure no persistent flash at startup
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -1160,6 +1161,16 @@ export default class View {
         }
         const color = this.currentTheme[colorIndex] || [1, 1, 1, 1];
 
+        // --- FIX START: Define dimensions BEFORE using them ---
+        let videoW = 1920;
+        let videoH = 1080;
+        // Check if video element exists and has valid dimensions
+        if (this.visualEffects.videoElement && this.visualEffects.videoElement.readyState >= 1) {
+             videoW = Math.max(1, this.visualEffects.videoElement.videoWidth || 1920);
+             videoH = Math.max(1, this.visualEffects.videoElement.videoHeight || 1080);
+        }
+        // --- FIX END ---
+
         // Pack Cleared Lines (vec4)
         const lines = [0,0,0,0];
         for(let i=0; i<this.lastClearedLines.length && i<4; i++) lines[i] = this.lastClearedLines[i];
@@ -1185,8 +1196,6 @@ export default class View {
         this.device.queue.writeBuffer(this.videoUniformBuffer, 0, baseData);
 
         // Write Locked Pieces Array (Starts at offset 96, aligned to 16 bytes)
-        // WGSL align(16) for array elements means we can just write the Float32Array directly
-        // offset 96 is 16-byte aligned (6 * 16)
         this.device.queue.writeBuffer(this.videoUniformBuffer, 96, this.lockedMinos);
     }
 

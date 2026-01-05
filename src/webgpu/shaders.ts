@@ -393,11 +393,12 @@ export const Shaders = () => {
                 time : f32,
                 useGlitch: f32,
                 lockPercent: f32,
+                screenSize: vec2<f32>,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -610,11 +611,11 @@ export const VideoBackgroundShader = () => {
             var finalColor = vec4<f32>(0.0);
 
             // --- ASPECT RATIO CORRECTION (Cover Mode) ---
-            let screenRatio = game.screen_size.x / game.screen_size.y;
+            let screenRatio = game.screen_size.x / max(1.0, game.screen_size.y);
             // Default to 1.0 if video size is missing/zero to prevent div by zero
             let vidW = select(game.video_size.x, 1920.0, game.video_size.x < 1.0);
             let vidH = select(game.video_size.y, 1080.0, game.video_size.y < 1.0);
-            let videoRatio = vidW / vidH;
+            let videoRatio = vidW / max(1.0, vidH);
             
             var scale = vec2<f32>(1.0, 1.0);
             
