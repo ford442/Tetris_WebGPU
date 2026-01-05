@@ -1,5 +1,5 @@
 import * as Matrix from "gl-matrix";
-import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders } from './webgpu/shaders.js';
+import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, VideoBackgroundShader } from './webgpu/shaders.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
@@ -66,6 +66,11 @@ export default class View {
   backgroundVertexBuffer!: GPUBuffer;
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
+
+  // Video Background
+  videoPipeline!: GPURenderPipeline;
+  videoUniformBuffer!: GPUBuffer;
+
   startTime: number;
 
   // Post Processing
@@ -332,7 +337,7 @@ export default class View {
         // Just update border colors in the buffer, don't recreate geometry
         // Iterate over stored border data and update color offset
         // Border color is at offset +192 (16 bytes)
-        const color = new Float32Array([...this.currentTheme.border, 1.0]);
+        const color = new Float32Array([...this.currentTheme.border, 0.5]);
         const view = new Float32Array(this.borderUniformData);
 
         // We know we have this.borderCount blocks
@@ -645,6 +650,37 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[0]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[1]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array(bgColors[2]));
+
+    // --- VIDEO PIPELINE SETUP ---
+    const videoShader = VideoBackgroundShader();
+    // Reusing bgData for video quad
+
+    this.videoPipeline = this.device.createRenderPipeline({
+        label: 'video pipeline',
+        layout: 'auto',
+        vertex: {
+            module: this.device.createShaderModule({ code: videoShader.vertex }),
+            entryPoint: 'main',
+            buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }]
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: videoShader.fragment }),
+            entryPoint: 'main',
+            targets: [{ format: 'rgba16float' }]
+        },
+        primitive: { topology: 'triangle-list' },
+        multisample: { count: 4 },
+        depthStencil: {
+            format: "depth24plus",
+            depthWriteEnabled: false,
+            depthCompare: "always"
+        }
+    });
+
+    this.videoUniformBuffer = this.device.createBuffer({
+        size: 32, // Time(4) + ShockCenter(8) + ShockTime(4) + Aberration(4) + Padding(12)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
 
     // --- Grid Pipeline ---
     const gridShader = GridShader();
@@ -1030,6 +1066,20 @@ export default class View {
     // Render everything in a single MSAA pass
     const renderVideo = this.visualEffects.isVideoPlaying;
 
+    // 1. Update Video Uniforms
+    if (renderVideo) {
+        const videoUniforms = new Float32Array([
+            time,
+            0.0, // Padding to align vec2 at offset 8
+            this.visualEffects.shockwaveCenter[0],
+            this.visualEffects.shockwaveCenter[1],
+            this.visualEffects.shockwaveTimer,
+            this.visualEffects.aberrationIntensity,
+            0, 0 // Padding to 32 bytes
+        ]);
+        this.device.queue.writeBuffer(this.videoUniformBuffer, 0, videoUniforms);
+    }
+
     // 2. Render Playfield
     const blockCount = this.updateBlockUniforms(this.state);
 
@@ -1052,8 +1102,28 @@ export default class View {
 
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
 
-    // Render Background first (if not using video)
-    if (!renderVideo) {
+    // Render Background first (Video or Shader)
+    if (renderVideo && this.visualEffects.videoElement) {
+        // Import External Texture
+        const externalTexture = this.device.importExternalTexture({
+            source: this.visualEffects.videoElement
+        });
+
+        // Create BindGroup (Per Frame)
+        const videoBindGroup = this.device.createBindGroup({
+            layout: this.videoPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: { buffer: this.videoUniformBuffer } },
+                { binding: 1, resource: this.sampler },
+                { binding: 2, resource: externalTexture }
+            ]
+        });
+
+        passEncoder.setPipeline(this.videoPipeline);
+        passEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        passEncoder.setBindGroup(0, videoBindGroup);
+        passEncoder.draw(6);
+    } else {
         passEncoder.setPipeline(this.backgroundPipeline);
         passEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         passEncoder.setBindGroup(0, this.backgroundBindGroup);
@@ -1238,11 +1308,11 @@ export default class View {
         floatView.set(this.MODELMATRIX, offsetFloats + 16);
         floatView.set(this.NORMALMATRIX, offsetFloats + 32);
 
-        const color = [...this.currentTheme.border, 1.0];
+        const color = [...this.currentTheme.border, 0.5];
         floatView[offsetFloats + 48] = color[0];
         floatView[offsetFloats + 49] = color[1];
         floatView[offsetFloats + 50] = color[2];
-        floatView[offsetFloats + 51] = 1.0;
+        floatView[offsetFloats + 51] = 0.5;
 
         borderIndex++;
       }
