@@ -789,7 +789,7 @@ export default class View {
     });
 
     this.postProcessUniformBuffer = this.device.createBuffer({
-        size: 48,
+        size: 64,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
