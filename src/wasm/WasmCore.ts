@@ -58,36 +58,23 @@ export class WasmCore {
 
         const module = await WebAssembly.instantiate(buffer, imports);
 
+        // Ensure memory exists and is large enough
+        const maybeMemory = module.instance.exports.memory;
+        if (!maybeMemory || !(maybeMemory instanceof WebAssembly.Memory) || maybeMemory.buffer.byteLength < 200) {
+            throw new Error("WASM memory missing or too small");
+        }
+
         this.instance.exports = module.instance.exports;
-        this.instance.wasmMemory = module.instance.exports.memory as WebAssembly.Memory;
+        this.instance.wasmMemory = maybeMemory as WebAssembly.Memory;
 
         // CRITICAL: Create a view on the first 200 bytes (10x20 grid)
-        // This MUST NOT be recreated frequently, but if the WASM memory grows, 
-        // the buffer detaches and this must be refreshed. 
-        // (For Tetris, memory won't grow, so this is safe).
         this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
 
         console.log("WASM Physics Core Initialized from", fetchedUrl);
     } catch (e) {
-        console.warn("WASM failed to load, using fallback JS implementation:", e);
-        // Fallback: create a JS-backed memory and a simple checkPieceCollision implementation
-        this.instance.wasmMemory = new WebAssembly.Memory({ initial: 1 });
-        this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
-
-        // Very small JS implementation that mirrors the intended WASM behavior
-        this.instance.exports = {
-            checkPieceCollision: (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number) => {
-                const view = this.instance.playfieldView;
-                const WIDTH = 10;
-                const HEIGHT = 20;
-                function isOccupied(x: number, y: number): boolean {
-                    if (x < 0 || x >= WIDTH || y >= HEIGHT) return true;
-                    if (y < 0) return false;
-                    return view[y * WIDTH + x] !== 0;
-                }
-                return (isOccupied(x1, y1) || isOccupied(x2, y2) || isOccupied(x3, y3) || isOccupied(x4, y4)) ? 1 : 0;
-            }
-        } as any;
+        console.warn("WASM failed to load:", e);
+        // Propagate error so the caller (index.ts) can decide how to handle fallback
+        throw e;
     }
   }
 
