@@ -409,7 +409,7 @@ export default class View {
   onLineClear(lines: number[]) {
       this.visualEffects.triggerFlash(1.0);
       this.visualEffects.triggerShake(0.5, 0.5);
-      this.visualEffects.triggerAberration(1.0);
+      this.visualEffects.triggerAberration(0.5);
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -482,8 +482,8 @@ export default class View {
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
       this.visualEffects.triggerShockwave([uvX, uvY]);
-      this.visualEffects.triggerShake(1.2, 0.2);
-      this.visualEffects.triggerAberration(1.5);
+      this.visualEffects.triggerShake(0.4, 0.1);
+      this.visualEffects.triggerAberration(0.3);
   }
 
   renderPlayfield_WebGPU(state: any) {
