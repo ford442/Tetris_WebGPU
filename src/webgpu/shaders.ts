@@ -559,65 +559,95 @@ export const Shaders = () => {
 
 export const VideoBackgroundShader = () => {
     const vertex = `
-        struct Output {
+        struct VertexOutput {
             @builtin(position) Position : vec4<f32>,
-            @location(0) vUV : vec2<f32>,
+            @location(0) uv : vec2<f32>,
         };
 
         @vertex
-        fn main(@location(0) position: vec3<f32>) -> Output {
-            var output: Output;
+        fn main(@location(0) position : vec3<f32>) -> VertexOutput {
+            var output : VertexOutput;
             output.Position = vec4<f32>(position, 1.0);
-            output.vUV = position.xy * 0.5 + 0.5;
-            // output.vUV.y = 1.0 - output.vUV.y; // Uncomment if video is upside down
+            output.uv = position.xy * 0.5 + 0.5;
+            output.uv.y = 1.0 - output.uv.y; // Correct standard video orientation
             return output;
         }
     `;
 
     const fragment = `
-        struct Uniforms {
+        struct GameState {
+            screen_size: vec2<f32>,
+            piece_pos: vec2<f32>,   // Grid coords (0-10, 0-20)
+            piece_color: vec4<f32>,
+            line_clear_y: f32,      // -1.0 if none
             time: f32,
-            shockwaveCenter: vec2<f32>,
-            shockwaveTime: f32,
-            aberrationStrength: f32,
+            game_over: f32,
+            padding: vec2<f32>,
         };
-        @binding(0) @group(0) var<uniform> uniforms: Uniforms;
-        @binding(1) @group(0) var mySampler: sampler;
-        @binding(2) @group(0) var myVideo: texture_external;
+
+        @group(0) @binding(0) var<uniform> game: GameState;
+        @group(0) @binding(1) var videoSampler: sampler;
+        @group(0) @binding(2) var videoTexture: texture_external;
 
         @fragment
-        fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-            var uv = vUV;
+        fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
+            var finalUV = uv;
 
-            // Shockwave Logic
-            let center = uniforms.shockwaveCenter;
-            let time = uniforms.shockwaveTime;
+            // --- EFFECT 1: Piece Distortion Field (Gravity Well) ---
+            // Map grid pos to UV space (10 wide, 20 high)
+            // Note: Game Y increases downwards, UV Y increases upwards in this shader setup?
+            // Let's assume standard UV (0 at bottom) for now, adjusting Y.
+            let pieceUV = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
 
-            if (time > 0.0 && time < 1.0) {
-                let dist = distance(uv, center);
-                let radius = time * 1.5;
-                let width = 0.15;
-                let diff = dist - radius;
+            // Aspect ratio correction for distance
+            let aspect = game.screen_size.x / game.screen_size.y;
+            let distVec = (uv - pieceUV) * vec2<f32>(aspect, 1.0);
+            let dist = length(distVec);
 
-                if (abs(diff) < width) {
-                    let angle = (diff / width) * 3.14159;
-                    let distortion = cos(angle) * 0.03 * (1.0 - time);
-                    let dir = normalize(uv - center);
-                    uv -= dir * distortion;
-                }
+            let distortionRadius = 0.3; // Size of the gravity well
+            let distortionStrength = 0.05 * smoothstep(distortionRadius, 0.0, dist);
+
+            finalUV += distortionStrength * vec2<f32>(
+                sin(game.time * 5.0 + dist * 10.0),
+                cos(game.time * 5.0 + dist * 10.0)
+            );
+
+            // Sample the video
+            var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV);
+
+            // --- EFFECT 2: Color Bleeding (Neon Glow) ---
+            let glowRadius = 0.4;
+            let glowIntensity = smoothstep(glowRadius, 0.0, dist) * 0.6;
+            videoColor = mix(videoColor, game.piece_color, glowIntensity);
+
+            // --- EFFECT 3: Line Clear Shockwave ---
+            if (game.line_clear_y > -0.5) {
+                 // Convert game row to UV Y (inverted)
+                 let lineY = 1.0 - (game.line_clear_y / 20.0);
+                 let waveDist = abs(uv.y - lineY);
+
+                 // Create a horizontal bright band
+                 let waveWidth = 0.1;
+                 let waveIntensity = smoothstep(waveWidth, 0.0, waveDist) * 2.0;
+
+                 // RGB Split on shockwave
+                 let shift = waveIntensity * 0.02;
+                 let r = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV + vec2<f32>(shift, 0.0)).r;
+                 let b = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV - vec2<f32>(shift, 0.0)).b;
+
+                 let shockColor = vec4<f32>(r + waveIntensity, videoColor.g + waveIntensity, b + waveIntensity, 1.0);
+                 videoColor = mix(videoColor, shockColor, 0.5);
             }
 
-            // Chromatic Aberration & Sampling
-            let strength = uniforms.aberrationStrength * 0.02;
+            // --- EFFECT 4: Game Over Desaturation/Glitch ---
+            if (game.game_over > 0.5) {
+                let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+                let glitchOffset = sin(uv.y * 50.0 + game.time * 10.0) * 0.01;
+                let glitchColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV + vec2<f32>(glitchOffset, 0.0));
+                videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), glitchColor, 0.3);
+            }
 
-            let red = textureSampleBaseClampToEdge(myVideo, mySampler, uv + vec2<f32>(strength, 0.0)).r;
-            let green = textureSampleBaseClampToEdge(myVideo, mySampler, uv).g;
-            let blue = textureSampleBaseClampToEdge(myVideo, mySampler, uv - vec2<f32>(strength, 0.0)).b;
-
-            // Optional Scanline
-            let scanline = sin(uv.y * 800.0 + uniforms.time * 10.0) * 0.02;
-
-            return vec4<f32>(red - scanline, green - scanline, blue - scanline, 1.0);
+            return vec4<f32>(videoColor.rgb, 1.0);
         }
     `;
 
