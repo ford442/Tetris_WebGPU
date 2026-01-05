@@ -4,7 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 133; // Delayed Auto Shift (ms) - Snappier
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
-const SOFT_DROP_SPEED = 2; // Sonic Drop: Instant move every 2ms (effectively instant but controllable)
+const SOFT_DROP_SPEED = 50; // Sonic Drop: Instant move every 2ms (effectively instant but controllable)
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
