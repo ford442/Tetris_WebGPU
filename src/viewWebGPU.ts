@@ -993,24 +993,24 @@ export default class View {
     }
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
 
-    // Calculate flash intensity (0..1) from visualEffects.flashTimer
-    const flashIntensity = Math.min(this.visualEffects.flashTimer, 1.0);
+    // Calculate flash intensity (0..1) from visualEffects.flashTimer, clamped to valid range
+    const flashIntensity = Math.max(0, Math.min(this.visualEffects.flashTimer, 1.0));
     // Purple-ish flash color
     const flashColor = [0.6, 0.4, 0.8];
 
     // Build post-process uniform data with explicit layout (16 floats = 64 bytes)
     const postProcessUniforms = [
-        time,                                           // offset 0: time
-        0.0,                                            // offset 4: useGlitch (disabled)
-        this.visualEffects.shockwaveCenter[0],        // offset 8: shockwaveCenter.x
-        this.visualEffects.shockwaveCenter[1],        // offset 12: shockwaveCenter.y
-        this.visualEffects.shockwaveTimer,            // offset 16: shockwaveTime
-        this.visualEffects.aberrationIntensity,       // offset 20: aberrationStrength
-        0, 0,                                          // offset 24-28: padding1
-        flashIntensity,                                // offset 32: flashIntensity
-        0, 0, 0,                                       // offset 36-44: padding2
-        flashColor[0], flashColor[1], flashColor[2],  // offset 48-56: flashColor
-        0                                              // offset 60: padding
+        time,                                           // index 0, byte 0: time
+        0.0,                                            // index 1, byte 4: useGlitch (disabled)
+        this.visualEffects.shockwaveCenter[0],        // index 2, byte 8: shockwaveCenter.x
+        this.visualEffects.shockwaveCenter[1],        // index 3, byte 12: shockwaveCenter.y
+        this.visualEffects.shockwaveTimer,            // index 4, byte 16: shockwaveTime
+        this.visualEffects.aberrationIntensity,       // index 5, byte 20: aberrationStrength
+        0, 0,                                          // index 6-7, byte 24-28: padding1
+        flashIntensity,                                // index 8, byte 32: flashIntensity
+        0, 0, 0,                                       // index 9-11, byte 36-44: padding2
+        flashColor[0], flashColor[1], flashColor[2],  // index 12-14, byte 48-56: flashColor
+        0                                              // index 15, byte 60: padding
     ];
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array(postProcessUniforms));
 
