@@ -547,6 +547,14 @@ export const Shaders = () => {
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
                 let uvEdgeFeature = smoothstep(0.9, 1.0, uvEdgeDist);
                 let featureAlpha = max(isTrace, max(uvEdgeFeature, hexEdge));
+
+                // Prevent disappearing blocks: if computed finalColor is almost black, force opacity and fallback to baseColor
+                let lumin = dot(finalColor, vec3<f32>(0.299, 0.587, 0.114));
+                if (lumin < 0.05) {
+                    finalColor = baseColor;
+                    return vec4<f32>(finalColor, 1.0);
+                }
+
                 let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
 
                 return vec4<f32>(finalColor, finalAlpha);
@@ -611,26 +619,26 @@ export const VideoBackgroundShader = () => {
             var finalColor = vec4<f32>(0.0);
 
             // --- ASPECT RATIO CORRECTION (Cover Mode) ---
-            let screenRatio = game.screen_size.x / max(1.0, game.screen_size.y);
-            // Default to 1.0 if video size is missing/zero to prevent div by zero
-            let vidW = select(game.video_size.x, 1920.0, game.video_size.x < 1.0);
-            let vidH = select(game.video_size.y, 1080.0, game.video_size.y < 1.0);
+            let screenW = game.screen_size.x;
+            let screenH = game.screen_size.y;
+            let vidW = select(1920.0, game.video_size.x, game.video_size.x > 1.0);
+            let vidH = select(1080.0, game.video_size.y, game.video_size.y > 1.0);
+
+            let screenRatio = screenW / max(1.0, screenH);
             let videoRatio = vidW / max(1.0, vidH);
-            
+
+            // Calculate scale to cover the screen
             var scale = vec2<f32>(1.0, 1.0);
             
-            if (screenRatio < videoRatio) {
-                // Screen is narrower than video (e.g. Portrait vs Landscape)
-                // Fit Height, Crop Width
-                scale.x = screenRatio / videoRatio;
-            } else {
-                // Screen is wider than video
-                // Fit Width, Crop Height
+            if (screenRatio > videoRatio) {
+                // Screen is wider: Fit Width, Crop Height
                 scale.y = videoRatio / screenRatio;
+            } else {
+                // Screen is taller: Fit Height, Crop Width
+                scale.x = screenRatio / videoRatio;
             }
             
-            // Apply crop scaling from center
-            // We transform the 0..1 screen UV to a centered subset of the video UV
+            // Center the crop
             let coverUV = (finalUV - 0.5) * scale + 0.5;
 
             // Calculate screen pos for distance checks (approximate aspect ratio correction)

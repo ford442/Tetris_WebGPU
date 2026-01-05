@@ -959,6 +959,11 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([0.0]));
     // Padding/New Uniforms: 56, 60 available
 
+    // --- FIX 2: Ensure we write screen size (offset 64) safely ---
+    const w = Math.max(1.0, this.canvasWebGPU.width);
+    const h = Math.max(1.0, this.canvasWebGPU.height);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 64, new Float32Array([w, h]));
+
     // --- BORDER INITIALIZATION (STATIC) ---
     this.createBorderBuffers();
 
@@ -1043,6 +1048,12 @@ export default class View {
     const quality = Math.min(1.0, this.currentFPS / 60.0);
 
     this.visualEffects.updateEffects(dt);
+
+    // --- FIX 1: SAFETY RESET FOR FLASH TIMER ---
+    // If flash hangs (NaN or stuck), force it to 0
+    if (isNaN(this.visualEffects.flashTimer) || this.visualEffects.flashTimer < 0) {
+        this.visualEffects.flashTimer = 0;
+    }
 
     if (this.lineClearTimer > 0) {
         this.lineClearTimer -= dt;
