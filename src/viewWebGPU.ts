@@ -984,6 +984,11 @@ export default class View {
 
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
+
+    // Write level to offset 4. Struct: time(4), level(4), padding(8), resolution(8).
+    const currentLevel = this.visualEffects.currentLevel || 0;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([currentLevel]));
+
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([0.0]));
@@ -1032,7 +1037,8 @@ export default class View {
       colorAttachments: [{
           view: this.msaaTexture.createView(), // Render to MSAA texture
           resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
-          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, // Stable black clear
+          // Clear to Transparent to allow video background to show through
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
           loadOp: 'clear', // Must clear MSAA textures
           storeOp: "store",
       }],
