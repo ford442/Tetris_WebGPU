@@ -25,21 +25,49 @@ export class WasmCore {
     };
 
     try {
-        // Fetch and instantiate the WASM module
-        const response = await fetch('build/release.wasm');
-        const buffer = await response.arrayBuffer();
+        // Fetch and instantiate the WASM module (strict path)
+        const candidates = [
+            './release.wasm'
+        ];
+        let buffer: ArrayBuffer | null = null;
+        let fetchedUrl = '';
+        for (const url of candidates) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) {
+                    console.warn(`WASM fetch ${url} failed: ${res.status}`);
+                    continue;
+                }
+                const ab = await res.arrayBuffer();
+                const magic = new Uint8Array(ab.slice(0, 4));
+                if (magic[0] === 0x00 && magic[1] === 0x61 && magic[2] === 0x73 && magic[3] === 0x6d) {
+                    buffer = ab;
+                    fetchedUrl = url;
+                    break;
+                } else {
+                    console.warn(`WASM fetch ${url} returned non-wasm content (magic: ${Array.from(magic).map(b => b.toString(16)).join(' ')})`);
+                }
+            } catch (e) {
+                console.warn(`WASM fetch ${url} failed:`, e);
+            }
+        }
+
+        if (!buffer) {
+            throw new Error('WASM module not found or invalid');
+        }
+
         const module = await WebAssembly.instantiate(buffer, imports);
-    
+
         this.instance.exports = module.instance.exports;
         this.instance.wasmMemory = module.instance.exports.memory as WebAssembly.Memory;
-        
+
         // CRITICAL: Create a view on the first 200 bytes (10x20 grid)
         // This MUST NOT be recreated frequently, but if the WASM memory grows, 
         // the buffer detaches and this must be refreshed. 
         // (For Tetris, memory won't grow, so this is safe).
         this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
-        
-        console.log("WASM Physics Core Initialized");
+
+        console.log("WASM Physics Core Initialized from", fetchedUrl);
     } catch (e) {
         console.warn("WASM failed to load, using fallback JS implementation:", e);
         // Fallback: create a JS-backed memory and a simple checkPieceCollision implementation
