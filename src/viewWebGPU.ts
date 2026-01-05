@@ -356,7 +356,7 @@ export default class View {
     if (!piece) return;
 
     const { blocks } = piece;
-    const blockSize = 20;
+    const blockSize = 24;
     // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
@@ -916,6 +916,8 @@ export default class View {
             }
         ]
     });
+
+    this.setTheme('neon');
 
     this.Frame();
   }
