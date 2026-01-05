@@ -5,6 +5,7 @@ import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
+import { GameState } from './game.js';
 // @ts-ignore
 const glMatrix = Matrix;
 
@@ -32,7 +33,7 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
-  state: { playfield: number[][] };
+  state!: GameState;
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -54,6 +55,9 @@ export default class View {
   x: number = 0;
 
   useGlitch: boolean = false;
+
+  private lastLineClearY: number = -1.0;
+  private lineClearTimer: number = 0.0;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -172,8 +176,9 @@ export default class View {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       ],
-    };
+    } as unknown as GameState;
     this.blockData = {};
+    this.useGlitch = false;
 
     // Initialize buffers
     this.blockUniformData = new ArrayBuffer(this.MAX_BLOCKS * this.BLOCK_UNIFORM_SIZE);
@@ -404,6 +409,12 @@ export default class View {
       this.visualEffects.triggerShake(0.5, 0.5);
       // FIX: Reduce from 0.5 to 0.01 (1% shift)
       this.visualEffects.triggerAberration(0.01);
+
+      if (lines.length > 0) {
+          // Assuming sorted, take the largest index (bottom-most)
+          this.lastLineClearY = Math.max(...lines);
+          this.lineClearTimer = 1.0; // Effect lasts 1 second
+      }
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -675,7 +686,7 @@ export default class View {
     });
 
     this.videoUniformBuffer = this.device.createBuffer({
-        size: 32, // Time(4) + ShockCenter(8) + ShockTime(4) + Aberration(4) + Padding(12)
+        size: 64,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -976,6 +987,12 @@ export default class View {
 
     this.visualEffects.updateEffects(dt);
 
+    if (this.lineClearTimer > 0) {
+        this.lineClearTimer -= dt;
+    } else {
+        this.lastLineClearY = -1.0;
+    }
+
     const time = (performance.now() - this.startTime) / 1000.0;
     let camX = 9.9;
     let camY = -20.9;
@@ -1064,15 +1081,19 @@ export default class View {
     const renderVideo = this.visualEffects.isVideoPlaying;
 
     // 1. Update Video Uniforms
-    if (renderVideo) {
+    if (renderVideo && this.state.activePiece) {
+        const activeP = this.state.activePiece;
+        const colorIndex = Math.abs(this.state.playfield[Math.max(0, activeP.y)][activeP.x] || 1);
+        const color = this.currentTheme[colorIndex] || [1,1,1,1];
+
         const videoUniforms = new Float32Array([
-            time,
-            0.0, // Padding to align vec2 at offset 8
-            this.visualEffects.shockwaveCenter[0],
-            this.visualEffects.shockwaveCenter[1],
-            this.visualEffects.shockwaveTimer,
-            this.visualEffects.aberrationIntensity,
-            0, 0 // Padding to 32 bytes
+            this.canvasWebGPU.width, this.canvasWebGPU.height, // Screen Size
+            activeP.x + 0.0, activeP.y + 0.0,                  // Piece Pos
+            color[0], color[1], color[2], 1.0,                 // Piece Color
+            this.lastLineClearY,                               // Line Clear Y
+            time,                                              // Time
+            this.state.isGameOver ? 1.0 : 0.0,                 // Game Over
+            0.0 // Padding
         ]);
         this.device.queue.writeBuffer(this.videoUniformBuffer, 0, videoUniforms);
     }
