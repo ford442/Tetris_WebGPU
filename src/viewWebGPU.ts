@@ -345,9 +345,9 @@ export default class View {
 
         // Update background colors
         const bgColors = this.currentTheme.backgroundColors;
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[0]));
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[1]));
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array(bgColors[2]));
     }
   }
 
@@ -632,7 +632,7 @@ export default class View {
     });
 
     this.backgroundUniformBuffer = this.device.createBuffer({
-        size: 64,
+        size: 128,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -642,9 +642,9 @@ export default class View {
     });
 
     const bgColors = this.currentTheme.backgroundColors;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[0]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[1]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array(bgColors[2]));
 
     // --- Grid Pipeline ---
     const gridShader = GridShader();
@@ -982,7 +982,7 @@ export default class View {
 
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([0.0]));
 
