@@ -789,7 +789,7 @@ export default class View {
     });
 
     this.postProcessUniformBuffer = this.device.createBuffer({
-        size: 64,
+        size: 80,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -998,19 +998,22 @@ export default class View {
     // Purple-ish flash color
     const flashColor = [0.6, 0.4, 0.8];
 
-    // Build post-process uniform data with explicit layout (16 floats = 64 bytes)
+    // Build post-process uniform data with explicit layout (20 floats = 80 bytes)
+    // Needs strict alignment to match WGSL struct with vec3s
     const postProcessUniforms = [
-        time,                                           // index 0, byte 0: time
-        0.0,                                            // index 1, byte 4: useGlitch (disabled)
-        this.visualEffects.shockwaveCenter[0],        // index 2, byte 8: shockwaveCenter.x
-        this.visualEffects.shockwaveCenter[1],        // index 3, byte 12: shockwaveCenter.y
-        this.visualEffects.shockwaveTimer,            // index 4, byte 16: shockwaveTime
-        this.visualEffects.aberrationIntensity,       // index 5, byte 20: aberrationStrength
-        0, 0,                                          // index 6-7, byte 24-28: padding1
-        flashIntensity,                                // index 8, byte 32: flashIntensity
-        0, 0, 0,                                       // index 9-11, byte 36-44: padding2
-        flashColor[0], flashColor[1], flashColor[2],  // index 12-14, byte 48-56: flashColor
-        0                                              // index 15, byte 60: padding
+        time,                                           // 0: time (offset 0)
+        0.0,                                            // 1: useGlitch (offset 4)
+        this.visualEffects.shockwaveCenter[0],        // 2: shockwaveCenter.x (offset 8)
+        this.visualEffects.shockwaveCenter[1],        // 3: shockwaveCenter.y (offset 12)
+        this.visualEffects.shockwaveTimer,            // 4: shockwaveTime (offset 16)
+        this.visualEffects.aberrationIntensity,       // 5: aberrationStrength (offset 20)
+        0.0, 0.0,                                       // 6-7: padding1 (offset 24)
+        flashIntensity,                                 // 8: flashIntensity (offset 32)
+        0.0, 0.0, 0.0,                                  // 9-11: Padding to align next vec3 to 16 bytes (offset 36->48)
+        0.0, 0.0, 0.0,                                  // 12-14: padding2 (vec3) (offset 48)
+        0.0,                                            // 15: Padding to align next vec3 to 16 bytes (offset 60->64)
+        flashColor[0], flashColor[1], flashColor[2],  // 16-18: flashColor (vec3) (offset 64)
+        0.0                                             // 19: Padding to struct size 80 (offset 76)
     ];
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array(postProcessUniforms));
 
