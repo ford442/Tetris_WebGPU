@@ -1170,7 +1170,7 @@ export default class View {
              time, dt,                                          // time, dt (8)
 
              activeP.x + 0.0, activeP.y + 0.0,                  // piece_pos (16)
-             0, 0,                                              // padding (24) -> align next vec4
+             videoW, videoH,                                    // video_size (24)
 
              color[0], color[1], color[2], 1.0,                 // piece_color (32)
 
