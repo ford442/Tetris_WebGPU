@@ -577,12 +577,23 @@ export const VideoBackgroundShader = () => {
     const fragment = `
         struct GameState {
             screen_size: vec2<f32>,
-            piece_pos: vec2<f32>,   // Grid coords (0-10, 0-20)
-            piece_color: vec4<f32>,
-            line_clear_y: f32,      // -1.0 if none
             time: f32,
-            game_over: f32,
-            padding: vec2<f32>,
+            dt: f32,
+
+            // Active Piece
+            piece_pos: vec2<f32>,
+            piece_color: vec4<f32>,
+
+            // Line Clears (Packed into vec4 for alignment)
+            cleared_lines: vec4<f32>,
+            line_clear_params: vec4<f32>, // x=count, y=progress, z=padding, w=padding
+
+            // Stats
+            stats: vec4<f32>, // x=level, y=score, z=quality(LOD), w=debug_mode
+
+            // Locked Pieces Ring Buffer
+            // We use vec4 for alignment: x,y = pos, z = fade_strength, w = padding
+            locked_pieces: array<vec4<f32>, 200>,
         };
 
         @group(0) @binding(0) var<uniform> game: GameState;
@@ -592,64 +603,100 @@ export const VideoBackgroundShader = () => {
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             var finalUV = uv;
+            var finalColor = vec4<f32>(0.0);
 
-            // --- EFFECT 1: Piece Distortion Field (Gravity Well) ---
-            // Map grid pos to UV space (10 wide, 20 high)
-            // Note: Game Y increases downwards, UV Y increases upwards in this shader setup?
-            // Let's assume standard UV (0 at bottom) for now, adjusting Y.
-            let pieceUV = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
-
-            // Aspect ratio correction for distance
+            // Calculate screen pos for distance checks (approximate aspect ratio correction)
             let aspect = game.screen_size.x / game.screen_size.y;
-            let distVec = (uv - pieceUV) * vec2<f32>(aspect, 1.0);
-            let dist = length(distVec);
+            let screenUV = uv * vec2<f32>(aspect, 1.0);
 
-            let distortionRadius = 0.3; // Size of the gravity well
-            let distortionStrength = 0.05 * smoothstep(distortionRadius, 0.0, dist);
+            // --- 1. GHOST PIECE BURN-IN ---
+            // Accumulate distortion from locked pieces
+            var totalDistortion = vec2<f32>(0.0);
 
-            finalUV += distortionStrength * vec2<f32>(
-                sin(game.time * 5.0 + dist * 10.0),
-                cos(game.time * 5.0 + dist * 10.0)
-            );
+            // LOD: Reduce iterations based on quality
+            let max_pieces = u32(200.0 * game.stats.z);
 
-            // Sample the video
+            for (var i = 0u; i < max_pieces; i++) {
+                let data = game.locked_pieces[i];
+                if (data.z <= 0.001) { continue; } // Skip faded
+
+                // Convert grid (10x20) to UV space
+                // Grid: 0,0 is top-left? verify mapping.
+                // Usually game uses 0 at top. UV 0 is bottom.
+                // map y: 0..20 -> 1.0..0.0
+                let pieceUV = vec2<f32>(data.x / 10.0, 1.0 - (data.y / 20.0));
+                let pieceScreenUV = pieceUV * vec2<f32>(aspect, 1.0);
+
+                let dist = distance(screenUV, pieceScreenUV);
+                let radius = 0.15; // Influence radius
+                let influence = smoothstep(radius, 0.0, dist) * data.z; // Scale by fade
+
+                totalDistortion += (screenUV - pieceScreenUV) * influence * 0.05;
+            }
+            finalUV += totalDistortion;
+
+            // --- 2. ACTIVE PIECE GRAVITY WELL ---
+            let activePos = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
+            let activeDist = distance(screenUV, activePos * vec2<f32>(aspect, 1.0));
+            let activeInfluence = smoothstep(0.3, 0.0, activeDist) * 0.03;
+
+            // Pulse effect
+            let pulse = sin(game.time * 5.0) * 0.005;
+            finalUV += (screenUV - (activePos * vec2<f32>(aspect, 1.0))) * (activeInfluence + pulse);
+
+            // SAMPLE VIDEO
             var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV);
 
-            // --- EFFECT 2: Color Bleeding (Neon Glow) ---
-            let glowRadius = 0.4;
-            let glowIntensity = smoothstep(glowRadius, 0.0, dist) * 0.6;
-            videoColor = mix(videoColor, game.piece_color, glowIntensity);
+            // --- 3. MULTI-LINE CASCADE ---
+            let lineCount = u32(game.line_clear_params.x);
+            if (lineCount > 0u) {
+                let progress = game.line_clear_params.y;
 
-            // --- EFFECT 3: Line Clear Shockwave ---
-            if (game.line_clear_y > -0.5) {
-                 // Convert game row to UV Y (inverted)
-                 let lineY = 1.0 - (game.line_clear_y / 20.0);
-                 let waveDist = abs(uv.y - lineY);
+                // Tetris Celebration (4 lines)
+                var celebration = vec3<f32>(0.0);
+                if (lineCount >= 4u) {
+                     let flash = sin(game.time * 15.0) * (1.0 - progress);
+                     celebration = vec3<f32>(flash * 0.2, flash * 0.1, flash * 0.3);
+                }
 
-                 // Create a horizontal bright band
-                 let waveWidth = 0.1;
-                 let waveIntensity = smoothstep(waveWidth, 0.0, waveDist) * 2.0;
+                for (var i = 0u; i < lineCount; i++) {
+                    let lineY_raw = game.cleared_lines[i]; // 0..20
+                    let lineUV_Y = 1.0 - (lineY_raw / 20.0);
 
-                 // RGB Split on shockwave
-                 let shift = waveIntensity * 0.02;
-                 let r = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV + vec2<f32>(shift, 0.0)).r;
-                 let b = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV - vec2<f32>(shift, 0.0)).b;
+                    let distToLine = abs(uv.y - lineUV_Y);
 
-                 let shockColor = vec4<f32>(r + waveIntensity, videoColor.g + waveIntensity, b + waveIntensity, 1.0);
-                 videoColor = mix(videoColor, shockColor, 0.5);
+                    // Stagger the waves
+                    let stagger = f32(i) * 0.15;
+                    let wavePos = progress * (1.0 + stagger);
+                    let waveDist = abs(distToLine - wavePos * 0.5); // Spread out
+
+                    let waveIntensity = smoothstep(0.1, 0.0, waveDist) * (1.0 - progress) * 2.0;
+
+                    // RGB Split / Aberration
+                    videoColor.r += waveIntensity * 0.3;
+                    videoColor.b -= waveIntensity * 0.3;
+                    videoColor.rgb += celebration;
+                }
             }
 
-            // --- EFFECT 4: Game Over Desaturation/Glitch ---
-            if (game.game_over > 0.5) {
-                let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-                let glitchOffset = sin(uv.y * 50.0 + game.time * 10.0) * 0.01;
-                let glitchColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV + vec2<f32>(glitchOffset, 0.0));
-                videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), glitchColor, 0.3);
+            // --- 4. DEBUG VISUALIZATION ---
+            if (game.stats.w > 0.5) {
+                // Visualize Distortion Field
+                let distLen = length(totalDistortion) * 20.0;
+                videoColor.g += distLen;
+
+                // Visualize Active Piece Radius
+                if (activeDist < 0.3) { videoColor.r += 0.1; }
             }
 
-            return vec4<f32>(videoColor.rgb, 1.0);
+            // Score/Level Intensity Scaling
+            let levelBoost = 1.0 + game.stats.x * 0.05; // Level * 0.05
+            // Saturation boost based on level
+            let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), videoColor, 1.0 + levelBoost * 0.2);
+
+            return videoColor;
         }
     `;
-
     return { vertex, fragment };
 };

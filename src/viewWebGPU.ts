@@ -56,8 +56,16 @@ export default class View {
 
   useGlitch: boolean = false;
 
-  private lastLineClearY: number = -1.0;
-  private lineClearTimer: number = 0.0;
+  // NEW PROPERTIES for Effects
+  private lockedMinos: Float32Array; // Stores x,y,fade,padding for 200 blocks
+  private lockedMinoIndex: number = 0;
+
+  private lastClearedLines: number[] = [];
+  private lineClearTimer: number = 0;
+
+  private lastFrameTime: number = 0;
+  private currentFPS: number = 60;
+  private debugMode: boolean = false;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -119,6 +127,10 @@ export default class View {
     this.nextPieceContext = nextPieceContext;
     this.holdPieceContext = holdPieceContext;
     this.startTime = performance.now();
+    this.lastFrameTime = performance.now();
+
+    // Init locked minos buffer (200 * 4 floats)
+    this.lockedMinos = new Float32Array(200 * 4);
 
     // Initialize subsystems
     this.particleSystem = new ParticleSystem();
@@ -331,6 +343,12 @@ export default class View {
     // No-op: glitch effect disabled
   }
 
+  // Toggle Debug
+  toggleDebug() {
+      this.debugMode = !this.debugMode;
+      console.log("Debug Mode:", this.debugMode);
+  }
+
   setTheme(themeName: keyof Themes) {
     this.currentTheme = this.themes[themeName];
     this.visualEffects.currentLevel = 0; // Reset to level 0 when theme changes
@@ -416,6 +434,10 @@ export default class View {
           this.lineClearTimer = 1.0; // Effect lasts 1 second
       }
 
+      // MULTI-LINE CASCADE LOGIC
+      this.lastClearedLines = lines.slice(0, 4); // Store up to 4 lines
+      this.lineClearTimer = 1.0; // 1 second animation
+
       // Emit particles for each cleared line
       lines.forEach(y => {
           const worldY = y * -2.2;
@@ -449,6 +471,33 @@ export default class View {
   onLock() {
       this.visualEffects.triggerLock(0.4); // Slightly stronger lock flash
       this.visualEffects.triggerShake(0.3, 0.2); // Stronger shake on lock
+
+      // ADD GHOST BURN-IN LOGIC
+      // We need to access the just-locked piece.
+      // Since onLock is called *before* updatePieces in Game, activePiece is the one locking.
+      if (this.state && (this.state as any).activePiece) {
+          const piece = (this.state as any).activePiece;
+          const { x, y, blocks } = piece;
+
+          // Add each block of the locked piece to the ring buffer
+          for(let r=0; r<blocks.length; r++) {
+              for(let c=0; c<blocks[r].length; c++) {
+                  if (blocks[r][c]) {
+                      const worldX = x + c;
+                      const worldY = y + r;
+
+                      // Write to ring buffer
+                      const idx = this.lockedMinoIndex * 4;
+                      this.lockedMinos[idx] = worldX;
+                      this.lockedMinos[idx+1] = worldY;
+                      this.lockedMinos[idx+2] = 1.0; // Initial Fade Strength (1.0 = full)
+                      this.lockedMinos[idx+3] = 0.0; // Padding
+
+                      this.lockedMinoIndex = (this.lockedMinoIndex + 1) % 200;
+                  }
+              }
+          }
+      }
   }
 
   onHold() {
@@ -686,7 +735,7 @@ export default class View {
     });
 
     this.videoUniformBuffer = this.device.createBuffer({
-        size: 64,
+        size: 4096,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -983,7 +1032,14 @@ export default class View {
 
   Frame = () => {
     if (!this.device) return;
-    const dt = 1.0/60.0;
+    const now = performance.now();
+    const dt = (now - this.lastFrameTime) / 1000.0;
+    this.lastFrameTime = now;
+
+    // FPS Calculation (Simple smoothing)
+    const fps = 1.0 / dt;
+    this.currentFPS = this.currentFPS * 0.9 + fps * 0.1;
+    const quality = Math.min(1.0, this.currentFPS / 60.0);
 
     this.visualEffects.updateEffects(dt);
 
@@ -993,7 +1049,14 @@ export default class View {
         this.lastLineClearY = -1.0;
     }
 
-    const time = (performance.now() - this.startTime) / 1000.0;
+    // Update Ghost Fades
+    for(let i=0; i<200; i++) {
+        if (this.lockedMinos[i*4 + 2] > 0) {
+            this.lockedMinos[i*4 + 2] -= dt * 0.5; // Fade out over ~2 seconds
+        }
+    }
+
+    const time = (now - this.startTime) / 1000.0;
     let camX = 9.9;
     let camY = -20.9;
     let camZ = 85.0;
@@ -1083,19 +1146,48 @@ export default class View {
     // 1. Update Video Uniforms
     if (renderVideo && this.state.activePiece) {
         const activeP = this.state.activePiece;
-        const colorIndex = Math.abs(this.state.playfield[Math.max(0, activeP.y)][activeP.x] || 1);
-        const color = this.currentTheme[colorIndex] || [1,1,1,1];
 
-        const videoUniforms = new Float32Array([
-            this.canvasWebGPU.width, this.canvasWebGPU.height, // Screen Size
-            activeP.x + 0.0, activeP.y + 0.0,                  // Piece Pos
-            color[0], color[1], color[2], 1.0,                 // Piece Color
-            this.lastLineClearY,                               // Line Clear Y
-            time,                                              // Time
-            this.state.isGameOver ? 1.0 : 0.0,                 // Game Over
-            0.0 // Padding
+        let colorIndex = 1;
+        // Find the first non-empty block to determine color
+        // activePiece blocks is 2D array (usually 3x3 or 4x4)
+        outer: for (let r = 0; r < activeP.blocks.length; r++) {
+            for (let c = 0; c < activeP.blocks[r].length; c++) {
+                if (activeP.blocks[r][c] !== 0) {
+                    colorIndex = Math.abs(activeP.blocks[r][c]);
+                    break outer;
+                }
+            }
+        }
+        const color = this.currentTheme[colorIndex] || [1, 1, 1, 1];
+
+        // Pack Cleared Lines (vec4)
+        const lines = [0,0,0,0];
+        for(let i=0; i<this.lastClearedLines.length && i<4; i++) lines[i] = this.lastClearedLines[i];
+
+        // 1. Base Uniforms (96 bytes)
+        const baseData = new Float32Array([
+             this.canvasWebGPU.width, this.canvasWebGPU.height, // screen_size (0)
+             time, dt,                                          // time, dt (8)
+
+             activeP.x + 0.0, activeP.y + 0.0,                  // piece_pos (16)
+             0, 0,                                              // padding (24) -> align next vec4
+
+             color[0], color[1], color[2], 1.0,                 // piece_color (32)
+
+             lines[0], lines[1], lines[2], lines[3],            // cleared_lines (48)
+
+             this.lastClearedLines.length, this.lineClearTimer, 0, 0, // params (64)
+
+             (this.state.level || 1), (this.state.score || 0), quality, this.debugMode ? 1:0 // stats (80)
         ]);
-        this.device.queue.writeBuffer(this.videoUniformBuffer, 0, videoUniforms);
+
+        // Write Base
+        this.device.queue.writeBuffer(this.videoUniformBuffer, 0, baseData);
+
+        // Write Locked Pieces Array (Starts at offset 96, aligned to 16 bytes)
+        // WGSL align(16) for array elements means we can just write the Float32Array directly
+        // offset 96 is 16-byte aligned (6 * 16)
+        this.device.queue.writeBuffer(this.videoUniformBuffer, 96, this.lockedMinos);
     }
 
     // 2. Render Playfield
