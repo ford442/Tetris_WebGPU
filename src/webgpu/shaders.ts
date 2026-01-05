@@ -117,13 +117,13 @@ export const PostProcessShaders = () => {
             // Clamp to prevent negative values from subtractive scanlines
             finalColor = max(vec3<f32>(0.0), finalColor);
 
-            // Apply flash overlay with gentle squared curve
+            // Apply flash overlay with gentle squared curve (color only)
             let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
             finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
 
-            // Preserve alpha for background video transparency
-            // But ensure flash is visible even if alpha is 0
-            let finalAlpha = clamp(a + (flashAmount * FLASH_BLEND_STRENGTH), 0.0, 1.0);
+            // Preserve texture alpha so background video remains visible
+            // Do NOT increase alpha during flash (avoids opaque 'purple mask')
+            let finalAlpha = a;
 
             return vec4<f32>(finalColor, finalAlpha);
         }
