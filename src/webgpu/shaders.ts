@@ -582,6 +582,10 @@ export const VideoBackgroundShader = () => {
 
             // Active Piece
             piece_pos: vec2<f32>,
+
+            // NEW: Video Size for Aspect Ratio Correction
+            video_size: vec2<f32>,
+
             piece_color: vec4<f32>,
 
             // Line Clears (Packed into vec4 for alignment)
@@ -605,54 +609,69 @@ export const VideoBackgroundShader = () => {
             var finalUV = uv;
             var finalColor = vec4<f32>(0.0);
 
+            // --- ASPECT RATIO CORRECTION (Cover Mode) ---
+            let screenRatio = game.screen_size.x / game.screen_size.y;
+            // Default to 1.0 if video size is missing/zero to prevent div by zero
+            let vidW = select(game.video_size.x, 1920.0, game.video_size.x < 1.0);
+            let vidH = select(game.video_size.y, 1080.0, game.video_size.y < 1.0);
+            let videoRatio = vidW / vidH;
+            
+            var scale = vec2<f32>(1.0, 1.0);
+            
+            if (screenRatio < videoRatio) {
+                // Screen is narrower than video (e.g. Portrait vs Landscape)
+                // Fit Height, Crop Width
+                scale.x = screenRatio / videoRatio;
+            } else {
+                // Screen is wider than video
+                // Fit Width, Crop Height
+                scale.y = videoRatio / screenRatio;
+            }
+            
+            // Apply crop scaling from center
+            // We transform the 0..1 screen UV to a centered subset of the video UV
+            let coverUV = (finalUV - 0.5) * scale + 0.5;
+
             // Calculate screen pos for distance checks (approximate aspect ratio correction)
             let aspect = game.screen_size.x / game.screen_size.y;
             let screenUV = uv * vec2<f32>(aspect, 1.0);
 
             // --- 1. GHOST PIECE BURN-IN ---
-            // Accumulate distortion from locked pieces
             var totalDistortion = vec2<f32>(0.0);
-
-            // LOD: Reduce iterations based on quality
             let max_pieces = u32(200.0 * game.stats.z);
 
             for (var i = 0u; i < max_pieces; i++) {
                 let data = game.locked_pieces[i];
-                if (data.z <= 0.001) { continue; } // Skip faded
+                if (data.z <= 0.001) { continue; }
 
-                // Convert grid (10x20) to UV space
-                // Grid: 0,0 is top-left? verify mapping.
-                // Usually game uses 0 at top. UV 0 is bottom.
-                // map y: 0..20 -> 1.0..0.0
                 let pieceUV = vec2<f32>(data.x / 10.0, 1.0 - (data.y / 20.0));
                 let pieceScreenUV = pieceUV * vec2<f32>(aspect, 1.0);
 
                 let dist = distance(screenUV, pieceScreenUV);
-                let radius = 0.15; // Influence radius
-                let influence = smoothstep(radius, 0.0, dist) * data.z; // Scale by fade
+                let radius = 0.15;
+                let influence = smoothstep(radius, 0.0, dist) * data.z;
 
                 totalDistortion += (screenUV - pieceScreenUV) * influence * 0.05;
             }
-            finalUV += totalDistortion;
+            
+            // Apply distortion to our corrected UVs
+            let distortedUV = coverUV + totalDistortion;
 
             // --- 2. ACTIVE PIECE GRAVITY WELL ---
             let activePos = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
             let activeDist = distance(screenUV, activePos * vec2<f32>(aspect, 1.0));
             let activeInfluence = smoothstep(0.3, 0.0, activeDist) * 0.03;
-
-            // Pulse effect
             let pulse = sin(game.time * 5.0) * 0.005;
-            finalUV += (screenUV - (activePos * vec2<f32>(aspect, 1.0))) * (activeInfluence + pulse);
+            
+            let finalSampleUV = distortedUV + (screenUV - (activePos * vec2<f32>(aspect, 1.0))) * (activeInfluence + pulse);
 
             // SAMPLE VIDEO
-            var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalUV);
+            var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalSampleUV);
 
             // --- 3. MULTI-LINE CASCADE ---
             let lineCount = u32(game.line_clear_params.x);
             if (lineCount > 0u) {
                 let progress = game.line_clear_params.y;
-
-                // Tetris Celebration (4 lines)
                 var celebration = vec3<f32>(0.0);
                 if (lineCount >= 4u) {
                      let flash = sin(game.time * 15.0) * (1.0 - progress);
@@ -660,39 +679,28 @@ export const VideoBackgroundShader = () => {
                 }
 
                 for (var i = 0u; i < lineCount; i++) {
-                    let lineY_raw = game.cleared_lines[i]; // 0..20
+                    let lineY_raw = game.cleared_lines[i];
                     let lineUV_Y = 1.0 - (lineY_raw / 20.0);
-
-                    let distToLine = abs(uv.y - lineUV_Y);
-
-                    // Stagger the waves
+                    let distToLine = abs(uv.y - lineUV_Y); // Use original UV for line position logic
                     let stagger = f32(i) * 0.15;
                     let wavePos = progress * (1.0 + stagger);
-                    let waveDist = abs(distToLine - wavePos * 0.5); // Spread out
-
+                    let waveDist = abs(distToLine - wavePos * 0.5);
                     let waveIntensity = smoothstep(0.1, 0.0, waveDist) * (1.0 - progress) * 2.0;
 
-                    // RGB Split / Aberration
                     videoColor.r += waveIntensity * 0.3;
                     videoColor.b -= waveIntensity * 0.3;
-                    // WGSL does not allow writing to a swizzled vec3 directly; assign full vec4
                     videoColor = vec4<f32>(videoColor.rgb + celebration, videoColor.a);
                 }
             }
 
             // --- 4. DEBUG VISUALIZATION ---
             if (game.stats.w > 0.5) {
-                // Visualize Distortion Field
                 let distLen = length(totalDistortion) * 20.0;
                 videoColor.g += distLen;
-
-                // Visualize Active Piece Radius
                 if (activeDist < 0.3) { videoColor.r += 0.1; }
             }
 
-            // Score/Level Intensity Scaling
-            let levelBoost = 1.0 + game.stats.x * 0.05; // Level * 0.05
-            // Saturation boost based on level
+            let levelBoost = 1.0 + game.stats.x * 0.05; 
             let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
             videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), videoColor, 1.0 + levelBoost * 0.2);
 
