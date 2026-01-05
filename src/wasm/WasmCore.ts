@@ -24,6 +24,11 @@ export class WasmCore {
       }
     };
 
+    // Create memory in JS and pass into WASM (ensures at least 1 page exists)
+    this.instance.wasmMemory = new WebAssembly.Memory({ initial: 1 }); // 64KB
+    // Attach memory to imports in a type-safe way
+    (imports as any).env = { ...(imports as any).env, memory: this.instance.wasmMemory };
+
     try {
         // Fetch and instantiate the WASM module (try root and relative paths)
         const candidates = [
@@ -59,28 +64,18 @@ export class WasmCore {
 
         const module = await WebAssembly.instantiate(buffer, imports);
 
-        // Capture exports and diagnostics
+        // Capture exports
         this.instance.exports = module.instance.exports || {};
-        const exportedKeys = Object.keys(this.instance.exports);
 
-        // Diagnostic: Check memory export
-        const maybeMemory = this.instance.exports.memory;
-        if (!maybeMemory || !(maybeMemory instanceof WebAssembly.Memory)) {
-            console.error("WASM Exports found (no memory):", exportedKeys);
-            throw new Error("WASM module did not export 'memory'. Ensure build used --exportMemory flag.");
+        // Safety check: our JS-created memory should have a usable buffer
+        if (!this.instance.wasmMemory || this.instance.wasmMemory.buffer.byteLength === 0) {
+            throw new Error("WASM memory is 0 bytes after instantiation");
         }
 
-        this.instance.wasmMemory = maybeMemory as WebAssembly.Memory;
-
-        // Validate memory size
-        if (this.instance.wasmMemory.buffer.byteLength < 200) {
-            throw new Error(`WASM memory too small: ${this.instance.wasmMemory.buffer.byteLength} bytes`);
-        }
-
-        // CRITICAL: Create a view on the first 200 bytes (10x20 grid)
+        // Create the view on the memory we created
         this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
 
-        console.log("WASM Physics Core Initialized from", fetchedUrl);
+        console.log(`WASM Physics Core Initialized (memory=${this.instance.wasmMemory.buffer.byteLength} bytes) from`, fetchedUrl);
     } catch (e) {
         // Log detailed diagnostics and continue so the application can use the JS fallback
         console.warn("WASM Init Failed (Using JS Fallback):", e);
