@@ -59,7 +59,7 @@ export const PostProcessShaders = () => {
             // Chromatic Aberration - distance-aware and less aggressive
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             let aberration = select(0.0, distFromCenter * 0.008, useGlitch > 0.5); // Reduced from 0.015
-            let totalAberration = aberration + aberrationStrength * 0.02;
+            let totalAberration = aberration + aberrationStrength;
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
