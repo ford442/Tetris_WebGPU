@@ -375,37 +375,25 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Main fill
-          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
+          // Create gradient for main fill to match 3D look
+          const gradient = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
+          gradient.addColorStop(0, `rgb(${color[0] * 255 + 40}, ${color[1] * 255 + 40}, ${color[2] * 255 + 40})`);
+          gradient.addColorStop(1, `rgb(${color[0] * 255 - 20}, ${color[1] * 255 - 20}, ${color[2] * 255 - 20})`);
+
+          ctx.fillStyle = gradient;
           ctx.fillRect(px, py, blockSize, blockSize);
 
-          // Top/Left Highlight (Bevel)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          ctx.beginPath();
-          ctx.moveTo(px, py + blockSize);
-          ctx.lineTo(px, py);
-          ctx.lineTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.lineTo(px + 4, py + 4);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.closePath();
-          ctx.fill();
+          // Inner Glow (Center)
+          const centerGlow = ctx.createRadialGradient(px + blockSize/2, py + blockSize/2, 0, px + blockSize/2, py + blockSize/2, blockSize/2);
+          centerGlow.addColorStop(0, `rgba(255, 255, 255, 0.4)`);
+          centerGlow.addColorStop(1, `rgba(255, 255, 255, 0.0)`);
+          ctx.fillStyle = centerGlow;
+          ctx.fillRect(px, py, blockSize, blockSize);
 
-          // Bottom/Right Shadow (Bevel)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-          ctx.beginPath();
-          ctx.moveTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize, py + blockSize);
-          ctx.lineTo(px, py + blockSize);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.closePath();
-          ctx.fill();
-
-          // Center Highlight
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.fillRect(px + 5, py + 5, blockSize - 10, blockSize - 10);
+          // Sharp Border (Neon Style)
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
         }
       });
     });
@@ -441,20 +429,20 @@ export default class View {
                    color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.0, 1.0, 1.0]);
               }
 
-              const count = isTetris ? 60 : 30; // Increased particle count
+              const count = isTetris ? 200 : 80; // Significantly increased particle count
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
   }
 
   onLock() {
-      this.visualEffects.triggerLock(0.3);
-      this.visualEffects.triggerShake(0.2, 0.15);
+      this.visualEffects.triggerLock(0.4); // Slightly stronger lock flash
+      this.visualEffects.triggerShake(0.3, 0.2); // Stronger shake on lock
   }
 
   onHold() {
       this.visualEffects.triggerFlash(0.2);
-      this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]);
+      this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 50, [0.5, 0.0, 1.0, 1.0]);
   }
 
   onHardDrop(x: number, y: number, distance: number) {
@@ -465,16 +453,25 @@ export default class View {
       for(let i=0; i<distance; i++) {
           const r = startRow + i;
           const worldY = r * -2.2;
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.9, 1.0, 0.5]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 10, [0.4, 0.9, 1.0, 0.5]);
       }
 
       // Impact Splash
       const impactY = y * -2.2;
-      for (let i=0; i<60; i++) {
-          const angle = (i / 60) * Math.PI * 2;
+      // Primary Burst
+      for (let i=0; i<80; i++) {
+          const angle = (i / 80) * Math.PI * 2;
           const speed = 15.0 + Math.random() * 10.0;
           // White/Cyan Splash
           const color = Math.random() > 0.5 ? [1.0, 1.0, 1.0, 1.0] : [0.0, 1.0, 1.0, 1.0];
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, color);
+      }
+
+      // Secondary High-Speed Ring (Shockwave visualization)
+      for (let i=0; i<40; i++) {
+          const angle = (i / 40) * Math.PI * 2;
+          const speed = 30.0 + Math.random() * 5.0; // Much faster
+          const color = [0.8, 0.2, 1.0, 1.0]; // Purple sparks
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, color);
       }
 
