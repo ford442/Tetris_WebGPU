@@ -27,6 +27,10 @@ export const PostProcessShaders = () => {
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
             aberrationStrength: f32,
+            padding1: vec2<f32>,
+            flashIntensity: f32,
+            padding2: vec3<f32>,
+            flashColor: vec3<f32>,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -107,12 +111,15 @@ export const PostProcessShaders = () => {
             let scanline = sin(uv.y * 800.0) * 0.02;
             finalColor -= vec3<f32>(scanline);
 
-            // PRESERVE ALPHA: Mask final color by alpha to ensure we don't draw on transparent background
-            // Since we are in premultiplied alpha mode, we should ensure color is 0 where alpha is 0.
-            // Also clamp to prevent negative values from subtractive scanlines.
-            finalColor = max(vec3<f32>(0.0), finalColor) * ceil(a);
+            // Clamp to prevent negative values from subtractive scanlines
+            finalColor = max(vec3<f32>(0.0), finalColor);
 
-            return vec4<f32>(finalColor, a);
+            // Apply flash overlay with gentle squared curve
+            let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
+            finalColor = mix(finalColor, uniforms.flashColor, flashAmount * 0.6);
+
+            // Return with stable alpha of 1.0
+            return vec4<f32>(finalColor, 1.0);
         }
     `;
 
