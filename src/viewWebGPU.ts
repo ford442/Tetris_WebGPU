@@ -409,6 +409,7 @@ export default class View {
   onLineClear(lines: number[]) {
       this.visualEffects.triggerFlash(1.0);
       this.visualEffects.triggerShake(0.5, 0.5);
+      // FIXED: Reduced to 0.5 for cleaner visual
       this.visualEffects.triggerAberration(0.5);
 
       // Emit particles for each cleared line
@@ -482,6 +483,7 @@ export default class View {
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
       this.visualEffects.triggerShockwave([uvX, uvY]);
+      // FIXED: Reduced shake and aberration
       this.visualEffects.triggerShake(0.4, 0.1);
       this.visualEffects.triggerAberration(0.3);
   }
@@ -618,6 +620,12 @@ export default class View {
         primitive: { topology: 'triangle-list' },
         multisample: {
             count: 4, // 4x MSAA to match render pass
+        },
+        // CRITICAL FIX: Add depthStencil to match the render pass attachment
+        depthStencil: {
+            format: "depth24plus",
+            depthWriteEnabled: false, // Don't write to depth
+            depthCompare: "always"    // Always draw (it's the background)
         }
     });
 
