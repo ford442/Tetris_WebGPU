@@ -82,6 +82,7 @@ export default class Game {
 
   getState(): GameState {
     // Reconstruct 2D array for View (could optimize view to use flat array later)
+    // Exposed activePiece for shader effects
     const playfield2D: number[][] = [];
     for (let y = 0; y < this.playfieldHeight; y++) {
         const row = new Array(this.playfieldWidth);
