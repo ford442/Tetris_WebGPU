@@ -116,7 +116,8 @@ export const PostProcessShaders = () => {
 
             // Apply flash overlay with gentle squared curve
             let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
-            finalColor = mix(finalColor, uniforms.flashColor, flashAmount * 0.6);
+            const FLASH_BLEND_STRENGTH = 0.6;
+            finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
 
             // Return with stable alpha of 1.0
             return vec4<f32>(finalColor, 1.0);
