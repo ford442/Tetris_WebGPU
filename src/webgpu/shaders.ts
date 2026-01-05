@@ -120,8 +120,11 @@ export const PostProcessShaders = () => {
             let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
             finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
 
-            // Return with stable alpha of 1.0
-            return vec4<f32>(finalColor, 1.0);
+            // Preserve alpha for background video transparency
+            // But ensure flash is visible even if alpha is 0
+            let finalAlpha = clamp(a + (flashAmount * FLASH_BLEND_STRENGTH), 0.0, 1.0);
+
+            return vec4<f32>(finalColor, finalAlpha);
         }
     `;
 
@@ -249,6 +252,8 @@ export const BackgroundShaders = () => {
     const fragment = `
         struct Uniforms {
             time: f32,
+            level: f32,
+            padding: vec2<f32>,
             resolution: vec2<f32>,
             color1: vec3<f32>,
             color2: vec3<f32>,
@@ -258,7 +263,9 @@ export const BackgroundShaders = () => {
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-          let time = uniforms.time * 0.3;
+          let levelFactor = clamp(uniforms.level / 20.0, 0.0, 1.0);
+          // Speed increases with level
+          let time = uniforms.time * (0.3 + levelFactor * 0.5);
           let uv = vUV;
           let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
 
@@ -266,7 +273,9 @@ export const BackgroundShaders = () => {
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
             let scale = exp2(layer_f);
-            let speed = 0.1 + layer_f * 0.05;
+
+            // Grid moves faster and more chaotically at higher levels
+            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 1.5);
 
             let perspectiveOffset = vec2<f32>(
               sin(time * speed) * (0.05 + layer_f * 0.02),
@@ -288,7 +297,11 @@ export const BackgroundShaders = () => {
           let neonPurple = uniforms.color2;
           let neonBlue = uniforms.color3;
 
-          let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
+          var gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
+
+          // Inject "Danger" Red as level increases
+          let dangerColor = vec3<f32>(1.0, 0.0, 0.2);
+          gridColor = mix(gridColor, dangerColor, levelFactor * 0.6);
 
           var lights = vec3<f32>(0.0);
           for (var i: i32 = 0; i < 3; i++) {
