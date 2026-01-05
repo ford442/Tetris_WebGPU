@@ -21,6 +21,8 @@ export const PostProcessShaders = () => {
     `;
 
     const fragment = `
+        const FLASH_BLEND_STRENGTH: f32 = 0.6;
+
         struct Uniforms {
             time: f32,
             useGlitch: f32,
@@ -116,7 +118,6 @@ export const PostProcessShaders = () => {
 
             // Apply flash overlay with gentle squared curve
             let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
-            const FLASH_BLEND_STRENGTH = 0.6;
             finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
 
             // Return with stable alpha of 1.0
