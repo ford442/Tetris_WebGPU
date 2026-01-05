@@ -148,7 +148,9 @@ export class VisualEffects {
 
     triggerShockwave(center: number[]): void {
         this.shockwaveCenter = center;
-        this.shockwaveTimer = 0.01; // Start effect
+        // Start effect at 0.01 to avoid 0.0 check failure
+        // The shader uses time * 1.5 for radius, so 0.01 is a small starting circle
+        this.shockwaveTimer = 0.01;
     }
 
     getClearColors(): { r: number, g: number, b: number } {
