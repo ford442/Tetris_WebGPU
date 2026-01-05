@@ -2,6 +2,7 @@ import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
 import { ScoringSystem } from './game/scoring.js';
+import { WasmCore } from './wasm/WasmCore.js';
 
 export interface GameState {
   score: number;
@@ -42,7 +43,18 @@ export default class Game {
 
   constructor() {
     this.pieceGenerator = new PieceGenerator();
-    this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+    // --- WASM INTEGRATION ---
+    try {
+        this.playfield = WasmCore.get().playfieldView;
+        if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
+            console.error("WASM Memory View mismatch");
+            this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight); // Fallback
+        }
+    } catch (e) {
+        console.warn("WASM not loaded, using fallback memory");
+        this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+    }
+    // ------------------------
     this.collisionDetector = new CollisionDetector(this.playfield);
     this.scoringSystem = new ScoringSystem();
     this.reset();
@@ -316,6 +328,31 @@ export default class Game {
   }
 
   hasCollisionPiece(piece: Piece): boolean {
+    // --- WASM ACCELERATION ---
+    const coords: {x: number, y: number}[] = [];
+    let count = 0;
+    
+    const blocks = piece.blocks;
+    for (let r = 0; r < blocks.length; r++) {
+        for (let c = 0; c < blocks[r].length; c++) {
+            if (blocks[r][c] !== 0) {
+                coords.push({x: c, y: r});
+                count++;
+            }
+        }
+    }
+    
+    // Only use WASM for standard tetrominoes (4 blocks)
+    if (count === 4) {
+        try {
+            return WasmCore.get().checkCollision(coords, piece.x, piece.y);
+        } catch (e) {
+            // WASM not available or failed, fallback to JS
+            return this.collisionDetector.hasCollision(piece);
+        }
+    }
+    
+    // Fallback for non-standard pieces
     return this.collisionDetector.hasCollision(piece);
   }
 
@@ -387,7 +424,8 @@ export default class Game {
             }
         }
         // Fill remaining top rows with 0 (already 0 by default)
-        this.playfield = newPlayfield;
+        // Write back to shared memory view to preserve WASM linkage
+        this.playfield.set(newPlayfield);
         this.collisionDetector.updatePlayfield(this.playfield);
     }
 

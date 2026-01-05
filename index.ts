@@ -2,6 +2,7 @@ import Game from "./src/game.js";
 import View from "./src/viewWebGPU.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
+import { WasmCore } from './src/wasm/WasmCore.js';
 
 declare global {
   interface Window {
@@ -69,60 +70,63 @@ uiContainer.innerHTML = `
 
 // Styles are in css/style.css, we should probably update them too.
 
-const game = new Game();
-const soundManager = new SoundManager();
-const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
-const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
+(async () => {
+  await WasmCore.init();
 
-const view = new View(
-    document.body,
-    window.innerWidth,
-    window.innerHeight,
-    20,
-    10,
-    nextPieceCtx,
-    holdPieceCtx
-);
+  const game = new Game();
+  const soundManager = new SoundManager();
+  const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
+  const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 
-const controller = new Controller(game, view, view, soundManager);
+  const view = new View(
+      document.body,
+      window.innerWidth,
+      window.innerHeight,
+      20,
+      10,
+      nextPieceCtx,
+      holdPieceCtx
+  );
 
-document.getElementById('pastel-theme')!.addEventListener('click', () => {
-  document.body.className = 'pastel-theme';
-  view.setTheme('pastel');
-});
+  const controller = new Controller(game, view, view, soundManager);
 
-document.getElementById('neon-theme')!.addEventListener('click', () => {
-  document.body.className = 'neon-theme';
-  view.setTheme('neon');
-});
+  document.getElementById('pastel-theme')!.addEventListener('click', () => {
+    document.body.className = 'pastel-theme';
+    view.setTheme('pastel');
+  });
 
-document.getElementById('futuristic-theme')!.addEventListener('click', () => {
-  document.body.className = 'futuristic-theme';
-  view.setTheme('future'); // Assuming we add 'future' to View
-});
+  document.getElementById('neon-theme')!.addEventListener('click', () => {
+    document.body.className = 'neon-theme';
+    view.setTheme('neon');
+  });
 
-document.getElementById('start-button')!.addEventListener('click', () => {
-    controller.play();
-    // Hide buttons or change state if needed
-    (document.getElementById('start-button') as HTMLButtonElement).blur();
-});
+  document.getElementById('futuristic-theme')!.addEventListener('click', () => {
+    document.body.className = 'futuristic-theme';
+    view.setTheme('future'); // Assuming we add 'future' to View
+  });
 
-document.getElementById('pause-button')!.addEventListener('click', () => {
-    controller.pause();
-    (document.getElementById('pause-button') as HTMLButtonElement).blur();
-});
+  document.getElementById('start-button')!.addEventListener('click', () => {
+      controller.play();
+      (document.getElementById('start-button') as HTMLButtonElement).blur();
+  });
 
-document.getElementById('glitch-button')!.addEventListener('click', (e) => {
-    view.toggleGlitch();
-    const btn = e.target as HTMLButtonElement;
-    btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
-    btn.blur();
-});
+  document.getElementById('pause-button')!.addEventListener('click', () => {
+      controller.pause();
+      (document.getElementById('pause-button') as HTMLButtonElement).blur();
+  });
 
-window.game = game;
-window.view = view;
-window.controller = controller;
-window.soundManager = soundManager;
+  document.getElementById('glitch-button')!.addEventListener('click', (e) => {
+      view.toggleGlitch();
+      const btn = e.target as HTMLButtonElement;
+      btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
+      btn.blur();
+  });
 
-// Set default
-document.getElementById('neon-theme')!.click();
+  window.game = game;
+  window.view = view;
+  window.controller = controller;
+  window.soundManager = soundManager;
+
+  // Set default
+  document.getElementById('neon-theme')!.click();
+})();

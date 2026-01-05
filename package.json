@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "asbuild:debug": "mkdir -p build && asc assembly/index.ts --target debug --outFile build/debug.wasm",
+    "asbuild:release": "mkdir -p build && asc assembly/index.ts --target release --outFile build/release.wasm",
+    "build:all": "npm run asbuild:release && npm run build",
+    "pretest": "npm run asbuild:release || true",
+    "test": "vitest run"
   },
   "dependencies": {
     "gl-matrix": "^3.4.4"
@@ -21,6 +26,8 @@
     "mocha": "^11.7.5",
     "ts-node": "^10.9.2",
     "typescript": "^4.9.5",
+    "assemblyscript": "^0.27.0",
+    "vitest": "^1.0.0",
     "vite": "^4.0.0"
   }
 }
