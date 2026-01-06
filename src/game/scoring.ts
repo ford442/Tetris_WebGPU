@@ -44,6 +44,7 @@ export class ScoringSystem {
   }
 
   updateScore(linesCleared: number): void {
+    this.lines += linesCleared;
     this.score += linesCleared * linesCleared * 10;
     console.log('score = ' + this.score);
   }
