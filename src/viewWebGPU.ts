@@ -385,7 +385,7 @@ export default class View {
     if (!piece) return;
 
     const { blocks } = piece;
-    const blockSize = 24;
+    const blockSize = 30;
     // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
