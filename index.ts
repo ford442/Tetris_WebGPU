@@ -45,7 +45,7 @@ uiContainer.innerHTML = `
       <div class="right-panel">
           <div class="panel-box next-piece-container">
             <p class="panel-label">NEXT</p>
-            <canvas id="next-piece-canvas" width="80" height="80"></canvas>
+            <canvas id="next-piece-canvas" width="120" height="120"></canvas>
           </div>
 
            <div class="theme-buttons panel-box">
