@@ -21,18 +21,11 @@ export const PostProcessShaders = () => {
     `;
 
     const fragment = `
-        const FLASH_BLEND_STRENGTH: f32 = 0.6;
-
         struct Uniforms {
             time: f32,
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
-            aberrationStrength: f32,
-            padding1: vec2<f32>,
-            flashIntensity: f32,
-            padding2: vec3<f32>,
-            flashColor: vec3<f32>,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -46,8 +39,11 @@ export const PostProcessShaders = () => {
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
             let useGlitch = uniforms.useGlitch;
-            let aberrationStrength = uniforms.aberrationStrength;
 
+            // Simple ripple (Only if glitch is on? Or shockwave is physical?)
+            // Shockwave is physical feedback, maybe keep it even if glitch is off?
+            // But usually "glitch effects" implies all distortions.
+            // Let's keep shockwave as it is "impact" not "glitch".
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
                 let radius = time * 1.5;
@@ -55,6 +51,7 @@ export const PostProcessShaders = () => {
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
+                    // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * 0.03 * (1.0 - time);
                     let dir = normalize(uv - center);
@@ -62,70 +59,23 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Chromatic Aberration - distance-aware and less aggressive
+            // Chromatic Aberration
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            var aberration = distFromCenter * 0.01; // Passive lens distortion (mutable)
-            aberration = select(aberration, aberration * 2.0, useGlitch > 0.5);
-            let totalAberration = aberration + aberrationStrength;
+            let aberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            var color = vec3<f32>(r, g, b);
-
-            // Add subtle sharpening filter when glitch is OFF
-            if (useGlitch < 0.5) {
-                let texSize = vec2<f32>(textureDimensions(myTexture));
-                let texelSize = 1.0 / texSize;
-                let center = color; // Reuse already sampled color
-                let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
-                let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
-                let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
-                let west = textureSample(myTexture, mySampler, finalUV - vec2<f32>(texelSize.x, 0.0)).rgb;
-                
-                // Simple Laplacian sharpen
-                let sharpened = center * 5.0 - (north + south + east + west);
-                color = mix(color, sharpened, 0.3);
+            // Bloom-ish boost (cheap)
+            let color = vec3<f32>(r, g, b);
+            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+            if (luminance > 0.8) {
+                // color += color * 0.2;
             }
 
-            var finalColor = color;
-
-            // Calculate luminance for Bloom and Saturation
-            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-
-            // Enhanced Bloom: Quadratic response for smoother high-end boost
-            let bloomThreshold = 0.6;
-            let bloomStrength = 0.7; // Increased bloom
-            let bloomFactor = max(0.0, luminance - bloomThreshold);
-            finalColor += color * bloomFactor * bloomStrength;
-
-            // Saturation boost for that "Neon" look
-            let gray = vec3<f32>(luminance);
-            finalColor = mix(gray, finalColor, 1.3); // Increased saturation
-
-            // Vignette
-            let distV = distance(uv, vec2<f32>(0.5));
-            let vignette = smoothstep(0.8, 0.2, distV * 0.8);
-            finalColor *= vignette;
-
-            // Scanlines (Subtle retro feel)
-            let scanline = sin(uv.y * 800.0) * 0.02;
-            finalColor -= vec3<f32>(scanline);
-
-            // Clamp to prevent negative values from subtractive scanlines
-            finalColor = max(vec3<f32>(0.0), finalColor);
-
-            // Apply flash overlay with gentle squared curve (color only)
-            let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
-            finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
-
-            // Preserve texture alpha so background video remains visible
-            // Do NOT increase alpha during flash (avoids opaque 'purple mask')
-            let finalAlpha = a;
-
-            return vec4<f32>(finalColor, finalAlpha);
+            return vec4<f32>(color, a);
         }
     `;
 
@@ -154,6 +104,7 @@ export const ParticleShaders = () => {
         ) -> VertexOutput {
             var output : VertexOutput;
 
+            // 6 vertices per particle (quad)
             let cornerIdx = vertexIndex % 6u;
 
             var pos = vec2<f32>(0.0);
@@ -166,6 +117,9 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
+            // Billboarding: Align with camera plane (simple XY approximation for this fixed view)
+            // For a true billboard in a perspective camera, we'd need the camera Up/Right vectors,
+            // but since the camera is mostly fixed looking at Z, this works reasonably well.
             let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
@@ -179,14 +133,18 @@ export const ParticleShaders = () => {
     const fragment = `
         @fragment
         fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            let dist = length(uv - 0.5) * 2.0;
+            let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
             if (dist > 1.0) {
                 discard;
             }
 
-            let intensity = exp(-dist * 4.0);
+            // "Hot Core" effect
+            // Intense center, rapid falloff
+            let intensity = exp(-dist * 4.0); // Sharper core
 
+            // Sparkle shape (star)
             let uvCentered = abs(uv - 0.5);
+            // Rotate UV 45 degrees for second cross
             let rot = 0.7071;
             let uvr = vec2<f32>(
                 uvCentered.x * rot - uvCentered.y * rot,
@@ -194,19 +152,23 @@ export const ParticleShaders = () => {
             );
             let uvrCentered = abs(uvr);
 
+            // Create a soft glowing core
             let core = exp(-length(uv - 0.5) * 5.0);
 
+            // Create sharp rays
             let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
             let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
 
             let sparkle = max(cross1, cross2 * 0.5);
 
+            // Combine
             let alpha = intensity + core * 0.5 + sparkle * 0.8;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
+            // Add a slight hue shift based on life for variety
             let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
 
-            return vec4<f32>(hueShift * 2.5, finalAlpha);
+            return vec4<f32>(hueShift * 2.5, finalAlpha); // Boost brightness
         }
     `;
 
@@ -228,7 +190,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.08);
+            return vec4<f32>(1.0, 1.0, 1.0, 0.08); // Very faint white
         }
     `;
     return { vertex, fragment };
@@ -245,7 +207,7 @@ export const BackgroundShaders = () => {
         fn main(@location(0) position: vec3<f32>) -> Output {
             var output: Output;
             output.Position = vec4<f32>(position, 1.0);
-            output.vUV = position.xy * 0.5 + 0.5;
+            output.vUV = position.xy * 0.5 + 0.5; // Map -1..1 to 0..1
             return output;
         }
     `;
@@ -253,8 +215,6 @@ export const BackgroundShaders = () => {
     const fragment = `
         struct Uniforms {
             time: f32,
-            level: f32,
-            padding: vec2<f32>,
             resolution: vec2<f32>,
             color1: vec3<f32>,
             color2: vec3<f32>,
@@ -264,20 +224,21 @@ export const BackgroundShaders = () => {
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-          let levelFactor = clamp(uniforms.level / 20.0, 0.0, 1.0);
-          // Speed increases with level
-          let time = uniforms.time * (0.3 + levelFactor * 0.5);
+          let time = uniforms.time * 0.3; // Slower, calmer animation
           let uv = vUV;
+
+          // Base deep space color
           let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
 
+          // --- Multi-layer perspective grid ---
           var grid = 0.0;
+          // Four layers of grids at different scales for depth
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
-            let scale = exp2(layer_f);
+            let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
+            let speed = 0.1 + layer_f * 0.05;
 
-            // Grid moves faster and more chaotically at higher levels
-            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 1.5);
-
+            // Perspective offset for each layer
             let perspectiveOffset = vec2<f32>(
               sin(time * speed) * (0.05 + layer_f * 0.02),
               cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
@@ -285,50 +246,58 @@ export const BackgroundShaders = () => {
 
             let gridUV = (uv - 0.5) * scale + perspectiveOffset;
 
+            // Smooth grid lines that get thinner with distance
             let lineWidth = 0.02 / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
+            // Combine X and Y lines, fade distant layers
             let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
             grid = max(grid, layerGrid);
           }
 
+          // --- Dynamic neon color palette ---
+          // Cycle through cyberpunk colors
           let colorCycle = sin(time * 0.5) * 0.5 + 0.5;
           let neonCyan = uniforms.color1;
           let neonPurple = uniforms.color2;
           let neonBlue = uniforms.color3;
 
-          var gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
+          let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
-          // Inject "Danger" Red as level increases
-          let dangerColor = vec3<f32>(1.0, 0.0, 0.2);
-          gridColor = mix(gridColor, dangerColor, levelFactor * 0.6);
-
+          // --- Multiple orbiting light sources ---
           var lights = vec3<f32>(0.0);
           for (var i: i32 = 0; i < 3; i++) {
             let idx = f32(i);
-            let angle = time * (0.3 + idx * 0.2) + idx * 2.094;
+            let angle = time * (0.3 + idx * 0.2) + idx * 2.094; // 120° separation
             let radius = 0.25 + idx * 0.1;
             let lightPos = vec2<f32>(
               0.5 + cos(angle) * radius,
               0.5 + sin(angle) * radius
             );
 
+            // Quadratic falloff for realistic lighting
             let dist = length(uv - lightPos);
             let intensity = 0.08 / (dist * dist + 0.01);
+
+            // Each light has a different color
             let lightColor = mix(neonCyan, neonPurple, sin(time + idx) * 0.5 + 0.5);
             lights += lightColor * intensity;
           }
 
+          // --- Global pulse effect ---
           let pulse = sin(time * 1.5) * 0.15 + 0.85;
 
+          // Combine all elements
           var finalColor = deepSpace;
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;
 
+          // --- Vignette effect to focus on center ---
           let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
           finalColor *= vignette;
 
+          // --- Subtle film grain for texture ---
           let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
           finalColor += (noise - 0.5) * 0.03;
 
@@ -343,11 +312,12 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
-  params.diffuseIntensity = "1.2"; // Slightly brighter diffuse
-  params.specularIntensity = "3.5"; // Even glossier
-  params.shininess = "300.0"; // Sharp highlights
+  params.ambientIntensity = "0.5"; // Brighter ambient for better visibility
+  params.diffuseIntensity = "1.0";
+  params.specularIntensity = "2.5"; // Very glossy
+  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
   params.specularColor = "(1.0, 1.0, 1.0)";
+  params.isPhong = "1";
 
   const vertex = `
             struct Uniforms {
@@ -361,30 +331,23 @@ export const Shaders = () => {
             struct Output {
                 @builtin(position) Position : vec4<f32>,
                 @location(0) vPosition : vec4<f32>,
-                @location(1) @interpolate(flat) vNormal : vec4<f32>,
+                @location(1) vNormal : vec4<f32>,
                 @location(2) vColor : vec4<f32>,
                 @location(3) vUV : vec2<f32>
             };
           
             @vertex
-            fn main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> Output {
+            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
-
-                // Construct vec4 with w=1.0 for Position (Point)
-                let mPosition:vec4<f32> = uniforms.modelMatrix * vec4<f32>(position, 1.0);
-
+                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
                 output.vPosition = mPosition;
-
-                // Construct vec4 with w=0.0 for Normal (Direction) - Critical Fix!
-                output.vNormal   = uniforms.normalMatrix * vec4<f32>(normal, 0.0);
-
+                output.vNormal   =  uniforms.normalMatrix*normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
-                output.vColor    = uniforms.colorVertex;
+                output.vColor   =  uniforms.colorVertex;
                 output.vUV = uv;
                 return output;
             }`;
 
-  // TECH GEMS: Merged Tech Lattice + Gem Physics
   const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
@@ -392,13 +355,11 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32,
                 useGlitch: f32,
-                lockPercent: f32,
-                screenSize: vec2<f32>,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
             @fragment
-            fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
@@ -408,14 +369,13 @@ export const Shaders = () => {
                 // --- Improved Lighting Model ---
                 let diffuse:f32 = max(dot(N, L), 0.0);
 
-                // Primary sharp specular (polished)
-                let specularSharp:f32 = pow(max(dot(N, H), 0.0), ${params.shininess}) * 3.0;
+                // Sharp specular for "glassy" look
+                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
 
-                // Secondary broad specular (clear coat)
-                let specularClear:f32 = pow(max(dot(N, H), 0.0), 16.0) * 0.5;
+                // Add secondary broad specular for "glossy plastic"
+                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
 
-                // Enhanced ambient with darker base for more contrast
-                let ambient:f32 = 0.3;
+                let ambient:f32 = ${params.ambientIntensity};
 
                 var baseColor = vColor.xyz;
 
@@ -423,19 +383,22 @@ export const Shaders = () => {
                 // Subtle hexagonal grid overlay
                 let hexScale = 4.0;
                 let uvHex = vUV * hexScale;
+                // Skew for hex look
                 let r = vec2<f32>(1.0, 1.73);
                 let h = r * 0.5;
                 let a = (uvHex - r * floor(uvHex / r)) - h;
                 let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
                 let guv = select(b, a, dot(a, a) < dot(b, b));
-                let hexDist = length(guv);
-                let hexEdge = smoothstep(0.45, 0.5, hexDist);
 
-                // Circuit Traces
+                // Distance to hex center
+                let hexDist = length(guv);
+                let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
+
+                // Circuit Traces (keep original logic but refined)
                 let uvScale = 3.0;
                 let uvGrid = vUV * uvScale;
                 let gridPos = fract(uvGrid);
-                let gridThick = 0.05;
+                let gridThick = 0.05; // Thinner, cleaner lines
                 let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
@@ -461,7 +424,7 @@ export const Shaders = () => {
                 }
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
                 // --- Emissive Elements ---
                 // Traces glow intensely
@@ -486,56 +449,41 @@ export const Shaders = () => {
 
                 finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
 
-                // --- Geometric Edge Highlight (Fresnel-based) ---
-                const EDGE_THRESHOLD = 0.6; // Sharp threshold for edge detection
-                const SILHOUETTE_THRESHOLD = 0.2; // Threshold for silhouette detection
-                
-                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
-                let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
-                
-                // Only apply to silhouette edges, not internal faces
-                let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
-                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.5;
-
-                // --- Active Piece Lock Pulse ---
-                // If lockPercent > 0, we pulse the color
-                let lockP = uniforms.lockPercent;
-                if (lockP > 0.0 && vColor.w > 0.8) {
-                   let pulseSpeed = 10.0 + lockP * 20.0; // Gets faster
-                   let whiteFlash = sin(uniforms.time * pulseSpeed) * 0.5 + 0.5;
-                   // Mix white based on lock progress (0 at start, up to 0.5 at end)
-                   let intensity = lockP * 0.6 * whiteFlash;
-                   finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), intensity);
-                }
+                // --- Edge Highlight ---
+                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
+                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
 
                 // --- GHOST PIECE RENDERING ---
-                // If alpha is low, use ghost logic (hologram)
+                // Ghost piece logic (usually alpha ~0.3) needs to be distinct from our new semi-transparent blocks (alpha 0.85)
+                // Let's assume ghost piece uses a much lower alpha threshold or distinct logic.
+                // But wait, user set blocks to 0.85. Previously blocks were 1.0.
+                // Ghost pieces are handled in game logic, but here we check vColor.w.
+                // If ghost piece alpha < 0.8, we use ghost logic.
                 if (vColor.w < 0.4) {
-                    let time = uniforms.time;
-                    // Scrolling digital rain effect
-                    let scanY = fract(vUV.y * 20.0 - time * 2.0);
-                    let scanline = smoothstep(0.1, 0.5, scanY) * (1.0 - smoothstep(0.5, 0.9, scanY));
+                    // Hologram effect
+                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
+                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
 
-                    // Hex pattern for ghost
-                    let ghostHex = hexEdge;
+                    // Wireframe
+                    let wire = edgeGlow;
 
-                    let ghostBase = vColor.rgb * 1.5; // Brighten base color
+                    // Internal grid
+                    let internalGrid = isTrace;
 
-                    // Wireframe edges
-                    var ghostFinal = ghostBase * edgeGlow * 3.0;
+                    // Shift ghost color towards Cyan/White for better visibility
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
 
-                    // Add scrolling scanlines
-                    ghostFinal += vec3<f32>(0.8, 0.9, 1.0) * scanline * 0.8;
+                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
+                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
+                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
 
-                    // Add hex pattern
-                    ghostFinal += ghostBase * ghostHex * 0.5;
+                    // Flicker - High frequency tech glitch
+                    let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
+                    let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
 
-                    // Hologram flicker
-                    let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-                    let flicker = 0.85 + 0.15 * sin(time * 30.0 + noise * 10.0);
-
-                    // Pulse alpha
-                    let pulse = 0.25 + 0.1 * sin(time * 3.0);
+                    // Pulse alpha - More visible range
+                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
@@ -543,18 +491,7 @@ export const Shaders = () => {
                 // --- Smart Transparency for Blocks ---
                 // Keep base material semi-transparent (0.85), but make features opaque (1.0)
                 let baseAlpha = vColor.w;
-                // Use UV-based edge for feature opacity (not the same as highlight)
-                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let uvEdgeFeature = smoothstep(0.9, 1.0, uvEdgeDist);
-                let featureAlpha = max(isTrace, max(uvEdgeFeature, hexEdge));
-
-                // Prevent disappearing blocks: if computed finalColor is almost black, force opacity and fallback to baseColor
-                let lumin = dot(finalColor, vec3<f32>(0.299, 0.587, 0.114));
-                if (lumin < 0.05) {
-                    finalColor = baseColor;
-                    return vec4<f32>(finalColor, 1.0);
-                }
-
+                let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
                 let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
 
                 return vec4<f32>(finalColor, finalAlpha);
@@ -564,157 +501,4 @@ export const Shaders = () => {
     vertex,
     fragment,
   };
-};
-
-export const VideoBackgroundShader = () => {
-    const vertex = `
-        struct VertexOutput {
-            @builtin(position) Position : vec4<f32>,
-            @location(0) uv : vec2<f32>,
-        };
-
-        @vertex
-        fn main(@location(0) position : vec3<f32>) -> VertexOutput {
-            var output : VertexOutput;
-            output.Position = vec4<f32>(position, 1.0);
-            output.uv = position.xy * 0.5 + 0.5;
-            output.uv.y = 1.0 - output.uv.y; // Correct standard video orientation
-            return output;
-        }
-    `;
-
-    const fragment = `
-        struct GameState {
-            screen_size: vec2<f32>,
-            time: f32,
-            dt: f32,
-
-            // Active Piece
-            piece_pos: vec2<f32>,
-
-            // NEW: Video Size for Aspect Ratio Correction
-            video_size: vec2<f32>,
-
-            piece_color: vec4<f32>,
-
-            // Line Clears (Packed into vec4 for alignment)
-            cleared_lines: vec4<f32>,
-            line_clear_params: vec4<f32>, // x=count, y=progress, z=padding, w=padding
-
-            // Stats
-            stats: vec4<f32>, // x=level, y=score, z=quality(LOD), w=debug_mode
-
-            // Locked Pieces Ring Buffer
-            // We use vec4 for alignment: x,y = pos, z = fade_strength, w = padding
-            locked_pieces: array<vec4<f32>, 200>,
-        };
-
-        @group(0) @binding(0) var<uniform> game: GameState;
-        @group(0) @binding(1) var videoSampler: sampler;
-        @group(0) @binding(2) var videoTexture: texture_external;
-
-        @fragment
-        fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            var finalUV = uv;
-            var finalColor = vec4<f32>(0.0);
-
-            // --- ASPECT RATIO CORRECTION (Cover Mode) ---
-            let screenW = game.screen_size.x;
-            let screenH = game.screen_size.y;
-            let vidW = select(1920.0, game.video_size.x, game.video_size.x > 1.0);
-            let vidH = select(1080.0, game.video_size.y, game.video_size.y > 1.0);
-
-            let screenRatio = screenW / max(1.0, screenH);
-            let videoRatio = vidW / max(1.0, vidH);
-
-            // Calculate scale to cover the screen
-            var scale = vec2<f32>(1.0, 1.0);
-            
-            if (screenRatio > videoRatio) {
-                // Screen is wider: Fit Width, Crop Height
-                scale.y = videoRatio / screenRatio;
-            } else {
-                // Screen is taller: Fit Height, Crop Width
-                scale.x = screenRatio / videoRatio;
-            }
-            
-            // Center the crop
-            let coverUV = (finalUV - 0.5) * scale + 0.5;
-
-            // Calculate screen pos for distance checks (approximate aspect ratio correction)
-            let aspect = game.screen_size.x / game.screen_size.y;
-            let screenUV = uv * vec2<f32>(aspect, 1.0);
-
-            // --- 1. GHOST PIECE BURN-IN ---
-            var totalDistortion = vec2<f32>(0.0);
-            let max_pieces = u32(200.0 * game.stats.z);
-
-            for (var i = 0u; i < max_pieces; i++) {
-                let data = game.locked_pieces[i];
-                if (data.z <= 0.001) { continue; }
-
-                let pieceUV = vec2<f32>(data.x / 10.0, 1.0 - (data.y / 20.0));
-                let pieceScreenUV = pieceUV * vec2<f32>(aspect, 1.0);
-
-                let dist = distance(screenUV, pieceScreenUV);
-                let radius = 0.15;
-                let influence = smoothstep(radius, 0.0, dist) * data.z;
-
-                totalDistortion += (screenUV - pieceScreenUV) * influence * 0.05;
-            }
-            
-            // Apply distortion to our corrected UVs
-            let distortedUV = coverUV + totalDistortion;
-
-            // --- 2. ACTIVE PIECE GRAVITY WELL ---
-            let activePos = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
-            let activeDist = distance(screenUV, activePos * vec2<f32>(aspect, 1.0));
-            let activeInfluence = smoothstep(0.3, 0.0, activeDist) * 0.03;
-            let pulse = sin(game.time * 5.0) * 0.005;
-            
-            let finalSampleUV = distortedUV + (screenUV - (activePos * vec2<f32>(aspect, 1.0))) * (activeInfluence + pulse);
-
-            // SAMPLE VIDEO
-            var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalSampleUV);
-
-            // --- 3. MULTI-LINE CASCADE ---
-            let lineCount = u32(game.line_clear_params.x);
-            if (lineCount > 0u) {
-                let progress = game.line_clear_params.y;
-                var celebration = vec3<f32>(0.0);
-                if (lineCount >= 4u) {
-                     let flash = sin(game.time * 15.0) * (1.0 - progress);
-                     celebration = vec3<f32>(flash * 0.2, flash * 0.1, flash * 0.3);
-                }
-
-                for (var i = 0u; i < lineCount; i++) {
-                    let lineY_raw = game.cleared_lines[i];
-                    let lineUV_Y = 1.0 - (lineY_raw / 20.0);
-                    let distToLine = abs(uv.y - lineUV_Y); // Use original UV for line position logic
-                    let stagger = f32(i) * 0.15;
-                    let wavePos = progress * (1.0 + stagger);
-                    let waveDist = abs(distToLine - wavePos * 0.5);
-                    let waveIntensity = smoothstep(0.1, 0.0, waveDist) * (1.0 - progress) * 2.0;
-
-                    videoColor.r += waveIntensity * 0.3;
-                    videoColor.b -= waveIntensity * 0.3;
-                    videoColor = vec4<f32>(videoColor.rgb + celebration, videoColor.a);
-                }
-            }
-
-            // --- 4. DEBUG VISUALIZATION ---
-            if (game.stats.w > 0.5) {
-                let distLen = length(totalDistortion) * 20.0;
-                videoColor.g += distLen;
-                if (activeDist < 0.3) { videoColor.r += 0.1; }
-            }
-
-            let levelBoost = 1.0 + game.stats.x * 0.05; 
-            let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-            videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), videoColor, 1.0 + levelBoost * 0.2);
-
-            return videoColor;
-        }
-    `;
-    return { vertex, fragment };
 };
