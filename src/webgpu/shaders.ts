@@ -184,29 +184,17 @@ export const ParticleShaders = () => {
                 discard;
             }
 
-            let intensity = exp(-dist * 4.0);
+            // Soft Particle Look
+            let glow = exp(-dist * 2.5); // Softer falloff
+            let core = exp(-dist * 5.0); // Bright center
 
-            let uvCentered = abs(uv - 0.5);
-            let rot = 0.7071;
-            let uvr = vec2<f32>(
-                uvCentered.x * rot - uvCentered.y * rot,
-                uvCentered.x * rot + uvCentered.y * rot
-            );
-            let uvrCentered = abs(uvr);
-
-            let core = exp(-length(uv - 0.5) * 5.0);
-
-            let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
-            let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
-
-            let sparkle = max(cross1, cross2 * 0.5);
-
-            let alpha = intensity + core * 0.5 + sparkle * 0.8;
+            let alpha = glow * 0.8 + core * 0.5;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
+            // Boost color for emissive look
+            let finalColor = color.rgb * (1.5 + core * 2.0);
 
-            return vec4<f32>(hueShift * 2.5, finalAlpha);
+            return vec4<f32>(finalColor, finalAlpha);
         }
     `;
 
@@ -466,13 +454,13 @@ export const Shaders = () => {
                 // --- Emissive Elements ---
                 // Traces glow intensely
                 if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 3.0;
+                    let traceGlow = pulsePos * 4.0; // Stronger glow
                     finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.5; // White hot core
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.7; // Brighter core
                 }
                 // Hex corners glow slightly
                 if (hexDist < 0.1) {
-                    finalColor += vColor.rgb * 0.5 * pulsePos;
+                    finalColor += vColor.rgb * 0.8 * pulsePos;
                 }
 
                 // --- Fresnel Rim Light (Enhanced) ---
@@ -484,7 +472,7 @@ export const Shaders = () => {
                 let rimG = rimColor.g;
                 let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
 
-                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
+                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 3.5; // Stronger rim
 
                 // --- Geometric Edge Highlight (Fresnel-based) ---
                 const EDGE_THRESHOLD = 0.6; // Sharp threshold for edge detection
@@ -495,7 +483,7 @@ export const Shaders = () => {
                 
                 // Only apply to silhouette edges, not internal faces
                 let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
-                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 2.5;
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 3.5;
 
                 // --- Active Piece Lock Pulse ---
                 // If lockPercent > 0, we pulse the color
@@ -519,23 +507,24 @@ export const Shaders = () => {
                     // Hex pattern for ghost
                     let ghostHex = hexEdge;
 
-                    let ghostBase = vColor.rgb * 1.5; // Brighten base color
+                    // Brighter ghost base
+                    let ghostBase = vColor.rgb * 2.0;
 
                     // Wireframe edges
-                    var ghostFinal = ghostBase * edgeGlow * 3.0;
+                    var ghostFinal = ghostBase * edgeGlow * 4.0;
 
-                    // Add scrolling scanlines
-                    ghostFinal += vec3<f32>(0.8, 0.9, 1.0) * scanline * 0.8;
+                    // Add scrolling scanlines (additive)
+                    ghostFinal += vec3<f32>(0.6, 0.9, 1.0) * scanline * 1.2;
 
                     // Add hex pattern
-                    ghostFinal += ghostBase * ghostHex * 0.5;
+                    ghostFinal += ghostBase * ghostHex * 0.8;
 
                     // Hologram flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-                    let flicker = 0.85 + 0.15 * sin(time * 30.0 + noise * 10.0);
+                    let flicker = 0.9 + 0.1 * sin(time * 30.0 + noise * 10.0);
 
                     // Pulse alpha
-                    let pulse = 0.25 + 0.1 * sin(time * 3.0);
+                    let pulse = 0.35 + 0.15 * sin(time * 3.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
