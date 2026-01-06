@@ -399,25 +399,38 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Create gradient for main fill to match 3D look
+          // Create gradient for main fill to match 3D look (Darker tech look)
           const gradient = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
-          gradient.addColorStop(0, `rgb(${color[0] * 255 + 40}, ${color[1] * 255 + 40}, ${color[2] * 255 + 40})`);
-          gradient.addColorStop(1, `rgb(${color[0] * 255 - 20}, ${color[1] * 255 - 20}, ${color[2] * 255 - 20})`);
+          gradient.addColorStop(0, `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`);
+          gradient.addColorStop(1, `rgb(${color[0] * 180}, ${color[1] * 180}, ${color[2] * 180})`);
 
           ctx.fillStyle = gradient;
-          ctx.fillRect(px, py, blockSize, blockSize);
+          ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
 
-          // Inner Glow (Center)
-          const centerGlow = ctx.createRadialGradient(px + blockSize/2, py + blockSize/2, 0, px + blockSize/2, py + blockSize/2, blockSize/2);
-          centerGlow.addColorStop(0, `rgba(255, 255, 255, 0.4)`);
-          centerGlow.addColorStop(1, `rgba(255, 255, 255, 0.0)`);
-          ctx.fillStyle = centerGlow;
-          ctx.fillRect(px, py, blockSize, blockSize);
+          // Tech Pattern Overlay (Canvas 2D simple version)
+          ctx.fillStyle = `rgba(0,0,0,0.2)`;
+          ctx.fillRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
 
-          // Sharp Border (Neon Style)
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+          // Inner Bevel Highlight
+          const bevel = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
+          bevel.addColorStop(0.0, `rgba(255, 255, 255, 0.8)`);
+          bevel.addColorStop(0.2, `rgba(255, 255, 255, 0.0)`);
+          bevel.addColorStop(0.8, `rgba(255, 255, 255, 0.0)`);
+          bevel.addColorStop(1.0, `rgba(0, 0, 0, 0.4)`);
+
+          ctx.fillStyle = bevel;
+          ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+
+          // Neon Border
+          ctx.strokeStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+
+          // Center Shine
+          ctx.fillStyle = `rgba(255, 255, 255, 0.9)`;
+          ctx.beginPath();
+          ctx.arc(px + blockSize * 0.3, py + blockSize * 0.3, 2, 0, Math.PI * 2);
+          ctx.fill();
         }
       });
     });
@@ -1377,6 +1390,47 @@ export default class View {
             blockIndex * 256
         );
     }
+
+    // --- PARTICLE TRAIL EMISSION ---
+    // Emit particles from active piece to create a trail
+    if (this.state && this.state.activePiece) {
+        const p = this.state.activePiece;
+        // Check if piece moved down or just emit continuously
+        // For trail, we can just emit a few particles per frame at block positions
+        // Use a lower probability to avoid clutter
+        if (Math.random() < 0.3) {
+             const { blocks, x, y } = p;
+             let colorIndex = 1;
+
+             // Find color
+             outer: for(let r=0; r<blocks.length; r++) {
+                 for(let c=0; c<blocks[r].length; c++) {
+                     if (blocks[r][c] !== 0) {
+                         colorIndex = Math.abs(blocks[r][c]);
+                         break outer;
+                     }
+                 }
+             }
+
+             const color = this.currentTheme[colorIndex] || [1,1,1,1];
+             // Add alpha for trail
+             const trailColor = [color[0], color[1], color[2], 0.4];
+
+             for(let r=0; r<blocks.length; r++) {
+                 for(let c=0; c<blocks[r].length; c++) {
+                     if (blocks[r][c]) {
+                         if (Math.random() > 0.1) continue; // Only emit for some blocks
+
+                         const wx = (x + c) * 2.2;
+                         const wy = (y + r) * -2.2;
+                         // Emit 1 particle
+                         this.particleSystem.emitParticles(wx, wy, 0.0, 1, trailColor);
+                     }
+                 }
+             }
+        }
+    }
+
     return blockIndex;
   }
 

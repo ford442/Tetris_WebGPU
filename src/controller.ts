@@ -294,7 +294,7 @@ export default class Controller {
 
       if (this.gravityTimer > speedMs) {
           this.game.movePieceDown();
-          this.gravityTimer = 0;
+          this.gravityTimer -= speedMs; // Subtract instead of reset to prevent drift
       }
 
       // Game update (lock delay)

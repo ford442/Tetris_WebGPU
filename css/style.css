@@ -46,20 +46,33 @@ h1 {
 }
 
 .panel-box {
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(10, 15, 30, 0.6);
+    border: 1px solid rgba(100, 200, 255, 0.3);
     padding: 15px;
-    border-radius: 8px;
+    border-radius: 4px;
     text-align: center;
-    backdrop-filter: blur(5px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 15px rgba(0, 150, 255, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    clip-path: polygon(
+        10px 0, 100% 0,
+        100% calc(100% - 10px), calc(100% - 10px) 100%,
+        0 100%, 0 10px
+    );
+    transition: box-shadow 0.3s, border-color 0.3s;
+}
+
+.panel-box:hover {
+    border-color: rgba(100, 255, 255, 0.6);
+    box-shadow: 0 0 25px rgba(0, 200, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
 .panel-label {
     margin: 0 0 10px 0;
-    font-size: 1.2rem;
-    color: #aaa;
-    letter-spacing: 2px;
+    font-size: 1.0rem;
+    color: #00eaff;
+    letter-spacing: 3px;
+    text-shadow: 0 0 5px rgba(0, 234, 255, 0.5);
+    text-transform: uppercase;
 }
 
 .panel-value {
