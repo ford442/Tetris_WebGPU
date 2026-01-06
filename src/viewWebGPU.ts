@@ -53,6 +53,7 @@ export default class View {
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
 
+  lastEffectCounter: number = 0;
   useGlitch: boolean = false;
 
   // Grid
@@ -401,6 +402,34 @@ export default class View {
   }
 
   renderMainScreen(state: any) {
+    // Check for new visual effects from Game Logic
+    if (state.effectCounter > this.lastEffectCounter) {
+        this.lastEffectCounter = state.effectCounter;
+        if (state.effectEvent === 'hardDrop' && state.lastDropPos) {
+             // Calculate shockwave center from dropped position
+             const pX = state.lastDropPos.x;
+             const pY = state.lastDropPos.y;
+
+             // Convert grid pos to world pos
+             const worldX = pX * 2.2;
+             const worldY = pY * -2.2;
+
+             // Convert world to UV
+             const camY = -20.0;
+             const camZ = 75.0;
+             const fov = (35 * Math.PI) / 180;
+             const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+             const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+
+             const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
+             const uvY = 0.5 - (worldY - camY) / visibleHeight;
+
+             this.visualEffects.triggerShockwave([uvX, uvY]);
+             // Add extra shake for juice
+             this.visualEffects.triggerShake(0.5, 0.2);
+        }
+    }
+
     // Check if level has changed and update video accordingly
     if (state.level !== this.visualEffects.currentLevel) {
       this.visualEffects.currentLevel = state.level;
@@ -716,7 +745,7 @@ export default class View {
     });
 
     this.postProcessUniformBuffer = this.device.createBuffer({
-        size: 32, // time(4) + pad + center(8) + time_shock(4) -> 16 + padding
+        size: 64, // Updated for shockwaveParams (vec4)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -940,10 +969,16 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
 
     // Update Shockwave Uniforms
+    // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, this.useGlitch ? 1.0 : 0.0,
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
         this.visualEffects.shockwaveTimer, 0, 0, 0
+    ]));
+    // Write params at offset 32 (vec4 alignment)
+    // width=0.15, strength=0.08, aberration=0.03
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, new Float32Array([
+        0.15, 0.08, 0.03, 0.0
     ]));
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
