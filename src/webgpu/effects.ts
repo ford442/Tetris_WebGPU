@@ -7,8 +7,8 @@ export class VisualEffects {
     // Visual effect timers
     flashTimer: number = 0;
     lockTimer: number = 0;
-    shakeIntensity: number = 0;
-    aberrationIntensity: number = 0;
+    shakeTimer: number = 0;
+    shakeMagnitude: number = 0;
     
     // Shockwave state
     shockwaveTimer: number = 0;
@@ -113,13 +113,8 @@ export class VisualEffects {
         if (this.lockTimer > 0) this.lockTimer -= dt;
         if (this.lockTimer < 0) this.lockTimer = 0;
 
-        // Exponential decay for smooth game feel
-        const decay = Math.exp(-dt * 5.0);
-        this.shakeIntensity *= decay;
-        this.aberrationIntensity *= decay;
-
-        if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
-        if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
+        if (this.shakeTimer > 0) this.shakeTimer -= dt;
+        if (this.shakeTimer < 0) this.shakeTimer = 0;
 
         if (this.shockwaveTimer > 0) {
             this.shockwaveTimer += dt * 0.8; // Speed
@@ -136,21 +131,13 @@ export class VisualEffects {
     }
 
     triggerShake(magnitude: number, duration: number): void {
-        // Additive shake for impact accumulation (duration ignored in favor of decay)
-        this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 2.5);
-    }
-
-    triggerAberration(magnitude: number): void {
-        this.aberrationIntensity += magnitude;
-        this.aberrationIntensity = Math.min(this.aberrationIntensity, 2.0);
+        this.shakeTimer = duration;
+        this.shakeMagnitude = magnitude;
     }
 
     triggerShockwave(center: number[]): void {
         this.shockwaveCenter = center;
-        // Start effect at 0.01 to avoid 0.0 check failure
-        // The shader uses time * 1.5 for radius, so 0.01 is a small starting circle
-        this.shockwaveTimer = 0.01;
+        this.shockwaveTimer = 0.01; // Start effect
     }
 
     getClearColors(): { r: number, g: number, b: number } {
@@ -168,10 +155,10 @@ export class VisualEffects {
     }
 
     getShakeOffset(): { x: number, y: number } {
-        if (this.shakeIntensity > 0) {
+        if (this.shakeTimer > 0) {
             return {
-                x: (Math.random() - 0.5) * this.shakeIntensity,
-                y: (Math.random() - 0.5) * this.shakeIntensity
+                x: (Math.random() - 0.5) * this.shakeMagnitude,
+                y: (Math.random() - 0.5) * this.shakeMagnitude
             };
         }
         return { x: 0, y: 0 };
