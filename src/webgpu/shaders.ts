@@ -26,6 +26,7 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
+            shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -39,33 +40,38 @@ export const PostProcessShaders = () => {
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
             let useGlitch = uniforms.useGlitch;
+            let params = uniforms.shockwaveParams;
 
-            // Simple ripple (Only if glitch is on? Or shockwave is physical?)
-            // Shockwave is physical feedback, maybe keep it even if glitch is off?
-            // But usually "glitch effects" implies all distortions.
-            // Let's keep shockwave as it is "impact" not "glitch".
+            // Shockwave Logic
+            var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
-                let radius = time * 1.5;
-                let width = 0.15;
+                let radius = time * 1.5; // Expanding radius
+                let width = params.x; // e.g. 0.1
+                let strength = params.y; // e.g. 0.05
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
                     // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
-                    let distortion = cos(angle) * 0.03 * (1.0 - time);
+                    let distortion = cos(angle) * strength * (1.0 - time); // Fade out
                     let dir = normalize(uv - center);
+
                     finalUV -= dir * distortion;
+
+                    // Add chromatic aberration at the edge of the shockwave
+                    shockwaveAberration = params.z * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
             }
 
-            // Chromatic Aberration
+            // Global Chromatic Aberration (Glitch + Shockwave)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let aberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            let baseAberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            let totalAberration = baseAberration + shockwaveAberration;
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(aberration, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(aberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap)
