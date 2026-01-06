@@ -269,12 +269,11 @@ export default class View {
     }
   }
 
-  renderPiece(ctx: CanvasRenderingContext2D, piece: any) {
+  renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     if (!piece) return;
 
     const { blocks } = piece;
-    const blockSize = 20;
     // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
@@ -438,8 +437,8 @@ export default class View {
 
     // this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
-    this.renderPiece(this.nextPieceContext, state.nextPiece);
-    this.renderPiece(this.holdPieceContext, state.holdPiece);
+    this.renderPiece(this.nextPieceContext, state.nextPiece, 30);
+    this.renderPiece(this.holdPieceContext, state.holdPiece, 20);
 
     const scoreEl = document.getElementById('score');
     if (scoreEl) scoreEl.textContent = state.score;
