@@ -15,6 +15,8 @@ export interface GameState {
   playfield: number[][]; // View still expects 2D array for now
   lockTimer: number;
   lockDelayTime: number;
+  effectEvent: string | null;
+  effectCounter: number;
 }
 
 export default class Game {
@@ -35,6 +37,11 @@ export default class Game {
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
   readonly maxLockResets: number = 15;
+
+  // Visual Effects
+  effectEvent: string | null = null;
+  effectCounter: number = 0;
+  lastDropPos: { x: number, y: number } | null = null;
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -151,7 +158,10 @@ export default class Game {
       isGameOver: this.gameOver,
       playfield: playfield2D,
       lockTimer: this.lockTimer,
-      lockDelayTime: this.lockDelayTime
+      lockDelayTime: this.lockDelayTime,
+      effectEvent: this.effectEvent,
+      effectCounter: this.effectCounter,
+      lastDropPos: this.lastDropPos
     }
   }
 
@@ -163,6 +173,11 @@ export default class Game {
     const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
+
+    // Trigger visual effect
+    this.effectEvent = 'hardDrop';
+    this.effectCounter++;
+    this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
 
     // Force lock
     this.lockPiece();
