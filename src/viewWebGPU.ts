@@ -394,10 +394,15 @@ export default class View {
       const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-      this.visualEffects.triggerShockwave([uvX, uvY]);
+      // Dynamic shockwave based on drop distance
+      const strength = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
+      const width = 0.1 + Math.min(distance * 0.01, 0.2);     // Max 0.3
+      const aberration = 0.02 + Math.min(distance * 0.005, 0.08); // Max 0.1
+
+      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
       // Increase shake
-      this.visualEffects.triggerShake(1.2, 0.2);
+      this.visualEffects.triggerShake(1.2 + distance * 0.05, 0.2);
   }
 
   renderMainScreen(state: any) {
@@ -423,9 +428,11 @@ export default class View {
              const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
              const uvY = 0.5 - (worldY - camY) / visibleHeight;
 
-             this.visualEffects.triggerShockwave([uvX, uvY]);
+             // Hard drops triggered from state might miss the 'distance' info here if not passed
+             // For now, use a default satisfying thud
+             this.visualEffects.triggerShockwave([uvX, uvY], 0.2, 0.1, 0.05);
              // Add extra shake for juice
-             this.visualEffects.triggerShake(0.5, 0.2);
+             this.visualEffects.triggerShake(0.8, 0.3);
         }
     }
 
@@ -975,10 +982,7 @@ export default class View {
         this.visualEffects.shockwaveTimer, 0, 0, 0
     ]));
     // Write params at offset 32 (vec4 alignment)
-    // width=0.15, strength=0.08, aberration=0.03
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, new Float32Array([
-        0.15, 0.08, 0.03, 0.0
-    ]));
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
