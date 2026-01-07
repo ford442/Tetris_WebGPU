@@ -122,6 +122,7 @@ export default class View {
   // Dynamic Block Styles
   currentBlockStyle: string = 'tech';
   pipelineCache: Map<string, GPURenderPipeline> = new Map();
+  blockTexture!: GPUTexture;
 
   // Cache
   private blockUniformData: ArrayBuffer;
@@ -241,6 +242,78 @@ export default class View {
     });
   }
 
+  async loadBlockTexture() {
+      try {
+          const response = await fetch('block.png');
+          const blob = await response.blob();
+          const img = await createImageBitmap(blob);
+
+          this.blockTexture = this.device.createTexture({
+              size: [img.width, img.height, 1],
+              format: 'rgba8unorm',
+              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+          });
+
+          this.device.queue.copyExternalImageToTexture(
+              { source: img },
+              { texture: this.blockTexture },
+              [img.width, img.height]
+          );
+          console.log("Block texture loaded.");
+      } catch (e) {
+          console.warn("Failed to load block.png, using fallback white texture.", e);
+          // Fallback: 1x1 White Pixel
+          this.blockTexture = this.device.createTexture({
+              size: [1, 1, 1],
+              format: 'rgba8unorm',
+              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+          });
+          const whiteData = new Uint8Array([255, 255, 255, 255]);
+          this.device.queue.writeTexture(
+              { texture: this.blockTexture },
+              whiteData,
+              { bytesPerRow: 4 },
+              [1, 1]
+          );
+      }
+  }
+
+  updateBlockBindGroup() {
+      if (!this.blockBindGroupLayout || !this.device) return;
+
+      let targetTextureView: GPUTextureView;
+
+      // Logic: Glass uses Background (Refraction), Tech uses Block Texture
+      if (this.currentBlockStyle === 'glass') {
+          targetTextureView = this.backgroundPassTexture.createView();
+      } else {
+          // Use the loaded texture (or fallback)
+          targetTextureView = this.blockTexture ? this.blockTexture.createView() : this.backgroundPassTexture.createView();
+      }
+
+      // Recreate the bind group
+      this.blockBindGroup = this.device.createBindGroup({
+          layout: this.blockBindGroupLayout,
+          entries: [
+              { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: 0, size: 208 } },
+              { binding: 1, resource: { buffer: this.fragmentUniformBuffer } },
+              { binding: 2, resource: this.sampler },
+              { binding: 3, resource: targetTextureView } // Dynamic Texture Slot
+          ]
+      });
+
+      // Also update Border BindGroup (Keep borders consistent with blocks)
+      this.borderBindGroup = this.device.createBindGroup({
+          layout: this.blockBindGroupLayout,
+          entries: [
+              { binding: 0, resource: { buffer: this.vertexUniformBuffer_border, offset: 0, size: 208 } },
+              { binding: 1, resource: { buffer: this.fragmentUniformBuffer } },
+              { binding: 2, resource: this.sampler },
+              { binding: 3, resource: targetTextureView }
+          ]
+      });
+  }
+
   async CheckWebGPU() {
       if (!navigator.gpu) {
           this.isWebGPU = { result: false, description: "WebGPU not supported in this browser." };
@@ -350,53 +423,8 @@ export default class View {
         });
     }
 
-    // Update Block Bind Group with new Background Texture
-    if (this.blockBindGroupLayout) {
-        this.blockBindGroup = this.device.createBindGroup({
-            layout: this.blockBindGroupLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: { buffer: this.vertexUniformBuffer, offset: 0, size: 208 }
-                },
-                {
-                    binding: 1,
-                    resource: { buffer: this.fragmentUniformBuffer }
-                },
-                {
-                    binding: 2,
-                    resource: this.sampler
-                },
-                {
-                    binding: 3,
-                    resource: this.backgroundPassTexture.createView()
-                }
-            ]
-        });
-
-        // Update Border Bind Group too
-        this.borderBindGroup = this.device.createBindGroup({
-            layout: this.blockBindGroupLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: { buffer: this.vertexUniformBuffer_border, offset: 0, size: 208 }
-                },
-                {
-                    binding: 1,
-                    resource: { buffer: this.fragmentUniformBuffer }
-                },
-                {
-                    binding: 2,
-                    resource: this.sampler
-                },
-                {
-                    binding: 3,
-                    resource: this.backgroundPassTexture.createView()
-                }
-            ]
-        });
-    }
+    // REPLACE the old blockBindGroup logic with:
+    this.updateBlockBindGroup();
 
     Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (35 * Math.PI) / 180;
@@ -1081,51 +1109,8 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Create ONE BindGroup for blocks with dynamic offset
-    this.blockBindGroup = this.device.createBindGroup({
-        layout: this.blockBindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: { buffer: this.vertexUniformBuffer, offset: 0, size: 208 }
-            },
-            {
-                binding: 1,
-                resource: { buffer: this.fragmentUniformBuffer }
-            },
-            {
-                binding: 2,
-                resource: this.sampler
-            },
-            {
-                binding: 3,
-                resource: this.backgroundPassTexture.createView()
-            }
-        ]
-    });
-
-    // Create ONE BindGroup for border (uses same layout and buffer type)
-    this.borderBindGroup = this.device.createBindGroup({
-        layout: this.blockBindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: { buffer: this.vertexUniformBuffer_border, offset: 0, size: 208 }
-            },
-            {
-                binding: 1,
-                resource: { buffer: this.fragmentUniformBuffer }
-            },
-            {
-                binding: 2,
-                resource: this.sampler
-            },
-            {
-                binding: 3,
-                resource: this.backgroundPassTexture.createView()
-            }
-        ]
-    });
+    // REPLACE the explicit this.blockBindGroup = ... creation with:
+    this.updateBlockBindGroup();
 
     this.setTheme('neon');
 
@@ -1697,17 +1682,16 @@ export default class View {
     const cachedPipeline = this.pipelineCache.get(style);
     if (cachedPipeline) {
       this.pipeline = cachedPipeline;
-      this.currentBlockStyle = style;
-      console.log(`Switched to cached block style: ${style}`);
-      return;
+    } else {
+      // If not cached, create a new pipeline
+      console.log(`Creating new pipeline for block style: ${style}`);
+      this.pipeline = this._createMainPipeline(style);
+      this.pipelineCache.set(style, this.pipeline);
     }
 
-    // If not cached, create a new pipeline
-    console.log(`Creating new pipeline for block style: ${style}`);
-    const newPipeline = this._createMainPipeline(style);
-
-    this.pipeline = newPipeline;
-    this.pipelineCache.set(style, newPipeline);
     this.currentBlockStyle = style;
+
+    // Switch Texture Binding
+    this.updateBlockBindGroup();
   }
 }
