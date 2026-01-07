@@ -13,6 +13,7 @@ export class VisualEffects {
     // Shockwave state
     shockwaveTimer: number = 0;
     shockwaveCenter: number[] = [0.5, 0.5];
+    shockwaveParams: number[] = [0.15, 0.08, 0.03, 0.0]; // width, strength, aberration, unused
 
     // Video background state
     videoElement: HTMLVideoElement;
@@ -146,11 +147,16 @@ export class VisualEffects {
         this.aberrationIntensity = Math.min(this.aberrationIntensity, 2.0);
     }
 
-    triggerShockwave(center: number[]): void {
+    triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03): void {
         this.shockwaveCenter = center;
+        this.shockwaveParams = [width, strength, aberration, 0.0];
         // Start effect at 0.01 to avoid 0.0 check failure
         // The shader uses time * 1.5 for radius, so 0.01 is a small starting circle
         this.shockwaveTimer = 0.01;
+    }
+
+    getShockwaveParams(): Float32Array {
+        return new Float32Array(this.shockwaveParams);
     }
 
     getClearColors(): { r: number, g: number, b: number } {
