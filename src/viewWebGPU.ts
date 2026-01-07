@@ -350,6 +350,54 @@ export default class View {
         });
     }
 
+    // Update Block Bind Group with new Background Texture
+    if (this.blockBindGroupLayout) {
+        this.blockBindGroup = this.device.createBindGroup({
+            layout: this.blockBindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: { buffer: this.vertexUniformBuffer, offset: 0, size: 208 }
+                },
+                {
+                    binding: 1,
+                    resource: { buffer: this.fragmentUniformBuffer }
+                },
+                {
+                    binding: 2,
+                    resource: this.sampler
+                },
+                {
+                    binding: 3,
+                    resource: this.backgroundPassTexture.createView()
+                }
+            ]
+        });
+
+        // Update Border Bind Group too
+        this.borderBindGroup = this.device.createBindGroup({
+            layout: this.blockBindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: { buffer: this.vertexUniformBuffer_border, offset: 0, size: 208 }
+                },
+                {
+                    binding: 1,
+                    resource: { buffer: this.fragmentUniformBuffer }
+                },
+                {
+                    binding: 2,
+                    resource: this.sampler
+                },
+                {
+                    binding: 3,
+                    resource: this.backgroundPassTexture.createView()
+                }
+            ]
+        });
+    }
+
     Matrix.mat4.identity(this.PROJMATRIX);
     let fovy = (35 * Math.PI) / 180;
     Matrix.mat4.perspective(
@@ -1074,7 +1122,7 @@ export default class View {
             },
             {
                 binding: 3,
-                resource: this.offscreenTexture.createView()
+                resource: this.backgroundPassTexture.createView()
             }
         ]
     });
@@ -1212,11 +1260,28 @@ export default class View {
     ];
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array(postProcessUniforms));
 
-    // *** Render Pass 1: Draw Scene to Offscreen Texture with MSAA ***
-    const textureViewOffscreen = this.offscreenTexture.createView();
-
-    // Render everything in a single MSAA pass
+    // *** Render Pass 1: Background Generation for Glass Refraction ***
+    // Render Background (Video) + Grid into backgroundPassTexture
+    const textureViewBackground = this.backgroundPassTexture.createView();
     const renderVideo = this.visualEffects.isVideoPlaying;
+
+    // Create Background Pass Encoder
+    const bgPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [{
+            view: this.msaaBackgroundTexture.createView(),
+            resolveTarget: textureViewBackground,
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            loadOp: 'clear',
+            storeOp: 'store',
+        }],
+        // Reuse depth texture but clear it
+        depthStencilAttachment: {
+            view: this.depthTexture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store'
+        }
+    };
 
     // 1. Update Video Uniforms
     if (renderVideo && this.state.activePiece) {
@@ -1273,37 +1338,15 @@ export default class View {
         this.device.queue.writeBuffer(this.videoUniformBuffer, 96, this.lockedMinos);
     }
 
-    // 2. Render Playfield
-    const blockCount = this.updateBlockUniforms(this.state);
-
-    this.renderPassDescription = {
-      colorAttachments: [{
-          view: this.msaaTexture.createView(), // Render to MSAA texture
-          resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
-          // Clear to Transparent to allow video background to show through
-          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-          loadOp: 'clear', // Must clear MSAA textures
-          storeOp: "store",
-      }],
-      depthStencilAttachment: {
-        view: this.depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      },
-    };
-
-    const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
-
-    // Render Background first (Video or Shader)
+    // Need to create videoBindGroup here to reuse in both passes if possible,
+    // BUT we can't reuse it across passes if we create it inside the if block easily.
+    // However, externalTexture is valid for the frame.
+    let videoBindGroup: GPUBindGroup | null = null;
     if (renderVideo && this.visualEffects.videoElement) {
-        // Import External Texture
-        const externalTexture = this.device.importExternalTexture({
+         const externalTexture = this.device.importExternalTexture({
             source: this.visualEffects.videoElement
         });
-
-        // Create BindGroup (Per Frame)
-        const videoBindGroup = this.device.createBindGroup({
+        videoBindGroup = this.device.createBindGroup({
             layout: this.videoPipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.videoUniformBuffer } },
@@ -1311,7 +1354,56 @@ export default class View {
                 { binding: 2, resource: externalTexture }
             ]
         });
+    }
 
+    // --- EXECUTE BACKGROUND PASS ---
+    const bgEncoder = commandEncoder.beginRenderPass(bgPassDescriptor);
+
+    if (renderVideo && videoBindGroup) {
+        bgEncoder.setPipeline(this.videoPipeline);
+        bgEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        bgEncoder.setBindGroup(0, videoBindGroup);
+        bgEncoder.draw(6);
+    } else {
+        bgEncoder.setPipeline(this.backgroundPipeline);
+        bgEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        bgEncoder.setBindGroup(0, this.backgroundBindGroup);
+        bgEncoder.draw(6);
+    }
+
+    // Render Grid in BG Pass
+    bgEncoder.setPipeline(this.gridPipeline);
+    bgEncoder.setBindGroup(0, this.gridBindGroup);
+    bgEncoder.setVertexBuffer(0, this.gridVertexBuffer);
+    bgEncoder.draw(this.gridVertexCount);
+
+    bgEncoder.end();
+
+    // *** Render Pass 2: Main Scene (Blocks on top) ***
+    const textureViewOffscreen = this.offscreenTexture.createView();
+    // 2. Update Block Uniforms (only needed once)
+    const blockCount = this.updateBlockUniforms(this.state);
+
+    this.renderPassDescription = {
+      colorAttachments: [{
+          view: this.msaaTexture.createView(), // Render to MSAA texture
+          resolveTarget: textureViewOffscreen, // Resolve to offscreen texture
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+          loadOp: 'clear', // Clear again for main pass
+          storeOp: "store",
+      }],
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear', // Clear depth again
+        depthStoreOp: 'store'
+      },
+    };
+
+    const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
+
+    // Re-draw Background/Video (Visible behind non-glass blocks/transparent areas)
+    if (renderVideo && videoBindGroup) {
         passEncoder.setPipeline(this.videoPipeline);
         passEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         passEncoder.setBindGroup(0, videoBindGroup);
@@ -1323,12 +1415,13 @@ export default class View {
         passEncoder.draw(6);
     }
 
-    // Render Grid
+    // Re-draw Grid
     passEncoder.setPipeline(this.gridPipeline);
     passEncoder.setBindGroup(0, this.gridBindGroup);
     passEncoder.setVertexBuffer(0, this.gridVertexBuffer);
     passEncoder.draw(this.gridVertexCount);
 
+    // Draw Blocks (Now safe to read backgroundPassTexture)
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setVertexBuffer(0, this.vertexBuffer);
     passEncoder.setVertexBuffer(1, this.normalBuffer);
