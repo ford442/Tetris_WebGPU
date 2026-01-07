@@ -327,17 +327,25 @@ export const BackgroundShaders = () => {
     return { vertex, fragment };
 };
 
-export const Shaders = () => {
-  let params: any = {};
-  // define default input values:
-  params.color = "(0.0, 1.0, 0.0)";
-  // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
-  params.diffuseIntensity = "1.2"; // Slightly brighter diffuse
-  params.specularIntensity = "4.0"; // Even glossier
-  params.shininess = "350.0"; // Sharp highlights
-  params.specularColor = "(1.0, 1.0, 1.0)";
+// Helper to select shader based on style
+export const getBlockShader = (style: string) => {
+    if (style === 'glass') {
+        return HolographicGlassShader();
+    }
+    return TechGemsShader();
+};
 
-  const vertex = `
+export const TechGemsShader = () => {
+    let params: any = {};
+    // define default input values:
+    params.color = "(0.0, 1.0, 0.0)";
+    // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
+    params.diffuseIntensity = "1.2"; // Slightly brighter diffuse
+    params.specularIntensity = "4.0"; // Even glossier
+    params.shininess = "350.0"; // Sharp highlights
+    params.specularColor = "(1.0, 1.0, 1.0)";
+
+    const vertex = `
             struct Uniforms {
                 viewProjectionMatrix : mat4x4<f32>,
                 modelMatrix : mat4x4<f32>,
@@ -372,8 +380,8 @@ export const Shaders = () => {
                 return output;
             }`;
 
-  // TECH GEMS: Merged Tech Lattice + Gem Physics
-  const fragment = `
+    // TECH GEMS: Merged Tech Lattice + Gem Physics
+    const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
@@ -384,6 +392,7 @@ export const Shaders = () => {
                 screenSize: vec2<f32>,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
+            // NOTE: Sampler and Texture bindings are present in layout but unused here
 
             @fragment
             fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
@@ -550,10 +559,90 @@ export const Shaders = () => {
                 return vec4<f32>(finalColor, finalAlpha);
             }`;
 
-  return {
-    vertex,
-    fragment,
-  };
+    return {
+        vertex,
+        fragment,
+    };
+};
+
+export const HolographicGlassShader = () => {
+    // Reuse the same vertex shader as TechGems
+    const { vertex } = TechGemsShader();
+
+    const fragment = `
+        struct Uniforms {
+            lightPosition : vec4<f32>,
+            eyePosition : vec4<f32>,
+            color : vec4<f32>,
+            time : f32,
+            useGlitch: f32,
+            lockPercent: f32,
+            screenSize: vec2<f32>,
+        };
+        @binding(1) @group(0) var<uniform> uniforms : Uniforms;
+        @binding(2) @group(0) var screenSampler: sampler;
+        @binding(3) @group(0) var screenTexture: texture_2d<f32>;
+
+        @fragment
+        fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+
+            var N:vec3<f32> = normalize(vNormal.xyz);
+            let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
+            let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
+            let H:vec3<f32> = normalize(L + V);
+
+            // --- Screen-space UVs for Refraction ---
+            // Normalize fragment coordinates to 0-1 range
+            let screenUV = fragCoord.xy / uniforms.screenSize;
+
+            // Refraction effect: offset UVs based on normal and view direction
+            // A simplified IOR (Index of Refraction) effect
+            let ior = 1.1; // Index of Refraction for glass-like effect
+            let refraction = refract(-V, N, 1.0 / ior);
+            let refractionUV = screenUV + refraction.xy * 0.05; // Adjust strength of effect
+
+            // Sample the background texture
+            let bgColor = textureSample(screenTexture, screenSampler, refractionUV).rgb;
+
+            // --- Glass Lighting ---
+            let diffuse:f32 = max(dot(N, L), 0.0);
+            let specular:f32 = pow(max(dot(N, H), 0.0), 300.0); // Sharp highlight for glass
+            let ambient:f32 = 0.1; // Glass is mostly transparent, low ambient
+
+            // --- Fresnel Effect for Edge Highlights ---
+            // Controls how reflective the surface is based on the viewing angle
+            let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+
+            // --- Ghost Piece ---
+            if (vColor.a < 0.4) {
+                 let time = uniforms.time;
+                 let scanY = fract(vUV.y * 20.0 - time * 2.0);
+                 let scanline = smoothstep(0.4, 0.5, scanY) - smoothstep(0.5, 0.6, scanY);
+                 let fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+                 let flicker = 0.5 + sin(time * 30.0 + vUV.y * 10.0) * 0.2;
+                 return vec4<f32>(vColor.rgb * fresnel * 8.0 * flicker + vec3<f32>(scanline * 0.5), 0.1 * flicker);
+            }
+
+            // --- Composition ---
+            // Base color is a mix of the block's color and the refracted background
+            let baseColor = mix(bgColor, vColor.rgb, 0.3); // 30% block color, 70% background
+
+            // Combine lighting components
+            var finalColor = baseColor * (ambient + diffuse * 0.8) + vec3<f32>(1.0) * specular * 3.0;
+
+            // Additive fresnel rim light - makes it glow at the edges
+            finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 2.0;
+
+            // Transparency: controlled by fresnel and base alpha
+            let finalAlpha = clamp(fresnelTerm + (1.0 - vColor.a), 0.1, 0.9);
+
+            return vec4<f32>(finalColor, finalAlpha);
+        }`;
+
+    return {
+        vertex,
+        fragment,
+    };
 };
 
 export const VideoBackgroundShader = () => {
