@@ -1,5 +1,5 @@
 import * as Matrix from "gl-matrix";
-import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, VideoBackgroundShader } from './webgpu/shaders.js';
+import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, getBlockShader, VideoBackgroundShader } from './webgpu/shaders.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
@@ -41,6 +41,7 @@ export default class View {
   normalBuffer!: GPUBuffer;
   uvBuffer!: GPUBuffer; // Add UV buffer
   pipeline!: GPURenderPipeline;
+  blockBindGroupLayout!: GPUBindGroupLayout;
   fragmentUniformBuffer!: GPUBuffer;
   MODELMATRIX: any;
   NORMALMATRIX: any;
@@ -112,6 +113,10 @@ export default class View {
   // Themes
   themes: Themes = themes;
   currentTheme: ThemeColors = themes.neon;
+
+  // Dynamic Block Styles
+  currentBlockStyle: string = 'tech';
+  pipelineCache: Map<string, GPURenderPipeline> = new Map();
 
   // Cache
   private blockUniformData: ArrayBuffer;
@@ -220,6 +225,8 @@ export default class View {
             this.element.appendChild(this.canvasWebGPU);
             this.preRender();
             window.addEventListener('resize', this.resize.bind(this));
+            // --- DEBUG ---
+            (window as any).setBlockStyle = (style: 'tech' | 'glass') => this.setBlockStyle(style);
         } else {
             let divError = document.createElement("div");
             divError.innerText = status.description;
@@ -618,7 +625,7 @@ export default class View {
     });
 
     // --- Main Block Pipeline ---
-    const shader = Shaders();
+    const shader = getBlockShader(this.currentBlockStyle);
     const cubeData = CubeData();
 
     this.numberOfVertices = cubeData.positions.length / 3;
@@ -626,56 +633,33 @@ export default class View {
     this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
     this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs);
 
-    // Create explicit layout to support Dynamic Offsets
-    const bindGroupLayout = this.device.createBindGroupLayout({
+    // Create a unified layout that works for all block styles
+    this.blockBindGroupLayout = this.device.createBindGroupLayout({
         entries: [
-            {
+            { // Vertex Uniforms
                 binding: 0,
                 visibility: GPUShaderStage.VERTEX,
-                buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: 208 } // VP(64)+Model(64)+Normal(64)+Color(16)=208
+                buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: 208 }
             },
-            {
+            { // Fragment Uniforms
                 binding: 1,
                 visibility: GPUShaderStage.FRAGMENT,
                 buffer: { type: 'uniform' }
+            },
+            { // Screen Texture Sampler (for glass)
+                binding: 2,
+                visibility: GPUShaderStage.FRAGMENT,
+                sampler: { type: 'filtering' }
+            },
+            { // Screen Texture (for glass)
+                binding: 3,
+                visibility: GPUShaderStage.FRAGMENT,
+                texture: { sampleType: 'float' }
             }
         ]
     });
 
-    this.pipeline = this.device.createRenderPipeline({
-      label: 'main pipeline',
-      layout: this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
-      vertex: {
-        module: this.device.createShaderModule({ code: shader.vertex }),
-        entryPoint: "main",
-        buffers: [
-          { arrayStride: 12, attributes: [{ shaderLocation: 0, format: "float32x3", offset: 0 }] }, // pos
-          { arrayStride: 12, attributes: [{ shaderLocation: 1, format: "float32x3", offset: 0 }] }, // normal
-          { arrayStride: 8,  attributes: [{ shaderLocation: 2, format: "float32x2", offset: 0 }] }, // uv
-        ],
-      },
-      fragment: {
-        module: this.device.createShaderModule({ code: shader.fragment }),
-        entryPoint: "main",
-        targets: [
-          {
-            format: 'rgba16float', // Higher precision format
-            blend: {
-              color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
-              alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
-            },
-        }],
-      },
-      primitive: { topology: "triangle-list" },
-      depthStencil: {
-        format: "depth24plus",
-        depthWriteEnabled: true,
-        depthCompare: "less",
-      },
-      multisample: {
-        count: 4, // 4x MSAA
-      },
-    });
+    this.pipeline = this._createMainPipeline(this.currentBlockStyle);
 
     // --- Background Pipeline ---
     const backgroundShader = BackgroundShaders();
@@ -938,6 +922,9 @@ export default class View {
         ]
     });
 
+    // Cache the initial pipeline
+    this.pipelineCache.set(this.currentBlockStyle, this.pipeline);
+
     this.fragmentUniformBuffer = this.device.createBuffer({
       size: 96,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -989,42 +976,46 @@ export default class View {
 
     // Create ONE BindGroup for blocks with dynamic offset
     this.blockBindGroup = this.device.createBindGroup({
-        layout: bindGroupLayout,
+        layout: this.blockBindGroupLayout,
         entries: [
             {
                 binding: 0,
-                resource: {
-                    buffer: this.vertexUniformBuffer,
-                    offset: 0,
-                    size: 208
-                }
+                resource: { buffer: this.vertexUniformBuffer, offset: 0, size: 208 }
             },
             {
                 binding: 1,
-                resource: {
-                    buffer: this.fragmentUniformBuffer
-                }
+                resource: { buffer: this.fragmentUniformBuffer }
+            },
+            {
+                binding: 2,
+                resource: this.sampler
+            },
+            {
+                binding: 3,
+                resource: this.offscreenTexture.createView()
             }
         ]
     });
 
     // Create ONE BindGroup for border (uses same layout and buffer type)
     this.borderBindGroup = this.device.createBindGroup({
-        layout: bindGroupLayout,
+        layout: this.blockBindGroupLayout,
         entries: [
             {
                 binding: 0,
-                resource: {
-                    buffer: this.vertexUniformBuffer_border,
-                    offset: 0,
-                    size: 208
-                }
+                resource: { buffer: this.vertexUniformBuffer_border, offset: 0, size: 208 }
             },
             {
                 binding: 1,
-                resource: {
-                    buffer: this.fragmentUniformBuffer
-                }
+                resource: { buffer: this.fragmentUniformBuffer }
+            },
+            {
+                binding: 2,
+                resource: this.sampler
+            },
+            {
+                binding: 3,
+                resource: this.offscreenTexture.createView()
             }
         ]
     });
@@ -1504,5 +1495,67 @@ export default class View {
 
     this.borderCount = borderIndex;
     this.device.queue.writeBuffer(this.vertexUniformBuffer_border, 0, this.borderUniformData, 0, borderIndex * 256);
+  }
+
+  private _createMainPipeline(style: string): GPURenderPipeline {
+    const shader = getBlockShader(style);
+    return this.device.createRenderPipeline({
+        label: `main pipeline [${style}]`,
+        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.blockBindGroupLayout] }),
+        vertex: {
+            module: this.device.createShaderModule({ code: shader.vertex }),
+            entryPoint: "main",
+            buffers: [
+                { arrayStride: 12, attributes: [{ shaderLocation: 0, format: "float32x3", offset: 0 }] }, // pos
+                { arrayStride: 12, attributes: [{ shaderLocation: 1, format: "float32x3", offset: 0 }] }, // normal
+                { arrayStride: 8,  attributes: [{ shaderLocation: 2, format: "float32x2", offset: 0 }] }, // uv
+            ],
+        },
+        fragment: {
+            module: this.device.createShaderModule({ code: shader.fragment }),
+            entryPoint: "main",
+            targets: [
+                {
+                    format: 'rgba16float',
+                    blend: {
+                        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+                        alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
+                    },
+                }
+            ],
+        },
+        primitive: { topology: "triangle-list" },
+        depthStencil: {
+            format: "depth24plus",
+            depthWriteEnabled: true,
+            depthCompare: "less",
+        },
+        multisample: {
+            count: 4,
+        },
+    });
+  }
+
+  setBlockStyle(style: 'tech' | 'glass') {
+    if (this.currentBlockStyle === style || !this.device) {
+      return;
+    }
+
+    // Check cache first
+    const cachedPipeline = this.pipelineCache.get(style);
+    if (cachedPipeline) {
+      this.pipeline = cachedPipeline;
+      this.currentBlockStyle = style;
+      console.log(`Switched to cached block style: ${style}`);
+      return;
+    }
+
+    // If not cached, create a new pipeline
+    console.log(`Creating new pipeline for block style: ${style}`);
+    const newPipeline = this._createMainPipeline(style);
+
+    this.pipeline = newPipeline;
+    this.pipelineCache.set(style, newPipeline);
+    this.currentBlockStyle = style;
   }
 }
