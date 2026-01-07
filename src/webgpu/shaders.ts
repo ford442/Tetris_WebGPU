@@ -333,8 +333,8 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   // Note: ambientIntensity is now hardcoded in shader for optimal contrast (0.3)
   params.diffuseIntensity = "1.2"; // Slightly brighter diffuse
-  params.specularIntensity = "3.5"; // Even glossier
-  params.shininess = "300.0"; // Sharp highlights
+  params.specularIntensity = "4.0"; // Even glossier
+  params.shininess = "350.0"; // Sharp highlights
   params.specularColor = "(1.0, 1.0, 1.0)";
 
   const vertex = `
@@ -437,30 +437,30 @@ export const Shaders = () => {
 
                 // Apply texture
                 if (hexEdge > 0.5) {
-                   baseColor *= 0.95; // Subtle hex pattern indentation
+                   baseColor *= 0.9; // Deeper hex pattern indentation
                 }
 
                 if (isTrace > 0.5) {
-                    baseColor *= 0.5; // Deep grooves
+                    baseColor *= 0.4; // Deeper grooves
                 } else {
                     // Crystalline noise sparkle
-                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
+                    let sparkle = step(0.98, noise) * 0.6 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
                     baseColor += vec3<f32>(sparkle);
                 }
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.9) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
 
                 // --- Emissive Elements ---
                 // Traces glow intensely
                 if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 4.0; // Stronger glow
+                    let traceGlow = pulsePos * 5.0; // Stronger glow
                     finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.7; // Brighter core
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.8; // Brighter core
                 }
                 // Hex corners glow slightly
                 if (hexDist < 0.1) {
-                    finalColor += vColor.rgb * 0.8 * pulsePos;
+                    finalColor += vColor.rgb * 1.0 * pulsePos;
                 }
 
                 // --- Fresnel Rim Light (Enhanced) ---
@@ -501,31 +501,32 @@ export const Shaders = () => {
                 if (vColor.w < 0.4) {
                     let time = uniforms.time;
                     // Scrolling digital rain effect
-                    let scanY = fract(vUV.y * 20.0 - time * 2.0);
-                    let scanline = smoothstep(0.1, 0.5, scanY) * (1.0 - smoothstep(0.5, 0.9, scanY));
+                    let scanY = fract(vUV.y * 30.0 - time * 3.0);
+                    let scanline = smoothstep(0.1, 0.3, scanY) * (1.0 - smoothstep(0.7, 0.9, scanY));
 
                     // Hex pattern for ghost
                     let ghostHex = hexEdge;
 
-                    // Brighter ghost base
-                    let ghostBase = vColor.rgb * 2.0;
+                    // Wireframe style base - reduce filled color
+                    let ghostBase = vColor.rgb * 0.5;
 
-                    // Wireframe edges
-                    var ghostFinal = ghostBase * edgeGlow * 4.0;
+                    // Wireframe edges - make them POP
+                    var ghostFinal = vColor.rgb * edgeGlow * 8.0;
 
                     // Add scrolling scanlines (additive)
-                    ghostFinal += vec3<f32>(0.6, 0.9, 1.0) * scanline * 1.2;
+                    ghostFinal += vec3<f32>(0.5, 0.8, 1.0) * scanline * 2.0;
 
                     // Add hex pattern
-                    ghostFinal += ghostBase * ghostHex * 0.8;
+                    ghostFinal += ghostBase * ghostHex * 1.5;
 
                     // Hologram flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-                    let flicker = 0.9 + 0.1 * sin(time * 30.0 + noise * 10.0);
+                    let flicker = 0.85 + 0.15 * sin(time * 40.0 + noise * 20.0);
 
                     // Pulse alpha
-                    let pulse = 0.35 + 0.15 * sin(time * 3.0);
+                    let pulse = 0.2 + 0.1 * sin(time * 5.0);
 
+                    // Ensure it's additive
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
 
