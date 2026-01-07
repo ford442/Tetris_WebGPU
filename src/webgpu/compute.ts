@@ -1,4 +1,3 @@
-
 export const ParticleComputeShader = `
 struct Particle {
   position: vec3<f32>,
