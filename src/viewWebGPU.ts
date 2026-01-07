@@ -476,14 +476,14 @@ export default class View {
                    color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.0, 1.0, 1.0]);
               }
 
-              const count = isTetris ? 200 : 80; // Significantly increased particle count
+              const count = isTetris ? 300 : 100; // Even more particles
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
   }
 
   onLock() {
-      this.visualEffects.triggerLock(0.4); // Slightly stronger lock flash
+      this.visualEffects.triggerLock(0.8); // Much stronger lock flash
       this.visualEffects.triggerShake(0.3, 0.2); // Stronger shake on lock
 
       // ADD GHOST BURN-IN LOGIC
