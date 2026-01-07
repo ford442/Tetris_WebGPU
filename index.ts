@@ -126,6 +126,19 @@ uiContainer.innerHTML = `
       btn.blur();
   });
 
+  const controlButtons = document.querySelector('.control-buttons');
+  const switchStyleButton = document.createElement('button');
+  switchStyleButton.id = 'switch-style-button';
+  switchStyleButton.textContent = 'STYLE';
+  controlButtons?.appendChild(switchStyleButton);
+
+  document.getElementById('switch-style-button')!.addEventListener('click', (e) => {
+    const newStyle = view.currentBlockStyle === 'tech' ? 'glass' : 'tech';
+    view.setBlockStyle(newStyle as 'tech' | 'glass');
+    const btn = e.target as HTMLButtonElement;
+    btn.blur();
+  });
+
   window.game = game;
   window.view = view;
   window.controller = controller;

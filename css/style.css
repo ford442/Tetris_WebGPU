@@ -103,6 +103,10 @@ button:active {
     transform: scale(0.95);
 }
 
+#switch-style-button {
+    /* Add any specific styles here if needed, otherwise it will inherit the default button styles */
+}
+
 #game-over {
     display: none;
     position: absolute;
