@@ -964,8 +964,9 @@ export default class View {
     // Update time for background and blocks
     // used 'time' calculated at start of frame
 
-    // Background time
+    // Background time & level
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([this.visualEffects.currentLevel]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
 
     // Block shader time (global update once per frame)
@@ -1232,7 +1233,7 @@ export default class View {
               resource: {
                 buffer: this.fragmentUniformBuffer,
                 offset: 0,
-                size: 64,
+                size: 80, // Updated to match fragment buffer usage (allows up to offset 80 or more)
               },
             },
           ],
