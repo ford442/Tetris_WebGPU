@@ -221,20 +221,27 @@ export const BackgroundShaders = () => {
     const fragment = `
         struct Uniforms {
             time: f32,
-            resolution: vec2<f32>,
-            color1: vec3<f32>,
-            color2: vec3<f32>,
-            color3: vec3<f32>,
+            level: f32, // Offset 4
+            resolution: vec2<f32>, // Offset 8 (align 8)
+            color1: vec3<f32>, // Offset 16 (align 16)
+            color2: vec3<f32>, // Offset 32
+            color3: vec3<f32>, // Offset 48
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
           let time = uniforms.time * 0.3; // Slower, calmer animation
+          let level = uniforms.level;
           let uv = vUV;
 
-          // Base deep space color
-          let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
+          // Modify parameters based on level
+          // Level 1: Calm blue
+          // Level 10: Chaotic red
+          let levelFactor = min(level * 0.1, 1.0);
+
+          // Base deep space color - shifts to red as level increases
+          let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.05, 0.0, 0.0), levelFactor);
 
           // --- Multi-layer perspective grid ---
           var grid = 0.0;
@@ -242,7 +249,8 @@ export const BackgroundShaders = () => {
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
             let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
-            let speed = 0.1 + layer_f * 0.05;
+            // Speed increases with level
+            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 2.0);
 
             // Perspective offset for each layer
             let perspectiveOffset = vec2<f32>(
@@ -265,9 +273,16 @@ export const BackgroundShaders = () => {
           // --- Dynamic neon color palette ---
           // Cycle through cyberpunk colors
           let colorCycle = sin(time * 0.5) * 0.5 + 0.5;
-          let neonCyan = uniforms.color1;
-          let neonPurple = uniforms.color2;
-          let neonBlue = uniforms.color3;
+
+          // Bias colors towards red/purple at high levels
+          var neonCyan = uniforms.color1;
+          var neonPurple = uniforms.color2;
+          var neonBlue = uniforms.color3;
+
+          // Manual mix for level influence (mix towards red/orange)
+          let dangerColor = vec3<f32>(1.0, 0.2, 0.0);
+          neonCyan = mix(neonCyan, dangerColor, levelFactor * 0.5);
+          neonBlue = mix(neonBlue, vec3<f32>(0.5, 0.0, 0.0), levelFactor * 0.8);
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
@@ -292,7 +307,9 @@ export const BackgroundShaders = () => {
           }
 
           // --- Global pulse effect ---
-          let pulse = sin(time * 1.5) * 0.15 + 0.85;
+          // Pulse faster at higher levels
+          let pulseSpeed = 1.5 + levelFactor * 3.0;
+          let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
 
           // Combine all elements
           var finalColor = deepSpace;
@@ -359,8 +376,8 @@ export const Shaders = () => {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
                 color : vec4<f32>,
-                time : f32,
-                useGlitch: f32,
+                time : f32, // Offset 48
+                useGlitch: f32, // Offset 52
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -409,9 +426,11 @@ export const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                // Pulse effect
+                // Pulse effect - ENHANCED for JUICE
                 let time = uniforms.time;
-                let pulsePos = sin(time * 1.5 + vPosition.y * 0.8 + vPosition.x * 0.8) * 0.5 + 0.5;
+                // Sharp heartbeat pulse: sin^4
+                let sineWave = sin(time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
+                let pulsePos = pow(sineWave * 0.5 + 0.5, 4.0); // Sharper peaks
 
                 // Surface finish
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
@@ -435,9 +454,9 @@ export const Shaders = () => {
                 // --- Emissive Elements ---
                 // Traces glow intensely
                 if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 3.0;
+                    let traceGlow = pulsePos * 4.0; // Brighter glow
                     finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.5; // White hot core
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.6; // White hot core
                 }
                 // Hex corners glow slightly
                 if (hexDist < 0.1) {
@@ -461,11 +480,7 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
 
                 // --- GHOST PIECE RENDERING ---
-                // Ghost piece logic (usually alpha ~0.3) needs to be distinct from our new semi-transparent blocks (alpha 0.85)
-                // Let's assume ghost piece uses a much lower alpha threshold or distinct logic.
-                // But wait, user set blocks to 0.85. Previously blocks were 1.0.
-                // Ghost pieces are handled in game logic, but here we check vColor.w.
-                // If ghost piece alpha < 0.8, we use ghost logic.
+                // Ghost piece alpha < 0.4
                 if (vColor.w < 0.4) {
                     // Hologram effect
                     let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
