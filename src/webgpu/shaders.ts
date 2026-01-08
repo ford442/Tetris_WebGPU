@@ -62,10 +62,11 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Chromatic Aberration - distance-aware and less aggressive
+            // Chromatic Aberration - distance-aware (Prism Effect)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            var aberration = distFromCenter * 0.01; // Passive lens distortion (mutable)
-            aberration = select(aberration, aberration * 2.0, useGlitch > 0.5);
+            // Non-linear increase towards edges (Cubic)
+            var aberration = pow(distFromCenter, 3.0) * 0.025;
+            aberration = select(aberration, aberration * 3.0, useGlitch > 0.5);
             let totalAberration = aberration + aberrationStrength;
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
@@ -79,7 +80,7 @@ export const PostProcessShaders = () => {
             if (useGlitch < 0.5) {
                 let texSize = vec2<f32>(textureDimensions(myTexture));
                 let texelSize = 1.0 / texSize;
-                let center = color; // Reuse already sampled color
+                let center = color;
                 let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
                 let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
                 let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
@@ -87,7 +88,7 @@ export const PostProcessShaders = () => {
 
                 // Simple Laplacian sharpen
                 let sharpened = center * 5.0 - (north + south + east + west);
-                color = mix(color, sharpened, 0.3);
+                color = mix(color, sharpened, 0.2); // Reduced sharpen slightly to avoid artifacts
             }
 
             var finalColor = color;
@@ -95,23 +96,27 @@ export const PostProcessShaders = () => {
             // Calculate luminance for Bloom and Saturation
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
-            // Enhanced Bloom: Quadratic response for smoother high-end boost
-            let bloomThreshold = 0.6;
-            let bloomStrength = 0.7; // Increased bloom
+            // Enhanced Bloom: Cubic response for smoother high-end boost
+            let bloomThreshold = 0.55;
+            let bloomStrength = 0.85;
             let bloomFactor = max(0.0, luminance - bloomThreshold);
-            finalColor += color * bloomFactor * bloomStrength;
+            // Squaring the factor creates a smoother knee and less wash-out in mid-tones
+            finalColor += color * (bloomFactor * bloomFactor) * bloomStrength;
 
             // Saturation boost for that "Neon" look
             let gray = vec3<f32>(luminance);
-            finalColor = mix(gray, finalColor, 1.3); // Increased saturation
+            finalColor = mix(gray, finalColor, 1.35);
 
-            // Vignette
+            // Vignette (Cinematic)
             let distV = distance(uv, vec2<f32>(0.5));
-            let vignette = smoothstep(0.8, 0.2, distV * 0.8);
+            let vignette = smoothstep(0.9, 0.2, distV * 1.1); // Darker corners
             finalColor *= vignette;
 
-            // Scanlines (Subtle retro feel)
-            let scanline = sin(uv.y * 800.0) * 0.02;
+            // Scanlines (Moving + Glitch interaction)
+            // Use time to slowly scroll scanlines
+            let scanSpeed = uniforms.time * 0.5;
+            let scanline = sin((uv.y - scanSpeed * 0.02) * 800.0) * 0.03;
+
             finalColor -= vec3<f32>(scanline);
 
             // Clamp to prevent negative values from subtractive scanlines
@@ -425,17 +430,23 @@ export const TechGemsShader = () => {
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.9) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
 
-                // --- Emissive Elements ---
-                let pulsePos = sin(uniforms.time * 1.5 + vPosition.y * 0.8 + vPosition.x * 0.8) * 0.5 + 0.5;
+                // --- Emissive Elements (Dynamic Pulse) ---
+                // Pulse speed synced with time, higher intensity
+                let pulseSpeed = 3.0;
+                let pulsePos = sin(uniforms.time * pulseSpeed + vPosition.y * 0.5 + vPosition.x * 0.5) * 0.5 + 0.5;
+
                 if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 5.0;
-                    finalColor += vColor.rgb * traceGlow * 0.5;
+                    // Traces glow brighter and pulse
+                    let traceGlow = pulsePos * 8.0;
+                    finalColor += vColor.rgb * traceGlow * 0.6;
+                    // Add white core to traces
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.2;
                 }
 
-                // --- Fresnel Rim Light ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                let rimColor = vec3<f32>(0.2, 0.8, 1.0);
-                finalColor += rimColor * fresnelTerm * 2.0;
+                // --- Fresnel Rim Light (Enhanced) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5); // Wider rim
+                let rimColor = vec3<f32>(0.4, 0.9, 1.0); // Brighter Cyan/White
+                finalColor += rimColor * fresnelTerm * 3.0; // Boosted intensity
 
                 // --- Edge Highlight ---
                 const EDGE_THRESHOLD = 0.6;
@@ -443,7 +454,7 @@ export const TechGemsShader = () => {
                 let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
                 let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
                 let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
-                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 3.5;
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 4.0;
 
                 // --- Lock Pulse ---
                 let lockP = uniforms.lockPercent;
@@ -454,10 +465,15 @@ export const TechGemsShader = () => {
                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), intensity);
                 }
 
-                // --- Ghost Piece ---
+                // --- Ghost Piece (Pulsing Hologram) ---
                 if (vColor.w < 0.4) {
-                    // Simple Ghost Logic
-                    return vec4<f32>(vColor.rgb * 2.0, 0.3);
+                    let ghostPulse = sin(uniforms.time * 4.0) * 0.5 + 0.5;
+                    let scanY = fract(vPosition.y * 5.0 - uniforms.time * 2.0);
+                    let scanline = step(0.5, scanY) * 0.2;
+                    let alpha = 0.15 + ghostPulse * 0.15; // Pulse between 0.15 and 0.3
+
+                    let ghostColor = vColor.rgb * 3.0 + vec3<f32>(scanline);
+                    return vec4<f32>(ghostColor, alpha);
                 }
 
                 // --- Final Alpha ---

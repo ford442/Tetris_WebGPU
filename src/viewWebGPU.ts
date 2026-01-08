@@ -500,6 +500,10 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
+          // Add Neon Glow
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+
           // Create gradient for main fill to match 3D look (Darker tech look)
           const gradient = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
           gradient.addColorStop(0, `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`);
@@ -507,6 +511,9 @@ export default class View {
 
           ctx.fillStyle = gradient;
           ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+
+          // Reset Shadow for inner details to avoid mess
+          ctx.shadowBlur = 0;
 
           // Tech Pattern Overlay (Canvas 2D simple version)
           ctx.fillStyle = `rgba(0,0,0,0.2)`;
@@ -577,7 +584,7 @@ export default class View {
                    color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.0, 1.0, 1.0]);
               }
 
-              const count = isTetris ? 300 : 100; // Even more particles
+                  const count = isTetris ? 500 : 100; // Even more particles (Boosted for Tetris)
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
@@ -639,6 +646,14 @@ export default class View {
           const speed = 15.0 + Math.random() * 10.0;
           // White/Cyan Splash
           const color = Math.random() > 0.5 ? [1.0, 1.0, 1.0, 1.0] : [0.0, 1.0, 1.0, 1.0];
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, color);
+      }
+
+      // Vertical Sparks (New)
+      for(let i=0; i<30; i++) {
+          const angle = (Math.random() - 0.5) * 0.5 + Math.PI/2; // Mostly up
+          const speed = 20.0 + Math.random() * 20.0;
+          const color = [1.0, 0.8, 0.2, 1.0]; // Gold/Orange sparks
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, color);
       }
 

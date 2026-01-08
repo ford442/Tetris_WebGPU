@@ -2,9 +2,9 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 133; // Delayed Auto Shift (ms) - Snappier
-const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
-const SOFT_DROP_SPEED = 30; // Sonic Drop: Faster soft drop for better responsiveness
+const DAS = 170; // Delayed Auto Shift (ms) - Standard Fast
+const ARR = 30;  // Auto Repeat Rate (ms) - Fast but controllable
+const SOFT_DROP_SPEED = 20; // Sonic Drop: Ultra fast soft drop
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
