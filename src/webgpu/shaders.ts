@@ -64,9 +64,11 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Global Chromatic Aberration (Glitch + Shockwave)
+            // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            let baseAberration = select(0.0, distFromCenter * 0.015, useGlitch > 0.5);
+            // Subtle permanent aberration at edges for arcade feel
+            let vignetteAberration = pow(distFromCenter, 3.0) * 0.015;
+            let baseAberration = select(vignetteAberration, distFromCenter * 0.03, useGlitch > 0.5);
             let totalAberration = baseAberration + shockwaveAberration;
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
@@ -75,11 +77,16 @@ export const PostProcessShaders = () => {
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap)
-            let color = vec3<f32>(r, g, b);
+            var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            if (luminance > 0.8) {
-                // color += color * 0.2;
+            // Lower threshold slightly and boost intensity for neon pop
+            if (luminance > 0.7) {
+                color += color * 0.3;
             }
+
+            // Vignette darken
+            let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
+            color *= vignette;
 
             return vec4<f32>(color, a);
         }
@@ -429,8 +436,9 @@ export const Shaders = () => {
                 // Pulse effect - ENHANCED for JUICE
                 let time = uniforms.time;
                 // Sharp heartbeat pulse: sin^4
-                let sineWave = sin(time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
-                let pulsePos = pow(sineWave * 0.5 + 0.5, 4.0); // Sharper peaks
+                // Faster pulse for more energy (3.0)
+                let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
+                let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0); // Extremely sharp peaks "Neon Heartbeat"
 
                 // Surface finish
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);

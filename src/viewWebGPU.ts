@@ -410,29 +410,11 @@ export default class View {
     if (state.effectCounter > this.lastEffectCounter) {
         this.lastEffectCounter = state.effectCounter;
         if (state.effectEvent === 'hardDrop' && state.lastDropPos) {
-             // Calculate shockwave center from dropped position
-             const pX = state.lastDropPos.x;
-             const pY = state.lastDropPos.y;
+             // Redundant shockwave trigger removed to prevent conflict with onHardDrop()
+             // The Controller now calls onHardDrop() directly with distance info for better visual juice.
 
-             // Convert grid pos to world pos
-             const worldX = pX * 2.2;
-             const worldY = pY * -2.2;
-
-             // Convert world to UV
-             const camY = -20.0;
-             const camZ = 75.0;
-             const fov = (35 * Math.PI) / 180;
-             const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
-             const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-
-             const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
-             const uvY = 0.5 - (worldY - camY) / visibleHeight;
-
-             // Hard drops triggered from state might miss the 'distance' info here if not passed
-             // For now, use a default satisfying thud
-             this.visualEffects.triggerShockwave([uvX, uvY], 0.2, 0.1, 0.05);
-             // Add extra shake for juice
-             this.visualEffects.triggerShake(0.8, 0.3);
+             // Still trigger a generic shake if needed, but onHardDrop handles that too.
+             // Leaving this block empty or just for debugging.
         }
     }
 
