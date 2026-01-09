@@ -795,7 +795,7 @@ export default class View {
     // Load the actual image async and replace texture when ready
     (async () => {
       try {
-        const resp = await fetch('/block.png');
+        const resp = await fetch('./block.png');
         const blob = await resp.blob();
         const bitmap = await createImageBitmap(blob);
 
