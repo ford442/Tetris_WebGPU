@@ -774,7 +774,7 @@ export default class View {
     this.blockTexture = this.device.createTexture({
       size: [1, 1, 1],
       format: 'rgba8unorm-srgb',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
     });
     this.device.queue.writeTexture(
       { texture: this.blockTexture },
@@ -802,7 +802,7 @@ export default class View {
         const tex = this.device.createTexture({
           size: [bitmap.width, bitmap.height, 1],
           format: 'rgba8unorm-srgb',
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
 
         this.device.queue.copyExternalImageToTexture(
