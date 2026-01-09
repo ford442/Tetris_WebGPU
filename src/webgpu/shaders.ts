@@ -591,5 +591,5 @@ export const Shaders = () => {
             }`;
 
   return { vertex, fragment };
-};
+
 };
