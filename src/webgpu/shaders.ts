@@ -492,6 +492,10 @@ export const Shaders = () => {
                 let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
 
+                // Sample block texture and tint it by the block's color (must run in uniform control flow)
+                let tex = textureSample(blockTexture, blockSampler, vUV);
+                let tinted = tex.rgb * vColor.rgb;
+
                 // --- GHOST PIECE RENDERING ---
                 // Ghost piece alpha < 0.4
                 if (vColor.w < 0.4) {
@@ -527,10 +531,6 @@ export const Shaders = () => {
                 let baseAlpha = vColor.w;
                 let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
                 let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
-
-                // Sample block texture and tint it by the block's color
-                let tex = textureSample(blockTexture, blockSampler, vUV);
-                let tinted = tex.rgb * vColor.rgb;
 
                 // Blend the shaded material with the tinted texture using the texture alpha
                 let outColor = mix(finalColor, tinted, tex.a);
