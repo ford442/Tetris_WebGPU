@@ -8,20 +8,24 @@ export const CubeData = () => {
   const normals: number[] = [];
   const uvs: number[] = [];
 
-  // Configuration for smoothness
+  // --- CONFIGURATION ---
   const segments = 16;
-  const radius = 0.2; // Rounded corner radius
-  const boxSize = 1.0 - radius;
+  const radius = 0.2; // Size of the rounded corner
+  const boxSize = 1.0 - radius; // The distance from center to the start of the bevel
 
-  // Helper to add a single vertex
-  // We now calculate UVs based on the Final projected position to avoid distortion
+  // ADJUST THIS TO FIX YOUR SAMPLING:
+  // 1.0 = Texture wraps around the entire block (including curved corners)
+  // ~1.25 = (1.0 / boxSize) Texture fits exactly on the flat face (crops corners)
+  // 2.0 = Texture tiles twice across the face
+  const textureScale = 1.0;
+
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
-    // 1. Clamp point to the inner box
+    // 1. Clamp to inner box
     const innerX = Math.max(-boxSize, Math.min(x, boxSize));
     const innerY = Math.max(-boxSize, Math.min(y, boxSize));
     const innerZ = Math.max(-boxSize, Math.min(z, boxSize));
 
-    // 2. Calculate vector from inner box to the point
+    // 2. Vector to surface
     let dx = x - innerX;
     let dy = y - innerY;
     let dz = z - innerZ;
@@ -47,31 +51,30 @@ export const CubeData = () => {
     positions.push(fx, fy, fz);
     normals.push(nx, ny, nz);
 
-    // 5. Planar UV Mapping (Fixes distortion)
-    // Extract the relevant coords for this face (e.g., x and y for Front face)
-    // Map from roughly -1..1 to 0..1
-    // We use the 'uAxis' and 'vAxis' strings to pick coordinates dynamically
+    // 5. UV Mapping with Scale
     const p: any = { x: fx, y: fy, z: fz };
 
-    // Normalize coordinates (-1 to 1) -> (0 to 1)
-    // We divide by (boxSize + radius) which is 1.0, so just * 0.5 + 0.5
+    // Standard planar map (-1..1 -> 0..1)
     let u = (p[uAxis] * uDir + 1.0) * 0.5;
     let v = (p[vAxis] * vDir + 1.0) * 0.5;
+
+    // Apply Scaling (Center the zoom)
+    // Formula: (uv - 0.5) * scale + 0.5
+    u = (u - 0.5) * textureScale + 0.5;
+    v = (v - 0.5) * textureScale + 0.5;
 
     uvs.push(u, v);
   };
 
-  // Helper to generate a grid for a face
   const buildFace = (uAxis: string, vAxis: string, wAxis: string, wVal: number, uDir: number, vDir: number) => {
     for (let i = 0; i < segments; i++) {
       for (let j = 0; j < segments; j++) {
-        // Grid coordinates (-1 to 1)
+        // Grid coords (-1 to 1)
         const u0 = (i / segments) * 2 - 1;
         const u1 = ((i + 1) / segments) * 2 - 1;
         const v0 = (j / segments) * 2 - 1;
         const v1 = ((j + 1) / segments) * 2 - 1;
 
-        // Apply direction flips for the grid generation
         const pa = u0 * uDir;
         const pb = u1 * uDir;
         const qa = v0 * vDir;
@@ -81,12 +84,11 @@ export const CubeData = () => {
            return { [uAxis]: a, [vAxis]: b, [wAxis]: wVal };
         }
 
-        // Triangle 1
+        // Triangles
         let p = getP(pa, qa); pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
         p = getP(pb, qa);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
         p = getP(pb, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
 
-        // Triangle 2
         p = getP(pa, qa);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
         p = getP(pb, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
         p = getP(pa, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
@@ -94,15 +96,12 @@ export const CubeData = () => {
     }
   };
 
-  // Generate 6 faces
-  // Note: vDir is -1 for Front to map Top (+Y) to UV(0) and Bottom (-Y) to UV(1) if desired,
-  // OR we fix it in the shader. Let's use standard Right-Hand Rule unwrap here.
-  buildFace('x', 'y', 'z',  1,  1, 1); // Front
-  buildFace('x', 'y', 'z', -1, -1, 1); // Back
-  buildFace('z', 'y', 'x',  1, -1, 1); // Right
-  buildFace('z', 'y', 'x', -1,  1, 1); // Left
-  buildFace('x', 'z', 'y',  1,  1, -1); // Top
-  buildFace('x', 'z', 'y', -1,  1, -1); // Bottom (Aligned to Top)
+  buildFace('x', 'y', 'z',  1,  1, 1);
+  buildFace('x', 'y', 'z', -1, -1, 1);
+  buildFace('z', 'y', 'x',  1, -1, 1);
+  buildFace('z', 'y', 'x', -1,  1, 1);
+  buildFace('x', 'z', 'y',  1,  1, -1);
+  buildFace('x', 'z', 'y', -1,  1, -1);
 
   return { positions: new Float32Array(positions), normals: new Float32Array(normals), uvs: new Float32Array(uvs) };
 };
