@@ -91,6 +91,10 @@ export default class View {
   themes: Themes = themes;
   currentTheme: ThemeColors = themes.neon;
 
+  // Block Texture and Sampler
+  blockTexture!: GPUTexture;
+  blockSampler!: GPUSampler;
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -475,6 +479,37 @@ export default class View {
       format: presentationFormat,
       alphaMode: 'premultiplied',
     });
+
+    // --- 1. Load Texture & Sampler ---
+    this.blockSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+    });
+
+    try {
+        const img = document.createElement('img');
+        // Use block.png as it exists in the repo
+        img.src = 'block.png';
+        await img.decode();
+        const imageBitmap = await createImageBitmap(img);
+
+        this.blockTexture = this.device.createTexture({
+          size: [imageBitmap.width, imageBitmap.height, 1],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+        });
+        this.device.queue.copyExternalImageToTexture(
+          { source: imageBitmap },
+          { texture: this.blockTexture },
+          [imageBitmap.width, imageBitmap.height]
+        );
+    } catch (e) {
+        // Fallback white texture
+        this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+        this.device.queue.writeTexture({ texture: this.blockTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
+    }
 
     // --- Main Block Pipeline ---
     const shader = Shaders();
@@ -865,6 +900,9 @@ export default class View {
                         size: 80, // Updated size matches creation
                     },
                 },
+                // Bind Texture & Sampler
+                { binding: 2, resource: this.blockTexture.createView() },
+                { binding: 3, resource: this.blockSampler }
             ],
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
@@ -1218,6 +1256,9 @@ export default class View {
                 size: 80, // Updated to match fragment buffer usage (allows up to offset 80 or more)
               },
             },
+            // Bind Texture & Sampler here too
+            { binding: 2, resource: this.blockTexture.createView() },
+            { binding: 3, resource: this.blockSampler }
           ],
         });
 
