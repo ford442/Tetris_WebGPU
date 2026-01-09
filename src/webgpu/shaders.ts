@@ -340,9 +340,9 @@ export const BackgroundShaders = () => {
 };
 export const Shaders = () => {
   let params: any = {};
-  params.ambientIntensity = "0.8"; // Brighter ambient for better color visibility
+  params.ambientIntensity = "0.8";
   params.diffuseIntensity = "1.0";
-  params.shininess = "32.0";       // Soft shine
+  params.shininess = "32.0";
 
   const vertex = `
             struct Uniforms {
@@ -393,43 +393,44 @@ export const Shaders = () => {
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // --- 1. Texture Sampling ---
+                // --- 1. Texture ---
                 // Flip Y for correct orientation
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
                 
-                // --- 2. Mask Logic (Frame vs Window) ---
-                // Calculate distance from center (0.5)
+                // --- 2. Frame Logic ---
+                // Calculate distance from center
                 let distX = min(vUV.x, 1.0 - vUV.x);
                 let distY = min(vUV.y, 1.0 - vUV.y);
                 let distEdge = min(distX, distY);
                 
-                // ADJUST THIS to match your texture's frame width
+                // ADJUST FRAME WIDTH HERE
                 let borderThickness = 0.15; 
                 
-                // 0.0 = Frame, 1.0 = Window
+                // Create Mask: 0.0 = Frame, 1.0 = Window
                 let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
 
                 // --- 3. Color Logic ---
-                var finalRGB: vec3<f32>;
                 
-                // Frame: Use Texture Color directly (Clean Gold)
-                let frameColor = texColor.rgb * 1.2; // 1.2 boost for brightness
+                // A. FRAME COLOR = Pure Texture (Gold)
+                let frameColor = texColor.rgb * 1.2; // Slight brightness boost
 
-                // Window: Use Block Color directly (Strong Tint)
-                // We add a bit of white (vec3(0.2)) so it's not too dark
-                let windowColor = vColor.rgb + vec3<f32>(0.1);
+                // B. WINDOW COLOR = Block Color (Tinted)
+                // Contrast Boost: (Color - 0.5) * Contrast + 0.5
+                let contrast = 1.3;
+                var windowBase = vColor.rgb;
+                windowBase = (windowBase - vec3<f32>(0.5)) * contrast + vec3<f32>(0.5);
+                let windowColor = windowBase + vec3<f32>(0.1); // Add slight lightness
 
-                // Mix them based on the mask
-                // if frameMask < 0.5 (Edge) -> frameColor
-                // if frameMask > 0.5 (Center) -> windowColor
-                finalRGB = mix(frameColor, windowColor, frameMask);
+                // Mix Frame and Window Colors
+                var finalRGB = mix(frameColor, windowColor, frameMask);
 
-                // --- 4. Alpha Logic ---
-                // Frame = 1.0 (Opaque)
-                // Window = 0.6 (Strong Tint - visible color but still see-through)
-                let frameAlpha = 1.0;
-                let windowAlpha = 0.65;
+                // --- 4. Alpha Logic (Crucial) ---
+
+                let frameAlpha = 1.0; // FRAME IS SOLID
+                let windowAlpha = 0.8; // WINDOW IS TRANSLUCENT (High Opacity)
+
+                // If frameMask is 0 (Frame), we get 1.0. If 1 (Window), we get 0.8.
                 let finalAlpha = mix(frameAlpha, windowAlpha, frameMask) * vColor.w;
 
                 // --- 5. Lighting ---
@@ -437,9 +438,8 @@ export const Shaders = () => {
                 let specular = pow(max(dot(N, H), 0.0), ${params.shininess});
                 let ambient = ${params.ambientIntensity};
 
-                // Apply lighting
                 finalRGB = finalRGB * (ambient + diffuse);
-                finalRGB += vec3<f32>(1.0) * specular * 0.4; // Add white shine
+                finalRGB += vec3<f32>(1.0) * specular * 0.4; // Specular shine
 
                 return vec4<f32>(finalRGB, finalAlpha);
             }`;

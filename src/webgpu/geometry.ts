@@ -12,16 +12,17 @@ export const CubeData = () => {
   const radius = 0.2;
   const boxSize = 1.0 - radius;
 
-  // ADJUST: 1.0 = wraps block. 1.25 = fits flat face.
+  // 1.0 = wraps the whole block.
+  // If your texture has a border you want on the face, 1.0 is usually correct.
   const textureScale = 1.0;
 
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
-    // 1. Clamp to inner box
+    // 1. Clamp
     const innerX = Math.max(-boxSize, Math.min(x, boxSize));
     const innerY = Math.max(-boxSize, Math.min(y, boxSize));
     const innerZ = Math.max(-boxSize, Math.min(z, boxSize));
 
-    // 2. Vector to surface
+    // 2. Vector
     let dx = x - innerX;
     let dy = y - innerY;
     let dz = z - innerZ;
@@ -38,14 +39,14 @@ export const CubeData = () => {
        nx = dx / len; ny = dy / len; nz = dz / len;
     }
 
-    // 4. Final Position
+    // 4. Position
     positions.push(innerX + nx * radius, innerY + ny * radius, innerZ + nz * radius);
     normals.push(nx, ny, nz);
 
-    // 5. Planar UV Mapping (Fixes distortion)
+    // 5. Planar UV Mapping (Unwarped)
+    // We recreate the position 'p' to map it flatly
     const p: any = { x: positions[positions.length-3], y: positions[positions.length-2], z: positions[positions.length-1] };
 
-    // Map -1..1 to 0..1
     let u = (p[uAxis] * uDir + 1.0) * 0.5;
     let v = (p[vAxis] * vDir + 1.0) * 0.5;
 
@@ -64,11 +65,8 @@ export const CubeData = () => {
         const v0 = (j / segments) * 2 - 1;
         const v1 = ((j + 1) / segments) * 2 - 1;
 
-        const pa = u0 * uDir;
-        const pb = u1 * uDir;
-        const qa = v0 * vDir;
-        const qb = v1 * vDir;
-
+        const pa = u0 * uDir; const pb = u1 * uDir;
+        const qa = v0 * vDir; const qb = v1 * vDir;
         const getP = (a: number, b: number) => ({ [uAxis]: a, [vAxis]: b, [wAxis]: wVal });
 
         let p = getP(pa, qa); pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);

@@ -79,6 +79,7 @@ export default class View {
 
   // Block texture (shared)
   blockTexture!: GPUTexture;
+  blockSampler!: GPUSampler;
 
   // Particles
   particlePipeline!: GPURenderPipeline;
@@ -748,6 +749,15 @@ export default class View {
         addressModeV: 'repeat',
     });
 
+    this.blockSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      mipmapFilter: 'linear',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat',
+      maxAnisotropy: 16,
+    });
+
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
     // We need to create it initially too
     this.offscreenTexture = this.device.createTexture({
@@ -921,7 +931,7 @@ export default class View {
                 },
                 {
                     binding: 3,
-                    resource: this.sampler,
+                    resource: this.blockSampler,
                 },
             ],
         });
@@ -978,7 +988,7 @@ export default class View {
                 },
                 {
                     binding: 3,
-                    resource: this.sampler,
+                    resource: this.blockSampler,
                 },
             ],
         });
@@ -1323,7 +1333,7 @@ export default class View {
             },
             {
                 binding: 3,
-                resource: this.sampler
+                resource: this.blockSampler
             }
           ],
         });
