@@ -750,12 +750,12 @@ export default class View {
     });
 
     this.blockSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      mipmapFilter: 'linear',
+      magFilter: 'nearest',
+      minFilter: 'nearest',
+      mipmapFilter: 'nearest',
       addressModeU: 'repeat',
       addressModeV: 'repeat',
-      maxAnisotropy: 16,
+      maxAnisotropy: 1,
     });
 
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
