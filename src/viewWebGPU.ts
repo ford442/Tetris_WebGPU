@@ -773,7 +773,7 @@ export default class View {
     // Create a 1x1 white placeholder texture so shader has something immediately
     this.blockTexture = this.device.createTexture({
       size: [1, 1, 1],
-      format: 'rgba8unorm',
+      format: 'rgba8unorm-srgb',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
     });
     this.device.queue.writeTexture(
@@ -801,7 +801,7 @@ export default class View {
 
         const tex = this.device.createTexture({
           size: [bitmap.width, bitmap.height, 1],
-          format: 'rgba8unorm',
+          format: 'rgba8unorm-srgb',
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
         });
 
