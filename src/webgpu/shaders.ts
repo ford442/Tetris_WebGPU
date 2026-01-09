@@ -341,14 +341,12 @@ export const BackgroundShaders = () => {
 
 export const Shaders = () => {
   let params: any = {};
-  // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.5"; // Brighter ambient for better visibility
+  params.ambientIntensity = "0.5"; 
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "2.5"; // Very glossy
-  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
+  params.specularIntensity = "2.5"; 
+  params.shininess = "256.0";
   params.specularColor = "(1.0, 1.0, 1.0)";
-  params.isPhong = "1";
 
   const vertex = `
             struct Uniforms {
@@ -372,10 +370,10 @@ export const Shaders = () => {
                 var output: Output;
                 let mPosition:vec4<f32> = uniforms.modelMatrix * position;
                 output.vPosition = mPosition;
-                output.vNormal   =  uniforms.normalMatrix*normal;
+                output.vNormal   = uniforms.normalMatrix * normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
-                output.vColor   =  uniforms.colorVertex;
-                output.vUV = uv;
+                output.vColor    = uniforms.colorVertex;
+                output.vUV       = uv; 
                 return output;
             }`;
 
@@ -384,14 +382,12 @@ export const Shaders = () => {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
                 color : vec4<f32>,
-                time : f32, // Offset 48
-                useGlitch: f32, // Offset 52
+                time : f32,
+                useGlitch: f32,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
-
-            // Block texture + sampler are part of group(0) bindings (binding 2 and 3)
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler; 
+            @binding(3) @group(0) var blockSampler: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
@@ -401,147 +397,199 @@ export const Shaders = () => {
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // --- Improved Lighting Model ---
+                // --- 1. Lighting ---
                 let diffuse:f32 = max(dot(N, L), 0.0);
-
-                // Sharp specular for "glassy" look
                 var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
-
-                // Add secondary broad specular for "glossy plastic"
                 specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
-
                 let ambient:f32 = ${params.ambientIntensity};
 
-                var baseColor = vColor.xyz;
+                // --- 2. Texture Sampling ---
+                // Sample the frame texture
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                
+                // --- 3. Frame & Window Logic ---
+                // Calculate if we are in the "border" (Frame) or "center" (Window)
+                // We use UV coordinates. 0.0 is edge, 0.5 is center.
+                // Adjustable border thickness (e.g., 0.1 = 10% from edge)
+                let borderThickness = 0.15; 
+                let distX = min(vUV.x, 1.0 - vUV.x);
+                let distY = min(vUV.y, 1.0 - vUV.y);
+                let distEdge = min(distX, distY);
 
-                // --- Premium Tech Pattern ---
-                // Subtle hexagonal grid overlay
-                let hexScale = 4.0;
-                let uvHex = vUV * hexScale;
-                // Skew for hex look
-                let r = vec2<f32>(1.0, 1.73);
-                let h = r * 0.5;
-                let a = (uvHex - r * floor(uvHex / r)) - h;
-                let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
-                let guv = select(b, a, dot(a, a) < dot(b, b));
-
-                // Distance to hex center
-                let hexDist = length(guv);
-                let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
-
-                // Circuit Traces (keep original logic but refined)
-                let uvScale = 3.0;
-                let uvGrid = vUV * uvScale;
-                let gridPos = fract(uvGrid);
-                let gridThick = 0.05; // Thinner, cleaner lines
-                let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
-                let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
-                let isTrace = max(lineX, lineY);
-
-                // Pulse effect - ENHANCED for JUICE
-                let time = uniforms.time;
-                // Sharp heartbeat pulse: sin^4
-                // Faster pulse for more energy (3.0)
-                let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
-                let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0); // Extremely sharp peaks "Neon Heartbeat"
-
-                // Surface finish
-                let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-
-                // Apply texture
-                if (hexEdge > 0.5) {
-                   baseColor *= 0.95; // Subtle hex pattern indentation
-                }
-
-                if (isTrace > 0.5) {
-                    baseColor *= 0.5; // Deep grooves
+                // Create a mask: 1.0 = Frame, 0.0 = Window
+                // smoothstep creates a soft transition so it doesn't look jagged
+                let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
+                
+                // --- 4. Combine Colors ---
+                // FRAME: Uses the texture color (Metallic)
+                // WINDOW: Uses the block's color (vColor) but transparent
+                
+                // Start with the Texture Color
+                var baseColor = texColor.rgb;
+                
+                // If we are in the Window (center), tint it with the Piece Color
+                // and darken it slightly so the video pops
+                if (frameMask < 0.5) {
+                   baseColor = vColor.rgb * 0.5; 
                 } else {
-                    // Crystalline noise sparkle
-                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
-                    baseColor += vec3<f32>(sparkle);
+                   // In the frame, multiply slight vertex color for tint
+                   baseColor = baseColor * (0.5 + 0.5 * vColor.rgb); 
                 }
 
-                // --- Composition ---
+                // --- 5. Final Alpha (Transparency) ---
+                // Frame is Opaque (1.0)
+                // Window is Translucent (0.3) to see video
+                
+                // If using a PNG with transparency, use texColor.a
+                // Otherwise, use our frameMask to calculate alpha
+                
+                let windowAlpha = 0.3; // 30% Opacity in center
+                let frameAlpha = 1.0;  // 100% Opacity on rim
+                
+                // Mix between window alpha and frame alpha based on mask
+                // Also respect the Ghost Piece alpha (vColor.w)
+                let calculatedAlpha = mix(windowAlpha, frameAlpha, frameMask);
+                let finalAlpha = calculatedAlpha * vColor.w;
+
+                // --- 6. Effects (Rim Light / Glow) ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
-                // --- Emissive Elements ---
-                // Traces glow intensely
-                if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 4.0; // Brighter glow
-                    finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.6; // White hot core
-                }
-                // Hex corners glow slightly
-                if (hexDist < 0.1) {
-                    finalColor += vColor.rgb * 0.5 * pulsePos;
+                // Strong Rim Light on the Frame only
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                if (frameMask > 0.5) {
+                     finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 2.0;
                 }
 
-                // --- Fresnel Rim Light (Enhanced) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper
-                let rimColor = vec3<f32>(0.2, 0.8, 1.0); // Cyan/Ice rim
-
-                // Chromatic Aberration on Rim
-                let rimR = rimColor.r * (1.0 + 0.1 * sin(time + vPosition.y));
-                let rimG = rimColor.g;
-                let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
-
-                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
-
-                // --- Edge Highlight ---
-                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
-
-                // Sample block texture and tint it by the block's color (must run in uniform control flow)
-                let tex = textureSample(blockTexture, blockSampler, vUV);
-                let tinted = tex.rgb * vColor.rgb;
-
-                // --- GHOST PIECE RENDERING ---
-                // Ghost piece alpha < 0.4
-                if (vColor.w < 0.4) {
-                    // Hologram effect
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
-                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
-
-                    // Wireframe
-                    let wire = edgeGlow;
-
-                    // Internal grid
-                    let internalGrid = isTrace;
-
-                    // Shift ghost color towards Cyan/White for better visibility
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
-
-                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
-                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
-
-                    // Flicker - High frequency tech glitch
-                    let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
-                    let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
-
-                    // Pulse alpha - More visible range
-                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
-
-                    return vec4<f32>(ghostFinal * flicker, pulse);
-                }
-
-                // --- Smart Transparency for Blocks ---
-                // Keep base material semi-transparent (0.85), but make features opaque (1.0)
-                let baseAlpha = vColor.w;
-                let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
-                let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
-
-                // Blend the shaded material with the tinted texture using the texture alpha
-                let outColor = mix(finalColor, tinted, tex.a);
-                // Combine alpha: keep features or use texture alpha modulated by base alpha
-                let outAlpha = max(finalAlpha, tex.a * vColor.w);
-
-                return vec4<f32>(outColor, outAlpha);
+                return vec4<f32>(finalColor, finalAlpha);
             }`;
 
-  return {
-    vertex,
-    fragment,
-  };
+  return { vertex, fragment };
+};export const Shaders = () => {
+  let params: any = {};
+  params.color = "(0.0, 1.0, 0.0)";
+  params.ambientIntensity = "0.5"; 
+  params.diffuseIntensity = "1.0";
+  params.specularIntensity = "2.5"; 
+  params.shininess = "256.0";
+  params.specularColor = "(1.0, 1.0, 1.0)";
+
+  const vertex = `
+            struct Uniforms {
+                viewProjectionMatrix : mat4x4<f32>,
+                modelMatrix : mat4x4<f32>,
+                normalMatrix : mat4x4<f32>,  
+                colorVertex : vec4<f32>              
+            };
+            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+            struct Output {
+                @builtin(position) Position : vec4<f32>,
+                @location(0) vPosition : vec4<f32>,
+                @location(1) vNormal : vec4<f32>,
+                @location(2) vColor : vec4<f32>,
+                @location(3) vUV : vec2<f32>
+            };
+          
+            @vertex
+            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
+                var output: Output;
+                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+                output.vPosition = mPosition;
+                output.vNormal   = uniforms.normalMatrix * normal;
+                output.Position  = uniforms.viewProjectionMatrix * mPosition;
+                output.vColor    = uniforms.colorVertex;
+                output.vUV       = uv; 
+                return output;
+            }`;
+
+  const fragment = `
+            struct Uniforms {
+                lightPosition : vec4<f32>,
+                eyePosition : vec4<f32>,
+                color : vec4<f32>,
+                time : f32,
+                useGlitch: f32,
+            };
+            @binding(1) @group(0) var<uniform> uniforms : Uniforms;
+            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+            @binding(3) @group(0) var blockSampler: sampler;
+
+            @fragment
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+               
+                var N:vec3<f32> = normalize(vNormal.xyz);
+                let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
+                let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
+                let H:vec3<f32> = normalize(L + V);
+
+                // --- 1. Lighting ---
+                let diffuse:f32 = max(dot(N, L), 0.0);
+                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
+                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
+                let ambient:f32 = ${params.ambientIntensity};
+
+                // --- 2. Texture Sampling ---
+                // Sample the frame texture
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                
+                // --- 3. Frame & Window Logic ---
+                // Calculate if we are in the "border" (Frame) or "center" (Window)
+                // We use UV coordinates. 0.0 is edge, 0.5 is center.
+                // Adjustable border thickness (e.g., 0.1 = 10% from edge)
+                let borderThickness = 0.15; 
+                let distX = min(vUV.x, 1.0 - vUV.x);
+                let distY = min(vUV.y, 1.0 - vUV.y);
+                let distEdge = min(distX, distY);
+
+                // Create a mask: 1.0 = Frame, 0.0 = Window
+                // smoothstep creates a soft transition so it doesn't look jagged
+                let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
+                
+                // --- 4. Combine Colors ---
+                // FRAME: Uses the texture color (Metallic)
+                // WINDOW: Uses the block's color (vColor) but transparent
+                
+                // Start with the Texture Color
+                var baseColor = texColor.rgb;
+                
+                // If we are in the Window (center), tint it with the Piece Color
+                // and darken it slightly so the video pops
+                if (frameMask < 0.5) {
+                   baseColor = vColor.rgb * 0.5; 
+                } else {
+                   // In the frame, multiply slight vertex color for tint
+                   baseColor = baseColor * (0.5 + 0.5 * vColor.rgb); 
+                }
+
+                // --- 5. Final Alpha (Transparency) ---
+                // Frame is Opaque (1.0)
+                // Window is Translucent (0.3) to see video
+                
+                // If using a PNG with transparency, use texColor.a
+                // Otherwise, use our frameMask to calculate alpha
+                
+                let windowAlpha = 0.3; // 30% Opacity in center
+                let frameAlpha = 1.0;  // 100% Opacity on rim
+                
+                // Mix between window alpha and frame alpha based on mask
+                // Also respect the Ghost Piece alpha (vColor.w)
+                let calculatedAlpha = mix(windowAlpha, frameAlpha, frameMask);
+                let finalAlpha = calculatedAlpha * vColor.w;
+
+                // --- 6. Effects (Rim Light / Glow) ---
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
+
+                // Strong Rim Light on the Frame only
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                if (frameMask > 0.5) {
+                     finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 2.0;
+                }
+
+                return vec4<f32>(finalColor, finalAlpha);
+            }`;
+
+  return { vertex, fragment };
+};
 };
