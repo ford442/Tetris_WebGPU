@@ -340,11 +340,9 @@ export const BackgroundShaders = () => {
 };
 export const Shaders = () => {
   let params: any = {};
-  params.ambientIntensity = "0.6";  // Increased slightly so colors pop
+  params.ambientIntensity = "0.8"; // Brighter ambient for better color visibility
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "1.0"; 
-  params.shininess = "128.0";       // Broader highlight
-  params.specularColor = "(1.0, 1.0, 1.0)";
+  params.shininess = "32.0";       // Soft shine
 
   const vertex = `
             struct Uniforms {
@@ -395,60 +393,56 @@ export const Shaders = () => {
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // --- 1. Lighting ---
-                let diffuse:f32 = max(dot(N, L), 0.0);
-                let ambient:f32 = ${params.ambientIntensity};
-                let specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
-
-                // --- 2. Texture Sampling ---
-                // Flip Y so texture isn't upside down
+                // --- 1. Texture Sampling ---
+                // Flip Y for correct orientation
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
                 
-                // --- 3. Mask Logic (Frame vs Window) ---
-                // distX/Y is 0.0 at edge, 0.5 at center
+                // --- 2. Mask Logic (Frame vs Window) ---
+                // Calculate distance from center (0.5)
                 let distX = min(vUV.x, 1.0 - vUV.x);
                 let distY = min(vUV.y, 1.0 - vUV.y);
                 let distEdge = min(distX, distY);
                 
-                // Adjust this to match your image frame width exactly
+                // ADJUST THIS to match your texture's frame width
                 let borderThickness = 0.15; 
                 
                 // 0.0 = Frame, 1.0 = Window
-                let frameMask = smoothstep(borderThickness - 0.01, borderThickness, distEdge);
+                let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
 
-                // --- 4. Color Selection ---
-                var baseColor = vec3<f32>(0.0);
+                // --- 3. Color Logic ---
+                var finalRGB: vec3<f32>;
                 
-                // IF WE ARE IN THE FRAME...
-                if (frameMask < 0.5) {
-                   // Use the TEXTURE color exactly (Gold)
-                   baseColor = texColor.rgb; 
-                } 
-                // IF WE ARE IN THE CENTER...
-                else {
-                   // Use the BLOCK color (Cyan, Purple, etc.)
-                   baseColor = vColor.rgb; 
-                }
+                // Frame: Use Texture Color directly (Clean Gold)
+                let frameColor = texColor.rgb * 1.2; // 1.2 boost for brightness
 
-                // --- 5. Alpha Selection ---
-                // Frame = 1.0 (Solid)
-                // Window = 0.4 (Translucent - adjust 0.4 up or down for more/less opacity)
-                let calculatedAlpha = mix(1.0, 0.4, frameMask);
-                
-                // Apply Ghost Piece transparency if needed (vColor.w)
-                let finalAlpha = calculatedAlpha * vColor.w;
+                // Window: Use Block Color directly (Strong Tint)
+                // We add a bit of white (vec3(0.2)) so it's not too dark
+                let windowColor = vColor.rgb + vec3<f32>(0.1);
 
-                // --- 6. Final Composition ---
-                // Standard Blinn-Phong lighting
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse);
-                
-                // Add white specular highlight (shiny look)
-                finalColor += vec3<f32>(1.0, 1.0, 1.0) * specular * 0.5;
+                // Mix them based on the mask
+                // if frameMask < 0.5 (Edge) -> frameColor
+                // if frameMask > 0.5 (Center) -> windowColor
+                finalRGB = mix(frameColor, windowColor, frameMask);
 
-                return vec4<f32>(finalColor, finalAlpha);
+                // --- 4. Alpha Logic ---
+                // Frame = 1.0 (Opaque)
+                // Window = 0.6 (Strong Tint - visible color but still see-through)
+                let frameAlpha = 1.0;
+                let windowAlpha = 0.65;
+                let finalAlpha = mix(frameAlpha, windowAlpha, frameMask) * vColor.w;
+
+                // --- 5. Lighting ---
+                let diffuse = max(dot(N, L), 0.0);
+                let specular = pow(max(dot(N, H), 0.0), ${params.shininess});
+                let ambient = ${params.ambientIntensity};
+
+                // Apply lighting
+                finalRGB = finalRGB * (ambient + diffuse);
+                finalRGB += vec3<f32>(1.0) * specular * 0.4; // Add white shine
+
+                return vec4<f32>(finalRGB, finalAlpha);
             }`;
 
   return { vertex, fragment };
-
 };

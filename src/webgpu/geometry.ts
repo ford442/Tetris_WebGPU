@@ -8,97 +8,86 @@ export const CubeData = () => {
   const normals: number[] = [];
   const uvs: number[] = [];
 
-  // Configuration for smoothness
-  const segments = 16;     // Increased for Gem Quality
-  const radius = 0.2;      // Larger radius for rounded gem
+  const segments = 16;
+  const radius = 0.2;
   const boxSize = 1.0 - radius;
-  const bevel = 0.02;      // Micro-bevel for flat faces
 
-  // Helper to add a single vertex with "Spherified Box" logic
-  const pushVertex = (x: number, y: number, z: number, u: number, v: number) => {
-    // 1. Clamp point to the inner box (this defines the flat centers)
+  // ADJUST: 1.0 = wraps block. 1.25 = fits flat face.
+  const textureScale = 1.0;
+
+  const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
+    // 1. Clamp to inner box
     const innerX = Math.max(-boxSize, Math.min(x, boxSize));
     const innerY = Math.max(-boxSize, Math.min(y, boxSize));
     const innerZ = Math.max(-boxSize, Math.min(z, boxSize));
 
-    // 2. Calculate vector from inner box to the point
+    // 2. Vector to surface
     let dx = x - innerX;
     let dy = y - innerY;
     let dz = z - innerZ;
 
-    // 3. Normalize that vector to get the corner direction
+    // 3. Normalize
     const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
     let nx = 0, ny = 0, nz = 0;
-
-    // If length is 0, we are on a flat face, use axis direction
     if (len < 0.0001) {
-       // Determine face based on max component
        const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
        if (ax >= ay && ax >= az) nx = Math.sign(x);
        else if (ay >= ax && ay >= az) ny = Math.sign(y);
        else nz = Math.sign(z);
-
-       // Apply Micro-Bevel to flat faces for light catching
-       // We slightly inset the "inner" point based on thickness?
-       // Or just use the normal.
-       // Actually, we are displacing "from inner box". If len=0, we are ON the inner box surface.
-       // The "radius" is added below.
-       // To bevel, we want flat faces to be slightly angled or the transition to be sharper?
-       // For now, let's keep it simple as rounding provides good highlights.
-
     } else {
-       // We are on a rounded corner/edge
        nx = dx / len; ny = dy / len; nz = dz / len;
     }
 
-    // 4. Project new position: InnerBox + Normal * Radius
+    // 4. Final Position
     positions.push(innerX + nx * radius, innerY + ny * radius, innerZ + nz * radius);
     normals.push(nx, ny, nz);
+
+    // 5. Planar UV Mapping (Fixes distortion)
+    const p: any = { x: positions[positions.length-3], y: positions[positions.length-2], z: positions[positions.length-1] };
+
+    // Map -1..1 to 0..1
+    let u = (p[uAxis] * uDir + 1.0) * 0.5;
+    let v = (p[vAxis] * vDir + 1.0) * 0.5;
+
+    // Scale from center
+    u = (u - 0.5) * textureScale + 0.5;
+    v = (v - 0.5) * textureScale + 0.5;
+
     uvs.push(u, v);
   };
 
-  // Helper to generate a grid for a face
   const buildFace = (uAxis: string, vAxis: string, wAxis: string, wVal: number, uDir: number, vDir: number) => {
     for (let i = 0; i < segments; i++) {
       for (let j = 0; j < segments; j++) {
-        // Calculate 0..1 UVs for the quad
-        const u0 = i / segments;
-        const u1 = (i + 1) / segments;
-        const v0 = j / segments;
-        const v1 = (j + 1) / segments;
+        const u0 = (i / segments) * 2 - 1;
+        const u1 = ((i + 1) / segments) * 2 - 1;
+        const v0 = (j / segments) * 2 - 1;
+        const v1 = ((j + 1) / segments) * 2 - 1;
 
-        // Calculate -1..1 coordinates
-        const pa = (u0 * 2 - 1) * uDir;
-        const pb = (u1 * 2 - 1) * uDir;
-        const qa = (v0 * 2 - 1) * vDir;
-        const qb = (v1 * 2 - 1) * vDir;
+        const pa = u0 * uDir;
+        const pb = u1 * uDir;
+        const qa = v0 * vDir;
+        const qb = v1 * vDir;
 
-        // Define the 4 corners of the quad
-        const getP = (a: number, b: number) => {
-           const p: any = { [uAxis]: a, [vAxis]: b, [wAxis]: wVal };
-           return p;
-        }
+        const getP = (a: number, b: number) => ({ [uAxis]: a, [vAxis]: b, [wAxis]: wVal });
 
-        // Triangle 1
-        const p1 = getP(pa, qa); pushVertex(p1.x, p1.y, p1.z, u0, v0);
-        const p2 = getP(pb, qa); pushVertex(p2.x, p2.y, p2.z, u1, v0);
-        const p3 = getP(pb, qb); pushVertex(p3.x, p3.y, p3.z, u1, v1);
+        let p = getP(pa, qa); pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
+        p = getP(pb, qa);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
+        p = getP(pb, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
 
-        // Triangle 2
-        const p4 = getP(pa, qa); pushVertex(p4.x, p4.y, p4.z, u0, v0);
-        const p5 = getP(pb, qb); pushVertex(p5.x, p5.y, p5.z, u1, v1);
-        const p6 = getP(pa, qb); pushVertex(p6.x, p6.y, p6.z, u0, v1);
+        p = getP(pa, qa);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
+        p = getP(pb, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
+        p = getP(pa, qb);     pushVertex(p.x, p.y, p.z, uAxis, vAxis, uDir, vDir);
       }
     }
   };
 
-  // Generate 6 faces
-  buildFace('x', 'y', 'z',  1,  1, -1); // Front
-  buildFace('x', 'y', 'z', -1, -1, -1); // Back (flipped U)
-  buildFace('z', 'y', 'x',  1, -1, -1); // Right
-  buildFace('z', 'y', 'x', -1,  1, -1); // Left
-  buildFace('x', 'z', 'y',  1,  1,  1); // Top
-  buildFace('x', 'z', 'y', -1,  1, -1); // Bottom
+  buildFace('x', 'y', 'z',  1,  1, 1);
+  buildFace('x', 'y', 'z', -1, -1, 1);
+  buildFace('z', 'y', 'x',  1, -1, 1);
+  buildFace('z', 'y', 'x', -1,  1, 1);
+  buildFace('x', 'z', 'y',  1,  1, -1);
+  buildFace('x', 'z', 'y', -1,  1, -1);
 
   return { positions: new Float32Array(positions), normals: new Float32Array(normals), uvs: new Float32Array(uvs) };
 };

@@ -743,6 +743,9 @@ export default class View {
     this.sampler = this.device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
+        mipmapFilter: 'linear',
+        addressModeU: 'repeat',
+        addressModeV: 'repeat',
     });
 
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
