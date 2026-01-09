@@ -465,14 +465,24 @@ export const TechGemsShader = () => {
                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), intensity);
                 }
 
-                // --- Ghost Piece (Pulsing Hologram) ---
+                // --- Ghost Piece (Wireframe Hologram) ---
                 if (vColor.w < 0.4) {
+                    // Wireframe logic based on UVs
+                    let dist = min(min(vUV.x, 1.0 - vUV.x), min(vUV.y, 1.0 - vUV.y));
+                    let edgeThickness = 0.05;
+                    let edge = smoothstep(edgeThickness, edgeThickness - 0.01, dist);
+
                     let ghostPulse = sin(uniforms.time * 4.0) * 0.5 + 0.5;
                     let scanY = fract(vPosition.y * 5.0 - uniforms.time * 2.0);
                     let scanline = step(0.5, scanY) * 0.2;
-                    let alpha = 0.15 + ghostPulse * 0.15; // Pulse between 0.15 and 0.3
 
-                    let ghostColor = vColor.rgb * 3.0 + vec3<f32>(scanline);
+                    // Only edges + scanlines
+                    let alpha = edge * (0.3 + ghostPulse * 0.2) + scanline * 0.1;
+
+                    // Inner fill is very faint
+                    alpha += 0.05;
+
+                    let ghostColor = vColor.rgb * 2.0 + vec3<f32>(1.0) * edge;
                     return vec4<f32>(ghostColor, alpha);
                 }
 

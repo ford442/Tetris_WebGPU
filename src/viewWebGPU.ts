@@ -124,6 +124,9 @@ export default class View {
   pipelineCache: Map<string, GPURenderPipeline> = new Map();
   blockTexture!: GPUTexture;
 
+  // Lighting
+  private currentLightPos: Float32Array = new Float32Array([-5.0, 0.0, 30.0, 1.0]);
+
   // Cache
   private blockUniformData: ArrayBuffer;
   private borderUniformData: ArrayBuffer;
@@ -1178,6 +1181,30 @@ export default class View {
             this.lockedMinos[i*4 + 2] -= dt * 0.5; // Fade out over ~2 seconds
         }
     }
+
+    // --- DYNAMIC LIGHTING ---
+    if (this.state && (this.state as any).activePiece) {
+        const p = (this.state as any).activePiece;
+        // Target: Center of the active piece
+        // Approximating piece center: (x + 1.5) * 2.2
+        const targetX = (p.x + 1.5) * 2.2;
+        const targetY = (p.y + 1.5) * -2.2;
+        const targetZ = 20.0; // Hover in front
+
+        // Smoothly interpolate current light position
+        const lerpSpeed = dt * 5.0;
+        this.currentLightPos[0] += (targetX - this.currentLightPos[0]) * lerpSpeed;
+        this.currentLightPos[1] += (targetY - this.currentLightPos[1]) * lerpSpeed;
+        this.currentLightPos[2] += (targetZ - this.currentLightPos[2]) * lerpSpeed;
+    } else {
+        // Default position if no piece
+        const lerpSpeed = dt * 2.0;
+        this.currentLightPos[0] += (-5.0 - this.currentLightPos[0]) * lerpSpeed;
+        this.currentLightPos[1] += (0.0 - this.currentLightPos[1]) * lerpSpeed;
+        this.currentLightPos[2] += (30.0 - this.currentLightPos[2]) * lerpSpeed;
+    }
+    // Update Uniform Buffer (Offset 0)
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, this.currentLightPos);
 
     const time = (now - this.startTime) / 1000.0;
     let camX = 9.9;
