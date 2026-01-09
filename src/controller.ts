@@ -402,10 +402,15 @@ export default class Controller {
              let steps = Math.floor(this.actionTimers.down! / SOFT_DROP_SPEED);
              this.actionTimers.down! %= SOFT_DROP_SPEED;
 
+             // Cap steps to avoid infinite loop lag spike if dt is huge
+             steps = Math.min(steps, 20);
+
              for (let i = 0; i < steps; i++) {
                  this.game.movePieceDown();
-                 // Optionally break if collision/lock happens to avoid tunneling or weird state?
-                 // movePieceDown() handles collision checks internally.
+                 // If we hit bottom, stop dropping for this frame to allow lock delay to start naturally
+                 if (this.game.hasCollision()) {
+                     break;
+                 }
              }
           }
       } else {
