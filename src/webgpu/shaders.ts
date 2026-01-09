@@ -338,6 +338,7 @@ export const BackgroundShaders = () => {
 
     return { vertex, fragment };
 };
+
 export const Shaders = () => {
   let params: any = {};
   params.color = "(0.0, 1.0, 0.0)";
@@ -403,60 +404,50 @@ export const Shaders = () => {
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- 2. Texture Sampling ---
-                // Sample the frame texture
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
                 
                 // --- 3. Frame & Window Logic ---
-                // Calculate if we are in the "border" (Frame) or "center" (Window)
-                // We use UV coordinates. 0.0 is edge, 0.5 is center.
-                // Adjustable border thickness (e.g., 0.1 = 10% from edge)
-                let borderThickness = 0.15; 
+                // distEdge is 0.0 at the Frame/Edge, and 0.5 at the Center
                 let distX = min(vUV.x, 1.0 - vUV.x);
                 let distY = min(vUV.y, 1.0 - vUV.y);
                 let distEdge = min(distX, distY);
 
-                // Create a mask: 1.0 = Frame, 0.0 = Window
-                // smoothstep creates a soft transition so it doesn't look jagged
+                // Config
+                let borderThickness = 0.15; // Width of the frame
+                
+                // Mask: 0.0 = Frame, 1.0 = Center Window
                 let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
                 
-                // --- 4. Combine Colors ---
-                // FRAME: Uses the texture color (Metallic)
-                // WINDOW: Uses the block's color (vColor) but transparent
+                // --- 4. Color & Alpha Swapped ---
+                var baseColor = vec3<f32>(0.0);
                 
-                // Start with the Texture Color
-                var baseColor = texColor.rgb;
-                
-                // If we are in the Window (center), tint it with the Piece Color
-                // and darken it slightly so the video pops
+                // We are in the Frame (Mask is 0.0)
                 if (frameMask < 0.5) {
-                   baseColor = vColor.rgb * 0.5; 
+                   // FRAME = METALLIC TEXTURE
+                   // Use the full texture color, maybe slightly tinted by block color
+                   baseColor = texColor.rgb * (0.8 + 0.2 * vColor.rgb);
                 } else {
-                   // In the frame, multiply slight vertex color for tint
-                   baseColor = baseColor * (0.5 + 0.5 * vColor.rgb); 
+                   // WINDOW = TINTED GLASS
+                   // Use the block color, but darken it to simulate clear glass
+                   baseColor = vColor.rgb * 0.6; 
                 }
 
-                // --- 5. Final Alpha (Transparency) ---
-                // Frame is Opaque (1.0)
-                // Window is Translucent (0.3) to see video
+                // --- 5. Final Alpha ---
+                // frameAlpha (for Mask 0.0) = 1.0 (Opaque)
+                // windowAlpha (for Mask 1.0) = 0.3 (Transparent)
+                let frameAlpha = 1.0;
+                let windowAlpha = 0.3;
                 
-                // If using a PNG with transparency, use texColor.a
-                // Otherwise, use our frameMask to calculate alpha
-                
-                let windowAlpha = 0.3; // 30% Opacity in center
-                let frameAlpha = 1.0;  // 100% Opacity on rim
-                
-                // Mix between window alpha and frame alpha based on mask
-                // Also respect the Ghost Piece alpha (vColor.w)
-                let calculatedAlpha = mix(windowAlpha, frameAlpha, frameMask);
+                // mix(a, b, t) -> When t is 0 (Frame), use a (frameAlpha). When t is 1 (Center), use b (windowAlpha).
+                let calculatedAlpha = mix(frameAlpha, windowAlpha, frameMask);
                 let finalAlpha = calculatedAlpha * vColor.w;
 
-                // --- 6. Effects (Rim Light / Glow) ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
-                // Strong Rim Light on the Frame only
+                // Strong Rim Light on the Frame only (Metallic shine)
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                if (frameMask > 0.5) {
+                if (frameMask < 0.5) { // Applied to Frame
                      finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 2.0;
                 }
 
@@ -465,5 +456,3 @@ export const Shaders = () => {
 
   return { vertex, fragment };
 };
-
-
