@@ -77,9 +77,8 @@ export default class View {
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
-  // Block texture (shared) and its bind group
+  // Block texture (shared)
   blockTexture!: GPUTexture;
-  blockTextureBindGroup!: GPUBindGroup;
 
   // Particles
   particlePipeline!: GPURenderPipeline;
@@ -783,15 +782,6 @@ export default class View {
       [1, 1, 1]
     );
 
-    // Create bind group for group(1): sampler + texture view
-    this.blockTextureBindGroup = this.device.createBindGroup({
-      layout: this.pipeline.getBindGroupLayout(1),
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: this.blockTexture.createView() }
-      ]
-    });
-
     // Load the actual image async and replace texture when ready
     (async () => {
       try {
@@ -811,15 +801,12 @@ export default class View {
           [bitmap.width, bitmap.height, 1]
         );
 
-        // Replace texture and recreate bind group to point to the new view
+        // Replace texture and recreate bindgroups so they reference the new view
         this.blockTexture = tex;
-        this.blockTextureBindGroup = this.device.createBindGroup({
-          layout: this.pipeline.getBindGroupLayout(1),
-          entries: [
-            { binding: 0, resource: this.sampler },
-            { binding: 1, resource: this.blockTexture.createView() }
-          ]
-        });
+        // Recreate per-block bind group cache to point at the new texture
+        this.recreateBlockBindGroupCache();
+        // Recreate the border bind groups
+        this.renderPlayfild_Border_WebGPU();
       } catch (e) {
         console.warn('Failed to load /block.png:', e);
       }
@@ -925,6 +912,14 @@ export default class View {
                         size: 80, // Updated size matches creation
                     },
                 },
+                {
+                    binding: 2,
+                    resource: this.blockTexture.createView(),
+                },
+                {
+                    binding: 3,
+                    resource: this.sampler,
+                },
             ],
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
@@ -947,6 +942,45 @@ export default class View {
     buffer.unmap();
     return buffer;
   };
+
+  // Recreate cached per-block bind groups to reference the current blockTexture and sampler
+  recreateBlockBindGroupCache() {
+    if (!this.device || !this.vertexUniformBuffer || !this.fragmentUniformBuffer || !this.pipeline) return;
+    const layout = this.pipeline.getBindGroupLayout(0);
+    const maxBlocks = this.uniformBindGroup_CACHE.length;
+    for (let i = 0; i < maxBlocks; i++) {
+        this.uniformBindGroup_CACHE[i] = this.device.createBindGroup({
+            label: `block_bindgroup_${i}`,
+            layout: layout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.vertexUniformBuffer,
+                        offset: i * 256,
+                        size: 208,
+                    },
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.fragmentUniformBuffer,
+                        offset: 0,
+                        size: 80,
+                    },
+                },
+                {
+                    binding: 2,
+                    resource: this.blockTexture.createView(),
+                },
+                {
+                    binding: 3,
+                    resource: this.sampler,
+                },
+            ],
+        });
+    }
+  }
 
   Frame = () => {
     if (!this.device) return;
@@ -1088,10 +1122,7 @@ export default class View {
     passEncoder.setVertexBuffer(1, this.normalBuffer);
     passEncoder.setVertexBuffer(2, this.uvBuffer);
 
-    // Bind shared block texture (group 1) so fragment shader can sample it
-    if (this.blockTextureBindGroup) {
-      passEncoder.setBindGroup(1, this.blockTextureBindGroup);
-    }
+
 
     let length_of_uniformBindGroup_boder = this.uniformBindGroup_ARRAY_border.length;
     for (let index = 0; index < length_of_uniformBindGroup_boder; index++) {
@@ -1283,6 +1314,14 @@ export default class View {
                 size: 80, // Updated to match fragment buffer usage (allows up to offset 80 or more)
               },
             },
+            {
+                binding: 2,
+                resource: this.blockTexture.createView()
+            },
+            {
+                binding: 3,
+                resource: this.sampler
+            }
           ],
         });
 

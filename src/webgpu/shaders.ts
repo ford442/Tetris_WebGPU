@@ -389,9 +389,9 @@ export const Shaders = () => {
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
-            // Shared block texture (group 1) - sampler + texture view
-            @binding(0) @group(1) var blockSampler: sampler;
-            @binding(1) @group(1) var blockTexture: texture_2d<f32>;
+            // Block texture + sampler are part of group(0) bindings (binding 2 and 3)
+            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+            @binding(3) @group(0) var blockSampler: sampler; 
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
