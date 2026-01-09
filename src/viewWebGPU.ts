@@ -484,8 +484,8 @@ export default class View {
     this.blockSampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat',
     });
 
     try {
