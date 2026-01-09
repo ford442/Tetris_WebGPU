@@ -88,7 +88,8 @@ export const PostProcessShaders = () => {
             let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
             color *= vignette;
 
-            return vec4<f32>(color, a);
+            // Return premultiplied color for correct compositing with 'premultiplied' canvas alpha
+            return vec4<f32>(color * a, a);
         }
     `;
 
@@ -388,6 +389,10 @@ export const Shaders = () => {
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
+            // Shared block texture (group 1) - sampler + texture view
+            @binding(0) @group(1) var blockSampler: sampler;
+            @binding(1) @group(1) var blockTexture: texture_2d<f32>;
+
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                
@@ -523,7 +528,16 @@ export const Shaders = () => {
                 let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
                 let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
 
-                return vec4<f32>(finalColor, finalAlpha);
+                // Sample block texture and tint it by the block's color
+                let tex = textureSample(blockTexture, blockSampler, vUV);
+                let tinted = tex.rgb * vColor.rgb;
+
+                // Blend the shaded material with the tinted texture using the texture alpha
+                let outColor = mix(finalColor, tinted, tex.a);
+                // Combine alpha: keep features or use texture alpha modulated by base alpha
+                let outAlpha = max(finalAlpha, tex.a * vColor.w);
+
+                return vec4<f32>(outColor, outAlpha);
             }`;
 
   return {

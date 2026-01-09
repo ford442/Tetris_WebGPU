@@ -77,6 +77,10 @@ export default class View {
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
+  // Block texture (shared) and its bind group
+  blockTexture!: GPUTexture;
+  blockTextureBindGroup!: GPUBindGroup;
+
   // Particles
   particlePipeline!: GPURenderPipeline;
   particleVertexBuffer!: GPUBuffer;
@@ -765,6 +769,62 @@ export default class View {
         ]
     });
 
+    // ---- Block Texture (shared) ----
+    // Create a 1x1 white placeholder texture so shader has something immediately
+    this.blockTexture = this.device.createTexture({
+      size: [1, 1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+    });
+    this.device.queue.writeTexture(
+      { texture: this.blockTexture },
+      new Uint8Array([255, 255, 255, 255]),
+      { bytesPerRow: 4 },
+      [1, 1, 1]
+    );
+
+    // Create bind group for group(1): sampler + texture view
+    this.blockTextureBindGroup = this.device.createBindGroup({
+      layout: this.pipeline.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.blockTexture.createView() }
+      ]
+    });
+
+    // Load the actual image async and replace texture when ready
+    (async () => {
+      try {
+        const resp = await fetch('/block.png');
+        const blob = await resp.blob();
+        const bitmap = await createImageBitmap(blob);
+
+        const tex = this.device.createTexture({
+          size: [bitmap.width, bitmap.height, 1],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+        });
+
+        this.device.queue.copyExternalImageToTexture(
+          { source: bitmap },
+          { texture: tex },
+          [bitmap.width, bitmap.height, 1]
+        );
+
+        // Replace texture and recreate bind group to point to the new view
+        this.blockTexture = tex;
+        this.blockTextureBindGroup = this.device.createBindGroup({
+          layout: this.pipeline.getBindGroupLayout(1),
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.blockTexture.createView() }
+          ]
+        });
+      } catch (e) {
+        console.warn('Failed to load /block.png:', e);
+      }
+    })();
+
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
@@ -1027,6 +1087,11 @@ export default class View {
     passEncoder.setVertexBuffer(0, this.vertexBuffer);
     passEncoder.setVertexBuffer(1, this.normalBuffer);
     passEncoder.setVertexBuffer(2, this.uvBuffer);
+
+    // Bind shared block texture (group 1) so fragment shader can sample it
+    if (this.blockTextureBindGroup) {
+      passEncoder.setBindGroup(1, this.blockTextureBindGroup);
+    }
 
     let length_of_uniformBindGroup_boder = this.uniformBindGroup_ARRAY_border.length;
     for (let index = 0; index < length_of_uniformBindGroup_boder; index++) {
