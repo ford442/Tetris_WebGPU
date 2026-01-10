@@ -480,6 +480,47 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
+    // --- 1. GLOBAL SAMPLER (Max Quality) ---
+    this.blockSampler = this.device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+        mipmapFilter: 'linear',
+        addressModeU: 'repeat',
+        addressModeV: 'repeat',
+        maxAnisotropy: 16
+    });
+    this.sampler = this.device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+        mipmapFilter: 'linear',
+        addressModeU: 'repeat',
+        addressModeV: 'repeat',
+    });
+
+    // --- 2. LOAD TEXTURE (Blocking/Sync) ---
+    // This ensures texture is ready before we create any bind groups
+    try {
+        const resp = await fetch('block.png');
+        const blob = await resp.blob();
+        const imageBitmap = await createImageBitmap(blob);
+
+        this.blockTexture = this.device.createTexture({
+          size: [imageBitmap.width, imageBitmap.height, 1],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+        });
+        this.device.queue.copyExternalImageToTexture(
+          { source: imageBitmap },
+          { texture: this.blockTexture },
+          [imageBitmap.width, imageBitmap.height]
+        );
+        console.log("Texture loaded successfully");
+    } catch (e) {
+        console.warn("Failed to load block.png, falling back to white texture");
+        this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+        this.device.queue.writeTexture({ texture: this.blockTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
+    }
+
     // --- Main Block Pipeline ---
     const shader = Shaders();
     const cubeData = CubeData();
@@ -694,7 +735,7 @@ export default class View {
 
     this.particleUniformBuffer = this.device.createBuffer({
         size: 64, // Mat4 for ViewProjection
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.particleBindGroup = this.device.createBindGroup({
@@ -741,23 +782,6 @@ export default class View {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    this.sampler = this.device.createSampler({
-        magFilter: 'linear',
-        minFilter: 'linear',
-        mipmapFilter: 'linear',
-        addressModeU: 'repeat',
-        addressModeV: 'repeat',
-    });
-
-    this.blockSampler = this.device.createSampler({
-      magFilter: 'nearest',
-      minFilter: 'nearest',
-      mipmapFilter: 'nearest',
-      addressModeU: 'repeat',
-      addressModeV: 'repeat',
-      maxAnisotropy: 1,
-    });
-
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
     // We need to create it initially too
     this.offscreenTexture = this.device.createTexture({
@@ -781,51 +805,6 @@ export default class View {
         ]
     });
 
-    // ---- Block Texture (shared) ----
-    // Create a 1x1 white placeholder texture so shader has something immediately
-    this.blockTexture = this.device.createTexture({
-      size: [1, 1, 1],
-      format: 'rgba8unorm-srgb',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-    });
-    this.device.queue.writeTexture(
-      { texture: this.blockTexture },
-      new Uint8Array([255, 255, 255, 255]),
-      { bytesPerRow: 4 },
-      [1, 1, 1]
-    );
-
-    // Load the actual image async and replace texture when ready
-    (async () => {
-      try {
-        const resp = await fetch('./block.png');
-        const blob = await resp.blob();
-        const bitmap = await createImageBitmap(blob);
-
-        const tex = this.device.createTexture({
-          size: [bitmap.width, bitmap.height, 1],
-          format: 'rgba8unorm-srgb',
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-        });
-
-        this.device.queue.copyExternalImageToTexture(
-          { source: bitmap },
-          { texture: tex },
-          [bitmap.width, bitmap.height, 1]
-        );
-
-        // Replace texture and recreate bindgroups so they reference the new view
-        this.blockTexture = tex;
-        // Recreate per-block bind group cache to point at the new texture
-        this.recreateBlockBindGroupCache();
-        // Recreate the border bind groups
-        this.renderPlayfild_Border_WebGPU();
-      } catch (e) {
-        console.warn('Failed to load /block.png:', e);
-      }
-    })();
-
-
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
       size: 96, // Increased to accommodate useGlitch (offset 52)
@@ -838,14 +817,6 @@ export default class View {
     this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
-    // Apply shake
-    if (this.shakeTimer > 0) {
-        const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
-        const shakeY = (Math.random() - 0.5) * this.shakeMagnitude;
-        eyePosition[0] += shakeX;
-        eyePosition[1] += shakeY;
-    }
-
     let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
 
     Matrix.mat4.identity(this.VIEWMATRIX);
@@ -892,21 +863,18 @@ export default class View {
       new Float32Array([this.useGlitch ? 1.0 : 0.0])
     );
 
-    this.renderPlayfild_Border_WebGPU();
-
     this.vertexUniformBuffer = this.device.createBuffer({
       size: this.state.playfield.length * 10 * 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // --- Pre-create BindGroups for Dynamic Blocks (Cache) ---
-    // Max blocks = 20 rows * 10 cols = 200
-    // Each block uses a 256-byte slice of the uniform buffer
+    // --- 3. BIND GROUPS (Using the loaded texture) ---
+    // Cache Block BindGroups
     const maxBlocks = 200;
     this.uniformBindGroup_CACHE = [];
     for (let i = 0; i < maxBlocks; i++) {
         const bindGroup = this.device.createBindGroup({
-            label: `block_bindgroup_${i}`,
+            label: `block_bind_${i}`,
             layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 {
@@ -938,6 +906,9 @@ export default class View {
         this.uniformBindGroup_CACHE.push(bindGroup);
     }
 
+    // Border BindGroups
+    this.renderPlayfild_Border_WebGPU();
+
     this.Frame();
   }
 
@@ -955,45 +926,6 @@ export default class View {
     buffer.unmap();
     return buffer;
   };
-
-  // Recreate cached per-block bind groups to reference the current blockTexture and sampler
-  recreateBlockBindGroupCache() {
-    if (!this.device || !this.vertexUniformBuffer || !this.fragmentUniformBuffer || !this.pipeline) return;
-    const layout = this.pipeline.getBindGroupLayout(0);
-    const maxBlocks = this.uniformBindGroup_CACHE.length;
-    for (let i = 0; i < maxBlocks; i++) {
-        this.uniformBindGroup_CACHE[i] = this.device.createBindGroup({
-            label: `block_bindgroup_${i}`,
-            layout: layout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: this.vertexUniformBuffer,
-                        offset: i * 256,
-                        size: 208,
-                    },
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: this.fragmentUniformBuffer,
-                        offset: 0,
-                        size: 80,
-                    },
-                },
-                {
-                    binding: 2,
-                    resource: this.blockTexture.createView(),
-                },
-                {
-                    binding: 3,
-                    resource: this.blockSampler,
-                },
-            ],
-        });
-    }
-  }
 
   Frame = () => {
     if (!this.device) return;
