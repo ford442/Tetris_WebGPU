@@ -203,7 +203,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.08); // Very faint white
+            return vec4<f32>(1.0, 1.0, 1.0, 0.15); // Slightly more visible grid
         }
     `;
     return { vertex, fragment };
@@ -501,18 +501,18 @@ export const Shaders = () => {
                     let internalGrid = isTrace;
 
                     // Shift ghost color towards Cyan/White for better visibility
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.8);
 
-                    var ghostFinal = ghostBase * wire * 4.0; // Very bright edges
-                    ghostFinal += ghostBase * internalGrid * 2.0; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 1.5; // Stronger scanlines
+                    var ghostFinal = ghostBase * wire * 3.0; // Bright edges
+                    ghostFinal += ghostBase * internalGrid * 1.5; // Glowing internal structure
+                    ghostFinal += ghostBase * scanline * 1.2; // Scanlines
 
-                    // Flicker - High frequency tech glitch
-                    let flickerBase = 0.9 + 0.1 * step(0.9, sin(time * 60.0));
+                    // Flicker - Reduced intensity for playability
+                    let flickerBase = 0.95 + 0.05 * step(0.9, sin(time * 30.0));
                     let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
 
-                    // Pulse alpha - More visible range
-                    let pulse = 0.35 + 0.15 * sin(time * 6.0);
+                    // Pulse alpha - More solid base alpha for better visibility
+                    let pulse = 0.6 + 0.2 * sin(time * 4.0);
 
                     return vec4<f32>(ghostFinal * flicker, pulse);
                 }
