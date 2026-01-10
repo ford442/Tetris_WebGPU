@@ -338,111 +338,104 @@ export const BackgroundShaders = () => {
 
     return { vertex, fragment };
 };
+
 export const Shaders = () => {
-  let params: any = {};
-  params.ambientIntensity = "0.8";
-  params.diffuseIntensity = "1.0";
-  params.shininess = "32.0";
+    let params: any = {};
+    params.ambientIntensity = "0.8";
+    params.diffuseIntensity = "1.0";
+    params.shininess = "32.0";
 
-  const vertex = `
-            struct Uniforms {
-                viewProjectionMatrix : mat4x4<f32>,
-                modelMatrix : mat4x4<f32>,
-                normalMatrix : mat4x4<f32>,  
-                colorVertex : vec4<f32>              
-            };
-            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+    const vertex = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            modelMatrix : mat4x4<f32>,
+            normalMatrix : mat4x4<f32>,
+            colorVertex : vec4<f32>
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
-            struct Output {
-                @builtin(position) Position : vec4<f32>,
-                @location(0) vPosition : vec4<f32>,
-                @location(1) vNormal : vec4<f32>,
-                @location(2) vColor : vec4<f32>,
-                @location(3) vUV : vec2<f32>
-            };
-          
-            @vertex
-            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
-                var output: Output;
-                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
-                output.vPosition = mPosition;
-                output.vNormal   = uniforms.normalMatrix * normal;
-                output.Position  = uniforms.viewProjectionMatrix * mPosition;
-                output.vColor    = uniforms.colorVertex;
-                output.vUV       = uv; 
-                return output;
-            }`;
+        struct Output {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vPosition : vec4<f32>,
+            @location(1) vNormal : vec4<f32>,
+            @location(2) vColor : vec4<f32>,
+            @location(3) vUV : vec2<f32>
+        };
 
-  const fragment = `
-            struct Uniforms {
-                lightPosition : vec4<f32>,
-                eyePosition : vec4<f32>,
-                color : vec4<f32>,
-                time : f32,
-                useGlitch: f32,
-            };
-            @binding(1) @group(0) var<uniform> uniforms : Uniforms;
-            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+        @vertex
+        fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
+            var output: Output;
+            let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+            output.vPosition = mPosition;
+            output.vNormal   = uniforms.normalMatrix * normal;
+            output.Position  = uniforms.viewProjectionMatrix * mPosition;
+            output.vColor    = uniforms.colorVertex;
+            output.vUV       = uv;
+            return output;
+        }
+    `;
 
-            @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-               
-                var N:vec3<f32> = normalize(vNormal.xyz);
-                let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
-                let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
-                let H:vec3<f32> = normalize(L + V);
+    const fragment = `
+        struct Uniforms {
+            lightPosition : vec4<f32>,
+            eyePosition : vec4<f32>,
+            color : vec4<f32>,
+            time : f32,
+            useGlitch: f32,
+        };
+        @binding(1) @group(0) var<uniform> uniforms : Uniforms;
+        @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+        @binding(3) @group(0) var blockSampler: sampler;
 
-                // --- 1. Texture ---
-                // Flip Y for correct orientation
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
-                
-                // --- 2. Frame Logic ---
-                // Calculate distance from center
-                let distX = min(vUV.x, 1.0 - vUV.x);
-                let distY = min(vUV.y, 1.0 - vUV.y);
-                let distEdge = min(distX, distY);
-                
-                // ADJUST FRAME WIDTH HERE
-                let borderThickness = 0.15; 
-                
-                // Create Mask: 0.0 = Frame, 1.0 = Window
-                let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
+        @fragment
+        fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
 
-                // --- 3. Color Logic ---
-                
-                // A. FRAME COLOR = Pure Texture (Gold)
-                let frameColor = texColor.rgb * 1.2; // Slight brightness boost
+            var N:vec3<f32> = normalize(vNormal.xyz);
+            let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
+            let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
+            let H:vec3<f32> = normalize(L + V);
 
-                // B. WINDOW COLOR = Block Color (Tinted)
-                // Contrast Boost: (Color - 0.5) * Contrast + 0.5
-                let contrast = 1.3;
-                var windowBase = vColor.rgb;
-                windowBase = (windowBase - vec3<f32>(0.5)) * contrast + vec3<f32>(0.5);
-                let windowColor = windowBase + vec3<f32>(0.1); // Add slight lightness
+            // --- 1. Texture Sampling ---
+            let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+            let texColor = textureSample(blockTexture, blockSampler, texUV);
 
-                // Mix Frame and Window Colors
-                var finalRGB = mix(frameColor, windowColor, frameMask);
+            // --- 2. Masking ---
+            // We still determine Frame vs Window to control the TINT and ALPHA
+            let distX = min(vUV.x, 1.0 - vUV.x);
+            let distY = min(vUV.y, 1.0 - vUV.y);
+            let distEdge = min(distX, distY);
+            let borderThickness = 0.15;
+            let frameMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
 
-                // --- 4. Alpha Logic (Crucial) ---
+            // --- 3. Color Application (TEXTURE FIRST) ---
 
-                let frameAlpha = 1.0; // FRAME IS SOLID
-                let windowAlpha = 0.8; // WINDOW IS TRANSLUCENT (High Opacity)
+            // A. Frame: Pure Texture (Gold)
+            let frameColor = texColor.rgb * 1.2;
 
-                // If frameMask is 0 (Frame), we get 1.0. If 1 (Window), we get 0.8.
-                let finalAlpha = mix(frameAlpha, windowAlpha, frameMask) * vColor.w;
+            // B. Window: Texture * Tint
+            // This keeps the texture detail (glass/scratches) but colors it.
+            // We brighten the tint (vColor + 0.2) so the texture doesn't get too dark.
+            let windowColor = texColor.rgb * (vColor.rgb + vec3<f32>(0.2));
 
-                // --- 5. Lighting ---
-                let diffuse = max(dot(N, L), 0.0);
-                let specular = pow(max(dot(N, H), 0.0), ${params.shininess});
-                let ambient = ${params.ambientIntensity};
+            // Mix: 0.0 = Frame, 1.0 = Window
+            var finalRGB = mix(frameColor, windowColor, frameMask);
 
-                finalRGB = finalRGB * (ambient + diffuse);
-                finalRGB += vec3<f32>(1.0) * specular * 0.4; // Specular shine
+            // --- 4. Alpha ---
+            let frameAlpha = 1.0;
+            let windowAlpha = 0.8; // Translucent center
+            let finalAlpha = mix(frameAlpha, windowAlpha, frameMask) * vColor.w;
 
-                return vec4<f32>(finalRGB, finalAlpha);
-            }`;
+            // --- 5. Lighting ---
+            let diffuse = max(dot(N, L), 0.0);
+            let specular = pow(max(dot(N, H), 0.0), ${params.shininess});
+            let ambient = ${params.ambientIntensity};
 
-  return { vertex, fragment };
+            finalRGB = finalRGB * (ambient + diffuse);
+            finalRGB += vec3<f32>(1.0) * specular * 0.4;
+
+            return vec4<f32>(finalRGB, finalAlpha);
+        }
+    `;
+
+    return { vertex, fragment };
 };
