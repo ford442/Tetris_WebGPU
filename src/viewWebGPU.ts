@@ -287,37 +287,33 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Main fill
+          // Store context state
+          ctx.save();
+
+          // Neon Glow (Outer)
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+
+          // Main fill (Semi-transparent for glass look)
+          ctx.fillStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.6)`;
+          ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+
+          // Restore state to avoid affecting other drawing ops (though we clear rect anyway)
+          ctx.restore();
+
+          // Border (Wireframe)
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+
+          // Inner highlight (Tech feel)
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
+
+          // Corner accent
           ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          ctx.fillRect(px, py, blockSize, blockSize);
-
-          // Top/Left Highlight (Bevel)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          ctx.beginPath();
-          ctx.moveTo(px, py + blockSize);
-          ctx.lineTo(px, py);
-          ctx.lineTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.lineTo(px + 4, py + 4);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.closePath();
-          ctx.fill();
-
-          // Bottom/Right Shadow (Bevel)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-          ctx.beginPath();
-          ctx.moveTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize, py + blockSize);
-          ctx.lineTo(px, py + blockSize);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.closePath();
-          ctx.fill();
-
-          // Center Highlight
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.fillRect(px + 5, py + 5, blockSize - 10, blockSize - 10);
+          ctx.fillRect(px + 2, py + 2, 2, 2);
+          ctx.fillRect(px + blockSize - 4, py + blockSize - 4, 2, 2);
         }
       });
     });
@@ -409,13 +405,7 @@ export default class View {
     // Check for new visual effects from Game Logic
     if (state.effectCounter > this.lastEffectCounter) {
         this.lastEffectCounter = state.effectCounter;
-        if (state.effectEvent === 'hardDrop' && state.lastDropPos) {
-             // Redundant shockwave trigger removed to prevent conflict with onHardDrop()
-             // The Controller now calls onHardDrop() directly with distance info for better visual juice.
-
-             // Still trigger a generic shake if needed, but onHardDrop handles that too.
-             // Leaving this block empty or just for debugging.
-        }
+        // Effect handling delegated to specific event methods called by Controller
     }
 
     // Check if level has changed and update video accordingly
