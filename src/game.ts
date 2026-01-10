@@ -17,6 +17,7 @@ export interface GameState {
   lockDelayTime: number;
   effectEvent: string | null;
   effectCounter: number;
+  lastDropPos: { x: number, y: number } | null;
 }
 
 export default class Game {
@@ -42,6 +43,9 @@ export default class Game {
   effectEvent: string | null = null;
   effectCounter: number = 0;
   lastDropPos: { x: number, y: number } | null = null;
+
+  // T-Spin Tracking
+  isTSpin: boolean = false;
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -169,9 +173,18 @@ export default class Game {
     return this.collisionDetector.getGhostY(this.activPiece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean } {
-    const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
+    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
+        linesCleared: [], locked: false, gameOver: false, tSpin: false
+    };
+
+    // Check if hard drop moves the piece
     const ghostY = this.getGhostY();
+    if (this.activPiece.y !== ghostY) {
+        // Movement invalidates T-Spin
+        this.isTSpin = false;
+    }
+
     this.activPiece.y = ghostY;
 
     // Trigger visual effect
@@ -182,11 +195,18 @@ export default class Game {
     // Force lock
     this.lockPiece();
     result.locked = true;
+
+    // Capture T-Spin state before updatePieces resets everything
+    const wasTSpin = this.isTSpin;
+
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        this.scoringSystem.updateScore(linesScore.length);
+        // TODO: Pass tSpin to scoring system
+        this.scoringSystem.updateScore(linesScore.length); // Add tSpin bonus logic later if needed
         result.linesCleared = linesScore;
+        result.tSpin = wasTSpin;
     }
+
     this.updatePieces();
     if (this.gameOver) result.gameOver = true;
 
@@ -201,14 +221,17 @@ export default class Game {
     this.holdPieceObj = null;
     this.canHold = true;
     this.lockTimer = 0;
+    this.isTSpin = false;
 
     this.activPiece = this.createPiece();
     this.nextPiece = this.createPiece();
   }
 
   // Called every frame
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean } {
-      const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
+      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
+          linesCleared: [], locked: false, gameOver: false, tSpin: false
+      };
       if (this.gameOver) return result;
 
       // Check if piece is on the ground
@@ -217,18 +240,21 @@ export default class Game {
       this.activPiece.y -= 1;
 
       if (onGround) {
-          // dt is in milliseconds (from Controller) or seconds?
-          // Controller passes (time - lastTime) which is ms.
-          // lockDelayTime is 500ms.
+          // dt is in milliseconds
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
               this.lockPiece();
               result.locked = true;
+
+              const wasTSpin = this.isTSpin;
+
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
                   this.scoringSystem.updateScore(linesScore.length);
                   result.linesCleared = linesScore;
+                  result.tSpin = wasTSpin;
               }
+
               this.updatePieces();
               if (this.gameOver) result.gameOver = true;
           }
@@ -243,6 +269,7 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x += 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
         this.handleMoveReset();
     }
   }
@@ -252,6 +279,7 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
         this.handleMoveReset();
     }
   }
@@ -261,28 +289,67 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
         this.lockTimer = 0;
     }
   }
 
   dropPiece(): void {
-      // Soft drop instant? Or hard drop?
-      // Assuming this is used for some legacy drop logic, but hardDrop is separate.
-      // Let's keep it but use hardDrop logic if intent is instant.
-      // But usually 'dropPiece' means 'Soft Drop all the way'?
+    let moved = false;
     while (true) {
       this.activPiece.y += 1;
       if (this.hasCollision()) {
         this.activPiece.y -= 1;
         break;
       }
+      moved = true;
     }
+    if (moved) this.isTSpin = false;
+
     this.lockPiece();
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
       this.scoringSystem.updateScore(linesScore.length);
     }
     this.updatePieces();
+  }
+
+  checkTSpin(): void {
+      if (this.activPiece.type !== 'T') {
+          this.isTSpin = false;
+          return;
+      }
+
+      // Check 4 corners of the 3x3 box
+      // Relative to piece X,Y: (0,0), (2,0), (0,2), (2,2)
+      // Standard T-piece spawns/rotates within a 3x3 grid.
+      // 3 of 4 corners must be occupied (block or wall/floor).
+
+      const px = this.activPiece.x;
+      const py = this.activPiece.y;
+
+      const corners = [
+          { x: px,     y: py     }, // Top-Left
+          { x: px + 2, y: py     }, // Top-Right
+          { x: px,     y: py + 2 }, // Bottom-Left
+          { x: px + 2, y: py + 2 }  // Bottom-Right
+      ];
+
+      let occupied = 0;
+      for (const c of corners) {
+          // Check if out of bounds or occupied
+          if (c.x < 0 || c.x >= this.playfieldWidth || c.y >= this.playfieldHeight) {
+              occupied++;
+          } else if (c.y >= 0) { // If valid Y inside grid
+              if (this.getCell(c.x, c.y) !== 0) {
+                  occupied++;
+              }
+          }
+          // Note: Standard SRS T-Spin rules usually don't count the space *above* the board as occupied wall,
+          // but we treat x < 0 and x >= width as walls.
+      }
+
+      this.isTSpin = (occupied >= 3);
   }
 
   rotatePiece(rightRurn: boolean = true): void {
@@ -302,6 +369,7 @@ export default class Game {
       this.activPiece.blocks = tempPiece.blocks;
       this.activPiece.rotation = tempPiece.rotation;
       this.handleMoveReset();
+      this.checkTSpin(); // Check T-Spin after rotation
       return;
     }
 
@@ -320,6 +388,7 @@ export default class Game {
             this.activPiece.blocks = tempPiece.blocks;
             this.activPiece.rotation = tempPiece.rotation;
             this.handleMoveReset();
+            this.checkTSpin(); // Check T-Spin after kick
             return;
         }
     }
@@ -393,6 +462,7 @@ export default class Game {
     this.canHold = true;
     this.lockTimer = 0;
     this.lockResets = 0;
+    this.isTSpin = false;
 
     if (this.hasCollision()) {
         this.gameOver = true;
@@ -465,5 +535,6 @@ export default class Game {
       this.canHold = false;
       this.lockTimer = 0;
       this.lockResets = 0;
+      this.isTSpin = false;
   }
 }
