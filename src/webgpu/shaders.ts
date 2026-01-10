@@ -456,10 +456,23 @@ export const Shaders = () => {
 
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
+                    // Hologram Effect
                     let scanY = fract(vUV.y * 30.0 - time * 5.0);
                     let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
+
+                    // Add glitchy offset to UV for ghost
+                    let glitchOffset = sin(time * 50.0 + vUV.y * 10.0) * 0.01;
+
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
-                    var ghostFinal = ghostBase * edgeGlow * 4.0 + ghostBase * isTrace * 2.0 + ghostBase * scanline * 1.5;
+
+                    // Boost Rim Light (Fresnel) for ghost
+                    let ghostFresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0) * 2.0;
+
+                    var ghostFinal = ghostBase * edgeGlow * 4.0
+                                   + ghostBase * isTrace * 2.0
+                                   + ghostBase * scanline * 2.0
+                                   + vec3<f32>(0.4, 0.8, 1.0) * ghostFresnel;
+
                     let flicker = select(1.0, 0.9 + 0.1 * step(0.9, sin(time * 60.0)), uniforms.useGlitch > 0.5);
                     return vec4<f32>(ghostFinal * flicker, 0.35 + 0.15 * sin(time * 6.0));
                 }

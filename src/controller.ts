@@ -250,7 +250,7 @@ export default class Controller {
 
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
@@ -302,7 +302,7 @@ export default class Controller {
 
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
