@@ -327,9 +327,9 @@ export default class View {
     });
   }
 
-  onLineClear(lines: number[]) {
+  onLineClear(lines: number[], tSpin: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
-      this.visualEffects.triggerShake(0.5, 0.5);
+      this.visualEffects.triggerShake(tSpin ? 0.8 : 0.5, tSpin ? 0.6 : 0.5); // More shake for T-Spin
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -337,15 +337,37 @@ export default class View {
           // Sweep across the line
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
-              // Mix of Gold and Cyan for victory feel
-              // Add variety based on line count
-              const isTetris = lines.length === 4;
-              const color = isTetris
-                  ? [1.0, 0.8, 0.0, 1.0] // GOLD for Tetris
-                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple for normal
 
-              const count = isTetris ? 40 : 20;
+              let color = [0.0, 1.0, 1.0, 1.0]; // Default Cyan
+              let count = 20;
+
+              // T-SPIN GOLD
+              if (tSpin) {
+                  color = [1.0, 0.8, 0.0, 1.0]; // GOLD
+                  count = 60; // Huge burst
+              } else if (lines.length === 4) {
+                  color = [1.0, 0.8, 0.0, 1.0]; // Gold for Tetris too? Or maybe distinct?
+                  // Let's make Tetris slightly different, maybe White/Blue?
+                  // Using Gold for both T-Spin and Tetris is fine for "Premium" feel.
+                  // But let's mix it up.
+                  color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
+                  count = 40;
+              } else {
+                  color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
+              }
+
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
+
+              // If T-Spin, add a radial burst at the center of the line
+              if (tSpin && c === 5) {
+                   for (let i=0; i<30; i++) {
+                      const angle = (i / 30) * Math.PI * 2;
+                      const speed = 20.0;
+                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.5, 0.0, 1.0]); // Orange/Gold
+                   }
+                   // Add extra shockwave/aberration for T-Spin
+                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1);
+              }
           }
       });
   }
