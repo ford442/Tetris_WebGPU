@@ -482,12 +482,12 @@ export default class View {
 
     // --- 1. GLOBAL SAMPLER (Max Quality) ---
     this.blockSampler = this.device.createSampler({
-        magFilter: 'linear',
-        minFilter: 'linear',
-        mipmapFilter: 'linear',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+        mipmapFilter: 'nearest',
         addressModeU: 'repeat',
         addressModeV: 'repeat',
-        maxAnisotropy: 16
+        maxAnisotropy: 1
     });
     this.sampler = this.device.createSampler({
         magFilter: 'linear',
