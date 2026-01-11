@@ -385,6 +385,7 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32, // Offset 48
                 useGlitch: f32, // Offset 52
+                lockPercent: f32, // Offset 56 (Lock Delay visual feedback)
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -486,6 +487,16 @@ export const Shaders = () => {
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
                 let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
+
+                // --- Lock Warning Effect ---
+                // Pulse Red when lock percent > 0.5
+                let lockPercent = uniforms.lockPercent;
+                if (lockPercent > 0.5) {
+                    let warningPulse = sin(time * 20.0) * 0.5 + 0.5;
+                    let warningColor = vec3<f32>(1.0, 0.0, 0.0);
+                    let warningStrength = (lockPercent - 0.5) * 2.0 * warningPulse * 0.5;
+                    finalColor = mix(finalColor, warningColor, warningStrength);
+                }
 
                 // --- GHOST PIECE RENDERING ---
                 // Ghost piece alpha < 0.4

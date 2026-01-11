@@ -947,6 +947,13 @@ export default class View {
     // Update glitch state for blocks
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
 
+    // Update Lock Warning
+    let lockPercent = 0.0;
+    if (this.state && this.state.lockDelayTime > 0) {
+        lockPercent = this.state.lockTimer / this.state.lockDelayTime;
+    }
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
+
     // Update Shockwave Uniforms
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
