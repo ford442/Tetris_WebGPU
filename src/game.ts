@@ -18,6 +18,7 @@ export interface GameState {
   effectEvent: string | null;
   effectCounter: number;
   lastDropPos: { x: number, y: number } | null;
+  lastDropDistance: number;
 }
 
 export default class Game {
@@ -43,6 +44,7 @@ export default class Game {
   effectEvent: string | null = null;
   effectCounter: number = 0;
   lastDropPos: { x: number, y: number } | null = null;
+  lastDropDistance: number = 0;
 
   // T-Spin Tracking
   isTSpin: boolean = false;
@@ -165,7 +167,8 @@ export default class Game {
       lockDelayTime: this.lockDelayTime,
       effectEvent: this.effectEvent,
       effectCounter: this.effectCounter,
-      lastDropPos: this.lastDropPos
+      lastDropPos: this.lastDropPos,
+      lastDropDistance: this.lastDropDistance
     }
   }
 
@@ -185,12 +188,14 @@ export default class Game {
         this.isTSpin = false;
     }
 
+    const distance = ghostY - this.activPiece.y;
     this.activPiece.y = ghostY;
 
     // Trigger visual effect
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
+    this.lastDropDistance = distance;
 
     // Force lock
     this.lockPiece();

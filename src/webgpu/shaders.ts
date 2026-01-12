@@ -46,7 +46,7 @@ export const PostProcessShaders = () => {
             var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
-                let radius = time * 1.5; // Expanding radius
+                let radius = time * 2.0; // Faster expansion for snap
                 let width = params.x; // e.g. 0.1
                 let strength = params.y; // e.g. 0.05
                 let diff = dist - radius;
