@@ -410,83 +410,49 @@ export const Shaders = () => {
 
                 var baseColor = vColor.xyz;
 
-                // --- Premium Tech Pattern ---
-                // Subtle hexagonal grid overlay
-                let hexScale = 4.0;
-                let uvHex = vUV * hexScale;
-                // Skew for hex look
-                let r = vec2<f32>(1.0, 1.73);
-                let h = r * 0.5;
-                let a = (uvHex - r * floor(uvHex / r)) - h;
-                let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
-                let guv = select(b, a, dot(a, a) < dot(b, b));
+                // --- Clean Modern Glass Style ---
 
-                // Distance to hex center
-                let hexDist = length(guv);
-                let hexEdge = smoothstep(0.45, 0.5, hexDist); // Sharp lines
-
-                // Circuit Traces (keep original logic but refined)
-                let uvScale = 3.0;
-                let uvGrid = vUV * uvScale;
-                let gridPos = fract(uvGrid);
-                let gridThick = 0.05; // Thinner, cleaner lines
-                let lineX = step(1.0 - gridThick, gridPos.x) + step(gridPos.x, gridThick);
-                let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
-                let isTrace = max(lineX, lineY);
-
-                // Pulse effect - ENHANCED for JUICE
+                // Pulse effect
                 let time = uniforms.time;
-                // Sharp heartbeat pulse: sin^4
-                // Faster pulse for more energy (3.0)
-                let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
-                let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0); // Extremely sharp peaks "Neon Heartbeat"
+                let sineWave = sin(time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
+                let pulsePos = pow(sineWave * 0.5 + 0.5, 4.0); // Softer pulse
 
-                // Surface finish
+                // Surface finish (Frosted Glass Noise)
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 
-                // Apply texture
-                if (hexEdge > 0.5) {
-                   baseColor *= 0.95; // Subtle hex pattern indentation
-                }
+                // Bevel/Edge detection
+                let uvEdgeDistX = abs(vUV.x - 0.5) * 2.0;
+                let uvEdgeDistY = abs(vUV.y - 0.5) * 2.0;
+                let uvEdgeDist = max(uvEdgeDistX, uvEdgeDistY);
 
-                if (isTrace > 0.5) {
-                    baseColor *= 0.5; // Deep grooves
-                } else {
-                    // Crystalline noise sparkle
-                    let sparkle = step(0.98, noise) * 0.5 * (sin(time * 5.0 + vPosition.x * 10.0) * 0.5 + 0.5);
-                    baseColor += vec3<f32>(sparkle);
-                }
+                // Smooth rounded bevel
+                let bevel = smoothstep(0.8, 0.95, uvEdgeDist);
+
+                // Inner "Core" Glow
+                let coreGlow = 1.0 - smoothstep(0.0, 0.6, length(vUV - 0.5));
+
+                // Apply texture/finish
+                // Add subtle grain to base color
+                baseColor += (noise - 0.5) * 0.1;
+
+                // Add inner glow
+                baseColor += vColor.rgb * coreGlow * 0.4;
 
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
-                // --- Emissive Elements ---
-                // Traces glow intensely
-                if (isTrace > 0.5) {
-                    let traceGlow = pulsePos * 4.0; // Brighter glow
-                    finalColor += vColor.rgb * traceGlow;
-                    finalColor += vec3<f32>(1.0) * traceGlow * 0.6; // White hot core
-                }
-                // Hex corners glow slightly
-                if (hexDist < 0.1) {
-                    finalColor += vColor.rgb * 0.5 * pulsePos;
-                }
+                // Add bevel highlight
+                finalColor += vec3<f32>(1.0) * bevel * 0.5;
 
-                // --- Fresnel Rim Light (Enhanced) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper
-                let rimColor = vec3<f32>(0.2, 0.8, 1.0); // Cyan/Ice rim
+                // --- Fresnel Rim Light (Glassy Look) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.0); // Broader Fresnel for glass
+                let rimColor = mix(vColor.rgb, vec3<f32>(1.0), 0.5); // Rim matches block color but lighter
 
-                // Chromatic Aberration on Rim
-                let rimR = rimColor.r * (1.0 + 0.1 * sin(time + vPosition.y));
-                let rimG = rimColor.g;
-                let rimB = rimColor.b * (1.0 + 0.1 * cos(time + vPosition.y));
+                finalColor += rimColor * fresnelTerm * 2.0;
 
-                finalColor += vec3<f32>(rimR, rimG, rimB) * fresnelTerm * 2.5;
-
-                // --- Edge Highlight ---
-                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8; // Bright white edges
+                // --- Edge Highlight (Sharp Wireframe feel) ---
+                let edgeGlow = smoothstep(0.92, 0.98, uvEdgeDist);
+                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8;
 
                 // --- Lock Warning Effect ---
                 // Pulse Red when lock percent > 0.5
@@ -501,38 +467,28 @@ export const Shaders = () => {
                 // --- GHOST PIECE RENDERING ---
                 // Ghost piece alpha < 0.4
                 if (vColor.w < 0.4) {
-                    // Hologram effect
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0); // Faster, denser scanlines
-                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
-
-                    // Wireframe
+                    // Simple, clean ghost
                     let wire = edgeGlow;
 
-                    // Internal grid
-                    let internalGrid = isTrace;
+                    // Add a filled body with low alpha
+                    let body = 0.15;
 
-                    // Shift ghost color towards Cyan/White for better visibility
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.8);
+                    let ghostColor = mix(vColor.rgb, vec3<f32>(1.0), 0.5); // Whitish tint
 
-                    var ghostFinal = ghostBase * wire * 3.0; // Bright edges
-                    ghostFinal += ghostBase * internalGrid * 1.5; // Glowing internal structure
-                    ghostFinal += ghostBase * scanline * 1.2; // Scanlines
+                    var finalGhost = ghostColor * wire * 2.0; // Bright wireframe
+                    finalGhost += vColor.rgb * body; // Subtle body fill
 
-                    // Flicker - Reduced intensity for playability
-                    let flickerBase = 0.95 + 0.05 * step(0.9, sin(time * 30.0));
-                    let flicker = select(1.0, flickerBase, uniforms.useGlitch > 0.5);
+                    // Pulse
+                    let pulse = 0.8 + 0.2 * sin(time * 5.0);
 
-                    // Pulse alpha - More solid base alpha for better visibility
-                    let pulse = 0.6 + 0.2 * sin(time * 4.0);
-
-                    return vec4<f32>(ghostFinal * flicker, pulse);
+                    return vec4<f32>(finalGhost, pulse * 0.6); // Increased visibility
                 }
 
-                // --- Smart Transparency for Blocks ---
-                // Keep base material semi-transparent (0.85), but make features opaque (1.0)
+                // --- Transparency ---
+                // Base alpha is high for "Solid Glass" feel
                 let baseAlpha = vColor.w;
-                let featureAlpha = max(isTrace, max(edgeGlow, hexEdge));
-                let finalAlpha = clamp(max(baseAlpha, featureAlpha), 0.0, 1.0);
+                // Edges are fully opaque
+                let finalAlpha = max(baseAlpha, edgeGlow);
 
                 return vec4<f32>(finalColor, finalAlpha);
             }`;

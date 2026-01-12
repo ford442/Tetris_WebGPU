@@ -287,33 +287,38 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Store context state
           ctx.save();
 
-          // Neon Glow (Outer)
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+          // 1. Soft Outer Glow
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.6)`;
 
-          // Main fill (Semi-transparent for glass look)
-          ctx.fillStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.6)`;
-          ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+          // 2. Main Glassy Fill (Gradient)
+          const grad = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
+          grad.addColorStop(0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.4)`);
+          grad.addColorStop(1, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.1)`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(px, py, blockSize, blockSize);
 
-          // Restore state to avoid affecting other drawing ops (though we clear rect anyway)
           ctx.restore();
 
-          // Border (Wireframe)
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
+          // 3. Bevel Highlight (Top/Left)
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
+          ctx.lineWidth = 1.0;
+          ctx.beginPath();
+          ctx.moveTo(px + blockSize, py);
+          ctx.lineTo(px, py);
+          ctx.lineTo(px, py + blockSize);
+          ctx.stroke();
 
-          // Inner highlight (Tech feel)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.fillRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
+          // 4. Sharp Edge Border
+          ctx.strokeStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 1.0)`;
+          ctx.lineWidth = 1.0;
+          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // Corner accent
-          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          ctx.fillRect(px + 2, py + 2, 2, 2);
-          ctx.fillRect(px + blockSize - 4, py + blockSize - 4, 2, 2);
+          // 5. Inner Core
+          ctx.fillStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+          ctx.fillRect(px + blockSize * 0.35, py + blockSize * 0.35, blockSize * 0.3, blockSize * 0.3);
         }
       });
     });
@@ -321,7 +326,7 @@ export default class View {
 
   onLineClear(lines: number[]) {
       this.visualEffects.triggerFlash(1.0);
-      this.visualEffects.triggerShake(0.5, 0.5);
+      this.visualEffects.triggerShake(0.6, 0.6); // Slightly more shake
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -329,25 +334,26 @@ export default class View {
           // Sweep across the line
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
-              // Mix of Gold and Cyan for victory feel
-              // Add variety based on line count
-              const isTetris = lines.length === 4;
-              const color = isTetris
-                  ? [1.0, 0.8, 0.0, 1.0] // GOLD for Tetris
-                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple for normal
 
-              const count = isTetris ? 40 : 20;
+              const isTetris = lines.length === 4;
+              // More vibrant colors
+              const color = isTetris
+                  ? [1.0, 0.9, 0.1, 1.0] // Bright Gold
+                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.2, 1.0, 1.0]); // Cyan/Purple
+
+              const count = isTetris ? 60 : 30; // Increased count
+              const speed = isTetris ? 12.0 : 8.0;
+
+              this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, 0, speed, color);
+              // Also burst up/down
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
   }
 
   onLock() {
-      this.visualEffects.triggerLock(0.3);
-      this.visualEffects.triggerShake(0.2, 0.15);
-
-      // Small sparks at lock position? (Requires X/Y context, which onLock doesn't have passed yet)
-      // For now, just screen shake.
+      this.visualEffects.triggerLock(0.4); // Stronger flash
+      this.visualEffects.triggerShake(0.3, 0.2);
   }
 
   onHold() {
