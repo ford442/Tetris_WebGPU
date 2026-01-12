@@ -31,7 +31,7 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
-  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any };
+  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number };
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -437,11 +437,27 @@ export default class View {
     if (state.effectCounter > this.lastEffectCounter) {
         this.lastEffectCounter = state.effectCounter;
         if (state.effectEvent === 'hardDrop' && state.lastDropPos) {
-             // Redundant shockwave trigger removed to prevent conflict with onHardDrop()
-             // The Controller now calls onHardDrop() directly with distance info for better visual juice.
+             const distance = state.lastDropDistance || 0;
+             const worldX = state.lastDropPos.x * 2.2;
+             const impactY = state.lastDropPos.y * -2.2;
 
-             // Still trigger a generic shake if needed, but onHardDrop handles that too.
-             // Leaving this block empty or just for debugging.
+             // Convert world pos to screen UV (approximate)
+             const camY = -20.0;
+             const camZ = 75.0;
+             const fov = (35 * Math.PI) / 180;
+             const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
+             const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+
+             const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
+             const uvY = 0.5 - (impactY - camY) / visibleHeight;
+
+             // Dynamic shockwave based on drop distance (Logic from onHardDrop moved here)
+             const strength = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
+             const width = 0.1 + Math.min(distance * 0.01, 0.2);     // Max 0.3
+             const aberration = 0.02 + Math.min(distance * 0.005, 0.08); // Max 0.1
+
+             this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
+             this.visualEffects.triggerShake(1.2 + distance * 0.05, 0.2);
         }
     }
 
