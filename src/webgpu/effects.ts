@@ -148,10 +148,11 @@ export class VisualEffects {
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03): void {
+        // console.log("Shockwave triggered", center, strength);
         this.shockwaveCenter = center;
         this.shockwaveParams = [width, strength, aberration, 0.0];
         // Start effect at 0.01 to avoid 0.0 check failure
-        // The shader uses time * 1.5 for radius, so 0.01 is a small starting circle
+        // The shader uses time * 2.0 for radius, so 0.01 is a small starting circle
         this.shockwaveTimer = 0.01;
     }
 
