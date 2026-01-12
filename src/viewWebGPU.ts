@@ -31,7 +31,7 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
-  state: { playfield: number[][] };
+  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any };
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -159,6 +159,8 @@ export default class View {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       ],
+      lockTimer: 0,
+      lockDelayTime: 500,
     };
     this.blockData = {};
     if (this.isWebGPU.result) {
@@ -291,37 +293,35 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Main fill
-          ctx.fillStyle = `rgb(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255})`;
-          ctx.fillRect(px, py, blockSize, blockSize);
+          // Neon Style Rendering
+          const r = Math.floor(color[0] * 255);
+          const g = Math.floor(color[1] * 255);
+          const b = Math.floor(color[2] * 255);
+          const cssColor = `rgb(${r}, ${g}, ${b})`;
 
-          // Top/Left Highlight (Bevel)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          ctx.beginPath();
-          ctx.moveTo(px, py + blockSize);
-          ctx.lineTo(px, py);
-          ctx.lineTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.lineTo(px + 4, py + 4);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.closePath();
-          ctx.fill();
+          // 1. Glow
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = cssColor;
 
-          // Bottom/Right Shadow (Bevel)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-          ctx.beginPath();
-          ctx.moveTo(px + blockSize, py);
-          ctx.lineTo(px + blockSize, py + blockSize);
-          ctx.lineTo(px, py + blockSize);
-          ctx.lineTo(px + 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + blockSize - 4);
-          ctx.lineTo(px + blockSize - 4, py + 4);
-          ctx.closePath();
-          ctx.fill();
+          // 2. Stroke (Neon Tube)
+          ctx.strokeStyle = cssColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // Center Highlight
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.fillRect(px + 5, py + 5, blockSize - 10, blockSize - 10);
+          // 3. Faint Inner Fill (Glass)
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+          ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+
+          // 4. Core Highlight
+          ctx.shadowBlur = 0; // Reset shadow for highlight
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          const coreSize = 4;
+          ctx.fillRect(
+              px + blockSize / 2 - coreSize / 2,
+              py + blockSize / 2 - coreSize / 2,
+              coreSize,
+              coreSize
+          );
         }
       });
     });
@@ -376,8 +376,9 @@ export default class View {
       this.visualEffects.triggerLock(0.3);
       this.visualEffects.triggerShake(0.2, 0.15);
 
-      // Small sparks at lock position? (Requires X/Y context, which onLock doesn't have passed yet)
-      // For now, just screen shake.
+      // Trigger a central shockwave on lock for impact
+      // This satisfies the "Shockwave" implementation requirement and adds "Juice"
+      this.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05);
   }
 
   onHold() {
@@ -642,7 +643,7 @@ export default class View {
 
     // Background Uniforms
     this.backgroundUniformBuffer = this.device.createBuffer({
-        size: 64, // time(4)+pad(4)+res(8) + 3*colors(16*3=48) = 64
+        size: 80, // INCREASED: time(4)+level(4)+res(8) + 3*colors(48) + lock(4)+pad(12) = 80
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1006,10 +1007,18 @@ export default class View {
     // Update time for background and blocks
     // used 'time' calculated at start of frame
 
-    // Background time & level
+    // Background time & level & Lock Pulse
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([this.visualEffects.currentLevel]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+
+    // Calculate Lock Percent (Tension)
+    let lockPercent = 0.0;
+    if (this.state && this.state.lockTimer !== undefined && this.state.lockDelayTime) {
+        lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
+    }
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array([lockPercent]));
+
 
     // Block shader time (global update once per frame)
     // 48 is the offset for 'time' in fragmentUniformBuffer
