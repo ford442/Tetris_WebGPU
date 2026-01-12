@@ -233,6 +233,7 @@ export const BackgroundShaders = () => {
             color1: vec3<f32>, // Offset 16 (align 16)
             color2: vec3<f32>, // Offset 32
             color3: vec3<f32>, // Offset 48
+            lockPercent: f32, // Offset 64
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -240,6 +241,7 @@ export const BackgroundShaders = () => {
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
           let time = uniforms.time * 0.3; // Slower, calmer animation
           let level = uniforms.level;
+          let lockPercent = uniforms.lockPercent;
           let uv = vUV;
 
           // Modify parameters based on level
@@ -322,6 +324,17 @@ export const BackgroundShaders = () => {
           var finalColor = deepSpace;
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;
+
+          // --- Lock Tension (Pulse Red) ---
+          // Pulse gets faster and more intense as lockPercent approaches 1.0
+          if (lockPercent > 0.0) {
+             let tensionPulse = sin(time * (10.0 + lockPercent * 20.0)) * 0.5 + 0.5;
+             let redFlash = vec3<f32>(1.0, 0.0, 0.0) * lockPercent * tensionPulse * 0.3;
+             finalColor += redFlash;
+
+             // Also distort the grid slightly?
+             // Not easily possible here without re-computing grid, but color flash is good.
+          }
 
           // --- Vignette effect to focus on center ---
           let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));

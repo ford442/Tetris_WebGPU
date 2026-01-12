@@ -161,7 +161,7 @@ export default class Game {
       activePiece: this.activPiece,
       isGameOver: this.gameOver,
       playfield: playfield2D,
-      lockTimer: this.lockTimer,
+      lockTimer: this.lockTimer, // Exposed for Visual Pulse Effect
       lockDelayTime: this.lockDelayTime,
       effectEvent: this.effectEvent,
       effectCounter: this.effectCounter,
