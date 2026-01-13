@@ -34,7 +34,7 @@ export default class Game {
 
   // Lock Delay
   lockTimer: number = 0;
-  readonly lockDelayTime: number = 500; // ms
+  readonly lockDelayTime: number = 600; // ms (Generous: 500->600)
 
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
