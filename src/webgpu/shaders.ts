@@ -76,12 +76,14 @@ export const PostProcessShaders = () => {
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap)
+            // Bloom-ish boost (cheap but juicy)
             var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            // Lower threshold slightly and boost intensity for neon pop
-            if (luminance > 0.7) {
-                color += color * 0.3;
+            // Lower threshold for more glow, higher intensity
+            let bloomThreshold = 0.6;
+            let bloomIntensity = 0.5;
+            if (luminance > bloomThreshold) {
+                color += color * bloomIntensity;
             }
 
             // Vignette darken
@@ -454,40 +456,55 @@ export const Shaders = () => {
                 let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
                 let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0);
 
+                // Global breathing for all blocks
+                let breath = sin(time * 2.0) * 0.1 + 0.1;
+                finalColor += vColor.rgb * breath;
+
                 if (isTrace > 0.5) {
                     finalColor += vColor.rgb * pulsePos * 4.0;
                 }
 
-                // Fresnel
+                // Fresnel (Boosted for Glass look)
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                finalColor += vec3<f32>(0.2, 0.8, 1.0) * fresnelTerm * 2.5;
+                // Iridescent fresnel
+                let irid = vec3<f32>(
+                    sin(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
+                    cos(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
+                    1.0
+                );
+                finalColor += irid * fresnelTerm * 3.0; // Stronger rim
 
                 // Edge Glow
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.9, 1.0, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8;
+                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
+                finalColor += vec3<f32>(1.0) * edgeGlow * 1.0;
 
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
-                    // Hologram Effect
-                    let scanY = fract(vUV.y * 30.0 - time * 5.0);
-                    let scanline = smoothstep(0.4, 0.6, scanY) * (1.0 - smoothstep(0.6, 0.8, scanY));
+                    // Hologram Effect - High Tech
+                    let scanSpeed = 8.0;
+                    let scanY = fract(vUV.y * 20.0 - time * scanSpeed);
+                    let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY));
 
-                    // Add glitchy offset to UV for ghost
-                    let glitchOffset = sin(time * 50.0 + vUV.y * 10.0) * 0.01;
+                    // Wireframe logic (from edgeGlow)
+                    let wireframe = smoothstep(0.9, 0.95, uvEdgeDist);
 
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
+                    let ghostColor = vColor.rgb * 1.5; // Brighten original color
 
-                    // Boost Rim Light (Fresnel) for ghost
-                    let ghostFresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0) * 2.0;
+                    // Pulsing Alpha
+                    let ghostAlpha = 0.3 + 0.2 * sin(time * 10.0);
 
-                    var ghostFinal = ghostBase * edgeGlow * 4.0
-                                   + ghostBase * isTrace * 2.0
-                                   + ghostBase * scanline * 2.0
-                                   + vec3<f32>(0.4, 0.8, 1.0) * ghostFresnel;
+                    var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
+                                   + ghostColor * scanline * 0.5   // Scanlines
+                                   + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
 
-                    let flicker = select(1.0, 0.9 + 0.1 * step(0.9, sin(time * 60.0)), uniforms.useGlitch > 0.5);
-                    return vec4<f32>(ghostFinal * flicker, 0.35 + 0.15 * sin(time * 6.0));
+                    // Digital noise/flicker
+                    let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
+                    if (noise > 0.95) {
+                        ghostFinal += vec3<f32>(1.0); // Sparkle
+                    }
+
+                    return vec4<f32>(ghostFinal, ghostAlpha);
                 }
 
                 return vec4<f32>(finalColor, 1.0);

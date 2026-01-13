@@ -388,6 +388,28 @@ export default class View {
       this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]); // Purple flash
   }
 
+  triggerImpactEffects(worldX: number, impactY: number, distance: number) {
+      // Convert world pos to screen UV (approximate)
+      const camY = -20.0;
+      const camZ = 75.0;
+      const fov = (35 * Math.PI) / 180;
+      const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
+      const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+
+      const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
+      const uvY = 0.5 - (impactY - camY) / visibleHeight;
+
+      // Dynamic shockwave based on drop distance (Boosted for JUICE)
+      const strength = 0.1 + Math.min(distance * 0.02, 0.3); // Max 0.4
+      const width = 0.15 + Math.min(distance * 0.02, 0.3);     // Max 0.45
+      const aberration = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
+
+      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
+
+      // Increase shake intensity
+      this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.3);
+  }
+
   onHardDrop(x: number, y: number, distance: number) {
       // Create a vertical trail of particles
       const worldX = x * 2.2;
@@ -410,26 +432,7 @@ export default class View {
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
-      // Trigger Shockwave Effect
-      // Convert world pos to screen UV (approximate)
-      const camY = -20.0;
-      const camZ = 75.0;
-      const fov = (35 * Math.PI) / 180;
-      const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
-      const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-
-      const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
-      const uvY = 0.5 - (impactY - camY) / visibleHeight;
-
-      // Dynamic shockwave based on drop distance
-      const strength = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
-      const width = 0.1 + Math.min(distance * 0.01, 0.2);     // Max 0.3
-      const aberration = 0.02 + Math.min(distance * 0.005, 0.08); // Max 0.1
-
-      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
-
-      // Increase shake
-      this.visualEffects.triggerShake(1.2 + distance * 0.05, 0.2);
+      this.triggerImpactEffects(worldX, impactY, distance);
   }
 
   renderMainScreen(state: any) {
@@ -441,23 +444,7 @@ export default class View {
              const worldX = state.lastDropPos.x * 2.2;
              const impactY = state.lastDropPos.y * -2.2;
 
-             // Convert world pos to screen UV (approximate)
-             const camY = -20.0;
-             const camZ = 75.0;
-             const fov = (35 * Math.PI) / 180;
-             const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
-             const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-
-             const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
-             const uvY = 0.5 - (impactY - camY) / visibleHeight;
-
-             // Dynamic shockwave based on drop distance (Logic from onHardDrop moved here)
-             const strength = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
-             const width = 0.1 + Math.min(distance * 0.01, 0.2);     // Max 0.3
-             const aberration = 0.02 + Math.min(distance * 0.005, 0.08); // Max 0.1
-
-             this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
-             this.visualEffects.triggerShake(1.2 + distance * 0.05, 0.2);
+             this.triggerImpactEffects(worldX, impactY, distance);
         }
     }
 
