@@ -110,7 +110,7 @@ export const ParticleShaders = () => {
 
         @vertex
         fn main(
-            @location(0) particlePos : vec3<f32>,
+            @location(0) particlePosRot : vec4<f32>, // xyz + rot
             @location(1) particleColor : vec4<f32>,
             @location(2) particleScale : f32,
             @builtin(vertex_index) vertexIndex : u32
@@ -130,10 +130,17 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
-            // Billboarding: Align with camera plane (simple XY approximation for this fixed view)
-            // For a true billboard in a perspective camera, we'd need the camera Up/Right vectors,
-            // but since the camera is mostly fixed looking at Z, this works reasonably well.
-            let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
+            // Rotate the quad logic
+            let angle = particlePosRot.w;
+            let c = cos(angle);
+            let s = sin(angle);
+            let rotatedPos = vec2<f32>(
+                pos.x * c - pos.y * s,
+                pos.x * s + pos.y * c
+            );
+
+            // Billboarding
+            let worldPos = particlePosRot.xyz + vec3<f32>(rotatedPos * particleScale, 0.0);
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
             output.color = particleColor;
@@ -470,16 +477,28 @@ export const Shaders = () => {
                     // Simple, clean ghost
                     let wire = edgeGlow;
 
-                    // Add a filled body with low alpha
-                    let body = 0.15;
+                    // Holographic scanline effect
+                    let scanPos = vPosition.y * 10.0 + time * 5.0;
+                    let scanline = sin(scanPos) * 0.5 + 0.5;
+                    // Sharp lines
+                    scanline = pow(scanline, 3.0);
 
-                    let ghostColor = mix(vColor.rgb, vec3<f32>(1.0), 0.5); // Whitish tint
+                    // Add a filled body with low alpha
+                    let body = 0.15 + scanline * 0.2; // Brighter on scanline
+
+                    let ghostColor = mix(vColor.rgb, vec3<f32>(0.5, 0.8, 1.0), 0.5); // Sci-fi Blue tint
 
                     var finalGhost = ghostColor * wire * 2.0; // Bright wireframe
                     finalGhost += vColor.rgb * body; // Subtle body fill
 
                     // Pulse
-                    let pulse = 0.8 + 0.2 * sin(time * 5.0);
+                    let pulse = 0.8 + 0.2 * sin(time * 3.0);
+
+                    // Add digital glitch noise to ghost
+                    let ghostNoise = fract(sin(dot(vUV + time, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+                    if (ghostNoise > 0.98) {
+                        finalGhost += vec3<f32>(0.5); // Glitch flash
+                    }
 
                     return vec4<f32>(finalGhost, pulse * 0.6); // Increased visibility
                 }

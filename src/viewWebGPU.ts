@@ -47,6 +47,7 @@ export default class View {
   vpMatrix: any;
   renderPassDescription!: GPURenderPassDescriptor;
   vertexUniformBuffer!: GPUBuffer;
+  vertexUniformData_CACHE!: Float32Array; // CPU-side cache for batched updates
   vertexUniformBuffer_border!: GPUBuffer;
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
   uniformBindGroup_CACHE: GPUBindGroup[] = []; // Cache for dynamic blocks
@@ -646,14 +647,14 @@ export default class View {
             module: this.device.createShaderModule({ code: particleShader.vertex }),
             entryPoint: 'main',
             buffers: [
-                // Interleaved buffer: pos(3) + color(4) + scale(1) = 8 floats = 32 bytes
+                // Interleaved buffer: pos(4:xyz+rot) + color(4) + scale(1) + pad(3) = 12 floats = 48 bytes
                 {
-                    arrayStride: 32,
+                    arrayStride: 48,
                     stepMode: 'instance', // We are drawing quads (6 verts) per instance
                     attributes: [
-                        { shaderLocation: 0, format: 'float32x3', offset: 0 },  // pos
-                        { shaderLocation: 1, format: 'float32x4', offset: 12 }, // color
-                        { shaderLocation: 2, format: 'float32',   offset: 28 }, // scale
+                        { shaderLocation: 0, format: 'float32x4', offset: 0 },  // pos + rot
+                        { shaderLocation: 1, format: 'float32x4', offset: 16 }, // color
+                        { shaderLocation: 2, format: 'float32',   offset: 32 }, // scale
                     ]
                 }
             ]
@@ -678,9 +679,9 @@ export default class View {
     });
 
     // Create initial particle buffer (enough for max particles)
-    // 32 bytes per particle * maxParticles
+    // 48 bytes per particle * maxParticles
     this.particleVertexBuffer = this.device.createBuffer({
-        size: 32 * this.particleSystem.maxParticles,
+        size: 48 * this.particleSystem.maxParticles,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
 
@@ -830,10 +831,13 @@ export default class View {
 
     this.renderPlayfild_Border_WebGPU();
 
+    const vertexUniformBufferSize = this.state.playfield.length * 10 * 256;
     this.vertexUniformBuffer = this.device.createBuffer({
-      size: this.state.playfield.length * 10 * 256,
+      size: vertexUniformBufferSize,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    // Create CPU-side data cache (Float32)
+    this.vertexUniformData_CACHE = new Float32Array(vertexUniformBufferSize / 4);
 
     // --- Pre-create BindGroups for Dynamic Blocks (Cache) ---
     // Max blocks = 20 rows * 10 cols = 200
@@ -1083,6 +1087,11 @@ export default class View {
 
     this.uniformBindGroup_ARRAY = [];
     let blockIndex = 0; // Index for retrieving from CACHE
+    let hasData = false;
+
+    // Use float offsets (byte offset / 4)
+    // Stride per block = 256 bytes = 64 floats
+    const stride = 64;
 
     for (let row = 0; row < playfield_length; row++) {
       for (let colom = 0; colom < playfield[row].length; colom++) {
@@ -1101,7 +1110,9 @@ export default class View {
 
         // Retrieve pre-created bindgroup
         let uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
-        const offset_ARRAY = blockIndex * 256;
+
+        // Calculate base float index for this block
+        const baseIndex = blockIndex * stride;
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
@@ -1116,34 +1127,33 @@ export default class View {
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
-        // Write to the specific slice of the buffer
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 0,
-          this.vpMatrix
-        );
+        // Update CPU cache (Float32Array)
+        // Offset 0: VP Matrix (16 floats)
+        this.vertexUniformData_CACHE.set(this.vpMatrix, baseIndex + 0);
 
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 64,
-          this.MODELMATRIX
-        );
+        // Offset 16: Model Matrix (16 floats) (64 bytes / 4)
+        this.vertexUniformData_CACHE.set(this.MODELMATRIX, baseIndex + 16);
 
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 128,
-          this.NORMALMATRIX
-        );
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 192,
-          new Float32Array([...color, alpha])
-        );
+        // Offset 32: Normal Matrix (16 floats) (128 bytes / 4)
+        this.vertexUniformData_CACHE.set(this.NORMALMATRIX, baseIndex + 32);
+
+        // Offset 48: Color (4 floats) (192 bytes / 4)
+        this.vertexUniformData_CACHE.set([...color, alpha], baseIndex + 48);
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
 
         blockIndex++;
+        hasData = true;
       }
+    }
+
+    // Perform a single write to the GPU buffer if we have data
+    if (hasData) {
+        // We only need to upload data for the number of blocks used
+        // Size = blockIndex * 64 floats
+        const usedSize = blockIndex * 64;
+        const dataView = this.vertexUniformData_CACHE.subarray(0, usedSize);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer, 0, dataView);
     }
   }
 
