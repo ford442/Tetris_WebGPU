@@ -8,6 +8,8 @@
 export interface Particle {
     x: number; y: number; z: number;
     vx: number; vy: number; vz: number;
+    rotation: number;
+    rotSpeed: number;
     color: number[];    // r, g, b, a
     scale: number;
     life: number;           // remaining life (0-1)
@@ -61,6 +63,8 @@ export class ParticleSystem {
         this.particles.push({
             x, y, z,
             vx, vy, vz,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 10.0,
             color,
             life,
             maxLife: life,
@@ -82,6 +86,7 @@ export class ParticleSystem {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
             p.z += p.vz * dt;
+            p.rotation += p.rotSpeed * dt;
 
             // Gravity
             p.vy -= 20.0 * dt;
@@ -90,27 +95,31 @@ export class ParticleSystem {
             p.vx *= 0.95;
             p.vy *= 0.95;
             p.vz *= 0.95;
+            p.rotSpeed *= 0.98;
         }
     }
 
     // Generate Float32Array for GPU buffer
-    // Layout: pos(3), color(4), scale(1) = 8 floats = 32 bytes
+    // New Layout: pos(4: x,y,z,rot), color(4), scale(1), padding(3) = 12 floats = 48 bytes
     getParticleData(): Float32Array {
-        const data = new Float32Array(this.particles.length * 8);
+        const stride = 12;
+        const data = new Float32Array(this.particles.length * stride);
         let offset = 0;
         for (const p of this.particles) {
             data[offset+0] = p.x;
             data[offset+1] = p.y;
             data[offset+2] = p.z;
+            data[offset+3] = p.rotation;
 
-            data[offset+3] = p.color[0];
-            data[offset+4] = p.color[1];
-            data[offset+5] = p.color[2];
-            data[offset+6] = p.color[3] * (p.life / p.maxLife); // Fade out alpha
+            data[offset+4] = p.color[0];
+            data[offset+5] = p.color[1];
+            data[offset+6] = p.color[2];
+            data[offset+7] = p.color[3] * (p.life / p.maxLife); // Fade out alpha
 
-            data[offset+7] = p.scale;
+            data[offset+8] = p.scale;
+            // +9, +10, +11 padding (0)
 
-            offset += 8;
+            offset += stride;
         }
         return data;
     }
