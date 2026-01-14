@@ -192,6 +192,7 @@ export default class Game {
     this.activPiece.y = ghostY;
 
     // Trigger visual effect
+    // NEON BRICKLAYER: Trigger Shockwave Effect
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
