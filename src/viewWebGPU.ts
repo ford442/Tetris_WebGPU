@@ -400,9 +400,10 @@ export default class View {
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
       // Dynamic shockwave based on drop distance (Boosted for JUICE)
-      const strength = 0.1 + Math.min(distance * 0.02, 0.3); // Max 0.4
-      const width = 0.15 + Math.min(distance * 0.02, 0.3);     // Max 0.45
-      const aberration = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
+      // NEON BRICKLAYER: Tuned for maximum impact
+      const strength = 0.15 + Math.min(distance * 0.03, 0.4); // Stronger start and scaling
+      const width = 0.2 + Math.min(distance * 0.02, 0.3);     // Wider ripple
+      const aberration = 0.08 + Math.min(distance * 0.015, 0.2); // More glitch
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
@@ -1028,6 +1029,8 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
     // Update glitch state for blocks
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+    // Update lock percent for blocks (red pulse)
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
 
     // Update Shockwave Uniforms
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)

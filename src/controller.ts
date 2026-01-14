@@ -401,11 +401,21 @@ export default class Controller {
              // Sonic Drop: Allow multiple steps per frame if dt is large
              let steps = Math.floor(this.actionTimers.down! / SOFT_DROP_SPEED);
              this.actionTimers.down! %= SOFT_DROP_SPEED;
+             // Cap steps to prevent freeze/tunneling
+             if (steps > 20) steps = 20;
 
              for (let i = 0; i < steps; i++) {
                  this.game.movePieceDown();
-                 // Optionally break if collision/lock happens to avoid tunneling or weird state?
-                 // movePieceDown() handles collision checks internally.
+                 // If collision happened (handled in movePieceDown), break?
+                 // movePieceDown resets position if collision.
+                 // So we continue trying to move down?
+                 // Actually movePieceDown prevents moving INTO collision.
+                 // So repeating it just hits the same collision.
+                 // It's safe but redundant.
+                 // Check if we hit ground?
+                 // Game.hasCollision() check is internal.
+                 // To optimize, we could check if locked?
+                 // But movePieceDown doesn't lock.
              }
           }
       } else {

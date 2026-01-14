@@ -79,11 +79,17 @@ export const PostProcessShaders = () => {
             // Bloom-ish boost (cheap but juicy)
             var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            // Lower threshold for more glow, higher intensity
+
+            // Neon Bloom: Boost bright colors more aggressively
+            // Threshold 0.6 means only bright neon parts glow
             let bloomThreshold = 0.6;
             let bloomIntensity = 0.5;
+
             if (luminance > bloomThreshold) {
-                color += color * bloomIntensity;
+                // Additive glow for "neon" feel
+                // Boost intensity based on how much it exceeds threshold
+                let factor = (luminance - bloomThreshold) / (1.0 - bloomThreshold);
+                color += color * bloomIntensity * (1.0 + factor);
             }
 
             // Vignette darken
@@ -205,7 +211,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.08); // Very faint white
+            return vec4<f32>(1.0, 1.0, 1.0, 0.15); // Increased visibility for neon look
         }
     `;
     return { vertex, fragment };
@@ -333,9 +339,6 @@ export const BackgroundShaders = () => {
              let tensionPulse = sin(time * (10.0 + lockPercent * 20.0)) * 0.5 + 0.5;
              let redFlash = vec3<f32>(1.0, 0.0, 0.0) * lockPercent * tensionPulse * 0.3;
              finalColor += redFlash;
-
-             // Also distort the grid slightly?
-             // Not easily possible here without re-computing grid, but color flash is good.
           }
 
           // --- Vignette effect to focus on center ---
@@ -399,6 +402,7 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32,
                 useGlitch: f32,
+                lockPercent: f32, // Offset 56
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
@@ -478,6 +482,13 @@ export const Shaders = () => {
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
                 let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
                 finalColor += vec3<f32>(1.0) * edgeGlow * 1.0;
+
+                // Lock Tension Pulse
+                let lockPercent = uniforms.lockPercent;
+                if (lockPercent > 0.5) {
+                    let pulse = sin(time * 20.0) * 0.5 + 0.5;
+                    finalColor = mix(finalColor, vec3<f32>(1.0, 0.0, 0.0), (lockPercent - 0.5) * 2.0 * pulse * 0.5);
+                }
 
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
