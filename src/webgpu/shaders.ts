@@ -442,8 +442,12 @@ export const Shaders = () => {
                 // Add subtle grain to base color
                 baseColor += (noise - 0.5) * 0.1;
 
-                // Add inner glow
-                baseColor += vColor.rgb * coreGlow * 0.4;
+                // Add inner glow (Boosted)
+                baseColor += vColor.rgb * coreGlow * 0.8;
+
+                // Add self-emission (based on color brightness)
+                let emission = vColor.rgb * 0.3;
+                baseColor += emission;
 
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
