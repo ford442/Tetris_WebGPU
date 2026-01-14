@@ -17,6 +17,8 @@ export interface GameState {
   lockDelayTime: number;
   effectEvent: string | null;
   effectCounter: number;
+  isTSpin: boolean;
+  isMini: boolean;
 }
 
 export default class Game {
@@ -42,6 +44,10 @@ export default class Game {
   effectEvent: string | null = null;
   effectCounter: number = 0;
   lastDropPos: { x: number, y: number } | null = null;
+
+  // T-Spin State
+  isTSpin: boolean = false;
+  isMini: boolean = false;
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -81,7 +87,7 @@ export default class Game {
 
   // Helper for TypedArray access
   getCell(x: number, y: number): number {
-      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
+      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 1; // Wall is filled
       return this.playfield[y * this.playfieldWidth + x];
   }
 
@@ -161,7 +167,9 @@ export default class Game {
       lockDelayTime: this.lockDelayTime,
       effectEvent: this.effectEvent,
       effectCounter: this.effectCounter,
-      lastDropPos: this.lastDropPos
+      lastDropPos: this.lastDropPos,
+      isTSpin: this.isTSpin,
+      isMini: this.isMini
     }
   }
 
@@ -169,10 +177,19 @@ export default class Game {
     return this.collisionDetector.getGhostY(this.activPiece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean } {
-    const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } {
+    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
+
+    // Hard drop maintains T-Spin status from last rotation
+    // But moving technically resets it. However, Hard Drop is usually a move.
+    // Standard rules: Hard drop does NOT reset T-Spin status if the last action was a rotation.
+    // Since Hard Drop is instant locking, we just check `isTSpin` state.
+    // However, hard drop changes Y, which is a move.
+    // BUT, usually T-Spin is checked at the locking position.
+    // If I rotated, then hard dropped, is it a T-Spin? Yes.
+    // So I should NOT reset `isTSpin` here.
 
     // Trigger visual effect
     this.effectEvent = 'hardDrop';
@@ -182,9 +199,12 @@ export default class Game {
     // Force lock
     this.lockPiece();
     result.locked = true;
+    result.tSpin = this.isTSpin;
+    result.mini = this.isMini;
+
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        this.scoringSystem.updateScore(linesScore.length);
+        this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini);
         result.linesCleared = linesScore;
     }
     this.updatePieces();
@@ -201,14 +221,16 @@ export default class Game {
     this.holdPieceObj = null;
     this.canHold = true;
     this.lockTimer = 0;
+    this.isTSpin = false;
+    this.isMini = false;
 
     this.activPiece = this.createPiece();
     this.nextPiece = this.createPiece();
   }
 
   // Called every frame
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean } {
-      const result: { linesCleared: number[], locked: boolean, gameOver: boolean } = { linesCleared: [], locked: false, gameOver: false };
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } {
+      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false };
       if (this.gameOver) return result;
 
       // Check if piece is on the ground
@@ -224,9 +246,12 @@ export default class Game {
           if (this.lockTimer > this.lockDelayTime) {
               this.lockPiece();
               result.locked = true;
+              result.tSpin = this.isTSpin;
+              result.mini = this.isMini;
+
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
-                  this.scoringSystem.updateScore(linesScore.length);
+                  this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini);
                   result.linesCleared = linesScore;
               }
               this.updatePieces();
@@ -243,6 +268,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x += 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
+        this.isMini = false;
         this.handleMoveReset();
     }
   }
@@ -252,6 +279,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
+        this.isMini = false;
         this.handleMoveReset();
     }
   }
@@ -261,6 +290,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
     } else {
+        this.isTSpin = false; // Reset T-Spin on move
+        this.isMini = false;
         this.lockTimer = 0;
     }
   }
@@ -277,12 +308,58 @@ export default class Game {
         break;
       }
     }
+    // Soft drop resets T-Spin
+    this.isTSpin = false;
+    this.isMini = false;
+
     this.lockPiece();
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-      this.scoringSystem.updateScore(linesScore.length);
+      this.scoringSystem.updateScore(linesScore.length, false, false);
     }
     this.updatePieces();
+  }
+
+  checkTSpin(piece: Piece, kickIndex: number): void {
+      if (piece.type !== 'T') {
+          this.isTSpin = false;
+          this.isMini = false;
+          return;
+      }
+
+      // 3-corner rule
+      // Check the 4 corners of the bounding box (0,0), (2,0), (0,2), (2,2)
+      // Relative to piece.x, piece.y
+      const corners = [
+          {x: 0, y: 0}, {x: 2, y: 0},
+          {x: 0, y: 2}, {x: 2, y: 2}
+      ];
+
+      let occupied = 0;
+      // Front corners depend on rotation? No, just check all 4 corners.
+      // If >= 3 corners are occupied (wall or block), it's a T-Spin.
+
+      for (const c of corners) {
+          const wx = piece.x + c.x;
+          const wy = piece.y + c.y;
+          if (this.getCell(wx, wy) !== 0) {
+              occupied++;
+          }
+      }
+
+      if (occupied >= 3) {
+          this.isTSpin = true;
+          // Mini detection is complex (SRS specific), but simplified:
+          // If the 5th kick (index 4) was used, it's a T-Spin Triple (not Mini).
+          // If T-Spin and lines cleared... wait, we don't know lines cleared yet.
+          // Usually T-Spin Mini is if front corners are not both occupied (or something like that).
+          // Simplified: Wall kick usage.
+          // For now, let's treat all as full T-Spin unless simplified Mini rule applies.
+          this.isMini = false; // Implement proper Mini logic if needed, but standard T-Spin is good for now.
+      } else {
+          this.isTSpin = false;
+          this.isMini = false;
+      }
   }
 
   rotatePiece(rightRurn: boolean = true): void {
@@ -302,6 +379,8 @@ export default class Game {
       this.activPiece.blocks = tempPiece.blocks;
       this.activPiece.rotation = tempPiece.rotation;
       this.handleMoveReset();
+      // Basic rotation (kick index -1 or 0 depending on impl, let's say 0)
+      this.checkTSpin(this.activPiece, 0);
       return;
     }
 
@@ -309,7 +388,8 @@ export default class Game {
     const kicks = getWallKicks(type, currentRotation, nextRotation);
     if (!kicks || kicks.length === 0) return;
 
-    for (const [ox, oy] of kicks) {
+    for (let i = 0; i < kicks.length; i++) {
+        const [ox, oy] = kicks[i];
         tempPiece.x = this.activPiece.x + ox;
         tempPiece.y = this.activPiece.y + oy;
 
@@ -320,6 +400,7 @@ export default class Game {
             this.activPiece.blocks = tempPiece.blocks;
             this.activPiece.rotation = tempPiece.rotation;
             this.handleMoveReset();
+            this.checkTSpin(this.activPiece, i);
             return;
         }
     }
@@ -393,6 +474,8 @@ export default class Game {
     this.canHold = true;
     this.lockTimer = 0;
     this.lockResets = 0;
+    this.isTSpin = false;
+    this.isMini = false;
 
     if (this.hasCollision()) {
         this.gameOver = true;
@@ -465,5 +548,7 @@ export default class Game {
       this.canHold = false;
       this.lockTimer = 0;
       this.lockResets = 0;
+      this.isTSpin = false;
+      this.isMini = false;
   }
 }

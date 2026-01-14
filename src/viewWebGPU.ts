@@ -325,7 +325,7 @@ export default class View {
     });
   }
 
-  onLineClear(lines: number[]) {
+  onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
       this.visualEffects.triggerShake(0.6, 0.6); // Slightly more shake
 
@@ -337,13 +337,24 @@ export default class View {
               const worldX = c * 2.2;
 
               const isTetris = lines.length === 4;
-              // More vibrant colors
-              const color = isTetris
-                  ? [1.0, 0.9, 0.1, 1.0] // Bright Gold
-                  : (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.2, 1.0, 1.0]); // Cyan/Purple
 
-              const count = isTetris ? 60 : 30; // Increased count
-              const speed = isTetris ? 12.0 : 8.0;
+              let color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.2, 1.0, 1.0]); // Cyan/Purple (default)
+              let count = 30;
+              let speed = 8.0;
+
+              if (isTSpin) {
+                  color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
+                  count = 80;
+                  speed = 15.0;
+                  if (isMini) {
+                    count = 40;
+                    speed = 10.0;
+                  }
+              } else if (isTetris) {
+                  color = [1.0, 0.9, 0.1, 1.0]; // Bright Gold
+                  count = 60;
+                  speed = 12.0;
+              }
 
               this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, 0, speed, color);
               // Also burst up/down
