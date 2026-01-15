@@ -334,9 +334,24 @@ export const BackgroundShaders = () => {
           let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
           finalColor *= vignette;
 
+          // --- Starfield ---
+          // Simple procedural stars
+          let starPos = uv * 2.0; // Scale up
+          // Parallax movement for stars
+          let starScroll = vec2<f32>(time * 0.1, time * 0.05);
+          let starNoise = fract(sin(dot(starPos + starScroll, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+          var star = 0.0;
+          if (starNoise > 0.99) {
+             // Blink
+             let blink = sin(time * 5.0 + starNoise * 100.0) * 0.5 + 0.5;
+             star = (starNoise - 0.99) * 100.0 * blink;
+          }
+
           // --- Subtle film grain for texture ---
           let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
           finalColor += (noise - 0.5) * 0.03;
+
+          finalColor += vec3<f32>(star);
 
           return vec4<f32>(finalColor, 1.0);
         }
@@ -349,10 +364,10 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.5"; // Brighter ambient for better visibility
+  params.ambientIntensity = "0.6"; // Brighter ambient for better visibility
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "2.5"; // Very glossy
-  params.shininess = "256.0"; // Extremely sharp, like polished gemstone
+  params.specularIntensity = "3.0"; // Very glossy
+  params.shininess = "300.0"; // Extremely sharp, like polished gemstone
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -456,10 +471,11 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * bevel * 0.5;
 
                 // --- Fresnel Rim Light (Glassy Look) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.0); // Broader Fresnel for glass
-                let rimColor = mix(vColor.rgb, vec3<f32>(1.0), 0.5); // Rim matches block color but lighter
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper Fresnel for glass
+                // Iridescent rim shift
+                let rimColor = mix(vColor.rgb, vec3<f32>(0.8, 0.9, 1.0), 0.6);
 
-                finalColor += rimColor * fresnelTerm * 2.0;
+                finalColor += rimColor * fresnelTerm * 2.5;
 
                 // --- Edge Highlight (Sharp Wireframe feel) ---
                 let edgeGlow = smoothstep(0.92, 0.98, uvEdgeDist);
@@ -482,29 +498,35 @@ export const Shaders = () => {
                     let wire = edgeGlow;
 
                     // Holographic scanline effect
-                    let scanPos = vPosition.y * 10.0 + time * 5.0;
+                    let scanPos = vPosition.y * 15.0 + time * 8.0;
                     let scanline = sin(scanPos) * 0.5 + 0.5;
                     // Sharp lines
-                    scanline = pow(scanline, 3.0);
+                    scanline = pow(scanline, 4.0);
+
+                    // Vertical Glitch
+                    var glitchOffset = 0.0;
+                    if (fract(time * 2.0) > 0.95) {
+                        glitchOffset = sin(vPosition.y * 50.0) * 0.02;
+                    }
 
                     // Add a filled body with low alpha
-                    let body = 0.15 + scanline * 0.2; // Brighter on scanline
+                    let body = 0.1 + scanline * 0.3; // Brighter on scanline
 
-                    let ghostColor = mix(vColor.rgb, vec3<f32>(0.5, 0.8, 1.0), 0.5); // Sci-fi Blue tint
+                    let ghostColor = mix(vColor.rgb, vec3<f32>(0.4, 0.9, 1.0), 0.6); // Cyber Cyan tint
 
-                    var finalGhost = ghostColor * wire * 2.0; // Bright wireframe
+                    var finalGhost = ghostColor * wire * 2.5; // Bright wireframe
                     finalGhost += vColor.rgb * body; // Subtle body fill
 
                     // Pulse
-                    let pulse = 0.8 + 0.2 * sin(time * 3.0);
+                    let pulse = 0.8 + 0.2 * sin(time * 4.0);
 
                     // Add digital glitch noise to ghost
-                    let ghostNoise = fract(sin(dot(vUV + time, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-                    if (ghostNoise > 0.98) {
-                        finalGhost += vec3<f32>(0.5); // Glitch flash
+                    let ghostNoise = fract(sin(dot(vUV + time + glitchOffset, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+                    if (ghostNoise > 0.97) {
+                        finalGhost += vec3<f32>(0.6); // Glitch flash
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.6); // Increased visibility
+                    return vec4<f32>(finalGhost, pulse * 0.7); // Increased visibility
                 }
 
                 // --- Transparency ---
