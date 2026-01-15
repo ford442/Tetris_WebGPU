@@ -351,7 +351,7 @@ export default class View {
                   // Using Gold for both T-Spin and Tetris is fine for "Premium" feel.
                   // But let's mix it up.
                   color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
-                  count = 40;
+                  count = 80; // JUICE: Double particles for Tetris
               } else {
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
               }
@@ -367,6 +367,11 @@ export default class View {
                    }
                    // Add extra shockwave/aberration for T-Spin
                    this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1);
+              }
+
+              // JUICE: Tetris Clear (4 lines) extra impact
+              if (lines.length === 4 && c === 5) {
+                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1); // Strong shockwave for Tetris
               }
           }
       });
@@ -437,17 +442,8 @@ export default class View {
   }
 
   renderMainScreen(state: any) {
-    // Check for new visual effects from Game Logic
-    if (state.effectCounter > this.lastEffectCounter) {
-        this.lastEffectCounter = state.effectCounter;
-        if (state.effectEvent === 'hardDrop' && state.lastDropPos) {
-             const distance = state.lastDropDistance || 0;
-             const worldX = state.lastDropPos.x * 2.2;
-             const impactY = state.lastDropPos.y * -2.2;
-
-             this.triggerImpactEffects(worldX, impactY, distance);
-        }
-    }
+    // JUICE: Removed redundant triggerImpactEffects loop check.
+    // Impact effects are triggered immediately by Controller -> onHardDrop for zero latency.
 
     // Check if level has changed and update video accordingly
     if (state.level !== this.visualEffects.currentLevel) {

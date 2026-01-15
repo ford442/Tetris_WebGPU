@@ -81,9 +81,9 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Neon Bloom: Boost bright colors more aggressively
-            // Threshold 0.6 means only bright neon parts glow
-            let bloomThreshold = 0.6;
-            let bloomIntensity = 0.5;
+            // Threshold 0.5 means only bright neon parts glow (Lowered for more glow)
+            let bloomThreshold = 0.5;
+            let bloomIntensity = 0.8; // JUICE: Increased from 0.5
 
             if (luminance > bloomThreshold) {
                 // Additive glow for "neon" feel
@@ -255,7 +255,8 @@ export const BackgroundShaders = () => {
           // Modify parameters based on level
           // Level 1: Calm blue
           // Level 10: Chaotic red
-          let levelFactor = min(level * 0.1, 1.0);
+          // JUICE: Faster ramp up to "danger" colors (max at level 8)
+          let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
           let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.05, 0.0, 0.0), levelFactor);
@@ -449,7 +450,7 @@ export const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                if (hexEdge > 0.5) { baseColor *= 0.95; }
+                if (hexEdge > 0.5) { baseColor *= 0.8; } // JUICE: More contrast
                 if (isTrace > 0.5) { baseColor *= 0.5; }
 
                 // --- Composition ---
@@ -469,14 +470,15 @@ export const Shaders = () => {
                 }
 
                 // Fresnel (Boosted for Glass look)
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                // JUICE: Softer falloff (2.5) for wider rim
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5);
                 // Iridescent fresnel
                 let irid = vec3<f32>(
                     sin(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     cos(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     1.0
                 );
-                finalColor += irid * fresnelTerm * 3.0; // Stronger rim
+                finalColor += irid * fresnelTerm * 4.0; // JUICE: Stronger rim (3.0 -> 4.0)
 
                 // Edge Glow
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
