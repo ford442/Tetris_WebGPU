@@ -69,6 +69,7 @@ export default class View {
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
   startTime: number;
+  lastFrameTime: number;
 
   // Post Processing
   postProcessPipeline!: GPURenderPipeline;
@@ -99,6 +100,7 @@ export default class View {
     this.nextPieceContext = nextPieceContext;
     this.holdPieceContext = holdPieceContext;
     this.startTime = performance.now();
+    this.lastFrameTime = this.startTime;
 
     // Initialize subsystems
     this.particleSystem = new ParticleSystem();
@@ -344,16 +346,19 @@ export default class View {
 
               if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 80;
-                  speed = 15.0;
+                  count = 120;
+                  speed = 18.0;
                   if (isMini) {
-                    count = 40;
-                    speed = 10.0;
+                    count = 60;
+                    speed = 12.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.9, 0.1, 1.0]; // Bright Gold
-                  count = 60;
-                  speed = 12.0;
+                  count = 100;
+                  speed = 15.0;
+              } else {
+                  count = 40;
+                  speed = 10.0;
               }
 
               this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, 0, speed, color);
@@ -409,14 +414,14 @@ export default class View {
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
       // Dynamic shockwave based on drop distance
-      const strength = 0.05 + Math.min(distance * 0.01, 0.15); // Max 0.2
-      const width = 0.1 + Math.min(distance * 0.01, 0.2);     // Max 0.3
-      const aberration = 0.02 + Math.min(distance * 0.005, 0.08); // Max 0.1
+      const strength = 0.08 + Math.min(distance * 0.015, 0.25); // Boosted impact
+      const width = 0.15 + Math.min(distance * 0.015, 0.3);     // Boosted width
+      const aberration = 0.04 + Math.min(distance * 0.008, 0.12); // Stronger glitch
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
       // Increase shake
-      this.visualEffects.triggerShake(1.2 + distance * 0.05, 0.2);
+      this.visualEffects.triggerShake(1.5 + distance * 0.08, 0.2);
   }
 
   renderMainScreen(state: any) {
@@ -901,13 +906,16 @@ export default class View {
 
   Frame = () => {
     if (!this.device) return;
-    const dt = 1.0/60.0; // Approx dt
+
+    const now = performance.now();
+    const dt = (now - this.lastFrameTime) / 1000.0;
+    this.lastFrameTime = now;
 
     // Update visual effects
     this.visualEffects.updateEffects(dt);
 
     // --- Camera Sway & Shake ---
-    const time = (performance.now() - this.startTime) / 1000.0;
+    const time = (now - this.startTime) / 1000.0;
 
     // Base position
     let camX = 0.0;
