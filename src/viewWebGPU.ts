@@ -298,30 +298,48 @@ export default class View {
 
           // 2. Main Glassy Fill (Gradient)
           const grad = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
-          grad.addColorStop(0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.4)`);
+          grad.addColorStop(0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.5)`);
           grad.addColorStop(1, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.1)`);
           ctx.fillStyle = grad;
-          ctx.fillRect(px, py, blockSize, blockSize);
+          ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
 
           ctx.restore();
 
-          // 3. Bevel Highlight (Top/Left)
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
-          ctx.lineWidth = 1.0;
+          // 3. Bevel Highlight (Top/Left) - Sharper
           ctx.beginPath();
-          ctx.moveTo(px + blockSize, py);
-          ctx.lineTo(px, py);
-          ctx.lineTo(px, py + blockSize);
+          ctx.moveTo(px + blockSize - 1, py + 1);
+          ctx.lineTo(px + 1, py + 1);
+          ctx.lineTo(px + 1, py + blockSize - 1);
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.7)`;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
 
-          // 4. Sharp Edge Border
-          ctx.strokeStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 1.0)`;
-          ctx.lineWidth = 1.0;
-          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+          // Bottom/Right lowlight
+          ctx.beginPath();
+          ctx.moveTo(px + blockSize - 1, py + 1);
+          ctx.lineTo(px + blockSize - 1, py + blockSize - 1);
+          ctx.lineTo(px + 1, py + blockSize - 1);
+          ctx.strokeStyle = `rgba(0, 0, 0, 0.3)`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
 
-          // 5. Inner Core
-          ctx.fillStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
-          ctx.fillRect(px + blockSize * 0.35, py + blockSize * 0.35, blockSize * 0.3, blockSize * 0.3);
+          // 4. Sharp Edge Border (Outer)
+          ctx.strokeStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
+          ctx.lineWidth = 1.0;
+          ctx.strokeRect(px + 0.5, py + 0.5, blockSize - 1, blockSize - 1);
+
+          // 5. Inner Core (Diamond shape for jewel look)
+          ctx.save();
+          ctx.translate(px + blockSize / 2, py + blockSize / 2);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.9)`;
+          const coreSize = blockSize * 0.4;
+          ctx.fillRect(-coreSize / 2, -coreSize / 2, coreSize, coreSize);
+
+          // Core Highlight
+          ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
+          ctx.fillRect(-coreSize / 4, -coreSize / 4, coreSize / 2, coreSize / 2);
+          ctx.restore();
         }
       });
     });
