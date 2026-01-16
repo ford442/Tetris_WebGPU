@@ -1,5 +1,6 @@
 import * as Matrix from "gl-matrix";
 import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders } from './webgpu/shaders.js';
+import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { ParticleSystem } from './webgpu/particles.js';
@@ -79,9 +80,11 @@ export default class View {
 
   // Particles
   particlePipeline!: GPURenderPipeline;
-  particleVertexBuffer!: GPUBuffer;
-  particleUniformBuffer!: GPUBuffer;
-  particleBindGroup!: GPUBindGroup;
+  particleStorageBuffer!: GPUBuffer; // Renamed from particleVertexBuffer
+  particleComputeUniformBuffer!: GPUBuffer; // Renamed
+  particleComputeBindGroup!: GPUBindGroup;
+  particleRenderBindGroup!: GPUBindGroup; // Renamed
+  particleComputePipeline!: GPUComputePipeline;
   
   // Subsystems
   particleSystem: ParticleSystem;
@@ -698,7 +701,37 @@ export default class View {
     });
 
 
-    // --- Particle Pipeline ---
+    // --- Particle Compute Pipeline ---
+    // Initialize storage buffer (Shared between Compute and Render)
+    this.particleStorageBuffer = this.device.createBuffer({
+        size: 64 * this.particleSystem.maxParticles, // 64 bytes per particle
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+
+    this.particleComputeUniformBuffer = this.device.createBuffer({
+        size: 16, // dt(4), time(4), pad(8)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    this.particleComputePipeline = this.device.createComputePipeline({
+        label: 'particle compute pipeline',
+        layout: 'auto',
+        compute: {
+            module: this.device.createShaderModule({ code: ParticleComputeShader }),
+            entryPoint: 'main',
+        },
+    });
+
+    this.particleComputeBindGroup = this.device.createBindGroup({
+        layout: this.particleComputePipeline.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: { buffer: this.particleStorageBuffer } },
+            { binding: 1, resource: { buffer: this.particleComputeUniformBuffer } }
+        ]
+    });
+
+
+    // --- Particle Render Pipeline ---
     const particleShader = ParticleShaders();
 
     this.particlePipeline = this.device.createRenderPipeline({
@@ -708,14 +741,15 @@ export default class View {
             module: this.device.createShaderModule({ code: particleShader.vertex }),
             entryPoint: 'main',
             buffers: [
-                // Interleaved buffer: pos(3) + color(4) + scale(1) = 8 floats = 32 bytes
+                // Use Storage Buffer as Vertex Buffer
+                // Stride: 64 bytes
                 {
-                    arrayStride: 32,
-                    stepMode: 'instance', // We are drawing quads (6 verts) per instance
+                    arrayStride: 64,
+                    stepMode: 'instance',
                     attributes: [
                         { shaderLocation: 0, format: 'float32x3', offset: 0 },  // pos
-                        { shaderLocation: 1, format: 'float32x4', offset: 12 }, // color
-                        { shaderLocation: 2, format: 'float32',   offset: 28 }, // scale
+                        { shaderLocation: 1, format: 'float32x4', offset: 32 }, // color (offset 32)
+                        { shaderLocation: 2, format: 'float32',   offset: 48 }, // scale (offset 48)
                     ]
                 }
             ]
@@ -726,7 +760,7 @@ export default class View {
             targets: [{
                 format: presentationFormat,
                 blend: {
-                    color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' }, // Additive blending for glow
+                    color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' }, // Additive blending
                     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
                 }
             }]
@@ -739,19 +773,18 @@ export default class View {
         }
     });
 
-    // Create initial particle buffer (enough for max particles)
-    // 32 bytes per particle * maxParticles
-    this.particleVertexBuffer = this.device.createBuffer({
-        size: 32 * this.particleSystem.maxParticles,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    this.particleComputeUniformBuffer = this.device.createBuffer({
+        size: 16, // dt(4), time(4), pad(8)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // ViewProjection for particles
     this.particleUniformBuffer = this.device.createBuffer({
         size: 64, // Mat4 for ViewProjection
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    this.particleBindGroup = this.device.createBindGroup({
+    this.particleRenderBindGroup = this.device.createBindGroup({
         layout: this.particlePipeline.getBindGroupLayout(0),
         entries: [{
             binding: 0,
@@ -992,16 +1025,35 @@ export default class View {
       eyePosition
     );
 
-    // Update particles
-    this.particleSystem.updateParticles(dt);
-
-    // Write particle buffer
-    if (this.particleSystem.particles.length > 0) {
-        const data = this.particleSystem.getParticleData();
-        this.device.queue.writeBuffer(this.particleVertexBuffer, 0, data);
+    // --- PARTICLE UPDATE (COMPUTE) ---
+    // 1. Upload new particles
+    if (this.particleSystem.pendingUploads.length > 0) {
+        // Optimization: Coalesce writes if possible, but simplest is 1 write per batch
+        // Or write individual particles
+        for(const upload of this.particleSystem.pendingUploads) {
+            this.device.queue.writeBuffer(
+                this.particleStorageBuffer,
+                upload.index * 64, // 64 bytes stride
+                upload.data
+            );
+        }
+        this.particleSystem.clearPending();
     }
 
-    // Update uniforms for particles & grid (sharing VP matrix)
+    // 2. Update uniforms (dt, time)
+    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, new Float32Array([dt, time]));
+
+    // 3. Dispatch Compute
+    const commandEncoder = this.device.createCommandEncoder();
+    const computePass = commandEncoder.beginComputePass();
+    computePass.setPipeline(this.particleComputePipeline);
+    computePass.setBindGroup(0, this.particleComputeBindGroup);
+    // Workgroup size 64. Count = maxParticles.
+    computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
+    computePass.end();
+
+
+    // Update uniforms for particles (Render VP) & grid
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
 
     // Update time for background and blocks
@@ -1054,8 +1106,6 @@ export default class View {
             storeOp: 'store'
         }]
     };
-
-    const commandEncoder = this.device.createCommandEncoder();
 
     if (!renderVideo) {
         const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
@@ -1112,12 +1162,14 @@ export default class View {
     }
 
     // Draw particles
-    if (this.particleSystem.particles.length > 0) {
-        passEncoder.setPipeline(this.particlePipeline);
-        passEncoder.setBindGroup(0, this.particleBindGroup);
-        passEncoder.setVertexBuffer(0, this.particleVertexBuffer);
-        passEncoder.draw(6, this.particleSystem.particles.length, 0, 0);
-    }
+    // Always draw max particles, the shader will discard invisible/dead ones (scale=0 or alpha=0)
+    // Or we could track active count, but tracking active count with ring buffer is complex.
+    // Drawing all 4000 quads is cheap.
+    passEncoder.setPipeline(this.particlePipeline);
+    passEncoder.setBindGroup(0, this.particleRenderBindGroup);
+    passEncoder.setVertexBuffer(0, this.particleStorageBuffer); // Use storage buffer as vertex buffer
+    passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
+
     passEncoder.end();
 
     // *** Render Pass 2: Post Processing ***

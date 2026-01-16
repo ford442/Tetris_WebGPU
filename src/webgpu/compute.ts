@@ -7,7 +7,6 @@ struct Particle {
   life: f32,
   maxLife: f32,
   pad1: f32,
-  pad2: f32,
 };
 
 struct Uniforms {
@@ -33,6 +32,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   var p = particles[index];
 
   if (p.life <= 0.0) {
+    // Optionally reset/hide dead particles to prevent ghosting or re-processing?
+    // For now, just setting scale to 0 is enough visual cleanup.
+    p.scale = 0.0;
+    particles[index] = p; // Write back to ensure it stays hidden
     return;
   }
 
