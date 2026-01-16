@@ -17,36 +17,15 @@ export interface Particle {
 
 export class ParticleSystem {
     particles: Particle[] = [];
-    maxParticles: number = 4000;
+    maxParticles: number = 8000; // Increased count for GPU
 
-    // GPU Resources (Managed by View but tracked here logically?)
-    // Actually, View manages buffers. ParticleSystem mainly manages emission logic
-    // and initial CPU state which then gets uploaded?
-    // With GPU particles, we maintain a "pool" in GPU memory.
-    // For simplicity in this step, we can keep the "Emit" logic on CPU
-    // but the "Update" logic on GPU.
-    // However, to do GPU updates, the data must persist on GPU.
-    // So we need to stop re-uploading every frame.
-    // We need a GPUBuffer for particles that stays on GPU.
-    // When we emit, we write to a free slot in that buffer.
-
-    // To properly implement GPU particles efficiently:
-    // 1. Storage Buffer with all particles.
-    // 2. CPU tracks "active count" or we use a dead/alive flag in shader.
-    // 3. Emission: CPU finds free slots and updates them via queue.writeBuffer.
-
-    // We need to know which slots are free.
-    // Simple Ring Buffer strategy:
-    // Keep an index `emitIndex`. Overwrite oldest particles.
-
+    // Ring Buffer strategy for emissions
     private emitIndex: number = 0;
-    public needsUpdate: boolean = false;
-    public newParticlesData: Float32Array; // Staging buffer for new emissions
-    public newParticlesCount: number = 0;
-    public newParticlesOffset: number = 0;
+
+    // Pending uploads for the View to handle
+    public pendingUploads: { index: number, data: Float32Array }[] = [];
 
     constructor() {
-        this.newParticlesData = new Float32Array(this.maxParticles * 16); // 16 floats per particle
     }
 
     // Helper to get random float
@@ -80,54 +59,17 @@ export class ParticleSystem {
     }
 
     private addParticle(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number[], life: number, scale: number) {
-        // struct Particle { pos(3), vel(3), color(4), scale(1), life(1), maxLife(1), pad(2) } = 16 floats = 64 bytes
-        // But in shader struct align:
-        // pos: vec3 (16 aligned?) -> actually vec3 is 12 bytes but usually aligned to 16 in array
-        // Let's assume explicit padding in TS matches shader layout.
-        // Shader:
-        // struct Particle {
-        //   position: vec3<f32>, (0,4,8)
-        //   velocity: vec3<f32>, (16,20,24) -- Alignment rules usually bump vec3 to 16-byte alignment
-        //   color: vec4<f32>,    (32,36,40,44)
-        //   scale: f32,          (48)
-        //   life: f32,           (52)
-        //   maxLife: f32,        (56)
-        //   pad1: f32,           (60)
-        //   pad2: f32,           (64) - Total 64 bytes?
-        // };
-        // Wait, vec3 in WGSL array<Particle> stride.
-        // vec3 align is 16. Size is 12.
-        // offset 0: pos (12)
-        // offset 12: gap (4) - implicit
-        // offset 16: vel (12)
-        // offset 28: gap (4) - implicit
-        // offset 32: color (16)
-        // offset 48: scale (4)
-        // offset 52: life (4)
-        // offset 56: maxLife (4)
-        // offset 60: pad (4) - Explicit padding needed to reach 64 bytes alignment?
-        // Struct size must be multiple of largest alignment (16).
-        // 64 is multiple of 16. So this layout works.
-        // 64 bytes = 16 floats.
+        // GPU Layout: 16 floats (64 bytes)
+        // 0-2: Pos
+        // 3: pad
+        // 4-6: Vel
+        // 7: pad
+        // 8-11: Color
+        // 12: Scale
+        // 13: Life
+        // 14: MaxLife
+        // 15: Pad1
 
-        // We write to a specific slot index
-        const index = this.emitIndex;
-        this.emitIndex = (this.emitIndex + 1) % this.maxParticles;
-
-        // We need to return this data to View so it can queue.writeBuffer to the specific offset
-        // But we want to batch them?
-        // Since we are just writing to a large array, View can take the logic.
-        // Let's store the pending writes.
-
-        // However, we are overwriting a specific index.
-        // If we emit 5 particles, they might wrap around.
-        // It's easiest if we expose a "pending updates" list: { index, data }
-        // Or we just update a CPU mirror and upload changed ranges.
-        // Updating 4000 particles on CPU every frame to upload is what we want to AVOID.
-        // But uploading *new* particles is fine.
-
-        // Let's define the particle data block (16 floats)
-        const offset = 0; // Local buffer
         const pData = new Float32Array(16);
         pData[0] = x; pData[1] = y; pData[2] = z; // Pos
         pData[4] = vx; pData[5] = vy; pData[6] = vz; // Vel (Offset 4 float = 16 bytes)
@@ -137,10 +79,11 @@ export class ParticleSystem {
         pData[14] = life; // maxLife
 
         // Push to a queue for the View to handle
-        this.pendingUploads.push({ index, data: pData });
-    }
+        this.pendingUploads.push({ index: this.emitIndex, data: pData });
 
-    public pendingUploads: { index: number, data: Float32Array }[] = [];
+        // Advance ring buffer
+        this.emitIndex = (this.emitIndex + 1) % this.maxParticles;
+    }
 
     // Clear pending after upload
     clearPending() {
