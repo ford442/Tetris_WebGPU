@@ -280,7 +280,11 @@ export default class Controller {
       // We need to implement gravity here if interval is gone.
 
       const level = this.game.getState().level;
-      const speedMs = Math.max(50, 1000 - level * 100);
+      // Improved Gravity Curve (Exponential decay)
+      // Level 1: 1000ms, Level 10: ~200ms, Level 15: ~90ms, Level 20: ~40ms
+      let speedMs = 1000 * Math.pow(0.85, Math.max(0, level - 1));
+      // Cap at reasonable speed (approx 60fps = 16ms)
+      speedMs = Math.max(16, speedMs);
 
       // Accumulate gravity time?
       // Simplest: use a gravity timer here.

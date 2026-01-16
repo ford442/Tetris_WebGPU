@@ -80,8 +80,9 @@ export const PostProcessShaders = () => {
             var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
             // Lower threshold slightly and boost intensity for neon pop
-            if (luminance > 0.7) {
-                color += color * 0.3;
+            // Threshold lowered to 0.6 to catch more block colors, intensity boosted
+            if (luminance > 0.6) {
+                color += color * 0.4;
             }
 
             // Vignette darken
@@ -439,7 +440,7 @@ export const Shaders = () => {
                 let sineWave = sin(time * 2.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
                 let pulsePos = pow(sineWave * 0.5 + 0.5, 4.0); // Softer pulse
 
-                // Surface finish (Frosted Glass Noise)
+                // Surface finish (Frosted Glass Noise) - Reduced noise for cleaner look
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 
                 // Bevel/Edge detection
@@ -454,14 +455,14 @@ export const Shaders = () => {
                 let coreGlow = 1.0 - smoothstep(0.0, 0.6, length(vUV - 0.5));
 
                 // Apply texture/finish
-                // Add subtle grain to base color
-                baseColor += (noise - 0.5) * 0.1;
+                // Add subtle grain to base color (Reduced)
+                baseColor += (noise - 0.5) * 0.05;
 
                 // Add inner glow (Boosted)
                 baseColor += vColor.rgb * coreGlow * 0.8;
 
-                // Add self-emission (based on color brightness)
-                let emission = vColor.rgb * 0.3;
+                // Add self-emission (based on color brightness) - Boosted
+                let emission = vColor.rgb * 0.4 + vColor.rgb * pulsePos * 0.2; // Pulsing emission
                 baseColor += emission;
 
                 // --- Composition ---
@@ -470,10 +471,19 @@ export const Shaders = () => {
                 // Add bevel highlight
                 finalColor += vec3<f32>(1.0) * bevel * 0.5;
 
-                // --- Fresnel Rim Light (Glassy Look) ---
+                // --- Fresnel Rim Light (Glassy Look with Chromatism) ---
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper Fresnel for glass
-                // Iridescent rim shift
-                let rimColor = mix(vColor.rgb, vec3<f32>(0.8, 0.9, 1.0), 0.6);
+
+                // Chromatic/Iridescent rim shift
+                // Shift color slightly based on view angle for crystal effect
+                let iridAngle = dot(N, V) * 3.14159;
+                let iridColor = vec3<f32>(
+                    sin(iridAngle) * 0.5 + 0.5,
+                    sin(iridAngle + 2.09) * 0.5 + 0.5,
+                    sin(iridAngle + 4.18) * 0.5 + 0.5
+                );
+
+                let rimColor = mix(vColor.rgb, iridColor, 0.3); // Subtle iridescence
 
                 finalColor += rimColor * fresnelTerm * 2.5;
 
@@ -509,12 +519,15 @@ export const Shaders = () => {
                         glitchOffset = sin(vPosition.y * 50.0) * 0.02;
                     }
 
+                    // Landing Beam Effect (Vertical highlight in center)
+                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 4.0);
+
                     // Add a filled body with low alpha
-                    let body = 0.1 + scanline * 0.3; // Brighter on scanline
+                    let body = 0.05 + scanline * 0.3 + beam * 0.2; // Brighter on scanline & beam
 
                     let ghostColor = mix(vColor.rgb, vec3<f32>(0.4, 0.9, 1.0), 0.6); // Cyber Cyan tint
 
-                    var finalGhost = ghostColor * wire * 2.5; // Bright wireframe
+                    var finalGhost = ghostColor * wire * 3.0; // Bright wireframe (Boosted)
                     finalGhost += vColor.rgb * body; // Subtle body fill
 
                     // Pulse
@@ -526,7 +539,7 @@ export const Shaders = () => {
                         finalGhost += vec3<f32>(0.6); // Glitch flash
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.7); // Increased visibility
+                    return vec4<f32>(finalGhost, pulse * 0.6); // Slightly clearer
                 }
 
                 // --- Transparency ---
