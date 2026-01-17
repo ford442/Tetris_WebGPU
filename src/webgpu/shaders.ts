@@ -46,7 +46,7 @@ export const PostProcessShaders = () => {
             var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
-                let radius = time * 1.5; // Expanding radius
+                let radius = time * 2.0; // Faster expansion
                 let width = params.x; // e.g. 0.1
                 let strength = params.y; // e.g. 0.05
                 let diff = dist - radius;
@@ -71,6 +71,7 @@ export const PostProcessShaders = () => {
             let baseAberration = select(vignetteAberration, distFromCenter * 0.03, useGlitch > 0.5);
             let totalAberration = baseAberration + shockwaveAberration;
 
+            // RGB Shift
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
@@ -79,15 +80,19 @@ export const PostProcessShaders = () => {
             // Bloom-ish boost (cheap)
             var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            // Lower threshold slightly and boost intensity for neon pop
-            // Threshold lowered to 0.6 to catch more block colors, intensity boosted
+            // Enhanced Bloom: smoother threshold
             if (luminance > 0.6) {
-                color += color * 0.4;
+                let bloom = (luminance - 0.6) * 0.8;
+                color += color * bloom;
             }
 
             // Vignette darken
-            let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
+            let vignette = 1.0 - smoothstep(0.5, 1.4, distFromCenter);
             color *= vignette;
+
+            // Scanline effect (subtle)
+            let scanline = sin(uv.y * 800.0) * 0.02;
+            color -= vec3<f32>(scanline);
 
             return vec4<f32>(color, a);
         }
@@ -211,7 +216,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.15); // Slightly more visible grid
+             return vec4<f32>(0.8, 0.9, 1.0, 0.15); // Cyan-tinted grid, slightly visible
         }
     `;
     return { vertex, fragment };
@@ -253,7 +258,8 @@ export const BackgroundShaders = () => {
           // Modify parameters based on level
           // Level 1: Calm blue
           // Level 10: Chaotic red
-          let levelFactor = min(level * 0.1, 1.0);
+          // Ramp up faster: reached max intensity at level 8
+          let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
           let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.05, 0.0, 0.0), levelFactor);
@@ -264,16 +270,22 @@ export const BackgroundShaders = () => {
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
             let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
-            // Speed increases with level
-            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 2.0);
+            // Speed increases with level - Warp Speed effect
+            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 4.0);
 
-            // Perspective offset for each layer
-            let perspectiveOffset = vec2<f32>(
-              sin(time * speed) * (0.05 + layer_f * 0.02),
-              cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
-            );
+            // Perspective offset for each layer (Warp Tunnel effect)
+            // Use time to drive Z-movement simulated by scaling UVs from center
+            let zoom = fract(time * speed * 0.2);
+            let scaleZoom = mix(1.0, 0.5, zoom); // Move towards camera
 
-            let gridUV = (uv - 0.5) * scale + perspectiveOffset;
+            // Basic rotation
+            let rotAngle = time * 0.1 * (1.0 - layer_f * 0.2);
+            let c = cos(rotAngle);
+            let s = sin(rotAngle);
+            let uvCentered = uv - 0.5;
+            let uvRot = vec2<f32>(uvCentered.x * c - uvCentered.y * s, uvCentered.x * s + uvCentered.y * c);
+
+            let gridUV = uvRot * scale * scaleZoom;
 
             // Smooth grid lines that get thinner with distance
             let lineWidth = 0.02 / scale;
@@ -296,8 +308,8 @@ export const BackgroundShaders = () => {
 
           // Manual mix for level influence (mix towards red/orange)
           let dangerColor = vec3<f32>(1.0, 0.2, 0.0);
-          neonCyan = mix(neonCyan, dangerColor, levelFactor * 0.5);
-          neonBlue = mix(neonBlue, vec3<f32>(0.5, 0.0, 0.0), levelFactor * 0.8);
+          neonCyan = mix(neonCyan, dangerColor, levelFactor * 0.6);
+          neonBlue = mix(neonBlue, vec3<f32>(0.5, 0.0, 0.0), levelFactor * 0.9);
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
@@ -328,7 +340,7 @@ export const BackgroundShaders = () => {
 
           // Combine all elements
           var finalColor = deepSpace;
-          finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
+          finalColor = mix(finalColor, gridColor * pulse, grid * 0.7); // More grid visibility
           finalColor += lights;
 
           // --- Vignette effect to focus on center ---
@@ -365,10 +377,10 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.6"; // Brighter ambient for better visibility
+  params.ambientIntensity = "0.7"; // Brighter
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "3.0"; // Very glossy
-  params.shininess = "300.0"; // Extremely sharp, like polished gemstone
+  params.specularIntensity = "3.5"; // Even glossier
+  params.shininess = "350.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -492,13 +504,21 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.8;
 
                 // --- Lock Warning Effect ---
-                // Pulse Red when lock percent > 0.5
+                // Pulse Red when lock percent > 0.5, getting faster and more intense
                 let lockPercent = uniforms.lockPercent;
                 if (lockPercent > 0.5) {
-                    let warningPulse = sin(time * 20.0) * 0.5 + 0.5;
-                    let warningColor = vec3<f32>(1.0, 0.0, 0.0);
-                    let warningStrength = (lockPercent - 0.5) * 2.0 * warningPulse * 0.5;
+                    // Speed increases with lockPercent
+                    let pulseSpeed = 10.0 + (lockPercent - 0.5) * 40.0;
+                    let warningPulse = sin(time * pulseSpeed) * 0.5 + 0.5;
+                    let warningColor = vec3<f32>(1.0, 0.0, 0.0); // Pure red
+                    // Strength increases with lockPercent (up to 0.8 mix)
+                    let warningStrength = (lockPercent - 0.5) * 2.0 * warningPulse * 0.8;
                     finalColor = mix(finalColor, warningColor, warningStrength);
+
+                    // Add white flash at very end
+                    if (lockPercent > 0.9 && warningPulse > 0.9) {
+                        finalColor += vec3<f32>(0.5);
+                    }
                 }
 
                 // --- GHOST PIECE RENDERING ---
@@ -508,38 +528,39 @@ export const Shaders = () => {
                     let wire = edgeGlow;
 
                     // Holographic scanline effect
-                    let scanPos = vPosition.y * 15.0 + time * 8.0;
+                    let scanPos = vPosition.y * 20.0 + time * 10.0;
                     let scanline = sin(scanPos) * 0.5 + 0.5;
                     // Sharp lines
-                    scanline = pow(scanline, 4.0);
+                    scanline = pow(scanline, 8.0); // Sharper scanlines
 
                     // Vertical Glitch
                     var glitchOffset = 0.0;
-                    if (fract(time * 2.0) > 0.95) {
-                        glitchOffset = sin(vPosition.y * 50.0) * 0.02;
+                    if (fract(time * 3.0) > 0.95) {
+                        glitchOffset = sin(vPosition.y * 50.0) * 0.05;
                     }
 
                     // Landing Beam Effect (Vertical highlight in center)
-                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 4.0);
+                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 8.0); // Thinner beam
 
                     // Add a filled body with low alpha
-                    let body = 0.05 + scanline * 0.3 + beam * 0.2; // Brighter on scanline & beam
+                    let body = 0.02 + scanline * 0.4 + beam * 0.3; // Brighter on scanline & beam
 
-                    let ghostColor = mix(vColor.rgb, vec3<f32>(0.4, 0.9, 1.0), 0.6); // Cyber Cyan tint
+                    let ghostColor = mix(vColor.rgb, vec3<f32>(0.2, 0.8, 1.0), 0.7); // Cyber Cyan tint
 
-                    var finalGhost = ghostColor * wire * 3.0; // Bright wireframe (Boosted)
+                    var finalGhost = ghostColor * wire * 4.0; // Bright wireframe (Boosted)
                     finalGhost += vColor.rgb * body; // Subtle body fill
 
                     // Pulse
-                    let pulse = 0.8 + 0.2 * sin(time * 4.0);
+                    let pulse = 0.7 + 0.3 * sin(time * 5.0);
 
                     // Add digital glitch noise to ghost
                     let ghostNoise = fract(sin(dot(vUV + time + glitchOffset, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-                    if (ghostNoise > 0.97) {
-                        finalGhost += vec3<f32>(0.6); // Glitch flash
+                    if (ghostNoise > 0.96) {
+                        finalGhost += vec3<f32>(0.8); // Glitch flash
+                        finalGhost *= 1.5; // Brightness boost
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.6); // Slightly clearer
+                    return vec4<f32>(finalGhost, pulse * 0.5);
                 }
 
                 // --- Transparency ---
