@@ -2,9 +2,9 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 150; // Delayed Auto Shift (ms) - Balanced
-const ARR = 10;  // Auto Repeat Rate (ms) - Very fast
-const SOFT_DROP_SPEED = 30; // Sonic Drop: Faster soft drop for better responsiveness
+const DAS = 130; // Delayed Auto Shift (ms) - Snappier
+const ARR = 8;   // Auto Repeat Rate (ms) - Extremely fast
+const SOFT_DROP_SPEED = 20; // Sonic Drop: Faster soft drop for better responsiveness
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -266,8 +266,11 @@ export default class Controller {
           return;
       }
 
-      const dt = time - this.lastTime;
+      let dt = time - this.lastTime;
       this.lastTime = time;
+
+      // Cap dt to prevent massive jumps (e.g., if tab was backgrounded)
+      if (dt > 100) dt = 100;
 
       // 1. Handle Input (Movement)
       this.handleInput(dt);

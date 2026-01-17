@@ -293,12 +293,13 @@ export default class View {
           ctx.save();
 
           // 1. Soft Outer Glow
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.6)`;
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`;
 
           // 2. Main Glassy Fill (Gradient)
           const grad = ctx.createLinearGradient(px, py, px + blockSize, py + blockSize);
-          grad.addColorStop(0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.5)`);
+          grad.addColorStop(0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.8)`);
+          grad.addColorStop(0.5, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.4)`);
           grad.addColorStop(1, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.1)`);
           ctx.fillStyle = grad;
           ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
@@ -310,8 +311,8 @@ export default class View {
           ctx.moveTo(px + blockSize - 1, py + 1);
           ctx.lineTo(px + 1, py + 1);
           ctx.lineTo(px + 1, py + blockSize - 1);
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.7)`;
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
+          ctx.lineWidth = 2.0;
           ctx.stroke();
 
           // Bottom/Right lowlight
@@ -347,7 +348,12 @@ export default class View {
 
   onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
-      this.visualEffects.triggerShake(0.6, 0.6); // Slightly more shake
+
+      const isTetris = lines.length === 4;
+      let shakeIntensity = 0.6;
+      if (isTetris || isTSpin) shakeIntensity = 1.5;
+
+      this.visualEffects.triggerShake(shakeIntensity, 0.6);
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -356,9 +362,7 @@ export default class View {
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
 
-              const isTetris = lines.length === 4;
-
-              let color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.8, 0.2, 1.0, 1.0]); // Cyan/Purple (default)
+              let color = [0.0, 1.0, 1.0, 1.0]; // Cyan default
               let count = 30;
               let speed = 8.0;
 
@@ -371,10 +375,17 @@ export default class View {
                     speed = 12.0;
                   }
               } else if (isTetris) {
-                  color = [1.0, 0.9, 0.1, 1.0]; // Bright Gold
+                  color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
                   count = 100;
                   speed = 15.0;
               } else {
+                  // Standard clears - vary color by level or just random cool colors
+                  // Random between Blue, Purple, Cyan
+                   const rand = Math.random();
+                   if (rand < 0.33) color = [0.0, 0.5, 1.0, 1.0];
+                   else if (rand < 0.66) color = [0.6, 0.0, 1.0, 1.0];
+                   else color = [0.0, 1.0, 1.0, 1.0];
+
                   count = 40;
                   speed = 10.0;
               }
@@ -407,16 +418,16 @@ export default class View {
       for(let i=0; i<distance; i++) {
           const r = startRow + i;
           const worldY = r * -2.2;
-          // More particles per block, blue/cyan trail
+          // More particles per block, electric blue trail
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.8, 1.0, 0.8]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.9, 1.0, 1.0]);
       }
 
-      // Impact particles at bottom
+      // Impact particles at bottom - More intense burst
       const impactY = y * -2.2;
-      for (let i=0; i<40; i++) {
-          const angle = (i / 40) * Math.PI * 2;
-          const speed = 15.0;
+      for (let i=0; i<60; i++) {
+          const angle = (i / 60) * Math.PI * 2;
+          const speed = 20.0 + Math.random() * 10.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
@@ -432,17 +443,21 @@ export default class View {
       const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
       // Dynamic shockwave based on drop distance
-      const strength = 0.08 + Math.min(distance * 0.015, 0.25); // Boosted impact
-      const width = 0.15 + Math.min(distance * 0.015, 0.3);     // Boosted width
-      const aberration = 0.04 + Math.min(distance * 0.008, 0.12); // Stronger glitch
+      // More aggressive parameters
+      const strength = 0.1 + Math.min(distance * 0.02, 0.4);
+      const width = 0.2 + Math.min(distance * 0.02, 0.4);
+      const aberration = 0.05 + Math.min(distance * 0.01, 0.2);
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
       // Increase shake
-      this.visualEffects.triggerShake(1.5 + distance * 0.08, 0.2);
+      this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.25);
   }
 
   renderMainScreen(state: any) {
+    // Update local state for the Frame loop
+    this.state = state;
+
     // Check for new visual effects from Game Logic
     if (state.effectCounter > this.lastEffectCounter) {
         this.lastEffectCounter = state.effectCounter;
@@ -455,8 +470,10 @@ export default class View {
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
     }
 
-    // this.clearScreen(state);
-    this.renderPlayfild_WebGPU(state);
+    // 3D Rendering is handled by the Frame() loop to ensure synchronization with swap chain
+    // this.renderPlayfild_WebGPU(state);
+
+    // 2D/DOM Updates
     this.renderPiece(this.nextPieceContext, state.nextPiece, 30);
     this.renderPiece(this.holdPieceContext, state.holdPiece, 20);
 
