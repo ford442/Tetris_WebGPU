@@ -243,10 +243,24 @@ export default class Controller {
       const dropDist = ghostY - this.game.activPiece.y;
       const currentX = this.game.activPiece.x;
 
+      // NEON BRICKLAYER: Get Color Index for visual flair
+      // Map piece type to theme color index
+      const type = this.game.activPiece.type;
+      let colorIdx = 1;
+      // Map standard pieces to index 1-7 (I,J,L,O,S,T,Z)
+      // This mapping assumes standard order or theme alignment
+      if (type === 'I') colorIdx = 1;
+      else if (type === 'J') colorIdx = 2;
+      else if (type === 'L') colorIdx = 3;
+      else if (type === 'O') colorIdx = 4;
+      else if (type === 'S') colorIdx = 5;
+      else if (type === 'T') colorIdx = 6;
+      else if (type === 'Z') colorIdx = 7;
+
       const result = this.game.hardDrop();
       this.soundManager.playHardDrop();
 
-      this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist);
+      this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist, colorIdx);
 
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
@@ -280,7 +294,9 @@ export default class Controller {
       // We need to implement gravity here if interval is gone.
 
       const level = this.game.getState().level;
-      const speedMs = Math.max(50, 1000 - level * 100);
+      // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
+      // Level 1: 1000ms, Level 10: ~230ms, Level 15: ~100ms
+      const speedMs = Math.max(16, 1000 * Math.pow(0.85, level - 1));
 
       // Accumulate gravity time?
       // Simplest: use a gravity timer here.
