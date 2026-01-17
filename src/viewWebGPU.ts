@@ -419,26 +419,31 @@ export default class View {
       this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.3);
   }
 
-  onHardDrop(x: number, y: number, distance: number) {
+  onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
       // Create a vertical trail of particles
       const worldX = x * 2.2;
       // Start from top of drop
       const startRow = y - distance;
 
+      // NEON BRICKLAYER: Use actual piece color for trail
+      const themeColors = this.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
+      const trailColor = [...themeColors, 0.8]; // Add alpha
+
       for(let i=0; i<distance; i++) {
           const r = startRow + i;
           const worldY = r * -2.2;
-          // More particles per block, blue/cyan trail
+          // More particles per block
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.8, 1.0, 0.8]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, trailColor);
       }
 
       // Impact particles at bottom
       const impactY = y * -2.2;
-      for (let i=0; i<40; i++) {
-          const angle = (i / 40) * Math.PI * 2;
-          const speed = 15.0;
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
+      const burstColor = [...themeColors, 1.0];
+      for (let i=0; i<60; i++) { // More particles!
+          const angle = (i / 60) * Math.PI * 2;
+          const speed = 20.0;
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
 
       this.triggerImpactEffects(worldX, impactY, distance);
@@ -1082,11 +1087,17 @@ export default class View {
 
     // Update Shockwave Uniforms
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
+    // Offset 48: level
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, this.useGlitch ? 1.0 : 0.0,
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
         this.visualEffects.shockwaveTimer, 0, 0, 0
     ]));
+    // Write params at offset 32 (vec4 alignment)
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
+
+    // Write level at offset 48 (NEON BRICKLAYER)
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, new Float32Array([this.visualEffects.currentLevel]));
     // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 

@@ -26,7 +26,13 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
+            // Align to 16 bytes for next field if needed, but here we just flow
+            // offset 0: time(4), 4: useGlitch(4), 8: center(8) -> 16
+            // offset 16: shockwaveTime(4), pad(12) -> 32
+            // offset 32: shockwaveParams(16) -> 48
+            // offset 48: level(4)
             shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
+            level: f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -41,6 +47,7 @@ export const PostProcessShaders = () => {
             let time = uniforms.shockwaveTime;
             let useGlitch = uniforms.useGlitch;
             let params = uniforms.shockwaveParams;
+            let level = uniforms.level;
 
             // Shockwave Logic
             var shockwaveAberration = 0.0;
@@ -64,11 +71,17 @@ export const PostProcessShaders = () => {
                 }
             }
 
-            // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette)
+            // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             // Subtle permanent aberration at edges for arcade feel
             let vignetteAberration = pow(distFromCenter, 3.0) * 0.015;
-            let baseAberration = select(vignetteAberration, distFromCenter * 0.03, useGlitch > 0.5);
+
+            // Level based aberration: Starts calm, gets glitchy at high levels
+            // Level 10+ = max stress
+            let levelStress = clamp(level / 12.0, 0.0, 1.0);
+            let levelAberration = levelStress * 0.008 * sin(uniforms.time * 2.0); // Breathing aberration
+
+            let baseAberration = select(vignetteAberration + levelAberration, distFromCenter * 0.03, useGlitch > 0.5);
             let totalAberration = baseAberration + shockwaveAberration;
 
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
@@ -485,11 +498,23 @@ export const Shaders = () => {
                 let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
                 finalColor += vec3<f32>(1.0) * edgeGlow * 1.0;
 
-                // Lock Tension Pulse
+                // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
                 if (lockPercent > 0.5) {
-                    let pulse = sin(time * 20.0) * 0.5 + 0.5;
-                    finalColor = mix(finalColor, vec3<f32>(1.0, 0.0, 0.0), (lockPercent - 0.5) * 2.0 * pulse * 0.5);
+                    // Heartbeat rhythm: faster as it gets closer to 1.0
+                    // Starts at 10.0 speed, ramps up to 50.0
+                    let beatSpeed = 10.0 + (lockPercent - 0.5) * 80.0;
+                    let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
+                    // Sharpen the pulse for a digital feel
+                    let sharpPulse = pow(pulse, 4.0);
+
+                    let intensity = (lockPercent - 0.5) * 2.0; // 0.0 to 1.0
+
+                    // Mix to Warning Red
+                    finalColor = mix(finalColor, vec3<f32>(1.0, 0.1, 0.1), intensity * sharpPulse * 0.8);
+
+                    // Add additive emission
+                    finalColor += vec3<f32>(0.8, 0.0, 0.0) * intensity * sharpPulse * 0.6;
                 }
 
                 // Ghost Piece Logic
