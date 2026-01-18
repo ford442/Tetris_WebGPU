@@ -9,7 +9,7 @@ Successfully implemented level-based video background switching for the Tetris W
 
 1. **Theme System Enhancement**
    - Replaced single `backgroundVideo` property with `levelVideos` array
-   - Each theme (pastel, neon, future) now supports 7 different videos
+   - Each theme (pastel, neon, future) now supports 8 different videos
    - Extracted video paths to `DEFAULT_LEVEL_VIDEOS` constant for maintainability
 
 2. **Level Tracking**
@@ -37,7 +37,8 @@ Successfully implemented level-based video background switching for the Tetris W
 | 3          | bg4.mp4   | 30-39          |
 | 4          | bg5.mp4   | 40-49          |
 | 5          | bg6.mp4   | 50-59          |
-| 6+         | bg7.mp4   | 60+            |
+| 6          | bg7.mp4   | 60-69          |
+| 7+         | bg8.mp4   | 70+            |
 
 Level calculation: `level = Math.floor(lines * 0.1)`
 
@@ -81,14 +82,14 @@ Level calculation: `level = Math.floor(lines * 0.1)`
 
 ### Manual Testing Required
 To fully test the implementation:
-1. Place video files (bg1.mp4 - bg7.mp4) in `assets/video/` directory
+1. Place video files (bg1.mp4 - bg8.mp4) in `assets/video/` directory
 2. Run `npm run dev` to start development server
 3. Play the game and clear lines to advance levels
 4. Verify videos switch automatically at level transitions
 
 ## Video Files
 
-The implementation expects 7 video files in `assets/video/`:
+The implementation expects 8 video files in `assets/video/`:
 - bg1.mp4
 - bg2.mp4
 - bg3.mp4
@@ -96,6 +97,7 @@ The implementation expects 7 video files in `assets/video/`:
 - bg5.mp4
 - bg6.mp4
 - bg7.mp4
+- bg8.mp4
 
 Use the provided `create-placeholder-videos.sh` script to generate test videos, or replace with actual video content.
 
