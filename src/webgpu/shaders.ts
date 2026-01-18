@@ -95,8 +95,8 @@ export const PostProcessShaders = () => {
 
             // Neon Bloom: Boost bright colors more aggressively
             // Threshold 0.5 means only bright neon parts glow (Lowered for more glow)
-            let bloomThreshold = 0.5;
-            let bloomIntensity = 0.8; // JUICE: Increased from 0.5
+            let bloomThreshold = 0.45; // JUICE: Lowered threshold for more glow
+            let bloomIntensity = 0.9; // JUICE: Increased from 0.8
 
             if (luminance > bloomThreshold) {
                 // Additive glow for "neon" feel
@@ -120,6 +120,7 @@ export const ParticleShaders = () => {
     const vertex = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
+            time : f32, // Added time
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -202,7 +203,10 @@ export const ParticleShaders = () => {
             // Add a slight hue shift based on life for variety
             let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
 
-            return vec4<f32>(hueShift * 2.5, finalAlpha); // Boost brightness
+            // JUICE: Pulse alpha for "alive" particles
+            let pulse = 0.8 + 0.2 * sin(uv.x * 20.0 + uniforms.time * 5.0); // Use proper time
+
+            return vec4<f32>(hueShift * 3.0, finalAlpha * pulse); // Boost brightness
         }
     `;
 
@@ -272,7 +276,8 @@ export const BackgroundShaders = () => {
           let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
-          let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.05, 0.0, 0.0), levelFactor);
+          // JUICE: More dramatic shift from Calm Blue to Chaotic Red
+          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.1, 0.0, 0.0), levelFactor);
 
           // --- Multi-layer perspective grid ---
           var grid = 0.0;
