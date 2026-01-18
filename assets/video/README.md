@@ -11,9 +11,10 @@ The videos will automatically change as the player progresses through levels:
 - `bg4.mp4` - Level 3
 - `bg5.mp4` - Level 4
 - `bg6.mp4` - Level 5
-- `bg7.mp4` - Level 6+
+- `bg7.mp4` - Level 6
+- `bg8.mp4` - Level 7+
 
-If a player reaches level 7 or higher, the game will continue to use `bg7.mp4`.
+If a player reaches level 8 or higher, the game will continue to use `bg8.mp4`.
 
 ## Display Behavior
 

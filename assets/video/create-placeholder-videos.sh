@@ -25,7 +25,8 @@ ffmpeg -f lavfi -i color=c=0xcc6600:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv
 
 # Level 6+ - Red
 ffmpeg -f lavfi -i color=c=0xcc0000:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg7.mp4
+ffmpeg -f lavfi -i color=c=0x9900cc:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg8.mp4
 
-echo "Done! Created 7 placeholder videos (bg1.mp4 through bg7.mp4)"
+echo "Done! Created 8 placeholder videos (bg1.mp4 through bg8.mp4)"
 echo "These are simple solid color videos for demonstration."
 echo "Replace them with your actual video content for production."
