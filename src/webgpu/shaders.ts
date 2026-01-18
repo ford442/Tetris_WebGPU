@@ -105,6 +105,7 @@ export const ParticleShaders = () => {
     const vertex = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
+            time : f32, // Offset 64
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -205,18 +206,52 @@ export const GridShader = () => {
     const vertex = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
+            time : f32, // Offset 64
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
+        struct Output {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vPos : vec2<f32>,
+        }
+
         @vertex
-        fn main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
-            return uniforms.viewProjectionMatrix * vec4<f32>(position, 1.0);
+        fn main(@location(0) position : vec3<f32>) -> Output {
+            var output: Output;
+            output.Position = uniforms.viewProjectionMatrix * vec4<f32>(position, 1.0);
+            output.vPos = position.xy;
+            return output;
         }
     `;
     const fragment = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            time : f32, // Offset 64
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
         @fragment
-        fn main() -> @location(0) vec4<f32> {
-             return vec4<f32>(0.8, 0.9, 1.0, 0.15); // Cyan-tinted grid, slightly visible
+        fn main(@location(0) vPos: vec2<f32>) -> @location(0) vec4<f32> {
+             let time = uniforms.time;
+
+             // Base color
+             var color = vec3<f32>(0.0, 0.8, 1.0); // Cyan
+
+             // Scanning pulse effect
+             let scan = sin(vPos.y * 0.5 - time * 2.0) * 0.5 + 0.5;
+             let pulse = pow(scan, 8.0) * 0.8;
+
+             // Subtle movement on lines
+             let flow = sin(vPos.x * 0.2 + time) * 0.1;
+
+             // Vertical fade out (top and bottom)
+             // Grid is roughly -20 to 10 vertically?
+             let yNorm = (vPos.y + 20.0) / 30.0;
+             let fade = smoothstep(0.0, 0.2, yNorm) * (1.0 - smoothstep(0.8, 1.0, yNorm));
+
+             let alpha = (0.15 + pulse + flow) * fade;
+
+             return vec4<f32>(color + pulse, alpha);
         }
     `;
     return { vertex, fragment };
@@ -377,10 +412,10 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.7"; // Brighter
+  params.ambientIntensity = "0.8"; // Brighter
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "3.5"; // Even glossier
-  params.shininess = "350.0"; // Razor sharp
+  params.specularIntensity = "5.0"; // Very high for sharp glass
+  params.shininess = "500.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -439,7 +474,7 @@ export const Shaders = () => {
                 var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
 
                 // Add secondary broad specular for "glossy plastic"
-                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
+                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.4; // Boosted
 
                 let ambient:f32 = ${params.ambientIntensity};
 
@@ -468,23 +503,23 @@ export const Shaders = () => {
 
                 // Apply texture/finish
                 // Add subtle grain to base color (Reduced)
-                baseColor += (noise - 0.5) * 0.05;
+                baseColor += (noise - 0.5) * 0.03; // Reduced noise
 
                 // Add inner glow (Boosted)
-                baseColor += vColor.rgb * coreGlow * 0.8;
+                baseColor += vColor.rgb * coreGlow * 1.0;
 
                 // Add self-emission (based on color brightness) - Boosted
-                let emission = vColor.rgb * 0.4 + vColor.rgb * pulsePos * 0.2; // Pulsing emission
+                let emission = vColor.rgb * 0.5 + vColor.rgb * pulsePos * 0.3; // Pulsing emission
                 baseColor += emission;
 
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
                 // Add bevel highlight
-                finalColor += vec3<f32>(1.0) * bevel * 0.5;
+                finalColor += vec3<f32>(1.0) * bevel * 0.6;
 
                 // --- Fresnel Rim Light (Glassy Look with Chromatism) ---
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0); // Sharper Fresnel for glass
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5); // Slightly broader Fresnel
 
                 // Chromatic/Iridescent rim shift
                 // Shift color slightly based on view angle for crystal effect
@@ -495,13 +530,13 @@ export const Shaders = () => {
                     sin(iridAngle + 4.18) * 0.5 + 0.5
                 );
 
-                let rimColor = mix(vColor.rgb, iridColor, 0.3); // Subtle iridescence
+                let rimColor = mix(vColor.rgb, iridColor, 0.5); // More Iridescence
 
-                finalColor += rimColor * fresnelTerm * 2.5;
+                finalColor += rimColor * fresnelTerm * 3.0; // Stronger Rim
 
                 // --- Edge Highlight (Sharp Wireframe feel) ---
                 let edgeGlow = smoothstep(0.92, 0.98, uvEdgeDist);
-                finalColor += vec3<f32>(1.0) * edgeGlow * 0.8;
+                finalColor += vec3<f32>(1.0) * edgeGlow * 0.9;
 
                 // --- Lock Warning Effect ---
                 // Pulse Red when lock percent > 0.5, getting faster and more intense
