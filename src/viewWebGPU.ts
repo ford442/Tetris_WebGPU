@@ -785,7 +785,7 @@ export default class View {
 
     // ViewProjection for particles
     this.particleUniformBuffer = this.device.createBuffer({
-        size: 64, // Mat4 for ViewProjection
+        size: 80, // Mat4 (64) + Time (4) + Pad (12) = 80
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1060,6 +1060,7 @@ export default class View {
 
     // Update uniforms for particles (Render VP) & grid
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, new Float32Array([time])); // Write time at offset 64
 
     // Update time for background and blocks
     // used 'time' calculated at start of frame
@@ -1098,6 +1099,7 @@ export default class View {
 
     // Write level at offset 48 (NEON BRICKLAYER)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, new Float32Array([this.visualEffects.currentLevel]));
+
     // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 
