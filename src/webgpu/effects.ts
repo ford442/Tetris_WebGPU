@@ -139,12 +139,12 @@ export class VisualEffects {
     triggerShake(magnitude: number, duration: number): void {
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 2.5);
+        this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // JUICE: Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
         this.aberrationIntensity += magnitude;
-        this.aberrationIntensity = Math.min(this.aberrationIntensity, 2.0);
+        this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03): void {
