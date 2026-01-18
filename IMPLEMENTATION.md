@@ -6,9 +6,9 @@ This implementation adds support for displaying different background videos for 
 ## Key Changes
 
 ### 1. Theme Configuration (`src/viewWebGPU.ts`)
-- **Changed**: `backgroundVideo` (single string) → `levelVideos` (array of 7 strings)
+- **Changed**: `backgroundVideo` (single string) → `levelVideos` (array of 8 strings)
 - **Purpose**: Support multiple videos mapped to different levels
-- **Implementation**: Each theme (pastel, neon, future) now has a `levelVideos` array containing paths to bg1.mp4 through bg7.mp4
+- **Implementation**: Each theme (pastel, neon, future) now has a `levelVideos` array containing paths to bg1.mp4 through bg8.mp4
 
 ### 2. Level Tracking
 - **Added**: `currentLevel` property to View class
@@ -49,7 +49,8 @@ This implementation adds support for displaying different background videos for 
 | 3     | bg4.mp4   | 30-39         |
 | 4     | bg5.mp4   | 40-49         |
 | 5     | bg6.mp4   | 50-59         |
-| 6+    | bg7.mp4   | 60+           |
+| 6     | bg7.mp4   | 60-69         |
+| 7+    | bg8.mp4   | 70+           |
 
 Note: Level is calculated as `Math.floor(lines * 0.1)` in `src/game.ts`
 
@@ -65,11 +66,11 @@ Note: Level is calculated as `Math.floor(lines * 0.1)` in `src/game.ts`
 ## Fallback Behavior
 1. If a video fails to load → falls back to shader-based background
 2. If no videos are configured for a theme → uses shader background
-3. If level exceeds available videos → uses the last video (bg7.mp4)
+3. If level exceeds available videos → uses the last video (bg8.mp4)
 
 ## Testing
 To test the implementation:
-1. Place video files (bg1.mp4 - bg7.mp4) in `assets/video/` directory
+1. Place video files (bg1.mp4 - bg8.mp4) in `assets/video/` directory
 2. Start the game with `npm run dev`
 3. Play until you clear 10 lines (advances to level 1)
 4. Video should automatically switch to bg2.mp4
