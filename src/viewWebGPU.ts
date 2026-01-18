@@ -347,11 +347,11 @@ export default class View {
   }
 
   onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
-      this.visualEffects.triggerFlash(1.0);
+      this.visualEffects.triggerFlash(0.5); // Slightly faster flash
 
       const isTetris = lines.length === 4;
-      let shakeIntensity = 0.6;
-      if (isTetris || isTSpin) shakeIntensity = 1.5;
+      let shakeIntensity = 1.0;
+      if (isTetris || isTSpin) shakeIntensity = 3.0; // Stronger shake
 
       this.visualEffects.triggerShake(shakeIntensity, 0.6);
 
@@ -363,35 +363,33 @@ export default class View {
               const worldX = c * 2.2;
 
               let color = [0.0, 1.0, 1.0, 1.0]; // Cyan default
-              let count = 30;
-              let speed = 8.0;
+              let count = 60; // Increased
+              let speed = 15.0; // Faster
 
               if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 120;
-                  speed = 18.0;
+                  count = 150;
+                  speed = 25.0;
                   if (isMini) {
-                    count = 60;
-                    speed = 12.0;
+                    count = 80;
+                    speed = 18.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
-                  count = 100;
-                  speed = 15.0;
+                  count = 120;
+                  speed = 22.0;
               } else {
-                  // Standard clears - vary color by level or just random cool colors
-                  // Random between Blue, Purple, Cyan
+                   // Random cool colors
                    const rand = Math.random();
                    if (rand < 0.33) color = [0.0, 0.5, 1.0, 1.0];
                    else if (rand < 0.66) color = [0.6, 0.0, 1.0, 1.0];
                    else color = [0.0, 1.0, 1.0, 1.0];
 
-                  count = 40;
-                  speed = 10.0;
+                  count = 50;
+                  speed = 12.0;
               }
 
               this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, 0, speed, color);
-              // Also burst up/down
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
           }
       });
@@ -420,14 +418,14 @@ export default class View {
           const worldY = r * -2.2;
           // More particles per block, electric blue trail
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, [0.4, 0.9, 1.0, 1.0]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 12, [0.4, 0.9, 1.0, 1.0]);
       }
 
       // Impact particles at bottom - More intense burst
       const impactY = y * -2.2;
-      for (let i=0; i<60; i++) {
-          const angle = (i / 60) * Math.PI * 2;
-          const speed = 20.0 + Math.random() * 10.0;
+      for (let i=0; i<80; i++) {
+          const angle = (i / 80) * Math.PI * 2;
+          const speed = 25.0 + Math.random() * 15.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
@@ -444,14 +442,14 @@ export default class View {
 
       // Dynamic shockwave based on drop distance
       // More aggressive parameters
-      const strength = 0.1 + Math.min(distance * 0.02, 0.4);
-      const width = 0.2 + Math.min(distance * 0.02, 0.4);
-      const aberration = 0.05 + Math.min(distance * 0.01, 0.2);
+      const strength = 0.15 + Math.min(distance * 0.03, 0.5);
+      const width = 0.25 + Math.min(distance * 0.03, 0.5);
+      const aberration = 0.08 + Math.min(distance * 0.02, 0.3);
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
       // Increase shake
-      this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.25);
+      this.visualEffects.triggerShake(3.0 + distance * 0.2, 0.3);
   }
 
   renderMainScreen(state: any) {
@@ -737,7 +735,7 @@ export default class View {
     });
 
     this.particleUniformBuffer = this.device.createBuffer({
-        size: 64, // Mat4 for ViewProjection
+        size: 80, // Mat4 (64) + Time (4) + Padding (12)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -996,6 +994,8 @@ export default class View {
 
     // Update uniforms for particles & grid (sharing VP matrix)
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
+    // Update time (offset 64)
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, new Float32Array([time]));
 
     // Update time for background and blocks
     // used 'time' calculated at start of frame
