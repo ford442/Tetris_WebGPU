@@ -347,13 +347,13 @@ export default class View {
   }
 
   onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
-      this.visualEffects.triggerFlash(0.5); // Slightly faster flash
+      this.visualEffects.triggerFlash(0.6); // Strong flash
 
       const isTetris = lines.length === 4;
-      let shakeIntensity = 1.0;
-      if (isTetris || isTSpin) shakeIntensity = 3.0; // Stronger shake
+      let shakeIntensity = 2.0;
+      if (isTetris || isTSpin) shakeIntensity = 5.0; // Massive shake for big clears
 
-      this.visualEffects.triggerShake(shakeIntensity, 0.6);
+      this.visualEffects.triggerShake(shakeIntensity, 0.8);
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -363,21 +363,21 @@ export default class View {
               const worldX = c * 2.2;
 
               let color = [0.0, 1.0, 1.0, 1.0]; // Cyan default
-              let count = 60; // Increased
-              let speed = 15.0; // Faster
+              let count = 80; // Increased base count
+              let speed = 18.0;
 
               if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 150;
-                  speed = 25.0;
+                  count = 200; // Massive particle burst
+                  speed = 30.0;
                   if (isMini) {
-                    count = 80;
-                    speed = 18.0;
+                    count = 100;
+                    speed = 22.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
-                  count = 120;
-                  speed = 22.0;
+                  count = 150;
+                  speed = 25.0;
               } else {
                    // Random cool colors
                    const rand = Math.random();
@@ -385,8 +385,8 @@ export default class View {
                    else if (rand < 0.66) color = [0.6, 0.0, 1.0, 1.0];
                    else color = [0.0, 1.0, 1.0, 1.0];
 
-                  count = 50;
-                  speed = 12.0;
+                  count = 60;
+                  speed = 15.0;
               }
 
               this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, 0, speed, color);
@@ -396,15 +396,15 @@ export default class View {
   }
 
   onLock() {
-      this.visualEffects.triggerLock(0.4); // Stronger flash
-      this.visualEffects.triggerShake(0.3, 0.2);
+      this.visualEffects.triggerLock(0.5); // Stronger flash
+      this.visualEffects.triggerShake(0.5, 0.25);
   }
 
   onHold() {
       // Visual feedback for hold
-      this.visualEffects.triggerFlash(0.2); // Quick flash
+      this.visualEffects.triggerFlash(0.3); // Quick flash
       // Maybe some particles at the center?
-      this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]); // Purple flash
+      this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 50, [0.6, 0.2, 1.0, 1.0]); // Purple flash
   }
 
   onHardDrop(x: number, y: number, distance: number) {
@@ -418,14 +418,14 @@ export default class View {
           const worldY = r * -2.2;
           // More particles per block, electric blue trail
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 12, [0.4, 0.9, 1.0, 1.0]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 20, [0.4, 0.9, 1.0, 1.0]);
       }
 
       // Impact particles at bottom - More intense burst
       const impactY = y * -2.2;
-      for (let i=0; i<80; i++) {
-          const angle = (i / 80) * Math.PI * 2;
-          const speed = 25.0 + Math.random() * 15.0;
+      for (let i=0; i<120; i++) {
+          const angle = (i / 120) * Math.PI * 2;
+          const speed = 30.0 + Math.random() * 20.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
@@ -442,14 +442,14 @@ export default class View {
 
       // Dynamic shockwave based on drop distance
       // More aggressive parameters
-      const strength = 0.15 + Math.min(distance * 0.03, 0.5);
-      const width = 0.25 + Math.min(distance * 0.03, 0.5);
-      const aberration = 0.08 + Math.min(distance * 0.02, 0.3);
+      const strength = 0.2 + Math.min(distance * 0.05, 0.6); // Stronger base
+      const width = 0.3 + Math.min(distance * 0.05, 0.6); // Wider
+      const aberration = 0.1 + Math.min(distance * 0.03, 0.4); // More glitch
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
 
       // Increase shake
-      this.visualEffects.triggerShake(3.0 + distance * 0.2, 0.3);
+      this.visualEffects.triggerShake(4.0 + distance * 0.3, 0.4);
   }
 
   renderMainScreen(state: any) {

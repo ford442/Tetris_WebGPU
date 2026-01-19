@@ -2,9 +2,9 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 130; // Delayed Auto Shift (ms) - Snappier
+const DAS = 120; // Delayed Auto Shift (ms) - Snappier
 const ARR = 8;   // Auto Repeat Rate (ms) - Extremely fast
-const SOFT_DROP_SPEED = 20; // Sonic Drop: Faster soft drop for better responsiveness
+const SOFT_DROP_SPEED = 10; // Sonic Drop: Even faster for instant feel
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -283,9 +283,9 @@ export default class Controller {
       // We need to implement gravity here if interval is gone.
 
       const level = this.game.getState().level;
-      // Improved Gravity Curve (Exponential decay)
-      // Level 1: 1000ms, Level 10: ~200ms, Level 15: ~90ms, Level 20: ~40ms
-      let speedMs = 1000 * Math.pow(0.85, Math.max(0, level - 1));
+      // Improved Gravity Curve (Smoother exponential decay)
+      // Level 1: 1000ms, Level 10: ~300ms, Level 20: ~90ms
+      let speedMs = 1000 * Math.pow(0.88, Math.max(0, level - 1));
       // Cap at reasonable speed (approx 60fps = 16ms)
       speedMs = Math.max(16, speedMs);
 
