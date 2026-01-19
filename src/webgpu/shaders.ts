@@ -192,10 +192,15 @@ export const ParticleShaders = () => {
             let alpha = intensity + core * 0.5 + sparkle * 0.8;
             let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            // Add a slight hue shift based on life for variety
-            let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
+            // Dynamic Hue Shift
+            let r = color.r;
+            let g = color.g;
+            let b = color.b;
 
-            return vec4<f32>(hueShift * 2.5, finalAlpha); // Boost brightness
+            // Boost brightness for "HDR" look
+            let boost = 1.5;
+
+            return vec4<f32>(vec3<f32>(r,g,b) * boost, finalAlpha);
         }
     `;
 
@@ -297,7 +302,8 @@ export const BackgroundShaders = () => {
           let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
-          let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.05, 0.0, 0.0), levelFactor);
+          // Added more red influence at higher levels
+          let deepSpace = mix(vec3<f32>(0.02, 0.01, 0.08), vec3<f32>(0.1, 0.0, 0.0), levelFactor * 0.8);
 
           // --- Multi-layer perspective grid ---
           var grid = 0.0;
@@ -306,7 +312,8 @@ export const BackgroundShaders = () => {
             let layer_f = f32(layer);
             let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
             // Speed increases with level - Warp Speed effect
-            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 4.0);
+            // Enhanced speed multiplier
+            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 8.0);
 
             // Perspective offset for each layer (Warp Tunnel effect)
             // Use time to drive Z-movement simulated by scaling UVs from center
@@ -370,7 +377,7 @@ export const BackgroundShaders = () => {
 
           // --- Global pulse effect ---
           // Pulse faster at higher levels
-          let pulseSpeed = 1.5 + levelFactor * 3.0;
+          let pulseSpeed = 1.5 + levelFactor * 5.0; // Faster pulse
           let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
 
           // Combine all elements
@@ -414,8 +421,8 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.8"; // Brighter
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "5.0"; // Very high for sharp glass
-  params.shininess = "500.0"; // Razor sharp
+  params.specularIntensity = "6.0"; // Even higher for sharper glass
+  params.shininess = "600.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -506,17 +513,17 @@ export const Shaders = () => {
                 baseColor += (noise - 0.5) * 0.03; // Reduced noise
 
                 // Add inner glow (Boosted)
-                baseColor += vColor.rgb * coreGlow * 1.0;
+                baseColor += vColor.rgb * coreGlow * 1.5; // Significantly stronger glow
 
                 // Add self-emission (based on color brightness) - Boosted
-                let emission = vColor.rgb * 0.5 + vColor.rgb * pulsePos * 0.3; // Pulsing emission
+                let emission = vColor.rgb * 0.6 + vColor.rgb * pulsePos * 0.4; // Pulsing emission
                 baseColor += emission;
 
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
                 // Add bevel highlight
-                finalColor += vec3<f32>(1.0) * bevel * 0.6;
+                finalColor += vec3<f32>(1.0) * bevel * 0.7;
 
                 // --- Fresnel Rim Light (Glassy Look with Chromatism) ---
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5); // Slightly broader Fresnel
@@ -539,15 +546,19 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * edgeGlow * 0.9;
 
                 // --- Lock Warning Effect ---
-                // Pulse Red when lock percent > 0.5, getting faster and more intense
+                // Pulse Red when lock timer is active, more intense as it nears completion
                 let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.5) {
+                if (lockPercent > 0.0) {
+                    // Start earlier but smoother
                     // Speed increases with lockPercent
-                    let pulseSpeed = 10.0 + (lockPercent - 0.5) * 40.0;
+                    let pulseSpeed = 5.0 + lockPercent * 40.0;
                     let warningPulse = sin(time * pulseSpeed) * 0.5 + 0.5;
                     let warningColor = vec3<f32>(1.0, 0.0, 0.0); // Pure red
-                    // Strength increases with lockPercent (up to 0.8 mix)
-                    let warningStrength = (lockPercent - 0.5) * 2.0 * warningPulse * 0.8;
+
+                    // Intensity ramps up with lockPercent
+                    let intensity = smoothstep(0.0, 1.0, lockPercent);
+                    let warningStrength = intensity * warningPulse * 0.9;
+
                     finalColor = mix(finalColor, warningColor, warningStrength);
 
                     // Add white flash at very end
@@ -578,7 +589,7 @@ export const Shaders = () => {
                     let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 8.0); // Thinner beam
 
                     // Add a filled body with low alpha
-                    let body = 0.02 + scanline * 0.4 + beam * 0.3; // Brighter on scanline & beam
+                    let body = 0.05 + scanline * 0.4 + beam * 0.3; // Increased body fill opacity
 
                     let ghostColor = mix(vColor.rgb, vec3<f32>(0.2, 0.8, 1.0), 0.7); // Cyber Cyan tint
 
@@ -586,7 +597,7 @@ export const Shaders = () => {
                     finalGhost += vColor.rgb * body; // Subtle body fill
 
                     // Pulse
-                    let pulse = 0.7 + 0.3 * sin(time * 5.0);
+                    let pulse = 0.7 + 0.3 * sin(time * 8.0); // Faster pulse for ghost
 
                     // Add digital glitch noise to ghost
                     let ghostNoise = fract(sin(dot(vUV + time + glitchOffset, vec2<f32>(12.9898, 78.233))) * 43758.5453);
@@ -595,7 +606,7 @@ export const Shaders = () => {
                         finalGhost *= 1.5; // Brightness boost
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.5);
+                    return vec4<f32>(finalGhost, pulse * 0.6);
                 }
 
                 // --- Transparency ---
