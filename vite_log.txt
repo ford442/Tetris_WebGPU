@@ -1,0 +1,10 @@
+
+> tetris-webgpu@1.0.0 dev
+> vite
+
+
+  VITE v4.5.14  ready in 302 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+1:39:13 PM [vite] page reload src/webgpu/shaders.ts
