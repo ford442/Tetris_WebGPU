@@ -446,6 +446,9 @@ export default class View {
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
 
+      // Add a floor splash ripple
+      this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, 0, 5.0, burstColor);
+
       this.triggerImpactEffects(worldX, impactY, distance);
   }
 
