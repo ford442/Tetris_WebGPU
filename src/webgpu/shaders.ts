@@ -91,22 +91,34 @@ export const PostProcessShaders = () => {
 
             // Bloom-ish boost (cheap but juicy)
             var color = vec3<f32>(r, g, b);
-            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
-            // Neon Bloom: Boost bright colors more aggressively
-            // Threshold 0.5 means only bright neon parts glow (Lowered for more glow)
-            let bloomThreshold = 0.45; // JUICE: Lowered threshold for more glow
-            let bloomIntensity = 0.9; // JUICE: Increased from 0.8
+            // NEON BRICKLAYER: "Tent Filter" Blur for cheap single-pass glow
+            // Sample 4 diagonals to create a soft halo
+            let offset = 0.003 * (1.0 + levelStress * 0.5); // Blur radius increases with stress
+            var glow = vec3<f32>(0.0);
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, offset)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, offset)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, -offset)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, -offset)).rgb;
+            glow *= 0.25;
 
-            if (luminance > bloomThreshold) {
-                // Additive glow for "neon" feel
-                // Boost intensity based on how much it exceeds threshold
-                let factor = (luminance - bloomThreshold) / (1.0 - bloomThreshold);
-                color += color * bloomIntensity * (1.0 + factor);
+            // Thresholding the glow
+            let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
+            let bloomThreshold = 0.5;
+            if (glowLum > bloomThreshold) {
+                 color += glow * 0.6; // Add glow on top
             }
 
-            // Vignette darken
-            let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
+            // High-pass boost for the core pixels
+            let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+            if (luminance > 0.6) {
+                 color += color * 0.4;
+            }
+
+            // Vignette darken (pulsing with beat)
+            let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
+            let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
+            let vignette = 1.0 - smoothstep(0.5, vignetteSize, distFromCenter);
             color *= vignette;
 
             return vec4<f32>(color, a);
@@ -204,7 +216,7 @@ export const ParticleShaders = () => {
             let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
 
             // JUICE: Pulse alpha for "alive" particles
-            let pulse = 0.8 + 0.2 * sin(uv.x * 20.0 + uniforms.time * 5.0); // Use proper time
+            let pulse = 0.8 + 0.2 * sin(uv.x * 20.0); // Reverted to avoid uniform dependency issue
 
             return vec4<f32>(hueShift * 3.0, finalAlpha * pulse); // Boost brightness
         }
@@ -285,8 +297,11 @@ export const BackgroundShaders = () => {
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
             let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
-            // Speed increases with level
-            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 2.0);
+
+            // NEON BRICKLAYER: WARP SPEED
+            // Speed increases significantly with level to simulate warp acceleration
+            let warpSpeed = 1.0 + levelFactor * 8.0;
+            let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
             let perspectiveOffset = vec2<f32>(
@@ -505,21 +520,26 @@ export const Shaders = () => {
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.5) {
-                    // Heartbeat rhythm: faster as it gets closer to 1.0
-                    // Starts at 10.0 speed, ramps up to 50.0
-                    let beatSpeed = 10.0 + (lockPercent - 0.5) * 80.0;
-                    let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
-                    // Sharpen the pulse for a digital feel
-                    let sharpPulse = pow(pulse, 4.0);
+                if (lockPercent > 0.0) {
+                     // NEON BRICKLAYER: Full range pulse, but subtle at first
+                     let tension = smoothstep(0.0, 1.0, lockPercent);
 
-                    let intensity = (lockPercent - 0.5) * 2.0; // 0.0 to 1.0
+                     // Heartbeat rhythm: faster as it gets closer to 1.0
+                     let beatSpeed = 4.0 + tension * 40.0;
+                     let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
+                     let sharpPulse = pow(pulse, 2.0 + tension * 4.0); // Sharper as it gets critical
 
-                    // Mix to Warning Red
-                    finalColor = mix(finalColor, vec3<f32>(1.0, 0.1, 0.1), intensity * sharpPulse * 0.8);
+                     // Digital Grid Scan Effect (Digitizing in/out)
+                     // Scanline that moves up/down based on pulse
+                     let scanY = fract(vUV.y * 10.0 + time * 5.0);
+                     let scanLine = step(0.9, scanY) * tension * sharpPulse;
 
-                    // Add additive emission
-                    finalColor += vec3<f32>(0.8, 0.0, 0.0) * intensity * sharpPulse * 0.6;
+                     // Mix to Warning Red
+                     let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
+                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 0.6);
+
+                     // Add Scanline Emission
+                     finalColor += warningColor * scanLine * 2.0;
                 }
 
                 // Ghost Piece Logic
