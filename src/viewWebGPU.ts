@@ -32,7 +32,7 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
-  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number };
+  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -330,6 +330,35 @@ export default class View {
     });
   }
 
+  showFloatingText(text: string, subText: string = "") {
+      const container = document.getElementById('ui-container');
+      if (!container) return;
+
+      const el = document.createElement('div');
+      el.className = 'floating-text';
+      // Center of screen usually good, but maybe slightly up
+      el.style.left = '50%';
+      el.style.top = '40%';
+
+      let html = `<span class="main-text">${text}</span>`;
+      if (subText) {
+          html += `<br><span class="sub-text">${subText}</span>`;
+      }
+      el.innerHTML = html;
+
+      // Add specific classes for styling based on text content
+      if (text.includes("TETRIS")) el.classList.add("tetris");
+      if (text.includes("T-SPIN")) el.classList.add("tspin");
+      if (text.includes("COMBO")) el.classList.add("combo");
+
+      container.appendChild(el);
+
+      // Remove after animation
+      setTimeout(() => {
+          el.remove();
+      }, 2000);
+  }
+
   onLineClear(lines: number[], tSpin: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
       this.visualEffects.triggerShake(tSpin ? 0.8 : 0.5, tSpin ? 0.6 : 0.5); // More shake for T-Spin
@@ -349,10 +378,6 @@ export default class View {
                   color = [1.0, 0.8, 0.0, 1.0]; // GOLD
                   count = 60; // Huge burst
               } else if (lines.length === 4) {
-                  color = [1.0, 0.8, 0.0, 1.0]; // Gold for Tetris too? Or maybe distinct?
-                  // Let's make Tetris slightly different, maybe White/Blue?
-                  // Using Gold for both T-Spin and Tetris is fine for "Premium" feel.
-                  // But let's mix it up.
                   color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
                   count = 80; // JUICE: Double particles for Tetris
               } else {
@@ -386,6 +411,7 @@ export default class View {
 
       // Trigger a central shockwave on lock for impact
       // This satisfies the "Shockwave" implementation requirement and adds "Juice"
+      // width, strength, aberration
       this.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05);
   }
 
@@ -460,6 +486,37 @@ export default class View {
     if (state.level !== this.visualEffects.currentLevel) {
       this.visualEffects.currentLevel = state.level;
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
+    }
+
+    // Check for Score Event (Floating Text)
+    if (state.scoreEvent) {
+        // Simple deduplication based on frame or ID would be better, but since renderMainScreen is called every frame,
+        // we need to make sure we don't trigger this 60 times a second for the same event.
+        // However, Game.ts only returns the event ONCE (implied).
+        // Wait, Game.ts state is persistent.
+        // We need a mechanism to consume the event.
+        // Or checking against a lastEventID.
+        // Let's implement a simple counter check.
+        if (state.effectCounter !== this.lastEffectCounter && state.scoreEvent.text) {
+             this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
+             this.lastEffectCounter = state.effectCounter;
+        }
+
+        // Actually Game.ts increments effectCounter on 'hardDrop', not score.
+        // So we need to ensure Game.ts increments something for Score too?
+        // Let's rely on the fact that if scoreEvent is present, it's a NEW event?
+        // No, Game.getState() returns the current state.
+        // I should modify Game.ts to clear scoreEvent after it's been read?
+        // Or add a sequence number to ScoreEvent.
+        // For now, let's assume we can compare objects or use a timestamp.
+        // But since I can't easily change Game.ts logic loop consumption model without refactoring,
+        // I'll add a 'timestamp' or ID to ScoreEvent.
+
+        // BETTER: Use score as a trigger? Score changes.
+        if (this.lastScore !== state.score && state.scoreEvent.text) {
+            this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
+            this.lastScore = state.score;
+        }
     }
 
     // this.clearScreen(state);

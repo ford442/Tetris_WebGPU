@@ -279,7 +279,7 @@ export const BackgroundShaders = () => {
           let time = uniforms.time * 0.3; // Slower, calmer animation
           let level = uniforms.level;
           let lockPercent = uniforms.lockPercent;
-          let uv = vUV;
+          var uv = vUV;
 
           // Modify parameters based on level
           // Level 1: Calm blue
@@ -290,6 +290,15 @@ export const BackgroundShaders = () => {
           // Base deep space color - shifts to red as level increases
           // JUICE: More dramatic shift from Calm Blue to Chaotic Red
           let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.1, 0.0, 0.0), levelFactor);
+
+          // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
+          // Warps the UVs towards the center as level increases
+          if (levelFactor > 0.0) {
+              let center = vec2<f32>(0.5, 0.5);
+              let dist = distance(uv, center);
+              let warpStrength = levelFactor * 0.2 * sin(uniforms.time * 2.0);
+              uv -= normalize(uv - center) * warpStrength * dist;
+          }
 
           // --- Multi-layer perspective grid ---
           var grid = 0.0;
