@@ -1,7 +1,7 @@
 import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
-import { ScoringSystem } from './game/scoring.js';
+import { ScoringSystem, ScoreEvent } from './game/scoring.js';
 import { WasmCore } from './wasm/WasmCore.js';
 
 export interface GameState {
@@ -19,6 +19,7 @@ export interface GameState {
   effectCounter: number;
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
+  scoreEvent: ScoreEvent | null;
 }
 
 export default class Game {
@@ -45,6 +46,7 @@ export default class Game {
   effectCounter: number = 0;
   lastDropPos: { x: number, y: number } | null = null;
   lastDropDistance: number = 0;
+  scoreEvent: ScoreEvent | null = null;
 
   // T-Spin Tracking
   isTSpin: boolean = false;
@@ -168,7 +170,8 @@ export default class Game {
       effectEvent: this.effectEvent,
       effectCounter: this.effectCounter,
       lastDropPos: this.lastDropPos,
-      lastDropDistance: this.lastDropDistance
+      lastDropDistance: this.lastDropDistance,
+      scoreEvent: this.scoreEvent
     }
   }
 
@@ -207,10 +210,12 @@ export default class Game {
 
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        // TODO: Pass tSpin to scoring system
-        this.scoringSystem.updateScore(linesScore.length); // Add tSpin bonus logic later if needed
+        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin);
         result.linesCleared = linesScore;
         result.tSpin = wasTSpin;
+    } else {
+        this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
+        this.scoreEvent = null;
     }
 
     this.updatePieces();
@@ -256,9 +261,12 @@ export default class Game {
 
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
-                  this.scoringSystem.updateScore(linesScore.length);
+                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin);
                   result.linesCleared = linesScore;
                   result.tSpin = wasTSpin;
+              } else {
+                  this.scoringSystem.resetCombo();
+                  this.scoreEvent = null;
               }
 
               this.updatePieces();
@@ -315,7 +323,11 @@ export default class Game {
     this.lockPiece();
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-      this.scoringSystem.updateScore(linesScore.length);
+      // Correctly pass tSpin status captured before lock
+      this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, this.isTSpin);
+    } else {
+      this.scoringSystem.resetCombo();
+      this.scoreEvent = null;
     }
     this.updatePieces();
   }

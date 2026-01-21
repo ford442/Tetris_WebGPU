@@ -3,14 +3,24 @@
  * Handles line clearing logic and score calculation
  */
 
+export interface ScoreEvent {
+  points: number;
+  text: string; // e.g., "TETRIS", "COMBO x3"
+  combo: number;
+  backToBack: boolean;
+}
+
 export class ScoringSystem {
   score: number = 0;
   lines: number = 0;
+  combo: number = -1; // -1 means no combo
+  backToBack: boolean = false;
 
   get level(): number {
-    return Math.floor(this.lines * 0.1);
+    return Math.floor(this.lines / 10) + 1;
   }
 
+  // Pure logic to clear lines from a 2D array (for fallback/simulation)
   clearLines(playfield: number[][]): number[] {
     let clearedLines: number[] = [];
 
@@ -43,14 +53,87 @@ export class ScoringSystem {
     return clearedLines;
   }
 
-  updateScore(linesCleared: number): void {
+  // Updates score based on action and returns a ScoreEvent for visuals
+  updateScore(linesCleared: number, tSpin: boolean = false): ScoreEvent | null {
+    if (linesCleared === 0) {
+      this.combo = -1; // Reset combo on no clear (drop without clear)
+      // Actually standard Tetris only resets combo when you lock a piece and DON'T clear lines.
+      // This method is called ONLY when lines are cleared in Game.ts currently?
+      // No, Game.ts calls updateScore even if linesCleared > 0.
+      // Wait, Game.ts: if (linesScore.length > 0) this.scoringSystem.updateScore(...)
+      // So this is only called on clears.
+      // I need a way to reset combo.
+      // I'll add a `resetCombo()` method and call it from Game.ts when a piece locks without clearing.
+      return null;
+    }
+
     this.lines += linesCleared;
-    this.score += linesCleared * linesCleared * 10;
-    console.log('score = ' + this.score);
+    this.combo++;
+
+    let baseScore = 0;
+    let text = "";
+    const level = this.level;
+    const isDifficult = tSpin || linesCleared === 4;
+
+    // Back-to-Back check
+    let b2bMultiplier = 1.0;
+    if (isDifficult) {
+        if (this.backToBack) {
+            b2bMultiplier = 1.5;
+            text += "B2B ";
+        }
+        this.backToBack = true;
+    } else {
+        this.backToBack = false;
+    }
+
+    // T-Spin Scoring
+    if (tSpin) {
+        switch (linesCleared) {
+            case 0: baseScore = 400 * level; text += "T-SPIN"; break; // T-Spin No Line (not handled by current logic as lines > 0)
+            case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
+            case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
+            case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+        }
+    } else {
+        // Standard Scoring
+        switch (linesCleared) {
+            case 1: baseScore = 100 * level; text = "SINGLE"; break;
+            case 2: baseScore = 300 * level; text = "DOUBLE"; break;
+            case 3: baseScore = 500 * level; text = "TRIPLE"; break;
+            case 4: baseScore = 800 * level; text += "TETRIS"; break;
+        }
+    }
+
+    // Apply B2B
+    let points = baseScore * b2bMultiplier;
+
+    // Combo Bonus
+    if (this.combo > 0) {
+        const comboBonus = 50 * this.combo * level;
+        points += comboBonus;
+        text += ` + COMBO x${this.combo}`;
+    }
+
+    this.score += Math.floor(points);
+    console.log(`Score: ${this.score} (${text})`);
+
+    return {
+        points: Math.floor(points),
+        text: text,
+        combo: this.combo,
+        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0 // Return true only if B2B was applied
+    };
+  }
+
+  resetCombo(): void {
+      this.combo = -1;
   }
 
   reset(): void {
     this.score = 0;
     this.lines = 0;
+    this.combo = -1;
+    this.backToBack = false;
   }
 }
