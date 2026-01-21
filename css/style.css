@@ -112,6 +112,69 @@ canvas {
     margin: 0 auto;
 }
 
+/* Floating Text */
+.floating-text {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 50;
+    animation: floatUp 2s ease-out forwards;
+    text-shadow: 0 0 10px rgba(0,0,0,0.8);
+}
+
+.floating-text .main-text {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #ffffff;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 5px;
+    text-shadow: 0 0 10px #00ffff;
+}
+
+.floating-text .sub-text {
+    font-size: 1.5rem;
+    color: #ffff00;
+}
+
+.floating-text.tetris .main-text {
+    color: #00ffff;
+    text-shadow: 0 0 20px #00ffff, 0 0 40px #ffffff;
+    font-size: 4rem;
+}
+
+.floating-text.tspin .main-text {
+    color: #ff00ff;
+    text-shadow: 0 0 20px #ff00ff, 0 0 40px #ffffff;
+}
+
+.floating-text.combo .sub-text {
+    color: #00ff00;
+}
+
+@keyframes floatUp {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -20%) scale(0.5);
+    }
+    10% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1.0);
+    }
+    80% {
+        opacity: 1;
+        transform: translate(-50%, -150%);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -200%);
+    }
+}
+
 /* Themes */
 .pastel-theme .panel-box {
     border-color: rgba(255, 182, 193, 0.5);
