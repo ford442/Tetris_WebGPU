@@ -551,6 +551,102 @@ export default class View {
     if (el) el.style.display = 'block';
   }
 
+  /**
+   * Generate mipmaps for a texture using WebGPU compute pipeline
+   * This creates progressively smaller versions of the texture for optimal sampling at different distances
+   */
+  generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {
+    // Create a simple mipmap generation pipeline using blit operations
+    const blitShader = `
+      @group(0) @binding(0) var srcTexture: texture_2d<f32>;
+      @group(0) @binding(1) var srcSampler: sampler;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) uv: vec2<f32>,
+      };
+
+      @vertex
+      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+        var pos = array<vec2<f32>, 6>(
+          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+          vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0)
+        );
+        var uv = array<vec2<f32>, 6>(
+          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0)
+        );
+        var output: VertexOutput;
+        output.position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
+        output.uv = uv[vertexIndex];
+        return output;
+      }
+
+      @fragment
+      fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+        return textureSample(srcTexture, srcSampler, uv);
+      }
+    `;
+
+    const shaderModule = this.device.createShaderModule({ code: blitShader });
+
+    const pipeline = this.device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vertexMain',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: 'rgba8unorm' }],
+      },
+    });
+
+    const sampler = this.device.createSampler({
+      minFilter: 'linear',
+      magFilter: 'linear',
+    });
+
+    const commandEncoder = this.device.createCommandEncoder();
+
+    for (let i = 1; i < mipLevelCount; i++) {
+      const srcView = texture.createView({
+        baseMipLevel: i - 1,
+        mipLevelCount: 1,
+      });
+
+      const dstView = texture.createView({
+        baseMipLevel: i,
+        mipLevelCount: 1,
+      });
+
+      const bindGroup = this.device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: srcView },
+          { binding: 1, resource: sampler },
+        ],
+      });
+
+      const passEncoder = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: dstView,
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        }],
+      });
+
+      passEncoder.setPipeline(pipeline);
+      passEncoder.setBindGroup(0, bindGroup);
+      passEncoder.draw(6, 1, 0, 0);
+      passEncoder.end();
+    }
+
+    this.device.queue.submit([commandEncoder.finish()]);
+  }
+
   //// ***** WEBGPU ***** ////
 
   async preRender() {
@@ -572,11 +668,15 @@ export default class View {
     });
 
     // --- 1. Load Texture & Sampler ---
+    // Use high-quality sampling with mipmaps and anisotropic filtering
+    // to reduce pixelation and improve rendering quality
     this.blockSampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
+      mipmapFilter: 'linear', // Enable trilinear filtering for smooth LOD transitions
       addressModeU: 'repeat',
       addressModeV: 'repeat',
+      maxAnisotropy: 16, // Enable anisotropic filtering for better quality at angles
     });
 
     try {
@@ -586,9 +686,13 @@ export default class View {
         await img.decode();
         const imageBitmap = await createImageBitmap(img);
 
+        // Calculate number of mip levels for optimal quality
+        const mipLevelCount = Math.floor(Math.log2(Math.max(imageBitmap.width, imageBitmap.height))) + 1;
+
         this.blockTexture = this.device.createTexture({
           size: [imageBitmap.width, imageBitmap.height, 1],
           format: 'rgba8unorm',
+          mipLevelCount: mipLevelCount, // Enable mipmaps for better quality at different distances
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.device.queue.copyExternalImageToTexture(
@@ -596,6 +700,10 @@ export default class View {
           { texture: this.blockTexture },
           [imageBitmap.width, imageBitmap.height]
         );
+
+        // Generate mipmaps using a simple box filter approach
+        // This significantly improves quality by preventing aliasing at different viewing distances
+        this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
     } catch (e) {
         // Fallback white texture
         this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -893,9 +1001,13 @@ export default class View {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // Create post-process sampler with high-quality filtering
     this.sampler = this.device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
+        mipmapFilter: 'linear', // Enable trilinear filtering
+        addressModeU: 'clamp-to-edge', // Prevent edge artifacts in post-processing
+        addressModeV: 'clamp-to-edge',
     });
 
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
