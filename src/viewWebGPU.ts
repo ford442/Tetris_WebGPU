@@ -552,7 +552,7 @@ export default class View {
   }
 
   /**
-   * Generate mipmaps for a texture using WebGPU compute pipeline
+   * Generate mipmaps for a texture using WebGPU render pipeline
    * This creates progressively smaller versions of the texture for optimal sampling at different distances
    */
   generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {
@@ -701,7 +701,7 @@ export default class View {
           [imageBitmap.width, imageBitmap.height]
         );
 
-        // Generate mipmaps using a simple box filter approach
+        // Generate mipmaps using bilinear filtering
         // This significantly improves quality by preventing aliasing at different viewing distances
         this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
     } catch (e) {
