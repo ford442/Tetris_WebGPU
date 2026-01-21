@@ -140,6 +140,7 @@ export const ParticleShaders = () => {
             @builtin(position) Position : vec4<f32>,
             @location(0) color : vec4<f32>,
             @location(1) uv : vec2<f32>,
+            @location(2) lifeRatio : f32,
         };
 
         @vertex
@@ -147,6 +148,8 @@ export const ParticleShaders = () => {
             @location(0) particlePos : vec3<f32>,
             @location(1) particleColor : vec4<f32>,
             @location(2) particleScale : f32,
+            @location(3) particleLife : f32,
+            @location(4) particleMaxLife : f32,
             @builtin(vertex_index) vertexIndex : u32
         ) -> VertexOutput {
             var output : VertexOutput;
@@ -172,6 +175,8 @@ export const ParticleShaders = () => {
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
             output.color = particleColor;
             output.uv = uv;
+            // Calculate normalized life (1.0 = born, 0.0 = dead)
+            output.lifeRatio = clamp(particleLife / max(particleMaxLife, 0.001), 0.0, 1.0);
 
             return output;
         }
@@ -179,7 +184,7 @@ export const ParticleShaders = () => {
 
     const fragment = `
         @fragment
-        fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
+        fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>, @location(2) lifeRatio : f32) -> @location(0) vec4<f32> {
             let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
             if (dist > 1.0) {
                 discard;
@@ -209,16 +214,29 @@ export const ParticleShaders = () => {
             let sparkle = max(cross1, cross2 * 0.5);
 
             // Combine
+            // Fade out as life decreases (lifeRatio goes 1 -> 0)
+            // But keep core bright until the very end
             let alpha = intensity + core * 0.5 + sparkle * 0.8;
-            let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
+            let finalAlpha = clamp(alpha * color.a * smoothstep(0.0, 0.2, lifeRatio), 0.0, 1.0);
 
-            // Add a slight hue shift based on life for variety
-            let hueShift = color.rgb * (1.0 + 0.2 * sin(uv.x * 10.0));
+            // Color Shift:
+            // Hot White/Yellow at birth -> Theme Color -> Darker/Cooler at death
+            let hotColor = vec3<f32>(1.0, 1.0, 0.8); // Hot white-yellow
+            let baseColor = color.rgb;
 
-            // JUICE: Pulse alpha for "alive" particles
-            let pulse = 0.8 + 0.2 * sin(uv.x * 20.0); // Reverted to avoid uniform dependency issue
+            // Mix based on life
+            // lifeRatio 1.0 -> 0.8 : Hot -> Base
+            // lifeRatio 0.8 -> 0.0 : Base
+            let mixFactor = smoothstep(0.8, 1.0, lifeRatio);
+            var finalColor = mix(baseColor, hotColor, mixFactor);
 
-            return vec4<f32>(hueShift * 3.0, finalAlpha * pulse); // Boost brightness
+            // JUICE: Pulse alpha for "alive" particles, sped up by low life
+            // Pulse faster when dying
+            let pulseSpeed = 20.0 + (1.0 - lifeRatio) * 30.0;
+            let pulse = 0.8 + 0.2 * sin(uv.x * pulseSpeed);
+
+            // Boost brightness for neon effect
+            return vec4<f32>(finalColor * 4.0 * lifeRatio, finalAlpha * pulse);
         }
     `;
 
