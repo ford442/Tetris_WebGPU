@@ -56,6 +56,7 @@ export default class View {
 
   lastEffectCounter: number = 0;
   useGlitch: boolean = false;
+  flashIntensity: number = 0.0;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -348,6 +349,7 @@ export default class View {
 
   onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
       this.visualEffects.triggerFlash(0.6); // Strong flash
+      this.flashIntensity = 0.8; // Screen flash
 
       const isTetris = lines.length === 4;
       let shakeIntensity = 3.0;
@@ -405,11 +407,15 @@ export default class View {
   onHold() {
       // Visual feedback for hold
       this.visualEffects.triggerFlash(0.3); // Quick flash
+      this.flashIntensity = 0.3;
       // Maybe some particles at the center?
       this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 50, [0.6, 0.2, 1.0, 1.0]); // Purple flash
   }
 
   onHardDrop(x: number, y: number, distance: number) {
+      // Trigger Flash
+      this.flashIntensity = 0.5;
+
       // Create a vertical trail of particles
       const worldX = x * 2.2;
       // Start from top of drop
@@ -957,6 +963,12 @@ export default class View {
     const dt = (now - this.lastFrameTime) / 1000.0;
     this.lastFrameTime = now;
 
+    // Decay Flash Intensity
+    if (this.flashIntensity > 0) {
+        this.flashIntensity -= dt * 4.0; // Fast decay
+        if (this.flashIntensity < 0) this.flashIntensity = 0;
+    }
+
     // Update visual effects
     this.visualEffects.updateEffects(dt);
 
@@ -1018,26 +1030,35 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([this.visualEffects.currentLevel]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
 
-    // Block shader time (global update once per frame)
-    // 48 is the offset for 'time' in fragmentUniformBuffer
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
-    // Update glitch state for blocks
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
-
     // Update Lock Warning
     let lockPercent = 0.0;
     if (this.state && this.state.lockDelayTime > 0) {
         lockPercent = this.state.lockTimer / this.state.lockDelayTime;
     }
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
+
+    // Block shader time (global update once per frame)
+    // 48 is the offset for 'time' in fragmentUniformBuffer
+    // We update time, glitch, lockPercent, flashIntensity (offsets 48, 52, 56, 60)
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([
+        time,
+        this.useGlitch ? 1.0 : 0.0,
+        lockPercent,
+        this.flashIntensity
+    ]));
+
+    // Update Grid Shader Uniforms
+    // Particle Uniform Buffer Layout: VPMatrix(64) + Time(4) + LockPercent(68)
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, new Float32Array([lockPercent]));
 
     // Update Shockwave Uniforms
-    // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
+    // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), flashIntensity(20), pad(24,28), params(32)
+    // We write the first chunk: time, glitch, center(x,y), time_shock, flashIntensity, pad(x,y) = 8 floats = 32 bytes
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, this.useGlitch ? 1.0 : 0.0,
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
-        this.visualEffects.shockwaveTimer, 0, 0, 0
+        this.visualEffects.shockwaveTimer, this.flashIntensity, 0, 0
     ]));
+
     // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 
