@@ -18,7 +18,7 @@ export interface Particle {
 
 export class ParticleSystem {
     particles: Particle[] = [];
-    maxParticles: number = 4000;
+    maxParticles: number = 8000;
 
     constructor() {}
 
