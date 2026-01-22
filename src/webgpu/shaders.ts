@@ -22,11 +22,13 @@ export const PostProcessShaders = () => {
 
     const fragment = `
         struct Uniforms {
-            time: f32,
-            useGlitch: f32,
-            shockwaveCenter: vec2<f32>,
-            shockwaveTime: f32,
-            shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
+            time: f32, // 0
+            useGlitch: f32, // 4
+            shockwaveCenter: vec2<f32>, // 8
+            shockwaveTime: f32, // 16
+            flashIntensity: f32, // 20
+            padding: vec2<f32>, // 24
+            shockwaveParams: vec4<f32>, // 32
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -98,6 +100,9 @@ export const PostProcessShaders = () => {
             // Noise (Film grain)
             let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
             color += (noise - 0.5) * 0.02;
+
+            // Flash Effect
+            color += vec3<f32>(uniforms.flashIntensity);
 
             return vec4<f32>(color, a);
         }
@@ -237,20 +242,23 @@ export const GridShader = () => {
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
             time : f32, // Offset 64
+            lockPercent: f32, // Offset 68
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
         @fragment
         fn main(@location(0) vPos: vec2<f32>) -> @location(0) vec4<f32> {
              let time = uniforms.time;
+             let lock = uniforms.lockPercent;
 
-             // Base color - Electric Blue
-             var color = vec3<f32>(0.0, 0.9, 1.0);
+             // Base color - Electric Blue, shifts to Red with lock tension
+             var color = mix(vec3<f32>(0.0, 0.9, 1.0), vec3<f32>(1.0, 0.0, 0.2), lock);
 
              // 1. Digital Scanline Pulse
              // Moves down the grid periodically
-             let scanSpeed = 3.0;
-             let scanPos = (vPos.y + 20.0) / 30.0 - fract(time * 0.3); // Normalize 0..1
+             // Speed increases with lock tension
+             let scanSpeed = 0.3 + lock * 1.0;
+             let scanPos = (vPos.y + 20.0) / 30.0 - fract(time * scanSpeed); // Normalize 0..1
              let scan = exp(-pow(abs(scanPos), 2.0) * 100.0); // Sharp peak
 
              // 2. Data Flow Effect
@@ -388,9 +396,20 @@ export const Shaders = () => {
                 viewProjectionMatrix : mat4x4<f32>,
                 modelMatrix : mat4x4<f32>,
                 normalMatrix : mat4x4<f32>,  
-                colorVertex : vec4<f32>              
+            colorVertex : vec4<f32>
             };
             @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+        struct GlobalUniforms {
+            lightPosition : vec4<f32>,
+            eyePosition : vec4<f32>,
+            color : vec4<f32>, // Theme color?
+            time : f32, // Offset 48
+            useGlitch: f32, // Offset 52
+            lockPercent: f32, // Offset 56
+            flashIntensity: f32, // Offset 60
+        };
+        @binding(1) @group(0) var<uniform> global : GlobalUniforms;
 
             struct Output {
                 @builtin(position) Position : vec4<f32>,
@@ -403,7 +422,18 @@ export const Shaders = () => {
             @vertex
             fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
-                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+
+                // Add vibration on lock
+                var pos = position;
+            let lock = global.lockPercent;
+                if (lock > 0.0) {
+                   // Vibrate x/z
+               let time = global.time;
+                   pos.x += sin(time * 50.0 + pos.y) * 0.05 * lock;
+                   pos.z += cos(time * 40.0 + pos.x) * 0.05 * lock;
+                }
+
+                let mPosition:vec4<f32> = uniforms.modelMatrix * pos;
                 output.vPosition = mPosition;
                 output.vNormal   =  uniforms.normalMatrix*normal;
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
@@ -420,6 +450,7 @@ export const Shaders = () => {
                 time : f32, // Offset 48
                 useGlitch: f32, // Offset 52
                 lockPercent: f32, // Offset 56 (Lock Delay visual feedback)
+                flashIntensity: f32, // Offset 60
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -546,6 +577,12 @@ export const Shaders = () => {
                     let strength = smoothstep(0.0, 1.0, lockPercent) * flash;
 
                     finalColor = mix(finalColor, warningColor, strength * 0.8);
+                }
+
+                // --- Flash Intensity (Impact) ---
+                let flashIntensity = uniforms.flashIntensity;
+                if (flashIntensity > 0.0) {
+                    finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), flashIntensity);
                 }
 
                 // Final alpha
