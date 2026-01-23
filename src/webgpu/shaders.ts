@@ -258,8 +258,14 @@ export const GridShader = () => {
              // Moves down the grid periodically
              // Speed increases with lock tension
              let scanSpeed = 0.3 + lock * 1.0;
-             let scanPos = (vPos.y + 20.0) / 30.0 - fract(time * scanSpeed); // Normalize 0..1
+             // Add a secondary pulse
+             let pulseTime = time * scanSpeed;
+             let scanPos = (vPos.y + 20.0) / 30.0 - fract(pulseTime); // Normalize 0..1
              let scan = exp(-pow(abs(scanPos), 2.0) * 100.0); // Sharp peak
+
+             // Secondary fainter pulse
+             let scanPos2 = (vPos.y + 20.0) / 30.0 - fract(pulseTime + 0.5);
+             let scan2 = exp(-pow(abs(scanPos2), 2.0) * 50.0) * 0.5;
 
              // 2. Data Flow Effect
              // Small packets moving along lines
@@ -271,10 +277,10 @@ export const GridShader = () => {
              let fade = smoothstep(0.0, 0.1, yNorm) * (1.0 - smoothstep(0.9, 1.0, yNorm));
 
              // Combine
-             let alpha = (0.1 + scan * 0.8 + flow * 0.6) * fade;
+             let alpha = (0.1 + scan * 0.8 + scan2 * 0.4 + flow * 0.6) * fade;
 
              // Boost color where bright
-             color += vec3<f32>(1.0) * (scan + flow);
+             color += vec3<f32>(1.0) * (scan + scan2 + flow);
 
              return vec4<f32>(color, alpha);
         }
@@ -364,6 +370,15 @@ export const BackgroundShaders = () => {
           var stars = 0.0;
           if (abs(starPos - starNoise) < 0.01 && starNoise > 0.9) {
               stars = 1.0 * (dist * 2.0); // Brighter at edges
+          }
+
+          // Second layer of stars (Dust/Nebula particles)
+          // Slower speed
+          let dustTime = time * 2.0;
+          let dustNoise = fract(sin(dot(dir, vec2<f32>(45.6, 12.3))) * 98765.4);
+          let dustPos = fract(dist * 3.0 - dustTime);
+          if (abs(dustPos - dustNoise) < 0.005 && dustNoise > 0.8) {
+              stars += 0.5 * dist;
           }
 
           // Combine
@@ -489,12 +504,13 @@ export const Shaders = () => {
                     // Base Ghost Color (Cyan/Blue tint)
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
 
-                    var finalGhost = ghostBase * wire * 3.0; // Bright edge
+                    var finalGhost = ghostBase * wire * 4.0; // Brighter edge
                     finalGhost += ghostBase * 0.2 * scanline; // Scanline fill
                     finalGhost += vec3<f32>(1.0) * beam * 0.4; // Landing beam
 
-                    // Pulse opacity
+                    // Pulse opacity with digital flicker
                     let pulse = 0.5 + 0.3 * sin(time * 10.0);
+                    let flicker = select(1.0, 0.8, sin(time * 60.0) > 0.0); // High frequency flicker
 
                     // Glitch flash
                     let noise = fract(sin(dot(vUV + time + glitchOffset, vec2<f32>(12.9, 78.2))) * 43758.5);
@@ -502,7 +518,7 @@ export const Shaders = () => {
                         finalGhost = vec3<f32>(1.0);
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.5);
+                    return vec4<f32>(finalGhost, pulse * 0.5 * flicker);
                 }
 
 
@@ -554,14 +570,17 @@ export const Shaders = () => {
 
                 // --- Fresnel / Iridescence ---
                 // View-dependent color shift (Soap bubble / Crystal effect)
-                let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                // Enhanced Fresnel for "Glassy" rim
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
                 let iridAngle = dot(N, V) * 3.14 * 2.0;
                 let irid = vec3<f32>(
                     sin(iridAngle + 0.0) * 0.5 + 0.5,
                     sin(iridAngle + 2.0) * 0.5 + 0.5,
                     sin(iridAngle + 4.0) * 0.5 + 0.5
                 );
-                finalColor += irid * fresnel * 2.0;
+                finalColor += irid * fresnelTerm * 1.5;
+                // Add pure white rim from fresnel
+                finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 0.5;
 
                 // --- Lock Warning (Critical Tension) ---
                 let lockPercent = uniforms.lockPercent;

@@ -2,8 +2,8 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 120; // Delayed Auto Shift (ms) - Snappier
-const ARR = 8;   // Auto Repeat Rate (ms) - Extremely fast
+const DAS = 133; // Delayed Auto Shift (ms) - Standard Fast
+const ARR = 10;   // Auto Repeat Rate (ms) - Fast but controllable
 const SOFT_DROP_SPEED = 10; // Sonic Drop: Even faster for instant feel
 
 // Logical actions
