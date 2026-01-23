@@ -435,8 +435,8 @@ export default class View {
 
       // Dynamic shockwave based on drop distance (Boosted for JUICE)
       // NEON BRICKLAYER: Tuned for maximum impact
-      const strength = 0.15 + Math.min(distance * 0.03, 0.4); // Stronger start and scaling
-      const width = 0.2 + Math.min(distance * 0.02, 0.3);     // Wider ripple
+      const strength = 0.2 + Math.min(distance * 0.03, 0.4); // Stronger start and scaling
+      const width = 0.25 + Math.min(distance * 0.02, 0.3);     // Wider ripple
       const aberration = 0.08 + Math.min(distance * 0.015, 0.2); // More glitch
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
@@ -485,6 +485,7 @@ export default class View {
     // Check if level has changed and update video accordingly
     if (state.level !== this.visualEffects.currentLevel) {
       this.visualEffects.currentLevel = state.level;
+      this.visualEffects.triggerLevelUp();
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
     }
 
@@ -1250,6 +1251,7 @@ export default class View {
         lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
     }
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array([lockPercent]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, new Float32Array([this.visualEffects.warpSurge]));
 
 
     // Block shader time (global update once per frame)
