@@ -84,8 +84,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.7) {
-                let bloom = (luminance - 0.7) * 0.5;
+            if (luminance > 0.6) {
+                let bloom = (luminance - 0.6) * 1.2;
                 color += color * bloom;
             }
 
@@ -257,7 +257,7 @@ export const GridShader = () => {
              // 1. Digital Scanline Pulse
              // Moves down the grid periodically
              // Speed increases with lock tension
-             let scanSpeed = 0.3 + lock * 1.0;
+             let scanSpeed = 0.3 + lock * 3.0;
              // Add a secondary pulse
              let pulseTime = time * scanSpeed;
              let scanPos = (vPos.y + 20.0) / 30.0 - fract(pulseTime); // Normalize 0..1
@@ -488,9 +488,9 @@ export const Shaders = () => {
                     // Sharp glowing edge
                     let wire = smoothstep(0.85, 0.95, edge);
 
-                    // Scanline effect
-                    let scanPos = vPosition.y * 30.0 - time * 15.0; // Moving down
-                    let scanline = step(0.5, fract(scanPos));
+                    // Scanline effect (Enhanced)
+                    let scanPos = vPosition.y * 50.0 + time * 20.0; // Faster, denser
+                    let scanline = sin(scanPos) * 0.5 + 0.5;
 
                     // Vertical "Landing Beam"
                     let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 4.0);
@@ -504,8 +504,8 @@ export const Shaders = () => {
                     // Base Ghost Color (Cyan/Blue tint)
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
 
-                    var finalGhost = ghostBase * wire * 4.0; // Brighter edge
-                    finalGhost += ghostBase * 0.2 * scanline; // Scanline fill
+                    var finalGhost = ghostBase * wire * 6.0; // Brighter edge
+                    finalGhost += ghostBase * 0.3 * scanline; // Stronger scanline fill
                     finalGhost += vec3<f32>(1.0) * beam * 0.4; // Landing beam
 
                     // Pulse opacity with digital flicker

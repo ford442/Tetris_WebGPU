@@ -286,22 +286,26 @@ export default class Controller {
       // Improved Gravity Curve (Smoother exponential decay)
       // Level 1: 1000ms, Level 10: ~300ms, Level 20: ~90ms
       let speedMs = 1000 * Math.pow(0.88, Math.max(0, level - 1));
-      // Cap at reasonable speed (approx 60fps = 16ms)
-      speedMs = Math.max(16, speedMs);
 
-      // Accumulate gravity time?
-      // Simplest: use a gravity timer here.
-      // Or pass dt to Game.update and let it handle gravity?
-      // Game.update signature: update(dt). It handles lock timer.
-      // It does NOT handle gravity (movePieceDown).
-      // So we need a gravity accumulator.
+      // Cap at minimum speed (0.5ms) to allow for 20G (instant drop) while preventing infinite loops
+      speedMs = Math.max(0.5, speedMs);
 
       if (!this.gravityTimer) this.gravityTimer = 0;
       this.gravityTimer += dt;
 
-      while (this.gravityTimer > speedMs) {
+      // Multi-step gravity for high speeds
+      let steps = 0;
+      const maxSteps = 25; // Limit to playfield height + buffer to prevent freeze
+
+      while (this.gravityTimer > speedMs && steps < maxSteps) {
           this.game.movePieceDown();
           this.gravityTimer -= speedMs;
+          steps++;
+      }
+
+      // If we fell behind (lag spike or extreme speed), reset timer to prevent death spiral
+      if (steps >= maxSteps) {
+          this.gravityTimer = 0;
       }
 
       // Game update (lock delay)
