@@ -9,6 +9,7 @@ export class VisualEffects {
     lockTimer: number = 0;
     shakeIntensity: number = 0;
     aberrationIntensity: number = 0;
+    warpSurge: number = 0;
     
     // Shockwave state
     shockwaveTimer: number = 0;
@@ -119,6 +120,10 @@ export class VisualEffects {
         this.shakeIntensity *= decay;
         this.aberrationIntensity *= decay;
 
+        // Warp surge decay
+        this.warpSurge *= Math.exp(-dt * 2.0);
+        if (this.warpSurge < 0.01) this.warpSurge = 0;
+
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
@@ -145,6 +150,12 @@ export class VisualEffects {
     triggerAberration(magnitude: number): void {
         this.aberrationIntensity += magnitude;
         this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
+    }
+
+    triggerLevelUp(): void {
+        this.warpSurge = 8.0;
+        this.triggerFlash(1.0);
+        this.triggerShockwave([0.5, 0.5], 2.0, 0.2, 0.1);
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03): void {

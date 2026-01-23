@@ -35,7 +35,7 @@ export default class Game {
 
   // Lock Delay
   lockTimer: number = 0;
-  readonly lockDelayTime: number = 600; // ms (Generous: 500->600)
+  readonly lockDelayTime: number = 500; // ms (Standard: 500)
 
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
@@ -195,7 +195,7 @@ export default class Game {
     this.activPiece.y = ghostY;
 
     // Trigger visual effect
-    // NEON BRICKLAYER: Trigger Shockwave Effect
+    // NEON BRICKLAYER: Trigger Hard Drop Shockwave (Juice)
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
