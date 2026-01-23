@@ -347,12 +347,44 @@ export default class View {
     });
   }
 
+  showFloatingText(text: string, subText: string = '', color: string = '#fff') {
+      const container = document.getElementById('ui-container');
+      if (!container) return;
+
+      const el = document.createElement('div');
+      el.className = 'floating-text';
+      el.innerHTML = `<div>${text}</div><div style="font-size: 1.5rem; color: #ccc;">${subText}</div>`;
+      el.style.color = color;
+
+      // Randomize position slightly around center
+      const offsetX = (Math.random() - 0.5) * 100;
+      const offsetY = (Math.random() - 0.5) * 50;
+      el.style.left = `calc(50% + ${offsetX}px)`;
+      el.style.top = `calc(50% + ${offsetY}px)`;
+
+      container.appendChild(el);
+
+      // Clean up
+      setTimeout(() => {
+          if (el.parentNode) el.parentNode.removeChild(el);
+      }, 1200);
+  }
+
   onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
       this.visualEffects.triggerFlash(0.6); // Strong flash
       this.flashIntensity = 0.8; // Screen flash
 
       const isTetris = lines.length === 4;
       let shakeIntensity = 3.0;
+
+      if (isTSpin) {
+           this.showFloatingText("T-SPIN", isMini ? "MINI" : "DOUBLE", "#f0f"); // Magenta
+           shakeIntensity = 6.0;
+      } else if (isTetris) {
+           this.showFloatingText("TETRIS", "", "#fd0"); // Gold
+           shakeIntensity = 6.0;
+      }
+
       if (isTetris || isTSpin) shakeIntensity = 6.0; // Massive shake for big clears
 
       this.visualEffects.triggerShake(shakeIntensity, 0.8);

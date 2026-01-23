@@ -142,3 +142,32 @@ canvas {
     font-family: 'Courier New', Courier, monospace; /* Placeholder for a tech font */
     letter-spacing: 5px;
 }
+
+/* Floating Text for Score Events */
+.floating-text {
+    position: absolute;
+    color: #fff;
+    font-size: 3rem;
+    font-weight: bold;
+    text-shadow: 0 0 10px #000, 0 0 20px #fff;
+    pointer-events: none;
+    z-index: 1000;
+    animation: floatUp 1.2s forwards cubic-bezier(0.19, 1, 0.22, 1);
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+@keyframes floatUp {
+    0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+    }
+    15% {
+        transform: translate(-50%, -100%) scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -200%) scale(1.0);
+        opacity: 0;
+    }
+}
