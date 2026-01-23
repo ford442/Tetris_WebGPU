@@ -289,6 +289,7 @@ export const BackgroundShaders = () => {
             color2: vec3<f32>, // Offset 32
             color3: vec3<f32>, // Offset 48
             lockPercent: f32, // Offset 64
+            warpSurge: f32, // Offset 68
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -297,6 +298,7 @@ export const BackgroundShaders = () => {
           let time = uniforms.time * 0.3; // Slower, calmer animation
           let level = uniforms.level;
           let lockPercent = uniforms.lockPercent;
+          let warpSurge = uniforms.warpSurge;
           var uv = vUV;
 
           // Modify parameters based on level
@@ -311,10 +313,10 @@ export const BackgroundShaders = () => {
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
-          if (levelFactor > 0.0) {
+          if (levelFactor > 0.0 || warpSurge > 0.0) {
               let center = vec2<f32>(0.5, 0.5);
               let dist = distance(uv, center);
-              let warpStrength = levelFactor * 0.2 * sin(uniforms.time * 2.0);
+              let warpStrength = (levelFactor * 0.2 + warpSurge * 0.1) * sin(uniforms.time * 2.0);
               uv -= normalize(uv - center) * warpStrength * dist;
           }
 
@@ -327,7 +329,7 @@ export const BackgroundShaders = () => {
 
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
-            let warpSpeed = 1.0 + levelFactor * 8.0;
+            let warpSpeed = 1.0 + levelFactor * 8.0 + warpSurge;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -409,6 +411,9 @@ export const BackgroundShaders = () => {
           // --- Subtle film grain for texture ---
           let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
           finalColor += (noise - 0.5) * 0.03;
+
+          // Warp Surge Flash
+          finalColor += vec3<f32>(1.0) * warpSurge * 0.1;
 
           return vec4<f32>(finalColor, 1.0);
         }
