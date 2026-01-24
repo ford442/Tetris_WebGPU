@@ -375,17 +375,17 @@ export default class View {
       this.flashIntensity = 0.8; // Screen flash
 
       const isTetris = lines.length === 4;
-      let shakeIntensity = 3.0;
+      let shakeIntensity = 4.0;
 
       if (isTSpin) {
            this.showFloatingText("T-SPIN", isMini ? "MINI" : "DOUBLE", "#f0f"); // Magenta
-           shakeIntensity = 6.0;
+           shakeIntensity = 8.0;
       } else if (isTetris) {
            this.showFloatingText("TETRIS", "", "#fd0"); // Gold
-           shakeIntensity = 6.0;
+           shakeIntensity = 8.0;
       }
 
-      if (isTetris || isTSpin) shakeIntensity = 6.0; // Massive shake for big clears
+      if (isTetris || isTSpin) shakeIntensity = 8.0; // Massive shake for big clears
 
       this.visualEffects.triggerShake(shakeIntensity, 0.8);
 
@@ -452,6 +452,9 @@ export default class View {
       const worldX = x * 2.2;
       // Start from top of drop
       const startRow = y - distance;
+
+      // Emit particles at the start position (slam effect)
+      this.particleSystem.emitParticles(worldX, startRow * -2.2, 0.0, 20, [1.0, 1.0, 1.0, 1.0]);
 
       for(let i=0; i<distance; i++) {
           const r = startRow + i;

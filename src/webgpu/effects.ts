@@ -139,7 +139,7 @@ export class VisualEffects {
     triggerShake(magnitude: number, duration: number): void {
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // Increased max shake
+        this.shakeIntensity = Math.min(this.shakeIntensity, 8.0); // Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
