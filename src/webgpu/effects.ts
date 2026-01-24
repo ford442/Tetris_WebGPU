@@ -6,6 +6,7 @@
 export class VisualEffects {
     // Visual effect timers
     flashTimer: number = 0;
+    rotationFlashTimer: number = 0;
     lockTimer: number = 0;
     shakeIntensity: number = 0;
     aberrationIntensity: number = 0;
@@ -14,7 +15,7 @@ export class VisualEffects {
     // Shockwave state
     shockwaveTimer: number = 0;
     shockwaveCenter: number[] = [0.5, 0.5];
-    shockwaveParams: number[] = [0.15, 0.08, 0.03, 0.0]; // width, strength, aberration, unused
+    shockwaveParams: number[] = [0.15, 0.08, 0.03, 2.0]; // width, strength, aberration, speed
 
     // Video background state
     videoElement: HTMLVideoElement;
@@ -137,6 +138,10 @@ export class VisualEffects {
         this.flashTimer = duration;
     }
 
+    triggerRotate(duration: number = 0.2): void {
+        this.rotationFlashTimer = duration;
+    }
+
     triggerLock(duration: number = 0.3): void {
         this.lockTimer = duration;
     }
@@ -158,10 +163,10 @@ export class VisualEffects {
         this.triggerShockwave([0.5, 0.5], 2.0, 0.2, 0.1);
     }
 
-    triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03): void {
+    triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
         // console.log("Shockwave triggered", center, strength);
         this.shockwaveCenter = center;
-        this.shockwaveParams = [width, strength, aberration, 0.0];
+        this.shockwaveParams = [width, strength, aberration, speed];
         // Start effect at 0.01 to avoid 0.0 check failure
         // The shader uses time * 2.0 for radius, so 0.01 is a small starting circle
         this.shockwaveTimer = 0.01;
