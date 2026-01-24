@@ -173,12 +173,24 @@ export default class Controller {
             this.actionTimers.down = 0;
             break;
         case 'rotateCW':
-            this.game.rotatePiece(true);
-            this.soundManager.playRotate();
+            {
+                const rBefore = this.game.activPiece.rotation;
+                this.game.rotatePiece(true);
+                if (this.game.activPiece.rotation !== rBefore) {
+                     this.viewWebGPU.onRotate();
+                }
+                this.soundManager.playRotate();
+            }
             break;
         case 'rotateCCW':
-            this.game.rotatePiece(false);
-            this.soundManager.playRotate();
+            {
+                const rBefore = this.game.activPiece.rotation;
+                this.game.rotatePiece(false);
+                if (this.game.activPiece.rotation !== rBefore) {
+                     this.viewWebGPU.onRotate();
+                }
+                this.soundManager.playRotate();
+            }
             break;
         case 'hardDrop':
             this.performHardDrop();
@@ -221,12 +233,24 @@ export default class Controller {
               this.actionTimers.down = 0;
               break;
           case 'rotateCW':
-              this.game.rotatePiece(true);
-              this.soundManager.playRotate();
+              {
+                const rBefore = this.game.activPiece.rotation;
+                this.game.rotatePiece(true);
+                if (this.game.activPiece.rotation !== rBefore) {
+                     this.viewWebGPU.onRotate();
+                }
+                this.soundManager.playRotate();
+              }
               break;
           case 'rotateCCW':
-              this.game.rotatePiece(false);
-              this.soundManager.playRotate();
+              {
+                const rBefore = this.game.activPiece.rotation;
+                this.game.rotatePiece(false);
+                if (this.game.activPiece.rotation !== rBefore) {
+                     this.viewWebGPU.onRotate();
+                }
+                this.soundManager.playRotate();
+              }
               break;
           case 'hardDrop':
               this.performHardDrop();
