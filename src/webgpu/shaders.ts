@@ -73,10 +73,14 @@ export const PostProcessShaders = () => {
             let baseAberration = select(vignetteAberration, distFromCenter * 0.05, useGlitch > 0.5); // Stronger glitch
             let totalAberration = baseAberration + shockwaveAberration;
 
+            // Permanent subtle Chromatic Aberration (Retro Lens)
+            let caStrength = 0.003;
+            let caOffset = (uv - 0.5) * caStrength;
+
             // RGB Shift
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0) - caOffset).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0) + caOffset).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap)
@@ -84,8 +88,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.6) {
-                let bloom = (luminance - 0.6) * 1.2;
+            if (luminance > 0.5) {
+                let bloom = (luminance - 0.5) * 1.5;
                 color += color * bloom;
             }
 
@@ -257,7 +261,7 @@ export const GridShader = () => {
              // 1. Digital Scanline Pulse
              // Moves down the grid periodically
              // Speed increases with lock tension
-             let scanSpeed = 0.3 + lock * 3.0;
+             let scanSpeed = 0.5 + lock * 5.0;
              // Add a secondary pulse
              let pulseTime = time * scanSpeed;
              let scanPos = (vPos.y + 20.0) / 30.0 - fract(pulseTime); // Normalize 0..1
@@ -270,11 +274,15 @@ export const GridShader = () => {
              // 2. Data Flow Effect
              // Small packets moving along lines
              let packet = sin(vPos.y * 1.0 + time * 5.0) * sin(vPos.x * 2.0) * 0.5 + 0.5;
-             let flow = pow(packet, 10.0); // Isolate bright spots
+             let flow = pow(packet, 8.0) * 2.0; // Isolate bright spots
 
              // 3. Vertical Fade
              let yNorm = (vPos.y + 20.0) / 30.0;
              let fade = smoothstep(0.0, 0.1, yNorm) * (1.0 - smoothstep(0.9, 1.0, yNorm));
+
+             // 4. Floor Glow
+             let floorGlow = smoothstep(0.8, 1.0, (vPos.y + 20.0) / 30.0) * 0.5;
+             color += vec3<f32>(0.0, 0.5, 1.0) * floorGlow;
 
              // Combine
              let alpha = (0.1 + scan * 0.8 + scan2 * 0.4 + flow * 0.6) * fade;
@@ -401,8 +409,8 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.8"; // Brighter
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "8.0"; // Ultra sharp glass
-  params.shininess = "800.0"; // Razor sharp
+  params.specularIntensity = "12.0"; // Ultra sharp glass
+  params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -558,6 +566,10 @@ export const Shaders = () => {
                 // --- Color Composition ---
                 var baseColor = vColor.rgb;
 
+                // Add inner pulse
+                let innerPulse = sin(time * 2.0) * 0.1 + 0.1;
+                baseColor += vec3<f32>(innerPulse);
+
                 // Add inner glow
                 baseColor += vColor.rgb * coreGlow * 0.8;
 
@@ -578,7 +590,7 @@ export const Shaders = () => {
                     sin(iridAngle + 2.0) * 0.5 + 0.5,
                     sin(iridAngle + 4.0) * 0.5 + 0.5
                 );
-                finalColor += irid * fresnelTerm * 1.5;
+                finalColor += irid * fresnelTerm * 2.5;
                 // Add pure white rim from fresnel
                 finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 0.5;
 
@@ -590,7 +602,7 @@ export const Shaders = () => {
                     let flash = sin(time * flashFreq) * 0.5 + 0.5;
 
                     // Mix to Red/White
-                    let warningColor = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0), 0.5 * flash);
+                    let warningColor = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0), lockPercent * flash);
 
                     // Strength grows with lockPercent
                     let strength = smoothstep(0.0, 1.0, lockPercent) * flash;
