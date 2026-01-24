@@ -53,7 +53,9 @@ export const PostProcessShaders = () => {
             var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
-                let radius = time * 2.0; // Faster expansion for snap
+                // NEON BRICKLAYER: Use speed from params.w
+                let speed = max(params.w, 0.1);
+                let radius = time * speed;
                 let width = params.x; // e.g. 0.1
                 let strength = params.y; // e.g. 0.05
                 let diff = dist - radius;

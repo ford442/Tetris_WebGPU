@@ -394,12 +394,12 @@ export default class View {
                       this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.5, 0.0, 1.0]); // Orange/Gold
                    }
                    // Add extra shockwave/aberration for T-Spin
-                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1);
+                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
               }
 
               // JUICE: Tetris Clear (4 lines) extra impact
               if (lines.length === 4 && c === 5) {
-                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1); // Strong shockwave for Tetris
+                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1, 3.0); // Strong shockwave for Tetris
               }
           }
       });
@@ -412,7 +412,7 @@ export default class View {
       // Trigger a central shockwave on lock for impact
       // This satisfies the "Shockwave" implementation requirement and adds "Juice"
       // width, strength, aberration
-      this.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05);
+      this.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05, 2.5);
   }
 
   onHold() {
@@ -420,6 +420,10 @@ export default class View {
       this.visualEffects.triggerFlash(0.2); // Quick flash
       // Maybe some particles at the center?
       this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]); // Purple flash
+  }
+
+  onRotate() {
+      this.visualEffects.triggerRotate(0.2);
   }
 
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
@@ -438,8 +442,9 @@ export default class View {
       const strength = 0.2 + Math.min(distance * 0.03, 0.4); // Stronger start and scaling
       const width = 0.25 + Math.min(distance * 0.02, 0.3);     // Wider ripple
       const aberration = 0.08 + Math.min(distance * 0.015, 0.2); // More glitch
+      const speed = 1.5 + Math.min(distance * 0.1, 1.0); // Faster for longer drops
 
-      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration);
+      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
 
       // Increase shake intensity
       this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.3);
@@ -473,7 +478,18 @@ export default class View {
       }
 
       // Add a floor splash ripple
-      this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, 0, 5.0, burstColor);
+      // Emit particles shooting left and right along the floor with upward bias
+      for (let i = 0; i < 20; i++) {
+          // Left side (aiming up-left)
+          const speedL = 8.0 + Math.random() * 12.0;
+          const angleL = Math.PI - Math.random() * 0.5; // 180 to ~150 degrees
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleL, speedL, burstColor);
+
+          // Right side (aiming up-right)
+          const speedR = 8.0 + Math.random() * 12.0;
+          const angleR = Math.random() * 0.5; // 0 to ~30 degrees
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
+      }
 
       this.triggerImpactEffects(worldX, impactY, distance);
   }
@@ -1381,8 +1397,9 @@ export default class View {
     requestAnimationFrame(this.Frame);
   };
 
-  async renderPlayfild_WebGPU({ playfield }: any) {
+  async renderPlayfild_WebGPU(state: any) {
     if (!this.device) return;
+    const { playfield, activePiece } = state;
 
     this.x += 0.01;
     const playfield_length = playfield.length;
@@ -1404,6 +1421,24 @@ export default class View {
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
+
+        // NEON BRICKLAYER: Rotation Flash
+        // If this block is part of the active piece, brighten it during rotation
+        if (this.visualEffects.rotationFlashTimer > 0 && activePiece) {
+             const relX = colom - activePiece.x;
+             const relY = row - activePiece.y;
+             if (relY >= 0 && relY < activePiece.blocks.length && relX >= 0 && relX < activePiece.blocks[0].length) {
+                  if (activePiece.blocks[relY][relX] !== 0) {
+                      // Add flash intensity
+                      const flash = this.visualEffects.rotationFlashTimer * 3.0;
+                      color = [
+                          Math.min(color[0] + flash, 1.0),
+                          Math.min(color[1] + flash, 1.0),
+                          Math.min(color[2] + flash, 1.0)
+                      ];
+                  }
+             }
+        }
 
         // Retrieve pre-created bindgroup
         let uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
