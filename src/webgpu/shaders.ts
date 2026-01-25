@@ -45,7 +45,7 @@ export const PostProcessShaders = () => {
             // Shockwave
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
-            let useGlitch = uniforms.useGlitch;
+            let glitchStrength = uniforms.useGlitch; // Treated as intensity
             let params = uniforms.shockwaveParams;
             let level = uniforms.level;
 
@@ -83,12 +83,23 @@ export const PostProcessShaders = () => {
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
             let levelAberration = levelStress * 0.008 * sin(uniforms.time * 2.0); // Breathing aberration
 
-            let baseAberration = select(vignetteAberration + levelAberration, distFromCenter * 0.03, useGlitch > 0.5);
-            let totalAberration = baseAberration + shockwaveAberration;
+            // NEON BRICKLAYER: Enhanced Glitch Logic
+            // Dynamic offset based on intensity, time, and Y position
+            let glitchOffset = glitchStrength * 0.05 * sin(finalUV.y * 50.0 + uniforms.time * 20.0);
+            // Tear effect: Random horizontal strips
+            let tear = step(0.95, fract(finalUV.y * 2.0 + uniforms.time * 10.0)) * glitchStrength * 0.05;
+            finalUV.x += tear;
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
+            let baseAberration = vignetteAberration + levelAberration;
+            // Add glitch aberration
+            let glitchAberration = glitchStrength * 0.03;
+            let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
+
+            // Chromatic Aberration with Glitch Offset
+            // R and B channels get offset by the glitch wave in opposite directions
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap but juicy)

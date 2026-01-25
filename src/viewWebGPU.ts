@@ -395,6 +395,7 @@ export default class View {
                    }
                    // Add extra shockwave/aberration for T-Spin
                    this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
+                   this.visualEffects.triggerGlitch(0.5);
               }
 
               // JUICE: Tetris Clear (4 lines) extra impact
@@ -503,6 +504,7 @@ export default class View {
       this.visualEffects.currentLevel = state.level;
       this.visualEffects.triggerLevelUp();
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
+      this.showFloatingText("LEVEL UP!", "WARP SPEED");
     }
 
     // Check for Score Event (Floating Text)
@@ -1282,7 +1284,7 @@ export default class View {
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
     // Offset 48: level
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
-        time, this.useGlitch ? 1.0 : 0.0,
+        time, Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
         this.visualEffects.shockwaveTimer, 0, 0, 0
     ]));
