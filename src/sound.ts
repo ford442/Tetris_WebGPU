@@ -1,6 +1,7 @@
 export default class SoundManager {
     private ctx: AudioContext;
     private masterGain: GainNode;
+    private noiseBuffer: AudioBuffer | null = null;
 
     constructor() {
         // @ts-ignore
@@ -9,6 +10,18 @@ export default class SoundManager {
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.value = 0.3; // Global volume
         this.masterGain.connect(this.ctx.destination);
+
+        this.initNoiseBuffer();
+    }
+
+    private initNoiseBuffer() {
+        if (!this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * 2.0; // 2 seconds
+        this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = this.noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
     }
 
     private playTone(freq: number, type: OscillatorType, duration: number, startTime: number = 0, vol: number = 1.0) {
@@ -21,7 +34,8 @@ export default class SoundManager {
         osc.type = type;
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime + startTime);
 
-        gain.gain.setValueAtTime(vol, this.ctx.currentTime + startTime);
+        gain.gain.setValueAtTime(0, this.ctx.currentTime + startTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + startTime + 0.01);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + startTime + duration);
 
         osc.connect(gain);
@@ -31,42 +45,131 @@ export default class SoundManager {
         osc.stop(this.ctx.currentTime + startTime + duration);
     }
 
+    private playNoise(duration: number, startTime: number = 0, vol: number = 1.0) {
+        if (!this.noiseBuffer || this.ctx.state === 'suspended') {
+             if (this.ctx.state === 'suspended') this.ctx.resume();
+             if (!this.noiseBuffer) this.initNoiseBuffer();
+             if (!this.noiseBuffer) return;
+        }
+
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.noiseBuffer;
+        const gain = this.ctx.createGain();
+
+        // Bandpass filter for "thud" vs "hiss"
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 800;
+
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime + startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + startTime + duration);
+
+        source.start(this.ctx.currentTime + startTime);
+        source.stop(this.ctx.currentTime + startTime + duration);
+    }
+
     playMove() {
-        this.playTone(300, 'square', 0.05, 0, 0.5);
+        // Crisp high blip
+        this.playTone(600, 'sine', 0.05, 0, 0.2);
+        this.playTone(1200, 'triangle', 0.02, 0, 0.1);
     }
 
     playRotate() {
-        this.playTone(400, 'triangle', 0.05, 0, 0.5);
+        // "Swish" / "Warp" sound
+        this.playTone(400, 'sine', 0.1, 0, 0.3);
+
+        if (this.ctx.state !== 'suspended') {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        }
     }
 
     playHardDrop() {
-        this.playTone(150, 'sawtooth', 0.2, 0, 0.8);
-        this.playTone(100, 'sine', 0.2, 0.05, 0.8);
+        // Impact thud + electric zap
+        // 1. Low frequency kick
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+
+        // 2. Noise Burst (Impact)
+        this.playNoise(0.1, 0, 0.6);
     }
 
     playLock() {
-        this.playTone(200, 'square', 0.1, 0, 0.6);
+        this.playTone(440, 'square', 0.1, 0, 0.3);
+        this.playTone(880, 'sine', 0.05, 0.02, 0.2);
     }
 
     playLineClear(lines: number) {
-        // Arpeggio based on lines
-        const base = 440;
-        const notes = [base, base * 1.25, base * 1.5, base * 2]; // Major chord-ish
+        const base = 523.25; // C5
+        // Major 7th chord: Root, Major 3rd, Perfect 5th, Major 7th
+        const chord = [base, base * 1.2599, base * 1.4983, base * 1.8877];
+        // Just Intonation approx: 1, 5/4, 3/2, 15/8
+        // Equal Temperament: 1, 1.26, 1.498, 1.888
 
+        const vol = 0.4;
+
+        // Staggered arpeggio
         for (let i = 0; i < Math.min(lines, 4); i++) {
-            this.playTone(notes[i], 'sine', 0.3, i * 0.05, 0.8);
+             this.playTone(chord[i], 'triangle', 0.4, i * 0.04, vol);
+             this.playTone(chord[i] * 2, 'sine', 0.4, i * 0.04 + 0.01, vol * 0.5); // Octave overtone
         }
 
         if (lines >= 4) {
-            // Tetris! Extra flair
-             this.playTone(880, 'square', 0.5, 0.2, 0.5);
+            // Tetris! - Full Chord Blast + noise sweep
+            this.playTone(chord[0] * 2, 'square', 0.8, 0.2, 0.3);
+            this.playTone(chord[2] * 2, 'square', 0.8, 0.2, 0.3);
+
+            // Cymbal-ish noise
+            const noiseDur = 0.6;
+            this.playNoise(noiseDur, 0, 0.4);
         }
     }
 
     playGameOver() {
-        this.playTone(300, 'sawtooth', 0.5, 0);
-        this.playTone(250, 'sawtooth', 0.5, 0.4);
-        this.playTone(200, 'sawtooth', 0.5, 0.8);
-        this.playTone(150, 'sawtooth', 1.0, 1.2);
+        const now = this.ctx.currentTime;
+        // Sad descent
+        [300, 250, 200, 150, 100].forEach((freq, i) => {
+            this.playTone(freq, 'sawtooth', 0.4, i * 0.15, 0.5);
+        });
+
+        // Low drone
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.value = 50;
+        osc.type = 'sawtooth';
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 2.0);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 2.0);
     }
 }
