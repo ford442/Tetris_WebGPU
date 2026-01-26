@@ -88,8 +88,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.5) {
-                let bloom = (luminance - 0.5) * 1.5;
+            if (luminance > 0.7) {
+                let bloom = (luminance - 0.7) * 2.0; // Higher threshold, stronger bloom
                 color += color * bloom;
             }
 
@@ -280,9 +280,11 @@ export const GridShader = () => {
              let yNorm = (vPos.y + 20.0) / 30.0;
              let fade = smoothstep(0.0, 0.1, yNorm) * (1.0 - smoothstep(0.9, 1.0, yNorm));
 
-             // 4. Floor Glow
-             let floorGlow = smoothstep(0.8, 1.0, (vPos.y + 20.0) / 30.0) * 0.5;
-             color += vec3<f32>(0.0, 0.5, 1.0) * floorGlow;
+             // 4. Floor Glow (Enhanced Retrowave)
+             let floorGlow = smoothstep(0.7, 1.0, (vPos.y + 20.0) / 30.0); // Wider glow
+             // Color shift for floor
+             let floorColor = mix(vec3<f32>(0.0, 0.5, 1.0), vec3<f32>(1.0, 0.0, 1.0), sin(time * 0.5) * 0.5 + 0.5);
+             color += floorColor * floorGlow * 1.5;
 
              // Combine
              let alpha = (0.1 + scan * 0.8 + scan2 * 0.4 + flow * 0.6) * fade;
@@ -380,17 +382,21 @@ export const BackgroundShaders = () => {
               stars = 1.0 * (dist * 2.0); // Brighter at edges
           }
 
-          // Second layer of stars (Dust/Nebula particles)
-          // Slower speed
-          let dustTime = time * 2.0;
-          let dustNoise = fract(sin(dot(dir, vec2<f32>(45.6, 12.3))) * 98765.4);
-          let dustPos = fract(dist * 3.0 - dustTime);
-          if (abs(dustPos - dustNoise) < 0.005 && dustNoise > 0.8) {
-              stars += 0.5 * dist;
-          }
+          // --- Nebula Layer ---
+          // Procedural noise for cloud-like structure
+          let nTime = time * 0.2;
+          let nUV = uv * 2.0;
+          let noise1 = sin(nUV.x * 5.0 + nTime) * sin(nUV.y * 5.0 - nTime);
+          let noise2 = cos(nUV.x * 3.0 - nTime * 0.5) * cos(nUV.y * 3.0 + nTime * 0.5);
+          let nebulaMask = (noise1 + noise2) * 0.5 + 0.5; // 0..1
+
+          // Deep purple/blue nebula color
+          let nebulaColor = mix(vec3<f32>(0.2, 0.0, 0.4), vec3<f32>(0.0, 0.2, 0.5), uv.y);
+          let nebula = nebulaColor * nebulaMask * 0.3 * (1.0 + levelFactor); // Brighter at higher levels
 
           // Combine
           var finalColor = deepSpace + tunnelColor * brightness * 2.0;
+          finalColor += nebula;
           finalColor += vec3<f32>(stars);
 
           // Soft Vignette
@@ -512,12 +518,19 @@ export const Shaders = () => {
                     // Base Ghost Color (Cyan/Blue tint)
                     let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
 
+                    // Add Digital Grid to Ghost
+                    let gridScale = 10.0;
+                    let gridX = abs(fract(vPosition.x * gridScale) - 0.5);
+                    let gridY = abs(fract(vPosition.y * gridScale) - 0.5);
+                    let grid = max(step(0.45, gridX), step(0.45, gridY));
+
                     var finalGhost = ghostBase * wire * 6.0; // Brighter edge
-                    finalGhost += ghostBase * 0.3 * scanline; // Stronger scanline fill
+                    finalGhost += ghostBase * 0.5 * scanline; // Stronger scanline fill
+                    finalGhost += ghostBase * 0.3 * grid; // Add grid
                     finalGhost += vec3<f32>(1.0) * beam * 0.4; // Landing beam
 
                     // Pulse opacity with digital flicker
-                    let pulse = 0.5 + 0.3 * sin(time * 10.0);
+                    let pulse = 0.5 + 0.4 * sin(time * 15.0); // Faster pulse
                     let flicker = select(1.0, 0.8, sin(time * 60.0) > 0.0); // High frequency flicker
 
                     // Glitch flash
@@ -526,7 +539,7 @@ export const Shaders = () => {
                         finalGhost = vec3<f32>(1.0);
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.5 * flicker);
+                    return vec4<f32>(finalGhost, pulse * 0.6 * flicker);
                 }
 
 
@@ -580,19 +593,17 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * bevel * 0.6;
                 finalColor += vec3<f32>(1.0) * rim * 0.8; // Sharp white edge
 
-                // --- Fresnel / Iridescence ---
-                // View-dependent color shift (Soap bubble / Crystal effect)
-                // Enhanced Fresnel for "Glassy" rim
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                let iridAngle = dot(N, V) * 3.14 * 2.0;
-                let irid = vec3<f32>(
-                    sin(iridAngle + 0.0) * 0.5 + 0.5,
-                    sin(iridAngle + 2.0) * 0.5 + 0.5,
-                    sin(iridAngle + 4.0) * 0.5 + 0.5
-                );
-                finalColor += irid * fresnelTerm * 2.5;
-                // Add pure white rim from fresnel
-                finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 0.5;
+                // --- Chromatic Dispersion / Refraction ---
+                // Approximate dispersion by calculating Fresnel with slight offsets for R, G, B
+                let viewAngle = max(dot(N, V), 0.0);
+                let fR = pow(1.0 - viewAngle, 3.0);
+                let fG = pow(1.0 - viewAngle, 3.1); // Slightly different power
+                let fB = pow(1.0 - viewAngle, 3.2);
+
+                let dispersionColor = vec3<f32>(fR, fG, fB);
+
+                // Add pure white rim from average fresnel
+                finalColor += dispersionColor * 2.0;
 
                 // --- Lock Warning (Critical Tension) ---
                 let lockPercent = uniforms.lockPercent;
