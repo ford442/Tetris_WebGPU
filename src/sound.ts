@@ -48,18 +48,28 @@ export default class SoundManager {
         this.playTone(200, 'square', 0.1, 0, 0.6);
     }
 
-    playLineClear(lines: number) {
-        // Arpeggio based on lines
-        const base = 440;
+    playLineClear(lines: number, combo: number = 0, backToBack: boolean = false) {
+        // Pitch shift based on combo (semitone step ~1.059)
+        const pitchMod = Math.pow(1.059, Math.min(combo, 12)); // Cap at one octave shift
+        const base = 440 * pitchMod;
         const notes = [base, base * 1.25, base * 1.5, base * 2]; // Major chord-ish
 
+        // Use a sharper wave for Back-to-Back to cut through the mix
+        const waveType: OscillatorType = backToBack ? 'triangle' : 'sine';
+
         for (let i = 0; i < Math.min(lines, 4); i++) {
-            this.playTone(notes[i], 'sine', 0.3, i * 0.05, 0.8);
+            this.playTone(notes[i], waveType, 0.3, i * 0.05, 0.8);
         }
 
         if (lines >= 4) {
             // Tetris! Extra flair
-             this.playTone(880, 'square', 0.5, 0.2, 0.5);
+             this.playTone(880 * pitchMod, 'square', 0.5, 0.2, 0.5);
+        }
+
+        if (backToBack) {
+            // Extra "Zing" for Back-to-Back
+            this.playTone(1760 * pitchMod, 'sawtooth', 0.4, 0.0, 0.4);
+            this.playTone(1760 * 1.5 * pitchMod, 'sawtooth', 0.4, 0.1, 0.2);
         }
     }
 
