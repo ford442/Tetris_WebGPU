@@ -315,11 +315,18 @@ export default class View {
           ctx.save();
           ctx.translate(centerX, centerY);
           ctx.rotate(Math.PI / 4);
-          ctx.fillStyle = `rgba(255, 255, 255, 0.3)`;
-          const coreSize = blockSize * 0.5;
-          ctx.fillRect(-coreSize / 2, -coreSize / 2, coreSize, coreSize);
 
-          // Core Hotspot
+          // Enhanced Core Glow
+          ctx.globalCompositeOperation = 'lighter';
+          const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, blockSize * 0.4);
+          coreGrad.addColorStop(0.0, `rgba(255, 255, 255, 0.9)`);
+          coreGrad.addColorStop(1.0, `rgba(${color[0] * 255}, ${color[1] * 255}, ${color[2] * 255}, 0.0)`);
+
+          ctx.fillStyle = coreGrad;
+          const coreSize = blockSize * 0.5;
+          ctx.fillRect(-coreSize, -coreSize, coreSize * 2, coreSize * 2);
+
+          // Core Hotspot (Diamond)
           ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
           ctx.fillRect(-coreSize / 4, -coreSize / 4, coreSize / 2, coreSize / 2);
           ctx.restore();
@@ -513,6 +520,8 @@ export default class View {
 
     // Check if level has changed and update video accordingly
     if (state.level !== this.visualEffects.currentLevel) {
+      this.showFloatingText("LEVEL UP!", "WARP SPEED", "#0ff");
+      this.visualEffects.triggerFlash(0.8);
       this.visualEffects.currentLevel = state.level;
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
     }
