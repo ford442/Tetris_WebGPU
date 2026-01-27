@@ -287,8 +287,12 @@ export default class Controller {
       this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist, colorIdx);
 
       if (result.linesCleared.length > 0) {
-          this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin);
+          const scoreEvent = this.game.scoreEvent;
+          const combo = scoreEvent ? scoreEvent.combo : 0;
+          const b2b = scoreEvent ? scoreEvent.backToBack : false;
+
+          this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
@@ -341,8 +345,12 @@ export default class Controller {
       const result = this.game.update(dt);
 
       if (result.linesCleared.length > 0) {
-          this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin);
+          const scoreEvent = this.game.scoreEvent;
+          const combo = scoreEvent ? scoreEvent.combo : 0;
+          const b2b = scoreEvent ? scoreEvent.backToBack : false;
+
+          this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();

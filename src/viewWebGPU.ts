@@ -359,9 +359,13 @@ export default class View {
       }, 2000);
   }
 
-  onLineClear(lines: number[], tSpin: boolean = false) {
+  onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
-      this.visualEffects.triggerShake(tSpin ? 0.8 : 0.5, tSpin ? 0.6 : 0.5); // More shake for T-Spin
+
+      // NEON BRICKLAYER: Combo increases shake
+      const shakeBase = tSpin ? 0.8 : 0.5;
+      const shakeBonus = Math.min(combo * 0.1, 1.0);
+      this.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.6 : 0.5);
 
       // Emit particles for each cleared line
       lines.forEach(y => {
@@ -371,17 +375,24 @@ export default class View {
               const worldX = c * 2.2;
 
               let color = [0.0, 1.0, 1.0, 1.0]; // Default Cyan
-              let count = 20;
+              // Juice: Combo increases particle density
+              let count = 20 + (combo * 5);
 
               // T-SPIN GOLD
               if (tSpin) {
                   color = [1.0, 0.8, 0.0, 1.0]; // GOLD
-                  count = 60; // Huge burst
+                  count = 60 + (combo * 10); // Huge burst
               } else if (lines.length === 4) {
                   color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
-                  count = 80; // JUICE: Double particles for Tetris
+                  count = 80 + (combo * 10); // JUICE: Double particles for Tetris
               } else {
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
+              }
+
+              // NEON BRICKLAYER: Back-to-Back Streak Effect
+              if (backToBack) {
+                  color = [1.0, 0.9, 0.2, 1.0]; // Distinct Golden/Electric Yellow
+                  count = Math.floor(count * 1.2);
               }
 
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
@@ -518,6 +529,12 @@ export default class View {
         // Let's implement a simple counter check.
         if (state.effectCounter !== this.lastEffectCounter && state.scoreEvent.text) {
              this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
+
+             // NEON BRICKLAYER: Visual glitch for Back-to-Back for extra impact
+             if (state.scoreEvent.backToBack) {
+                 this.visualEffects.triggerGlitch(0.3);
+             }
+
              this.lastEffectCounter = state.effectCounter;
         }
 
