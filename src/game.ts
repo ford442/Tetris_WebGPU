@@ -210,7 +210,8 @@ export default class Game {
 
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin);
+        const isAllClear = this.isPlayfieldEmpty();
+        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
         result.linesCleared = linesScore;
         result.tSpin = wasTSpin;
     } else {
@@ -261,7 +262,8 @@ export default class Game {
 
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
-                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin);
+                  const isAllClear = this.isPlayfieldEmpty();
+                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
                   result.linesCleared = linesScore;
                   result.tSpin = wasTSpin;
               } else {
@@ -324,12 +326,20 @@ export default class Game {
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
       // Correctly pass tSpin status captured before lock
-      this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, this.isTSpin);
+      const isAllClear = this.isPlayfieldEmpty();
+      this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, this.isTSpin, isAllClear);
     } else {
       this.scoringSystem.resetCombo();
       this.scoreEvent = null;
     }
     this.updatePieces();
+  }
+
+  private isPlayfieldEmpty(): boolean {
+      for (let i = 0; i < this.playfield.length; i++) {
+          if (this.playfield[i] !== 0) return false;
+      }
+      return true;
   }
 
   checkTSpin(): void {
