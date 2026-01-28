@@ -33,6 +33,7 @@ export const PostProcessShaders = () => {
             // offset 48: level(4)
             shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
             level: f32,
+            warpSurge: f32, // Offset 52
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -105,21 +106,31 @@ export const PostProcessShaders = () => {
             // Bloom-ish boost (cheap but juicy)
             var color = vec3<f32>(r, g, b);
 
-            // NEON BRICKLAYER: "Tent Filter" Blur for cheap single-pass glow
-            // Sample 4 diagonals to create a soft halo
-            let offset = 0.003 * (1.0 + levelStress * 0.5); // Blur radius increases with stress
+            // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
+            // Sample 8 points for a smoother, wider halo
+            let offset = 0.003 * (1.0 + levelStress * 0.5);
+            let offset2 = offset * 2.0; // Wider ring
             var glow = vec3<f32>(0.0);
+
+            // Inner Ring
             glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, offset)).rgb;
             glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, offset)).rgb;
             glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, -offset)).rgb;
             glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, -offset)).rgb;
-            glow *= 0.25;
+
+            // Outer Ring (Diagonal)
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, offset2)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, -offset2)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset2, 0.0)).rgb;
+            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset2, 0.0)).rgb;
+
+            glow *= 0.125; // Average of 8 samples
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.5;
+            let bloomThreshold = 0.4; // Lower threshold for more juice
             if (glowLum > bloomThreshold) {
-                 color += glow * 0.6; // Add glow on top
+                 color += glow * 0.8; // Stronger addition
             }
 
             // High-pass boost for the core pixels
@@ -133,6 +144,13 @@ export const PostProcessShaders = () => {
             let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
             let vignette = 1.0 - smoothstep(0.5, vignetteSize, distFromCenter);
             color *= vignette;
+
+            // NEON BRICKLAYER: Warp Surge Flash
+            let warpSurge = uniforms.warpSurge;
+            if (warpSurge > 0.01) {
+                let invert = vec3<f32>(1.0) - color;
+                color = mix(color, invert, clamp(warpSurge * 0.8, 0.0, 0.8));
+            }
 
             return vec4<f32>(color, a);
         }
@@ -163,6 +181,7 @@ export const ParticleShaders = () => {
             @location(2) particleScale : f32,
             @location(3) particleLife : f32,
             @location(4) particleMaxLife : f32,
+            @location(5) particleVel : vec3<f32>,
             @builtin(vertex_index) vertexIndex : u32
         ) -> VertexOutput {
             var output : VertexOutput;
@@ -180,10 +199,19 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
-            // Billboarding: Align with camera plane (simple XY approximation for this fixed view)
-            // For a true billboard in a perspective camera, we'd need the camera Up/Right vectors,
-            // but since the camera is mostly fixed looking at Z, this works reasonably well.
-            let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
+            // Velocity Stretching (Neon Sparks)
+            // If particle is moving fast, stretch it along the velocity vector
+            let speed = length(particleVel);
+            var vOffset = vec3<f32>(pos * particleScale, 0.0);
+
+            if (speed > 2.0) {
+                 let dir = normalize(particleVel);
+                 let right = normalize(cross(dir, vec3<f32>(0.0, 0.0, 1.0)));
+                 let stretch = 1.0 + speed * 0.05;
+                 vOffset = (right * pos.x * particleScale * 0.5) + (dir * pos.y * particleScale * stretch);
+            }
+
+            let worldPos = particlePos + vOffset;
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
             output.color = particleColor;
@@ -248,8 +276,13 @@ export const ParticleShaders = () => {
             let pulseSpeed = 20.0 + (1.0 - lifeRatio) * 30.0;
             let pulse = 0.8 + 0.2 * sin(uv.x * pulseSpeed);
 
+            // Neon Flicker (JUICE)
+            // Use vertexIndex logic if passed, but we don't have it here.
+            // We can use gl_FragCoord or UV for randomness.
+            let flicker = 0.8 + 0.2 * sin(uniforms.time * 50.0 + uv.x * 10.0 + uv.y * 10.0);
+
             // Boost brightness for neon effect
-            return vec4<f32>(finalColor * 4.0 * lifeRatio, finalAlpha * pulse);
+            return vec4<f32>(finalColor * 4.0 * lifeRatio, finalAlpha * pulse * flicker);
         }
     `;
 
@@ -427,6 +460,9 @@ export const BackgroundShaders = () => {
 
           // Warp Surge Flash
           finalColor += vec3<f32>(1.0) * warpSurge * 0.1;
+
+          // NEON BRICKLAYER: Hyper-Inversion
+          finalColor = mix(finalColor, vec3<f32>(1.0) - finalColor, clamp(warpSurge * 0.5, 0.0, 1.0));
 
           return vec4<f32>(finalColor, 1.0);
         }
