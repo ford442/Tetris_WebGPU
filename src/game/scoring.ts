@@ -8,6 +8,7 @@ export interface ScoreEvent {
   text: string; // e.g., "TETRIS", "COMBO x3"
   combo: number;
   backToBack: boolean;
+  isAllClear: boolean;
 }
 
 export class ScoringSystem {
@@ -54,7 +55,7 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: boolean = false): ScoreEvent | null {
+  updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
     if (linesCleared === 0) {
       this.combo = -1; // Reset combo on no clear (drop without clear)
       // Actually standard Tetris only resets combo when you lock a piece and DON'T clear lines.
@@ -115,6 +116,13 @@ export class ScoringSystem {
         text += ` + COMBO x${this.combo}`;
     }
 
+    // All Clear Bonus
+    if (isAllClear) {
+        const allClearBonus = 2000 * level;
+        points += allClearBonus;
+        text += " ALL CLEAR!";
+    }
+
     this.score += Math.floor(points);
     console.log(`Score: ${this.score} (${text})`);
 
@@ -122,7 +130,8 @@ export class ScoringSystem {
         points: Math.floor(points),
         text: text,
         combo: this.combo,
-        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0 // Return true only if B2B was applied
+        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0, // Return true only if B2B was applied
+        isAllClear: isAllClear
     };
   }
 

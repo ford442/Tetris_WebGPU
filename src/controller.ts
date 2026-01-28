@@ -290,9 +290,10 @@ export default class Controller {
           const scoreEvent = this.game.scoreEvent;
           const combo = scoreEvent ? scoreEvent.combo : 0;
           const b2b = scoreEvent ? scoreEvent.backToBack : false;
+          const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
           this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
@@ -348,9 +349,10 @@ export default class Controller {
           const scoreEvent = this.game.scoreEvent;
           const combo = scoreEvent ? scoreEvent.combo : 0;
           const b2b = scoreEvent ? scoreEvent.backToBack : false;
+          const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
           this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
