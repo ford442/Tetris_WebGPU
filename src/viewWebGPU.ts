@@ -359,7 +359,7 @@ export default class View {
       }, 2000);
   }
 
-  onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false) {
+  onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
 
       // NEON BRICKLAYER: Combo increases shake
@@ -415,6 +415,30 @@ export default class View {
               }
           }
       });
+
+      // NEON BRICKLAYER: ALL CLEAR JUICE
+      if (isAllClear) {
+           this.visualEffects.triggerShockwave([0.5, 0.5], 0.5, 0.3, 0.2, 4.0); // Massive Shockwave
+           this.visualEffects.triggerShake(1.5, 0.8); // Long Shake
+
+           // Rainbow Burst
+           const centerX = 5.0 * 2.2;
+           const centerY = 10.0 * -2.2;
+
+           for (let i = 1; i <= 7; i++) {
+               // Cycle through theme colors
+               let color = this.currentTheme[i];
+               if (!color) color = [1.0, 1.0, 1.0];
+               const particleColor = [...color, 1.0];
+
+               // Radial burst for each color
+               for (let p = 0; p < 30; p++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 10.0 + Math.random() * 25.0; // High speed
+                    this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, particleColor);
+               }
+           }
+      }
   }
 
   onLock() {
