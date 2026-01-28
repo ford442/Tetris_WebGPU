@@ -404,16 +404,16 @@ export default class View {
 
               if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 300; // Massive particle burst
-                  speed = 35.0;
+                  count = 500; // Massive particle burst (Juice!)
+                  speed = 40.0;
                   if (isMini) {
-                    count = 150;
-                    speed = 25.0;
+                    count = 200;
+                    speed = 30.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
-                  count = 200;
-                  speed = 30.0;
+                  count = 300; // Bigger burst
+                  speed = 35.0;
               } else {
                    // Random cool colors
                    const rand = Math.random();
@@ -421,8 +421,8 @@ export default class View {
                    else if (rand < 0.66) color = [0.6, 0.0, 1.0, 1.0];
                    else color = [0.0, 1.0, 0.8, 1.0];
 
-                  count = 80;
-                  speed = 20.0;
+                  count = 120; // More particles for standard clears
+                  speed = 25.0;
               }
 
               // Radial burst
@@ -463,7 +463,7 @@ export default class View {
           const worldY = r * -2.2;
           // More particles per block, electric blue trail
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 25, [0.5, 0.9, 1.0, 1.0]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 40, [0.5, 0.9, 1.0, 1.0]);
       }
 
       const impactY = y * -2.2;
@@ -471,15 +471,15 @@ export default class View {
       // 1. Radial Burst
       for (let i=0; i<120; i++) {
           const angle = (i / 120) * Math.PI * 2;
-          const speed = 30.0 + Math.random() * 20.0;
+          const speed = 40.0 + Math.random() * 30.0; // Faster burst
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
       }
 
       // 2. Floor Splash (Cone upwards)
-      for (let i=0; i<80; i++) {
+      for (let i=0; i<100; i++) { // More splash
           // Angle between PI/4 and 3PI/4 (upwards)
           const angle = Math.PI/4 + Math.random() * (Math.PI/2);
-          const speed = 40.0 + Math.random() * 30.0;
+          const speed = 50.0 + Math.random() * 40.0; // Faster splash
           // Offset slightly from center
           const offsetX = (Math.random() - 0.5) * 4.0;
           this.particleSystem.emitParticlesRadial(worldX + offsetX, impactY, 0.0, angle, speed, [1.0, 1.0, 1.0, 0.8]);
@@ -1019,9 +1019,9 @@ export default class View {
     let camY = -20.0;
     let camZ = 75.0;
 
-    // "Breathing" sway
-    camX += Math.sin(time * 0.2) * 2.0;
-    camY += Math.cos(time * 0.3) * 1.0;
+    // "Breathing" sway (Reduced for playability)
+    camX += Math.sin(time * 0.2) * 1.0;
+    camY += Math.cos(time * 0.3) * 0.5;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();

@@ -88,8 +88,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.7) {
-                let bloom = (luminance - 0.7) * 2.0; // Higher threshold, stronger bloom
+            if (luminance > 0.6) {
+                let bloom = (luminance - 0.6) * 3.0; // Lower threshold, stronger bloom
                 color += color * bloom;
             }
 
@@ -287,7 +287,7 @@ export const GridShader = () => {
              color += floorColor * floorGlow * 1.5;
 
              // Combine
-             let alpha = (0.1 + scan * 0.8 + scan2 * 0.4 + flow * 0.6) * fade;
+             let alpha = (0.1 + scan * 1.5 + scan2 * 0.8 + flow * 0.6) * fade;
 
              // Boost color where bright
              color += vec3<f32>(1.0) * (scan + scan2 + flow);
@@ -413,9 +413,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.9"; // Even brighter ambient for neon look
+  params.ambientIntensity = "1.0"; // Even brighter ambient for neon look
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "15.0"; // Increased specular for wet/glassy look
+  params.specularIntensity = "25.0"; // Increased specular for wet/glassy look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -524,13 +524,14 @@ export const Shaders = () => {
                     let gridY = abs(fract(vPosition.y * gridScale) - 0.5);
                     let grid = max(step(0.45, gridX), step(0.45, gridY));
 
-                    var finalGhost = ghostBase * wire * 6.0; // Brighter edge
-                    finalGhost += ghostBase * 0.5 * scanline; // Stronger scanline fill
-                    finalGhost += ghostBase * 0.3 * grid; // Add grid
-                    finalGhost += vec3<f32>(1.0) * beam * 0.4; // Landing beam
+                    var finalGhost = ghostBase * wire * 8.0; // Brighter edge
+                    finalGhost += ghostBase * 0.8 * scanline; // Stronger scanline fill
+                    finalGhost += ghostBase * 0.5 * grid; // Add grid
+                    finalGhost += vec3<f32>(1.0) * beam * 0.5; // Landing beam
+                    finalGhost += ghostBase * 0.2; // Base fill for better visibility
 
                     // Pulse opacity with digital flicker
-                    let pulse = 0.5 + 0.4 * sin(time * 15.0); // Faster pulse
+                    let pulse = 0.6 + 0.4 * sin(time * 15.0); // Faster pulse, higher base opacity
                     let flicker = select(1.0, 0.8, sin(time * 60.0) > 0.0); // High frequency flicker
 
                     // Glitch flash
@@ -618,7 +619,7 @@ export const Shaders = () => {
                     // Strength grows with lockPercent
                     let strength = smoothstep(0.0, 1.0, lockPercent) * flash;
 
-                    finalColor = mix(finalColor, warningColor, strength * 0.8);
+                    finalColor = mix(finalColor, warningColor, strength * 1.0); // Stronger warning override
                 }
 
                 // --- Flash Intensity (Impact) ---
