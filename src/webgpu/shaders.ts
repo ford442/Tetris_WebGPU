@@ -88,8 +88,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.6) {
-                let bloom = (luminance - 0.6) * 3.0; // Lower threshold, stronger bloom
+            if (luminance > 0.55) {
+                let bloom = (luminance - 0.55) * 4.0; // Lower threshold, stronger bloom
                 color += color * bloom;
             }
 
@@ -413,9 +413,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "1.0"; // Even brighter ambient for neon look
+  params.ambientIntensity = "1.2"; // Even brighter ambient for neon look
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "25.0"; // Increased specular for wet/glassy look
+  params.specularIntensity = "30.0"; // Increased specular for wet/glassy look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -500,7 +500,7 @@ export const Shaders = () => {
                     let edge = max(uvEdgeDistX, uvEdgeDistY);
 
                     // Sharp glowing edge
-                    let wire = smoothstep(0.85, 0.95, edge);
+                    let wire = smoothstep(0.80, 0.95, edge);
 
                     // Scanline effect (Enhanced)
                     let scanPos = vPosition.y * 50.0 + time * 20.0; // Faster, denser
@@ -528,7 +528,7 @@ export const Shaders = () => {
                     finalGhost += ghostBase * 0.8 * scanline; // Stronger scanline fill
                     finalGhost += ghostBase * 0.5 * grid; // Add grid
                     finalGhost += vec3<f32>(1.0) * beam * 0.5; // Landing beam
-                    finalGhost += ghostBase * 0.2; // Base fill for better visibility
+                    finalGhost += ghostBase * 0.3; // Base fill for better visibility
 
                     // Pulse opacity with digital flicker
                     let pulse = 0.6 + 0.4 * sin(time * 15.0); // Faster pulse, higher base opacity
