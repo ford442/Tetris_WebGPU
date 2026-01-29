@@ -475,15 +475,15 @@ export default class View {
 
       // Dynamic shockwave based on drop distance (Boosted for JUICE)
       // NEON BRICKLAYER: Tuned for maximum impact
-      const strength = 0.2 + Math.min(distance * 0.03, 0.4); // Stronger start and scaling
-      const width = 0.25 + Math.min(distance * 0.02, 0.3);     // Wider ripple
-      const aberration = 0.08 + Math.min(distance * 0.015, 0.2); // More glitch
-      const speed = 1.5 + Math.min(distance * 0.1, 1.0); // Faster for longer drops
+      const strength = 0.3 + Math.min(distance * 0.05, 0.5); // JUICE: Even stronger start and scaling
+      const width = 0.3 + Math.min(distance * 0.03, 0.4);     // JUICE: Wider ripple
+      const aberration = 0.1 + Math.min(distance * 0.02, 0.3); // JUICE: More glitch
+      const speed = 2.0 + Math.min(distance * 0.15, 1.5); // JUICE: High speed shockwave
 
       this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
 
       // Increase shake intensity
-      this.visualEffects.triggerShake(2.0 + distance * 0.1, 0.3);
+      this.visualEffects.triggerShake(3.0 + distance * 0.2, 0.4); // JUICE: Harder shake
   }
 
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
