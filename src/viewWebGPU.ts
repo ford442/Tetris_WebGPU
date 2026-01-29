@@ -985,6 +985,7 @@ export default class View {
                         { shaderLocation: 2, format: 'float32',   offset: 48 }, // scale (offset 48)
                         { shaderLocation: 3, format: 'float32',   offset: 52 }, // life (offset 52)
                         { shaderLocation: 4, format: 'float32',   offset: 56 }, // maxLife (offset 56)
+                        { shaderLocation: 5, format: 'float32x3', offset: 16 }, // velocity (offset 16)
                     ]
                 }
             ]
@@ -1334,6 +1335,8 @@ export default class View {
 
     // Write level at offset 48 (NEON BRICKLAYER)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, new Float32Array([this.visualEffects.currentLevel]));
+    // Write warpSurge at offset 52
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, new Float32Array([this.visualEffects.warpSurge]));
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
