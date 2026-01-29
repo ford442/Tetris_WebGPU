@@ -324,8 +324,8 @@ export default class Controller {
 
       const level = this.game.getState().level;
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
-      // Level 1: 1000ms, Level 10: ~230ms, Level 15: ~100ms
-      const speedMs = Math.max(16, 1000 * Math.pow(0.85, level - 1));
+      // Level 1: 1000ms, Level 10: ~316ms, Level 15: ~160ms (Using 0.88 base)
+      const speedMs = Math.max(16, 1000 * Math.pow(0.88, level - 1));
 
       // Accumulate gravity time?
       // Simplest: use a gravity timer here.
