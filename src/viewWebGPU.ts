@@ -327,8 +327,11 @@ export default class View {
           ctx.fillRect(-coreSize, -coreSize, coreSize * 2, coreSize * 2);
 
           // Core Hotspot (Diamond)
-          ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
-          ctx.fillRect(-coreSize / 4, -coreSize / 4, coreSize / 2, coreSize / 2);
+          const hotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreSize / 2);
+          hotGrad.addColorStop(0.0, `rgba(255, 255, 255, 1.0)`);
+          hotGrad.addColorStop(1.0, `rgba(255, 255, 255, 0.0)`);
+          ctx.fillStyle = hotGrad;
+          ctx.fillRect(-coreSize / 2, -coreSize / 2, coreSize, coreSize);
           ctx.restore();
 
           // 4. Rim Highlight (Sharp White Edge)
@@ -433,9 +436,21 @@ export default class View {
       });
   }
 
-  onLock() {
+  onLock(x?: number, y?: number) {
       this.visualEffects.triggerLock(0.4);
       this.visualEffects.triggerShake(0.5, 0.25);
+
+      if (x !== undefined && y !== undefined) {
+          const worldX = x * 2.2;
+          const worldY = y * -2.2;
+          // Emit subtle particles for lock
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 30, [1.0, 1.0, 1.0, 0.8]);
+          // Small radial burst
+          for(let i=0; i<20; i++) {
+               const angle = (i/20) * Math.PI * 2;
+               this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, 15.0, [0.5, 0.8, 1.0, 1.0]);
+          }
+      }
   }
 
   onHold() {

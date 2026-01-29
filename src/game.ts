@@ -244,6 +244,7 @@ export default class Game {
           // lockDelayTime is 500ms.
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
+              this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
               this.lockPiece();
               result.locked = true;
               result.tSpin = this.isTSpin;

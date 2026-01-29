@@ -286,6 +286,10 @@ export const GridShader = () => {
              let floorColor = mix(vec3<f32>(0.0, 0.5, 1.0), vec3<f32>(1.0, 0.0, 1.0), sin(time * 0.5) * 0.5 + 0.5);
              color += floorColor * floorGlow * 1.5;
 
+             // 5. Beat Pulse (Grid lines pulse)
+             let beat = sin(time * 3.0) * 0.5 + 0.5;
+             color += vec3<f32>(0.2) * beat * fade;
+
              // Combine
              let alpha = (0.1 + scan * 1.5 + scan2 * 0.8 + flow * 0.6) * fade;
 
@@ -415,7 +419,7 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "1.2"; // Even brighter ambient for neon look
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "30.0"; // Increased specular for wet/glassy look
+  params.specularIntensity = "20.0"; // Slightly reduced for smoother glass
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -502,9 +506,9 @@ export const Shaders = () => {
                     // Sharp glowing edge
                     let wire = smoothstep(0.80, 0.95, edge);
 
-                    // Scanline effect (Enhanced)
-                    let scanPos = vPosition.y * 50.0 + time * 20.0; // Faster, denser
-                    let scanline = sin(scanPos) * 0.5 + 0.5;
+                    // Hologram Effect
+                    // Vertical sine wave for wavering transparency
+                    let hologram = sin(vPosition.y * 50.0 + time * 10.0) * 0.5 + 0.5;
 
                     // Vertical "Landing Beam"
                     let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 4.0);
@@ -525,10 +529,10 @@ export const Shaders = () => {
                     let grid = max(step(0.45, gridX), step(0.45, gridY));
 
                     var finalGhost = ghostBase * wire * 8.0; // Brighter edge
-                    finalGhost += ghostBase * 0.8 * scanline; // Stronger scanline fill
+                    finalGhost += ghostBase * 0.5 * hologram; // Hologram fill
                     finalGhost += ghostBase * 0.5 * grid; // Add grid
                     finalGhost += vec3<f32>(1.0) * beam * 0.5; // Landing beam
-                    finalGhost += ghostBase * 0.3; // Base fill for better visibility
+                    finalGhost += ghostBase * 0.4; // Base fill for better visibility
 
                     // Pulse opacity with digital flicker
                     let pulse = 0.6 + 0.4 * sin(time * 15.0); // Faster pulse, higher base opacity
@@ -582,7 +586,7 @@ export const Shaders = () => {
 
                 // Add inner pulse
                 let innerPulse = sin(time * 2.0) * 0.1 + 0.1;
-                baseColor += vec3<f32>(innerPulse);
+                baseColor += vColor.rgb * innerPulse;
 
                 // Add inner glow
                 baseColor += vColor.rgb * coreGlow * 0.8;

@@ -1,35 +1,42 @@
 from playwright.sync_api import sync_playwright
+import time
 
-def verify_visual_effects():
+def verify_effects():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Launch with WebGPU flags
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--enable-unsafe-webgpu",
+                "--use-gl=egl",
+                "--ignore-gpu-blocklist"
+            ]
+        )
         page = browser.new_page()
 
-        # Navigate to the game
-        page.goto("http://localhost:5173")
+        # Go to app
+        page.goto("http://localhost:3000")
 
-        # Wait for the canvas to be ready
-        page.wait_for_selector("#canvaswebgpu", state="attached")
+        # Wait for canvas to be present
+        page.wait_for_selector("#canvaswebgpu")
 
-        # Take a screenshot of the initial state
-        page.screenshot(path="verification_initial.png")
+        # Wait a bit for game to start and effects to show
+        # The game auto-starts? Controller.play() is called in constructor.
+        time.sleep(2)
 
-        # Simulate key presses to trigger effects
-        # Rotate and move to ensure game is active
-        page.keyboard.press("ArrowRight")
-        page.keyboard.press("ArrowRight")
+        # Simulate a key press to rotate (visual check)
         page.keyboard.press("ArrowUp")
+        time.sleep(0.5)
 
-        # Hard drop to trigger shake and shockwave
+        # Simulate hard drop to see particles
         page.keyboard.press("Space")
+        # Wait for particle effect
+        time.sleep(0.2)
 
-        # Wait briefly for effects to manifest (particles, shake)
-        page.wait_for_timeout(100)
-
-        # Take a screenshot of the effect
-        page.screenshot(path="verification_effect.png")
+        # Take screenshot
+        page.screenshot(path="verification_effects.png")
 
         browser.close()
 
 if __name__ == "__main__":
-    verify_visual_effects()
+    verify_effects()

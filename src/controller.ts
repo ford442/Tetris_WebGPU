@@ -253,7 +253,7 @@ export default class Controller {
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          this.viewWebGPU.onLock(currentX, ghostY);
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
@@ -316,7 +316,12 @@ export default class Controller {
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          const lastPos = this.game.lastDropPos;
+          if (lastPos) {
+              this.viewWebGPU.onLock(lastPos.x, lastPos.y);
+          } else {
+              this.viewWebGPU.onLock();
+          }
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
