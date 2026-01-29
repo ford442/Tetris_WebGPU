@@ -57,7 +57,7 @@ export const PostProcessShaders = () => {
                 // NEON BRICKLAYER: Use speed from params.w
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
-                let width = params.x; // e.g. 0.1
+                let width = params.x * 1.5; // JUICE: Wider shockwave
                 let strength = params.y; // e.g. 0.05
                 let diff = dist - radius;
 
@@ -128,9 +128,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.4; // Lower threshold for more juice
+            let bloomThreshold = 0.6; // JUICE: Higher threshold for targeted neon pop
             if (glowLum > bloomThreshold) {
-                 color += glow * 0.8; // Stronger addition
+                 color += glow * 1.5; // JUICE: Intense bloom
             }
 
             // High-pass boost for the core pixels
@@ -204,10 +204,10 @@ export const ParticleShaders = () => {
             let speed = length(particleVel);
             var vOffset = vec3<f32>(pos * particleScale, 0.0);
 
-            if (speed > 2.0) {
+            if (speed > 0.5) { // JUICE: Threshold lowered
                  let dir = normalize(particleVel);
                  let right = normalize(cross(dir, vec3<f32>(0.0, 0.0, 1.0)));
-                 let stretch = 1.0 + speed * 0.05;
+                 let stretch = 1.0 + speed * 0.1; // JUICE: More stretch
                  vOffset = (right * pos.x * particleScale * 0.5) + (dir * pos.y * particleScale * stretch);
             }
 
@@ -277,12 +277,11 @@ export const ParticleShaders = () => {
             let pulse = 0.8 + 0.2 * sin(uv.x * pulseSpeed);
 
             // Neon Flicker (JUICE)
-            // Use vertexIndex logic if passed, but we don't have it here.
-            // We can use gl_FragCoord or UV for randomness.
-            let flicker = 0.8 + 0.2 * sin(uniforms.time * 50.0 + uv.x * 10.0 + uv.y * 10.0);
+            // High frequency chaos for electrical look
+            let flicker = 0.7 + 0.3 * sin(uniforms.time * 80.0 + uv.x * 20.0);
 
             // Boost brightness for neon effect
-            return vec4<f32>(finalColor * 4.0 * lifeRatio, finalAlpha * pulse * flicker);
+            return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
         }
     `;
 
@@ -354,8 +353,8 @@ export const BackgroundShaders = () => {
           let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
-          // JUICE: More dramatic shift from Calm Blue to Chaotic Red
-          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.1, 0.0, 0.0), levelFactor);
+          // JUICE: More dramatic shift from Calm Blue to Chaotic Red/Purple
+          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.15, 0.0, 0.1), levelFactor);
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
@@ -375,7 +374,8 @@ export const BackgroundShaders = () => {
 
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
-            let warpSpeed = 1.0 + levelFactor * 8.0 + warpSurge;
+            // JUICE: Uncapped speed based on raw level
+            let warpSpeed = 1.0 + level * 0.5 + warpSurge * 2.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -476,8 +476,8 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.5";
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "2.5";
-  params.shininess = "256.0";
+  params.specularIntensity = "30.0";
+  params.shininess = "1000.0";
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
 
@@ -577,7 +577,9 @@ export const Shaders = () => {
 
                 // Global breathing for all blocks
                 let breath = sin(time * 2.0) * 0.1 + 0.1;
-                finalColor += vColor.rgb * breath;
+                // JUICE: Inner pulse driven by time
+                let innerPulse = sin(time * 5.0) * 0.1;
+                finalColor += vColor.rgb * (breath + innerPulse);
 
                 if (isTrace > 0.5) {
                     finalColor += vColor.rgb * pulsePos * 4.0;
@@ -585,14 +587,14 @@ export const Shaders = () => {
 
                 // Fresnel (Boosted for Glass look)
                 // JUICE: Softer falloff (2.5) for wider rim
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
                 // Iridescent fresnel
                 let irid = vec3<f32>(
                     sin(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     cos(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     1.0
                 );
-                finalColor += irid * fresnelTerm * 4.0; // JUICE: Stronger rim (3.0 -> 4.0)
+                finalColor += irid * fresnelTerm * 5.0; // JUICE: Stronger rim
 
                 // Edge Glow
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
