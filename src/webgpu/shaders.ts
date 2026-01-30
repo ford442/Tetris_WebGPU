@@ -88,8 +88,8 @@ export const PostProcessShaders = () => {
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
             // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.55) {
-                let bloom = (luminance - 0.55) * 4.0; // Lower threshold, stronger bloom
+            if (luminance > 0.5) {
+                let bloom = (luminance - 0.5) * 5.0; // Lower threshold, stronger bloom
                 color += color * bloom;
             }
 
@@ -417,9 +417,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "1.2"; // Even brighter ambient for neon look
+  params.ambientIntensity = "0.8"; // Lower ambient for higher contrast
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "20.0"; // Slightly reduced for smoother glass
+  params.specularIntensity = "30.0"; // Sharper specular for gem-like look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -519,8 +519,8 @@ export const Shaders = () => {
                         glitchOffset = sin(vPosition.y * 80.0) * 0.1;
                     }
 
-                    // Base Ghost Color (Cyan/Blue tint)
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
+                    // Base Ghost Color (White/Cyan tint, brighter)
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.8, 0.9, 1.0), 0.3);
 
                     // Add Digital Grid to Ghost
                     let gridScale = 10.0;
