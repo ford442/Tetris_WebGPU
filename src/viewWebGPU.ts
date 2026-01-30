@@ -942,7 +942,7 @@ export default class View {
     });
 
     this.particleComputeUniformBuffer = this.device.createBuffer({
-        size: 16, // dt(4), time(4), pad(8)
+        size: 48, // dt, time, swTimer, pad, swCenter(2), pad(2), swParams(4)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1007,11 +1007,6 @@ export default class View {
             depthWriteEnabled: false, // Particles don't write to depth
             depthCompare: 'less',
         }
-    });
-
-    this.particleComputeUniformBuffer = this.device.createBuffer({
-        size: 16, // dt(4), time(4), pad(8)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // ViewProjection for particles
@@ -1281,7 +1276,16 @@ export default class View {
     }
 
     // 2. Update uniforms (dt, time)
-    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, new Float32Array([dt, time]));
+    const swParams = this.visualEffects.getShockwaveParams();
+    const swCenter = this.visualEffects.shockwaveCenter;
+    const swTimer = this.visualEffects.shockwaveTimer;
+    // Layout: dt, time, swTimer, pad | swCenter(2), pad(2) | swParams(4)
+    const computeData = new Float32Array([
+        dt, time, swTimer, 0.0,
+        swCenter[0], swCenter[1], 0.0, 0.0,
+        swParams[0], swParams[1], swParams[2], swParams[3]
+    ]);
+    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, computeData);
 
     // 3. Dispatch Compute
     const commandEncoder = this.device.createCommandEncoder();
