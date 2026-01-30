@@ -335,8 +335,8 @@ export default class View {
           ctx.restore();
 
           // 4. Rim Highlight (Sharp White Edge)
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
+          ctx.lineWidth = 2.0;
           ctx.strokeRect(px + 1.5, py + 1.5, blockSize - 3, blockSize - 3);
 
           // 5. Bevel Reflection (Top Left Corner)
@@ -1035,8 +1035,8 @@ export default class View {
     let camZ = 75.0;
 
     // "Breathing" sway (Reduced for playability)
-    camX += Math.sin(time * 0.2) * 0.5;
-    camY += Math.cos(time * 0.3) * 0.25;
+    camX += Math.sin(time * 0.15) * 0.2;
+    camY += Math.cos(time * 0.2) * 0.1;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();
