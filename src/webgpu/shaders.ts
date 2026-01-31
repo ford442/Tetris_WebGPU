@@ -87,11 +87,17 @@ export const PostProcessShaders = () => {
             var color = vec3<f32>(r, g, b);
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
 
-            // Enhanced Bloom: smoother threshold and tint
-            if (luminance > 0.55) {
-                let bloom = (luminance - 0.55) * 4.0; // Lower threshold, stronger bloom
-                color += color * bloom;
-            }
+            // High Quality Soft Bloom
+            // Uses a smooth curve instead of a hard cut-off
+            let threshold = 0.5;
+            let bloomAmount = max(0.0, luminance - threshold);
+            // Smooth curve (pow) prevents harsh transitions
+            let bloom = pow(bloomAmount, 0.8) * 2.5;
+
+            // Add bloom with slight tint shift for richness
+            color += color * bloom;
+            // Add subtle blue glow to shadows for contrast
+            color += vec3<f32>(0.0, 0.05, 0.1) * bloom * 0.5;
 
             // Vignette darken
             let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
@@ -503,48 +509,50 @@ export const Shaders = () => {
                     let uvEdgeDistY = abs(vUV.y - 0.5) * 2.0;
                     let edge = max(uvEdgeDistX, uvEdgeDistY);
 
-                    // Sharp glowing edge
-                    let wire = smoothstep(0.80, 0.95, edge);
+                    // Sharp glowing edge - Increased thickness
+                    let wire = smoothstep(0.75, 0.95, edge);
 
                     // Hologram Effect
                     // Vertical sine wave for wavering transparency
-                    let hologram = sin(vPosition.y * 50.0 + time * 10.0) * 0.5 + 0.5;
+                    let hologram = sin(vPosition.y * 40.0 + time * 5.0) * 0.5 + 0.5;
 
-                    // Vertical "Landing Beam"
-                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 4.0);
+                    // Vertical "Landing Beam" - Enhanced Visibility
+                    // Wider beam
+                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 2.5);
 
-                    // Glitch displacement
+                    // Glitch displacement - Reduced frequency for stability
                     var glitchOffset = 0.0;
-                    if (fract(time * 5.0) > 0.9) {
-                        glitchOffset = sin(vPosition.y * 80.0) * 0.1;
+                    if (fract(time * 2.0) > 0.95) {
+                        glitchOffset = sin(vPosition.y * 50.0) * 0.05;
                     }
 
                     // Base Ghost Color (Cyan/Blue tint)
-                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.5);
+                    let ghostBase = mix(vColor.rgb, vec3<f32>(0.0, 1.0, 1.0), 0.7); // More color
 
                     // Add Digital Grid to Ghost
                     let gridScale = 10.0;
                     let gridX = abs(fract(vPosition.x * gridScale) - 0.5);
                     let gridY = abs(fract(vPosition.y * gridScale) - 0.5);
-                    let grid = max(step(0.45, gridX), step(0.45, gridY));
+                    let grid = max(step(0.48, gridX), step(0.48, gridY)); // Thinner grid lines
 
-                    var finalGhost = ghostBase * wire * 8.0; // Brighter edge
-                    finalGhost += ghostBase * 0.5 * hologram; // Hologram fill
-                    finalGhost += ghostBase * 0.5 * grid; // Add grid
-                    finalGhost += vec3<f32>(1.0) * beam * 0.5; // Landing beam
-                    finalGhost += ghostBase * 0.4; // Base fill for better visibility
+                    var finalGhost = ghostBase * wire * 12.0; // Much brighter edge
+                    finalGhost += ghostBase * 0.3 * hologram; // Hologram fill
+                    finalGhost += ghostBase * 0.3 * grid; // Add grid
+                    finalGhost += vec3<f32>(1.0) * beam * 1.5; // Strong Landing beam (White)
+                    finalGhost += ghostBase * 0.2; // Base fill
 
                     // Pulse opacity with digital flicker
-                    let pulse = 0.6 + 0.4 * sin(time * 15.0); // Faster pulse, higher base opacity
-                    let flicker = select(1.0, 0.8, sin(time * 60.0) > 0.0); // High frequency flicker
+                    let pulse = 0.7 + 0.3 * sin(time * 10.0); // Slower, deeper pulse
+                    let flicker = select(1.0, 0.9, sin(time * 60.0) > 0.0);
 
                     // Glitch flash
                     let noise = fract(sin(dot(vUV + time + glitchOffset, vec2<f32>(12.9, 78.2))) * 43758.5);
-                    if (noise > 0.97) {
+                    if (noise > 0.98) { // Less frequent noise
                         finalGhost = vec3<f32>(1.0);
                     }
 
-                    return vec4<f32>(finalGhost, pulse * 0.6 * flicker);
+                    // Higher overall opacity for visibility
+                    return vec4<f32>(finalGhost, pulse * 0.8 * flicker);
                 }
 
 
@@ -565,7 +573,8 @@ export const Shaders = () => {
 
                 // 1. Inner Core Glow (Diamond shape)
                 let centerDist = length(vUV - 0.5);
-                let coreGlow = smoothstep(0.5, 0.0, centerDist); // Brightest at center
+                // Sharper, brighter core (Neon Tube look)
+                let coreGlow = pow(smoothstep(0.55, 0.0, centerDist), 1.5) * 1.5;
 
                 // 2. Edge/Bevel Highlight
                 let uvEdgeDistX = abs(vUV.x - 0.5) * 2.0;
@@ -589,14 +598,14 @@ export const Shaders = () => {
                 baseColor += vColor.rgb * innerPulse;
 
                 // Add inner glow
-                baseColor += vColor.rgb * coreGlow * 0.8;
+                baseColor += vColor.rgb * coreGlow * 1.2; // Boosted core
 
                 // Apply lighting
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * specular;
 
                 // Add Bevel
                 finalColor += vec3<f32>(1.0) * bevel * 0.6;
-                finalColor += vec3<f32>(1.0) * rim * 0.8; // Sharp white edge
+                finalColor += vec3<f32>(1.0) * rim * 1.5; // Boosted Rim for better shape definition
 
                 // --- Chromatic Dispersion / Refraction ---
                 // Approximate dispersion by calculating Fresnel with slight offsets for R, G, B
@@ -621,9 +630,10 @@ export const Shaders = () => {
                     let warningColor = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0), lockPercent * flash);
 
                     // Strength grows with lockPercent
-                    let strength = smoothstep(0.0, 1.0, lockPercent) * flash;
+                    // Aggressive warning near 100%
+                    let strength = smoothstep(0.4, 1.0, lockPercent) * flash * 1.2;
 
-                    finalColor = mix(finalColor, warningColor, strength * 1.0); // Stronger warning override
+                    finalColor = mix(finalColor, warningColor, min(strength, 1.0));
                 }
 
                 // --- Flash Intensity (Impact) ---
