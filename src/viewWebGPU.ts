@@ -335,17 +335,18 @@ export default class View {
           ctx.restore();
 
           // 4. Rim Highlight (Sharp White Edge)
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(px + 1.5, py + 1.5, blockSize - 3, blockSize - 3);
+          // Boosted for neon look
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
+          ctx.lineWidth = 2.0;
+          ctx.strokeRect(px + 1.0, py + 1.0, blockSize - 2, blockSize - 2);
 
           // 5. Bevel Reflection (Top Left Corner)
           ctx.beginPath();
           ctx.moveTo(px + 2, py + blockSize - 2);
           ctx.lineTo(px + 2, py + 2);
           ctx.lineTo(px + blockSize - 2, py + 2);
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.8)`;
-          ctx.lineWidth = 1.0;
+          ctx.strokeStyle = `rgba(255, 255, 255, 1.0)`; // Pure white
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
       });
