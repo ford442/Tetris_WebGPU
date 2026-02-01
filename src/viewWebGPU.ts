@@ -1036,8 +1036,8 @@ export default class View {
     let camZ = 75.0;
 
     // "Breathing" sway (Reduced for playability)
-    camX += Math.sin(time * 0.2) * 0.5;
-    camY += Math.cos(time * 0.3) * 0.25;
+    camX += Math.sin(time * 0.15) * 0.2;
+    camY += Math.cos(time * 0.2) * 0.1;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();

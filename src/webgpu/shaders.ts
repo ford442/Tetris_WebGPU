@@ -423,9 +423,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "1.2"; // Even brighter ambient for neon look
+  params.ambientIntensity = "0.8"; // Lower ambient for higher contrast
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "20.0"; // Slightly reduced for smoother glass
+  params.specularIntensity = "30.0"; // Sharper specular for gem-like look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
