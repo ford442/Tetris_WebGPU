@@ -287,14 +287,14 @@ export const GridShader = () => {
              let fade = smoothstep(0.0, 0.1, yNorm) * (1.0 - smoothstep(0.9, 1.0, yNorm));
 
              // 4. Floor Glow (Enhanced Retrowave)
-             let floorGlow = smoothstep(0.7, 1.0, (vPos.y + 20.0) / 30.0); // Wider glow
+             let floorGlow = smoothstep(0.5, 1.0, (vPos.y + 20.0) / 30.0); // Wider glow
              // Color shift for floor
              let floorColor = mix(vec3<f32>(0.0, 0.5, 1.0), vec3<f32>(1.0, 0.0, 1.0), sin(time * 0.5) * 0.5 + 0.5);
              color += floorColor * floorGlow * 1.5;
 
              // 5. Beat Pulse (Grid lines pulse)
              let beat = sin(time * 3.0) * 0.5 + 0.5;
-             color += vec3<f32>(0.2) * beat * fade;
+             color += vec3<f32>(0.4) * beat * fade;
 
              // Combine
              let alpha = (0.1 + scan * 1.5 + scan2 * 0.8 + flow * 0.6) * fade;
@@ -423,9 +423,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.8"; // Lower ambient for higher contrast
+  params.ambientIntensity = "0.4"; // Lower ambient for higher contrast
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "30.0"; // Sharper specular for gem-like look
+  params.specularIntensity = "50.0"; // Sharper specular for gem-like look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -510,7 +510,7 @@ export const Shaders = () => {
                     let edge = max(uvEdgeDistX, uvEdgeDistY);
 
                     // Sharp glowing edge - Increased thickness
-                    let wire = smoothstep(0.75, 0.95, edge);
+                    let wire = smoothstep(0.60, 0.95, edge);
 
                     // Hologram Effect
                     // Vertical sine wave for wavering transparency
@@ -538,7 +538,7 @@ export const Shaders = () => {
                     var finalGhost = ghostBase * wire * 12.0; // Much brighter edge
                     finalGhost += ghostBase * 0.3 * hologram; // Hologram fill
                     finalGhost += ghostBase * 0.3 * grid; // Add grid
-                    finalGhost += vec3<f32>(1.0) * beam * 1.5; // Strong Landing beam (White)
+                    finalGhost += vec3<f32>(1.0) * beam * 2.0; // Strong Landing beam (White)
                     finalGhost += ghostBase * 0.2; // Base fill
 
                     // Pulse opacity with digital flicker
@@ -574,7 +574,7 @@ export const Shaders = () => {
                 // 1. Inner Core Glow (Diamond shape)
                 let centerDist = length(vUV - 0.5);
                 // Sharper, brighter core (Neon Tube look)
-                let coreGlow = pow(smoothstep(0.55, 0.0, centerDist), 1.5) * 1.5;
+                let coreGlow = pow(smoothstep(0.55, 0.0, centerDist), 1.5) * 2.0;
 
                 // 2. Edge/Bevel Highlight
                 let uvEdgeDistX = abs(vUV.x - 0.5) * 2.0;
@@ -600,8 +600,11 @@ export const Shaders = () => {
                 // Add inner glow
                 baseColor += vColor.rgb * coreGlow * 1.2; // Boosted core
 
+                // Emissive Term for Neon Look
+                let emissive = baseColor * 0.3;
+
                 // Apply lighting
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * specular;
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * specular + emissive;
 
                 // Add Bevel
                 finalColor += vec3<f32>(1.0) * bevel * 0.6;
