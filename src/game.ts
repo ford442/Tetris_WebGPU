@@ -39,6 +39,7 @@ export default class Game {
 
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
+  // NEON BRICKLAYER: Verified Infinity Mechanics (15 resets)
   readonly maxLockResets: number = 15;
 
   // Visual Effects

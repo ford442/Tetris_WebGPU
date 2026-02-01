@@ -77,7 +77,8 @@ export const PostProcessShaders = () => {
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             // Subtle permanent aberration at edges for arcade feel
-            let vignetteAberration = pow(distFromCenter, 3.0) * 0.015;
+            // JUICE: Increased lens distortion at edges
+            let vignetteAberration = pow(distFromCenter, 2.5) * 0.02;
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -98,9 +99,12 @@ export const PostProcessShaders = () => {
 
             // Chromatic Aberration with Glitch Offset
             // R and B channels get offset by the glitch wave in opposite directions
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, 0.0)).r;
+            // JUICE: Vertical aberration added for lens effect (scaled by UV y)
+            let vertAberration = totalAberration * (uv.y - 0.5) * 0.2;
+
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, vertAberration)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, vertAberration)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (cheap but juicy)
@@ -108,7 +112,8 @@ export const PostProcessShaders = () => {
 
             // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
             // Sample 8 points for a smoother, wider halo
-            let offset = 0.003 * (1.0 + levelStress * 0.5);
+            // JUICE: Wider spread
+            let offset = 0.005 * (1.0 + levelStress * 0.5);
             let offset2 = offset * 2.0; // Wider ring
             var glow = vec3<f32>(0.0);
 
@@ -128,9 +133,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.6; // JUICE: Higher threshold for targeted neon pop
+            let bloomThreshold = 0.5; // JUICE: Lower threshold (0.6 -> 0.5) captures more neon
             if (glowLum > bloomThreshold) {
-                 color += glow * 1.5; // JUICE: Intense bloom
+                 color += glow * 2.0; // JUICE: More intense bloom (1.5 -> 2.0)
             }
 
             // High-pass boost for the core pixels
@@ -518,6 +523,7 @@ export const Shaders = () => {
                 time : f32,
                 useGlitch: f32,
                 lockPercent: f32, // Offset 56
+                level: f32,       // Offset 60
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
@@ -531,10 +537,17 @@ export const Shaders = () => {
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
+                // Level Evolution
+                let level = uniforms.level;
+                let levelFactor = min(level * 0.1, 1.0); // 0 to 1 over 10 levels
+
                 // Lighting
                 let diffuse:f32 = max(dot(N, L), 0.0);
-                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess});
-                specular += pow(max(dot(N, H), 0.0), 32.0) * 0.2;
+
+                // JUICE: Sharpness increases with level (Glassier)
+                let shininessBoost = 1.0 + levelFactor * 2.0;
+                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess} * shininessBoost);
+                specular += pow(max(dot(N, H), 0.0), 32.0 * shininessBoost) * 0.2;
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- TEXTURE SAMPLING ---
@@ -588,18 +601,27 @@ export const Shaders = () => {
                 // Fresnel (Boosted for Glass look)
                 // JUICE: Softer falloff (2.5) for wider rim
                 let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-                // Iridescent fresnel
-                let irid = vec3<f32>(
+
+                // NEON BRICKLAYER: Diamond Refraction (Chromatic Shift) at high levels
+                var irid = vec3<f32>(
                     sin(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     cos(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
                     1.0
                 );
-                finalColor += irid * fresnelTerm * 5.0; // JUICE: Stronger rim
+
+                if (levelFactor > 0.5) {
+                    // Split channels based on viewing angle
+                    let shift = levelFactor * 2.0;
+                    irid.r = sin(fresnelTerm * (10.0 + shift) + time) * 0.5 + 0.5;
+                    irid.b = cos(fresnelTerm * (10.0 - shift) + time) * 0.5 + 0.5;
+                }
+
+                finalColor += irid * fresnelTerm * (5.0 + levelFactor * 3.0); // JUICE: Stronger rim
 
                 // Edge Glow
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
                 let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
-                finalColor += vec3<f32>(1.0) * edgeGlow * 1.0;
+                finalColor += vec3<f32>(1.0) * edgeGlow * (1.0 + levelFactor);
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
@@ -608,7 +630,7 @@ export const Shaders = () => {
                      let tension = smoothstep(0.0, 1.0, lockPercent);
 
                      // Heartbeat rhythm: faster as it gets closer to 1.0
-                     let beatSpeed = 4.0 + tension * 40.0;
+                     let beatSpeed = 4.0 + tension * 60.0; // JUICE: Even faster panic mode
                      let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
                      let sharpPulse = pow(pulse, 2.0 + tension * 4.0); // Sharper as it gets critical
 
