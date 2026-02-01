@@ -17,7 +17,7 @@ export interface Particle {
 
 export class ParticleSystem {
     particles: Particle[] = [];
-    maxParticles: number = 8000; // Increased count for GPU
+    maxParticles: number = 5000; // Capped at 5000 for performance (Neon Bricklayer)
 
     // Ring Buffer strategy for emissions
     private emitIndex: number = 0;
