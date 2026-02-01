@@ -408,15 +408,15 @@ export default class View {
 
               if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 500; // Massive particle burst (Juice!)
-                  speed = 40.0;
+                  count = 800; // Massive particle burst (Juice!)
+                  speed = 50.0;
                   if (isMini) {
-                    count = 200;
+                    count = 300;
                     speed = 30.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
-                  count = 300; // Bigger burst
+                  count = 500; // Bigger burst
                   speed = 35.0;
               } else {
                    // Random cool colors
@@ -479,7 +479,7 @@ export default class View {
           const worldY = r * -2.2;
           // More particles per block, electric blue trail
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 40, [0.5, 0.9, 1.0, 1.0]);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 60, [0.5, 0.9, 1.0, 1.0]);
       }
 
       const impactY = y * -2.2;
@@ -1036,8 +1036,8 @@ export default class View {
     let camZ = 75.0;
 
     // "Breathing" sway (Reduced for playability)
-    camX += Math.sin(time * 0.15) * 0.2;
-    camY += Math.cos(time * 0.2) * 0.1;
+    camX += Math.sin(time * 0.15) * 0.05;
+    camY += Math.cos(time * 0.2) * 0.03;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();
