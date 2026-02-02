@@ -376,22 +376,39 @@ export default class View {
       }, 1200);
   }
 
-  onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false) {
+  onLineClear(lines: number[], isTSpin: boolean = false, isMini: boolean = false, isAllClear: boolean = false) {
       this.visualEffects.triggerFlash(0.6); // Strong flash
       this.flashIntensity = 0.8; // Screen flash
 
       const isTetris = lines.length === 4;
       let shakeIntensity = 4.0;
 
-      if (isTSpin) {
+      if (isAllClear) {
+           this.showFloatingText("ALL CLEAR", "PERFECT!", "#0ff"); // Cyan
+           shakeIntensity = 10.0;
+           this.visualEffects.triggerFlash(1.0); // Full flash
+
+           // Massive radial burst of rainbows
+           const centerX = 4.5 * 2.2;
+           const centerY = -10.0 * 2.2;
+
+           for(let i=0; i<360; i+=5) {
+               const rad = i * (Math.PI / 180);
+               const r = Math.sin(rad) * 0.5 + 0.5;
+               const g = Math.sin(rad + 2.09) * 0.5 + 0.5; // 2.09 is approx 2*PI/3
+               const b = Math.sin(rad + 4.18) * 0.5 + 0.5; // 4.18 is approx 4*PI/3
+
+               this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, rad, 60.0 + Math.random() * 20.0, [r, g, b, 1.0]);
+           }
+           // Central explosion
+           this.particleSystem.emitParticles(centerX, centerY, 0.0, 1000, [1.0, 1.0, 1.0, 1.0]);
+      } else if (isTSpin) {
            this.showFloatingText("T-SPIN", isMini ? "MINI" : "DOUBLE", "#f0f"); // Magenta
            shakeIntensity = 8.0;
       } else if (isTetris) {
            this.showFloatingText("TETRIS", "", "#fd0"); // Gold
            shakeIntensity = 8.0;
       }
-
-      if (isTetris || isTSpin) shakeIntensity = 8.0; // Massive shake for big clears
 
       this.visualEffects.triggerShake(shakeIntensity, 0.8);
 
@@ -406,7 +423,13 @@ export default class View {
               let count = 80;
               let speed = 18.0;
 
-              if (isTSpin) {
+              if (isAllClear) {
+                  // Handled above, but add line clear particles too?
+                  // Maybe subtler
+                  color = [1.0, 1.0, 1.0, 1.0];
+                  count = 100;
+                  speed = 40.0;
+              } else if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
                   count = 800; // Massive particle burst (Juice!)
                   speed = 50.0;
@@ -1035,9 +1058,9 @@ export default class View {
     let camY = -20.0;
     let camZ = 75.0;
 
-    // "Breathing" sway (Reduced for playability)
-    camX += Math.sin(time * 0.15) * 0.05;
-    camY += Math.cos(time * 0.2) * 0.03;
+    // "Breathing" sway (Greatly reduced for playability)
+    camX += Math.sin(time * 0.1) * 0.02;
+    camY += Math.cos(time * 0.15) * 0.01;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();

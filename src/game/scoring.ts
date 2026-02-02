@@ -45,7 +45,7 @@ export class ScoringSystem {
     return clearedLines;
   }
 
-  updateScore(linesCleared: number, tSpin: boolean = false, isMini: boolean = false): void {
+  updateScore(linesCleared: number, tSpin: boolean = false, isMini: boolean = false, isAllClear: boolean = false): void {
     if (linesCleared === 0) {
       this.combo = -1;
       return;
@@ -95,6 +95,11 @@ export class ScoringSystem {
     if (this.combo > 0) {
       moveScore += 50 * this.combo * level;
       console.log(`Combo ${this.combo}!`);
+    }
+
+    if (isAllClear) {
+        moveScore += 2000 * level;
+        console.log("All Clear!");
     }
 
     this.lines += linesCleared;

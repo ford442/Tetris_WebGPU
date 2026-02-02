@@ -177,8 +177,15 @@ export default class Game {
     return this.collisionDetector.getGhostY(this.activPiece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } {
-    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false };
+  isPlayfieldEmpty(): boolean {
+    for (let i = 0; i < this.playfield.length; i++) {
+        if (this.playfield[i] !== 0) return false;
+    }
+    return true;
+  }
+
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } {
+    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false, isAllClear: false };
     const ghostY = this.getGhostY();
     this.activPiece.y = ghostY;
 
@@ -204,7 +211,8 @@ export default class Game {
 
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini);
+        if (this.isPlayfieldEmpty()) result.isAllClear = true;
+        this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini, result.isAllClear);
         result.linesCleared = linesScore;
     }
     this.updatePieces();
@@ -229,8 +237,8 @@ export default class Game {
   }
 
   // Called every frame
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } {
-      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false };
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } {
+      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false, isAllClear: false };
       if (this.gameOver) return result;
 
       // Check if piece is on the ground
@@ -252,7 +260,8 @@ export default class Game {
 
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
-                  this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini);
+                  if (this.isPlayfieldEmpty()) result.isAllClear = true;
+                  this.scoringSystem.updateScore(linesScore.length, this.isTSpin, this.isMini, result.isAllClear);
                   result.linesCleared = linesScore;
               }
               this.updatePieces();
