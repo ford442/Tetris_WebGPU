@@ -112,9 +112,9 @@ export const PostProcessShaders = () => {
 
             // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
             // Sample 8 points for a smoother, wider halo
-            // JUICE: Wider spread
-            let offset = 0.005 * (1.0 + levelStress * 0.5);
-            let offset2 = offset * 2.0; // Wider ring
+            // JUICE: Wider spread (Increased base offset)
+            let offset = 0.006 * (1.0 + levelStress * 0.8);
+            let offset2 = offset * 2.2; // Even wider outer ring
             var glow = vec3<f32>(0.0);
 
             // Inner Ring
@@ -133,9 +133,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.5; // JUICE: Lower threshold (0.6 -> 0.5) captures more neon
+            let bloomThreshold = 0.45; // JUICE: Lower threshold (0.5 -> 0.45) for more glow
             if (glowLum > bloomThreshold) {
-                 color += glow * 2.0; // JUICE: More intense bloom (1.5 -> 2.0)
+                 color += glow * 2.5; // JUICE: More intense bloom (2.0 -> 2.5)
             }
 
             // High-pass boost for the core pixels
@@ -358,15 +358,16 @@ export const BackgroundShaders = () => {
           let levelFactor = min(level * 0.125, 1.0);
 
           // Base deep space color - shifts to red as level increases
-          // JUICE: More dramatic shift from Calm Blue to Chaotic Red/Purple
-          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.15, 0.0, 0.1), levelFactor);
+          // NEON BRICKLAYER: More dramatic shift from Calm Blue to Chaotic Red/Purple
+          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.2, 0.0, 0.1), levelFactor);
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
           if (levelFactor > 0.0 || warpSurge > 0.0) {
               let center = vec2<f32>(0.5, 0.5);
               let dist = distance(uv, center);
-              let warpStrength = (levelFactor * 0.2 + warpSurge * 0.1) * sin(uniforms.time * 2.0);
+              // JUICE: Increased warp strength for higher levels
+              let warpStrength = (levelFactor * 0.3 + warpSurge * 0.15) * sin(uniforms.time * 2.0);
               uv -= normalize(uv - center) * warpStrength * dist;
           }
 
@@ -389,7 +390,9 @@ export const BackgroundShaders = () => {
               cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
             );
 
-            let gridUV = (uv - 0.5) * scale + perspectiveOffset;
+            // NEON BRICKLAYER: Grid Distortion from Warp Surge
+            let surgeDistortion = sin(uv.y * 20.0 + time * 10.0) * warpSurge * 0.05;
+            let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
             // Smooth grid lines that get thinner with distance
             let lineWidth = 0.02 / scale;
@@ -590,8 +593,9 @@ export const Shaders = () => {
 
                 // Global breathing for all blocks
                 let breath = sin(time * 2.0) * 0.1 + 0.1;
-                // JUICE: Inner pulse driven by time
-                let innerPulse = sin(time * 5.0) * 0.1;
+                // JUICE: Inner pulse frequency scales with level (Heartbeat)
+                let pulseFreq = 5.0 + level * 0.5;
+                let innerPulse = sin(time * pulseFreq) * (0.1 + level * 0.01);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 if (isTrace > 0.5) {
@@ -599,8 +603,8 @@ export const Shaders = () => {
                 }
 
                 // Fresnel (Boosted for Glass look)
-                // JUICE: Softer falloff (2.5) for wider rim
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+                // JUICE: Sharper falloff (5.0) for distinct neon rim
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 5.0);
 
                 // NEON BRICKLAYER: Diamond Refraction (Chromatic Shift) at high levels
                 var irid = vec3<f32>(
