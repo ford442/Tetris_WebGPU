@@ -425,7 +425,7 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.4"; // Lower ambient for higher contrast
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "50.0"; // Sharper specular for gem-like look
+  params.specularIntensity = "70.0"; // Sharper specular for gem-like look
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -510,7 +510,7 @@ export const Shaders = () => {
                     let edge = max(uvEdgeDistX, uvEdgeDistY);
 
                     // Sharp glowing edge - Increased thickness
-                    let wire = smoothstep(0.60, 0.95, edge);
+                    let wire = smoothstep(0.80, 0.98, edge);
 
                     // Hologram Effect
                     // Vertical sine wave for wavering transparency
@@ -518,11 +518,11 @@ export const Shaders = () => {
 
                     // Vertical "Landing Beam" - Enhanced Visibility
                     // Wider beam
-                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 2.5);
+                    let beam = max(0.0, 1.0 - abs(vPosition.x - round(vPosition.x)) * 1.5);
 
                     // Glitch displacement - Reduced frequency for stability
                     var glitchOffset = 0.0;
-                    if (fract(time * 2.0) > 0.95) {
+                    if (fract(time * 0.5) > 0.95) {
                         glitchOffset = sin(vPosition.y * 50.0) * 0.05;
                     }
 
@@ -535,10 +535,10 @@ export const Shaders = () => {
                     let gridY = abs(fract(vPosition.y * gridScale) - 0.5);
                     let grid = max(step(0.48, gridX), step(0.48, gridY)); // Thinner grid lines
 
-                    var finalGhost = ghostBase * wire * 12.0; // Much brighter edge
+                    var finalGhost = ghostBase * wire * 15.0; // Much brighter edge
                     finalGhost += ghostBase * 0.3 * hologram; // Hologram fill
                     finalGhost += ghostBase * 0.3 * grid; // Add grid
-                    finalGhost += vec3<f32>(1.0) * beam * 2.0; // Strong Landing beam (White)
+                    finalGhost += vec3<f32>(1.0) * beam * 2.5; // Strong Landing beam (White)
                     finalGhost += ghostBase * 0.2; // Base fill
 
                     // Pulse opacity with digital flicker
@@ -574,7 +574,7 @@ export const Shaders = () => {
                 // 1. Inner Core Glow (Diamond shape)
                 let centerDist = length(vUV - 0.5);
                 // Sharper, brighter core (Neon Tube look)
-                let coreGlow = pow(smoothstep(0.55, 0.0, centerDist), 1.5) * 2.0;
+                let coreGlow = pow(smoothstep(0.6, 0.0, centerDist), 2.0) * 2.5;
 
                 // 2. Edge/Bevel Highlight
                 let uvEdgeDistX = abs(vUV.x - 0.5) * 2.0;
@@ -601,7 +601,7 @@ export const Shaders = () => {
                 baseColor += vColor.rgb * coreGlow * 1.2; // Boosted core
 
                 // Emissive Term for Neon Look
-                let emissive = baseColor * 0.3;
+                let emissive = baseColor * 0.4;
 
                 // Apply lighting
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * specular + emissive;

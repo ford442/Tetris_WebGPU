@@ -250,7 +250,7 @@ export default class Controller {
 
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini, result.isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock(currentX, ghostY);
@@ -313,7 +313,7 @@ export default class Controller {
 
       if (result.linesCleared.length > 0) {
           this.soundManager.playLineClear(result.linesCleared.length);
-          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini);
+          this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, result.mini, result.isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
           const lastPos = this.game.lastDropPos;
