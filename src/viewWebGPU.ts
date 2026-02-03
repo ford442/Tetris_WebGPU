@@ -424,23 +424,22 @@ export default class View {
               let speed = 18.0;
 
               if (isAllClear) {
-                  // Handled above, but add line clear particles too?
-                  // Maybe subtler
+                  // Handled above, but add line clear particles too
                   color = [1.0, 1.0, 1.0, 1.0];
-                  count = 100;
-                  speed = 40.0;
+                  count = 50;
+                  speed = 45.0;
               } else if (isTSpin) {
                   color = [1.0, 0.0, 1.0, 1.0]; // Magenta for T-Spin
-                  count = 800; // Massive particle burst (Juice!)
-                  speed = 50.0;
+                  count = 60; // High impact but optimized
+                  speed = 55.0;
                   if (isMini) {
-                    count = 300;
-                    speed = 30.0;
+                    count = 30;
+                    speed = 35.0;
                   }
               } else if (isTetris) {
                   color = [1.0, 0.85, 0.0, 1.0]; // Bright Gold for Tetris
-                  count = 500; // Bigger burst
-                  speed = 35.0;
+                  count = 40;
+                  speed = 40.0;
               } else {
                    // Random cool colors
                    const rand = Math.random();
@@ -448,7 +447,7 @@ export default class View {
                    else if (rand < 0.66) color = [0.6, 0.0, 1.0, 1.0];
                    else color = [0.0, 1.0, 0.8, 1.0];
 
-                  count = 120; // More particles for standard clears
+                  count = 15; // Optimized for standard clears
                   speed = 25.0;
               }
 
@@ -1059,8 +1058,8 @@ export default class View {
     let camZ = 75.0;
 
     // "Breathing" sway (Greatly reduced for playability)
-    camX += Math.sin(time * 0.1) * 0.02;
-    camY += Math.cos(time * 0.15) * 0.01;
+    camX += Math.sin(time * 0.1) * 0.005;
+    camY += Math.cos(time * 0.15) * 0.0025;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();

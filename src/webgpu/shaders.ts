@@ -38,6 +38,16 @@ export const PostProcessShaders = () => {
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             var finalUV = uv;
 
+            // --- Lens Distortion (CRT Barrel) ---
+            let distortionStrength = 0.1;
+            let uvCenter = vec2<f32>(0.5, 0.5);
+            let dc = finalUV - uvCenter;
+            let distSq = dot(dc, dc);
+
+            let lens = 1.0 + distSq * distortionStrength;
+
+            finalUV = uvCenter + dc * lens;
+
             // Shockwave
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
@@ -103,8 +113,8 @@ export const PostProcessShaders = () => {
             let vignette = 1.0 - smoothstep(0.5, 1.5, distFromCenter);
             color *= vignette;
 
-            // Scanline effect (subtle)
-            let scanline = sin(uv.y * 1200.0) * 0.03;
+            // Scanline effect (CRT)
+            let scanline = sin(finalUV.y * 800.0) * 0.04;
             color -= vec3<f32>(scanline);
 
             // Noise (Film grain)
@@ -113,6 +123,10 @@ export const PostProcessShaders = () => {
 
             // Flash Effect
             color += vec3<f32>(uniforms.flashIntensity);
+
+            // CRT Border Mask
+            let inBounds = (finalUV.x >= 0.0) && (finalUV.x <= 1.0) && (finalUV.y >= 0.0) && (finalUV.y <= 1.0);
+            color *= f32(inBounds);
 
             return vec4<f32>(color, a);
         }
@@ -423,9 +437,9 @@ export const Shaders = () => {
   let params: any = {};
   // define default input values:
   params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.4"; // Lower ambient for higher contrast
+  params.ambientIntensity = "0.5"; // Slightly higher for vibrancy
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "70.0"; // Sharper specular for gem-like look
+  params.specularIntensity = "90.0"; // Very sharp specular
   params.shininess = "1000.0"; // Razor sharp
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -593,15 +607,15 @@ export const Shaders = () => {
                 // --- Color Composition ---
                 var baseColor = vColor.rgb;
 
-                // Add inner pulse
-                let innerPulse = sin(time * 2.0) * 0.1 + 0.1;
+                // Add inner pulse (Heartbeat)
+                let innerPulse = sin(time * 3.0) * 0.2 + 0.2;
                 baseColor += vColor.rgb * innerPulse;
 
-                // Add inner glow
-                baseColor += vColor.rgb * coreGlow * 1.2; // Boosted core
+                // Add inner glow (Neon Core)
+                baseColor += vColor.rgb * coreGlow * 1.5; // Stronger core
 
                 // Emissive Term for Neon Look
-                let emissive = baseColor * 0.4;
+                let emissive = baseColor * 0.6; // Higher emissive
 
                 // Apply lighting
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.8) + vec3<f32>${params.specularColor} * specular + emissive;
@@ -611,16 +625,20 @@ export const Shaders = () => {
                 finalColor += vec3<f32>(1.0) * rim * 1.5; // Boosted Rim for better shape definition
 
                 // --- Chromatic Dispersion / Refraction ---
-                // Approximate dispersion by calculating Fresnel with slight offsets for R, G, B
+                // Diamond-like dispersion
                 let viewAngle = max(dot(N, V), 0.0);
-                let fR = pow(1.0 - viewAngle, 3.0);
-                let fG = pow(1.0 - viewAngle, 3.1); // Slightly different power
-                let fB = pow(1.0 - viewAngle, 3.2);
+                // Wider spread for rainbow edges
+                let fR = pow(1.0 - viewAngle, 2.5);
+                let fG = pow(1.0 - viewAngle, 2.6);
+                let fB = pow(1.0 - viewAngle, 2.7);
 
                 let dispersionColor = vec3<f32>(fR, fG, fB);
 
-                // Add pure white rim from average fresnel
-                finalColor += dispersionColor * 2.0;
+                // Add refractive sparkle based on view angle
+                let sparkle = pow(max(dot(reflect(-L, N), V), 0.0), 30.0) * 2.0;
+
+                finalColor += dispersionColor * 2.5;
+                finalColor += vec3<f32>(sparkle);
 
                 // --- Lock Warning (Critical Tension) ---
                 let lockPercent = uniforms.lockPercent;
