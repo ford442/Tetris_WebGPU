@@ -41,7 +41,14 @@ export const PostProcessShaders = () => {
 
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            var finalUV = uv;
+            // Lens Distortion (Barrel)
+            let centeredUV = uv - 0.5;
+            let distSq = dot(centeredUV, centeredUV);
+            let distortStrength = 0.1; // K factor
+            let distortedUV = 0.5 + centeredUV * (1.0 + distSq * distortStrength);
+
+            var finalUV = distortedUV;
+            let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
             // Shockwave
             let center = uniforms.shockwaveCenter;
@@ -157,6 +164,14 @@ export const PostProcessShaders = () => {
                 color = mix(color, invert, clamp(warpSurge * 0.8, 0.0, 0.8));
             }
 
+            // Scanlines
+            let scanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
+            color -= vec3<f32>(scanline);
+
+            if (!inBounds) {
+                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+            }
+
             return vec4<f32>(color, a);
         }
     `;
@@ -229,6 +244,12 @@ export const ParticleShaders = () => {
     `;
 
     const fragment = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            time : f32,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
         @fragment
         fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>, @location(2) lifeRatio : f32) -> @location(0) vec4<f32> {
             let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
@@ -603,24 +624,28 @@ export const Shaders = () => {
                 }
 
                 // Fresnel (Boosted for Glass look)
-                // JUICE: Sharper falloff (5.0) for distinct neon rim
-                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+                // JUICE: Sharper falloff for distinct neon rim
+                let baseFresnel = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+                let fresnelTerm = baseFresnel; // Alias for legacy code
 
-                // NEON BRICKLAYER: Diamond Refraction (Chromatic Shift) at high levels
-                var irid = vec3<f32>(
-                    sin(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
-                    cos(fresnelTerm * 10.0 + time) * 0.5 + 0.5,
-                    1.0
-                );
+                // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
+                // Shift the fresnel curve for each channel based on level
+                let dispersion = 0.2 * levelFactor;
+                // Clamp bases to 0.0 to avoid NaN in pow()
+                let fR = pow(max(0.0, 1.0 - dot(N, V) * (1.0 - dispersion)), 5.0);
+                let fG = baseFresnel;
+                let fB = pow(max(0.0, 1.0 - dot(N, V) * (1.0 + dispersion)), 5.0);
 
-                if (levelFactor > 0.5) {
-                    // Split channels based on viewing angle
-                    let shift = levelFactor * 2.0;
-                    irid.r = sin(fresnelTerm * (10.0 + shift) + time) * 0.5 + 0.5;
-                    irid.b = cos(fresnelTerm * (10.0 - shift) + time) * 0.5 + 0.5;
-                }
+                var irid = vec3<f32>(fR, fG, fB);
 
-                finalColor += irid * fresnelTerm * (5.0 + levelFactor * 3.0); // JUICE: Stronger rim
+                // Add iridescence (oil slick) on top
+                irid += vec3<f32>(
+                    sin(baseFresnel * 10.0 + time) * 0.5 + 0.5,
+                    cos(baseFresnel * 10.0 + time) * 0.5 + 0.5,
+                    sin(baseFresnel * 15.0 + time) * 0.5 + 0.5
+                ) * 0.5;
+
+                finalColor += irid * (3.0 + levelFactor * 4.0); // JUICE: Stronger rim
 
                 // Edge Glow
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
