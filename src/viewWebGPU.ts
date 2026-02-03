@@ -381,10 +381,10 @@ export default class View {
               // T-SPIN GOLD
               if (tSpin) {
                   color = [1.0, 0.8, 0.0, 1.0]; // GOLD
-                  count = 60 + (combo * 10); // Huge burst
+                  count = 100 + (combo * 20); // NEON BRICKLAYER: Massive T-Spin Burst
               } else if (lines.length === 4) {
                   color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
-                  count = 80 + (combo * 10); // JUICE: Double particles for Tetris
+                  count = 150 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
               }
@@ -486,7 +486,7 @@ export default class View {
       this.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.1, 1.0);
 
       // Increase shake intensity
-      this.visualEffects.triggerShake(3.0 + distance * 0.2, 0.4); // JUICE: Harder shake
+      this.visualEffects.triggerShake(4.0 + distance * 0.3, 0.4); // NEON BRICKLAYER: Seismometer-breaking shake
   }
 
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
