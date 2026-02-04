@@ -54,8 +54,8 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
-    if (linesCleared === 0) {
+  updateScore(linesCleared: number, tSpin: boolean = false, isMini: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
+    if (linesCleared === 0 && !tSpin) {
       this.combo = -1;
       return null;
     }
@@ -83,9 +83,9 @@ export class ScoringSystem {
     // T-Spin Scoring
     if (tSpin) {
         switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
-            case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
-            case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
+            case 0: baseScore = isMini ? 100 * level : 400 * level; text += "T-SPIN"; break;
+            case 1: baseScore = isMini ? 200 * level : 800 * level; text += "T-SPIN SINGLE"; break;
+            case 2: baseScore = isMini ? 400 * level : 1200 * level; text += "T-SPIN DOUBLE"; break;
             case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
         }
     } else {
@@ -122,7 +122,7 @@ export class ScoringSystem {
         points: Math.floor(points),
         text: text,
         combo: this.combo,
-        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0, // Return true only if B2B was applied
+        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0,
         isAllClear: isAllClear
     };
   }

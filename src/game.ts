@@ -20,6 +20,8 @@ export interface GameState {
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
+  isTSpin: boolean;
+  isMini: boolean;
 }
 
 export default class Game {
@@ -39,7 +41,6 @@ export default class Game {
 
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
-  // NEON BRICKLAYER: Verified Infinity Mechanics (15 resets)
   readonly maxLockResets: number = 15;
 
   // Visual Effects
@@ -49,8 +50,9 @@ export default class Game {
   lastDropDistance: number = 0;
   scoreEvent: ScoreEvent | null = null;
 
-  // T-Spin Tracking
+  // T-Spin State
   isTSpin: boolean = false;
+  isMini: boolean = false;
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -59,7 +61,6 @@ export default class Game {
 
   constructor() {
     this.pieceGenerator = new PieceGenerator();
-    // --- WASM INTEGRATION ---
     try {
         this.playfield = WasmCore.get().playfieldView;
         if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
@@ -70,7 +71,6 @@ export default class Game {
         console.warn("WASM not loaded, using fallback memory");
         this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
     }
-    // ------------------------
     this.collisionDetector = new CollisionDetector(this.playfield);
     this.scoringSystem = new ScoringSystem();
     this.reset();
@@ -88,9 +88,8 @@ export default class Game {
     return this.scoringSystem.level;
   }
 
-  // Helper for TypedArray access
   getCell(x: number, y: number): number {
-      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
+      if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 1;
       return this.playfield[y * this.playfieldWidth + x];
   }
 
@@ -99,7 +98,6 @@ export default class Game {
       this.playfield[y * this.playfieldWidth + x] = value;
   }
 
-  // Helper to reset piece position based on its type
   resetPiecePosition(piece: Piece): void {
       this.pieceGenerator.resetPiecePosition(piece);
   }
@@ -109,8 +107,6 @@ export default class Game {
   }
 
   getState(): GameState {
-    // Reconstruct 2D array for View (could optimize view to use flat array later)
-    // Exposed activePiece for shader effects
     const playfield2D: number[][] = [];
     for (let y = 0; y < this.playfieldHeight; y++) {
         const row = new Array(this.playfieldWidth);
@@ -121,11 +117,9 @@ export default class Game {
     }
 
     if (!this.gameOver) {
-        // 1. Draw Ghost Piece (ONCE)
         const ghostY = this.getGhostY();
         const { x: pieceX, blocks } = this.activPiece;
 
-        // Draw Ghost (negative values)
         for (let y = 0; y < blocks.length; y++) {
             for (let x = 0; x < blocks[y].length; x++) {
                 if (blocks[y][x]) {
@@ -141,8 +135,7 @@ export default class Game {
             }
         }
 
-        // 2. Draw Active Piece
-        const { y: pY, x: pX } = this.activPiece; // Rename to avoid conflict
+        const { y: pY, x: pX } = this.activPiece;
         for (let y = 0; y < blocks.length; y++) {
             for (let x = 0; x < blocks[y].length; x++) {
                 if (blocks[y][x]) {
@@ -166,13 +159,15 @@ export default class Game {
       activePiece: this.activPiece,
       isGameOver: this.gameOver,
       playfield: playfield2D,
-      lockTimer: this.lockTimer, // Exposed for Visual Pulse Effect
+      lockTimer: this.lockTimer,
       lockDelayTime: this.lockDelayTime,
       effectEvent: this.effectEvent,
       effectCounter: this.effectCounter,
       lastDropPos: this.lastDropPos,
       lastDropDistance: this.lastDropDistance,
-      scoreEvent: this.scoreEvent
+      scoreEvent: this.scoreEvent,
+      isTSpin: this.isTSpin,
+      isMini: this.isMini
     }
   }
 
@@ -180,43 +175,42 @@ export default class Game {
     return this.collisionDetector.getGhostY(this.activPiece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-        linesCleared: [], locked: false, gameOver: false, tSpin: false
-    };
+  isPlayfieldEmpty(): boolean {
+    for (let i = 0; i < this.playfield.length; i++) {
+        if (this.playfield[i] !== 0) return false;
+    }
+    return true;
+  }
 
-    // Check if hard drop moves the piece
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } {
+    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false, isAllClear: false };
     const ghostY = this.getGhostY();
     if (this.activPiece.y !== ghostY) {
-        // Movement invalidates T-Spin
         this.isTSpin = false;
     }
 
     const distance = ghostY - this.activPiece.y;
     this.activPiece.y = ghostY;
 
-    // Trigger visual effect
-    // NEON BRICKLAYER: Trigger Hard Drop Shockwave (Juice) - Params tuned in View
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
     this.lastDropDistance = distance;
 
-    // Force lock
     this.lockPiece();
     result.locked = true;
+    result.tSpin = this.isTSpin;
+    result.mini = this.isMini;
 
-    // Capture T-Spin state before updatePieces resets everything
     const wasTSpin = this.isTSpin;
-
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-        const isAllClear = this.isPlayfieldEmpty();
-        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
+        if (this.isPlayfieldEmpty()) result.isAllClear = true;
+        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, result.isAllClear);
         result.linesCleared = linesScore;
         result.tSpin = wasTSpin;
     } else {
-        this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
+        this.scoringSystem.resetCombo();
         this.scoreEvent = null;
     }
 
@@ -229,42 +223,40 @@ export default class Game {
   reset(): void {
     this.scoringSystem.reset();
     this.gameOver = false;
-    this.playfield.fill(0); // Efficient clear
+    this.playfield.fill(0);
     this.collisionDetector.updatePlayfield(this.playfield);
     this.holdPieceObj = null;
     this.canHold = true;
     this.lockTimer = 0;
     this.isTSpin = false;
+    this.isMini = false;
 
     this.activPiece = this.createPiece();
     this.nextPiece = this.createPiece();
   }
 
-  // Called every frame
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-          linesCleared: [], locked: false, gameOver: false, tSpin: false
-      };
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } {
+      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean, mini: boolean, isAllClear: boolean } = { linesCleared: [], locked: false, gameOver: false, tSpin: false, mini: false, isAllClear: false };
       if (this.gameOver) return result;
 
-      // Check if piece is on the ground
       this.activPiece.y += 1;
       const onGround = this.hasCollision();
       this.activPiece.y -= 1;
 
       if (onGround) {
-          // dt is in milliseconds
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
+              this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
               this.lockPiece();
               result.locked = true;
+              result.tSpin = this.isTSpin;
+              result.mini = this.isMini;
 
               const wasTSpin = this.isTSpin;
-
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
-                  const isAllClear = this.isPlayfieldEmpty();
-                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
+                  if (this.isPlayfieldEmpty()) result.isAllClear = true;
+                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, result.isAllClear);
                   result.linesCleared = linesScore;
                   result.tSpin = wasTSpin;
               } else {
@@ -286,7 +278,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x += 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = false;
+        this.isMini = false;
         this.handleMoveReset();
     }
   }
@@ -296,7 +289,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = false;
+        this.isMini = false;
         this.handleMoveReset();
     }
   }
@@ -306,7 +300,8 @@ export default class Game {
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = false;
+        this.isMini = false;
         this.lockTimer = 0;
     }
   }
@@ -321,14 +316,13 @@ export default class Game {
       }
       moved = true;
     }
-    if (moved) this.isTSpin = false;
+    this.isTSpin = false;
+    this.isMini = false;
 
     this.lockPiece();
     const linesScore = this.clearLine();
     if (linesScore.length > 0) {
-      // Correctly pass tSpin status captured before lock
-      const isAllClear = this.isPlayfieldEmpty();
-      this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, this.isTSpin, isAllClear);
+      this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, false, false);
     } else {
       this.scoringSystem.resetCombo();
       this.scoreEvent = null;
@@ -336,49 +330,34 @@ export default class Game {
     this.updatePieces();
   }
 
-  private isPlayfieldEmpty(): boolean {
-      for (let i = 0; i < this.playfield.length; i++) {
-          if (this.playfield[i] !== 0) return false;
-      }
-      return true;
-  }
-
-  checkTSpin(): void {
-      if (this.activPiece.type !== 'T') {
+  checkTSpin(piece: Piece, kickIndex: number): void {
+      if (piece.type !== 'T') {
           this.isTSpin = false;
+          this.isMini = false;
           return;
       }
 
-      // Check 4 corners of the 3x3 box
-      // Relative to piece X,Y: (0,0), (2,0), (0,2), (2,2)
-      // Standard T-piece spawns/rotates within a 3x3 grid.
-      // 3 of 4 corners must be occupied (block or wall/floor).
-
-      const px = this.activPiece.x;
-      const py = this.activPiece.y;
-
       const corners = [
-          { x: px,     y: py     }, // Top-Left
-          { x: px + 2, y: py     }, // Top-Right
-          { x: px,     y: py + 2 }, // Bottom-Left
-          { x: px + 2, y: py + 2 }  // Bottom-Right
+          {x: 0, y: 0}, {x: 2, y: 0},
+          {x: 0, y: 2}, {x: 2, y: 2}
       ];
 
       let occupied = 0;
       for (const c of corners) {
-          // Check if out of bounds or occupied
-          if (c.x < 0 || c.x >= this.playfieldWidth || c.y >= this.playfieldHeight) {
+          const wx = piece.x + c.x;
+          const wy = piece.y + c.y;
+          if (this.getCell(wx, wy) !== 0) {
               occupied++;
-          } else if (c.y >= 0) { // If valid Y inside grid
-              if (this.getCell(c.x, c.y) !== 0) {
-                  occupied++;
-              }
           }
-          // Note: Standard SRS T-Spin rules usually don't count the space *above* the board as occupied wall,
-          // but we treat x < 0 and x >= width as walls.
       }
 
-      this.isTSpin = (occupied >= 3);
+      if (occupied >= 3) {
+          this.isTSpin = true;
+          this.isMini = false;
+      } else {
+          this.isTSpin = false;
+          this.isMini = false;
+      }
   }
 
   rotatePiece(rightRurn: boolean = true): void {
@@ -389,8 +368,7 @@ export default class Game {
 
     if (type === 'O') return;
 
-    // Use temp piece for testing rotation to avoid mutation
-    const tempPiece = { ...this.activPiece }; // shallow clone
+    const tempPiece = { ...this.activPiece };
     tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
     tempPiece.rotation = nextRotation;
 
@@ -398,26 +376,25 @@ export default class Game {
       this.activPiece.blocks = tempPiece.blocks;
       this.activPiece.rotation = tempPiece.rotation;
       this.handleMoveReset();
-      this.checkTSpin(); // Check T-Spin after rotation
+      this.checkTSpin(this.activPiece, 0);
       return;
     }
 
-    // Wall Kicks
     const kicks = getWallKicks(type, currentRotation, nextRotation);
     if (!kicks || kicks.length === 0) return;
 
-    for (const [ox, oy] of kicks) {
+    for (let i = 0; i < kicks.length; i++) {
+        const [ox, oy] = kicks[i];
         tempPiece.x = this.activPiece.x + ox;
         tempPiece.y = this.activPiece.y + oy;
 
         if (!this.hasCollisionPiece(tempPiece)) {
-            // Apply successful kick
             this.activPiece.x = tempPiece.x;
             this.activPiece.y = tempPiece.y;
             this.activPiece.blocks = tempPiece.blocks;
             this.activPiece.rotation = tempPiece.rotation;
             this.handleMoveReset();
-            this.checkTSpin(); // Check T-Spin after kick
+            this.checkTSpin(this.activPiece, i);
             return;
         }
     }
@@ -441,7 +418,6 @@ export default class Game {
   }
 
   hasCollisionPiece(piece: Piece): boolean {
-    // --- WASM ACCELERATION ---
     const coords: {x: number, y: number}[] = [];
     let count = 0;
     
@@ -455,17 +431,14 @@ export default class Game {
         }
     }
     
-    // Only use WASM for standard tetrominoes (4 blocks)
     if (count === 4) {
         try {
             return WasmCore.get().checkCollision(coords, piece.x, piece.y);
         } catch (e) {
-            // WASM not available or failed, fallback to JS
             return this.collisionDetector.hasCollision(piece);
         }
     }
     
-    // Fallback for non-standard pieces
     return this.collisionDetector.hasCollision(piece);
   }
 
@@ -492,6 +465,7 @@ export default class Game {
     this.lockTimer = 0;
     this.lockResets = 0;
     this.isTSpin = false;
+    this.isMini = false;
 
     if (this.hasCollision()) {
         this.gameOver = true;
@@ -499,12 +473,10 @@ export default class Game {
   }
 
   clearLine(): number[] {
-    // Optimized line clearing for flat array
     const linesCleared: number[] = [];
     const width = this.playfieldWidth;
     const height = this.playfieldHeight;
 
-    // Check lines from top to bottom
     for (let y = 0; y < height; y++) {
         let full = true;
         for (let x = 0; x < width; x++) {
@@ -519,26 +491,17 @@ export default class Game {
     }
 
     if (linesCleared.length > 0) {
-        // Remove lines
-        // We can do this in place or by shifting
-        // Easier to reconstruct: Iterate from bottom up, copying rows that aren't cleared
         const newPlayfield = new Int8Array(width * height);
         let targetY = height - 1;
 
         for (let y = height - 1; y >= 0; y--) {
             if (!linesCleared.includes(y)) {
-                // Copy row y to targetY
-                const start = y * width;
-                const end = start + width;
-                // TypedArray.set or just loop
                 for(let k=0; k<width; k++) {
-                    newPlayfield[targetY * width + k] = this.playfield[start + k];
+                    newPlayfield[targetY * width + k] = this.playfield[y * width + k];
                 }
                 targetY--;
             }
         }
-        // Fill remaining top rows with 0 (already 0 by default)
-        // Write back to shared memory view to preserve WASM linkage
         this.playfield.set(newPlayfield);
         this.collisionDetector.updatePlayfield(this.playfield);
     }
@@ -560,10 +523,11 @@ export default class Game {
       }
 
       this.resetPiecePosition(this.activPiece);
-      this.resetPiecePosition(this.holdPieceObj); // Fixed: Reset held piece too
+      this.resetPiecePosition(this.holdPieceObj);
       this.canHold = false;
       this.lockTimer = 0;
       this.lockResets = 0;
       this.isTSpin = false;
+      this.isMini = false;
   }
 }

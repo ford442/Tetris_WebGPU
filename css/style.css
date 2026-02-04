@@ -46,33 +46,23 @@ h1 {
 }
 
 .panel-box {
-    background: rgba(10, 15, 30, 0.6);
-    border: 1px solid rgba(100, 200, 255, 0.3);
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     padding: 15px;
-    border-radius: 4px;
+    border-radius: 12px;
     text-align: center;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 0 15px rgba(0, 150, 255, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.5);
-    clip-path: polygon(
-        10px 0, 100% 0,
-        100% calc(100% - 10px), calc(100% - 10px) 100%,
-        0 100%, 0 10px
-    );
-    transition: box-shadow 0.3s, border-color 0.3s;
-}
-
-.panel-box:hover {
-    border-color: rgba(100, 255, 255, 0.6);
-    box-shadow: 0 0 25px rgba(0, 200, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    transition: all 0.3s ease;
 }
 
 .panel-label {
     margin: 0 0 10px 0;
-    font-size: 1.0rem;
-    color: #00eaff;
+    font-size: 1.2rem;
+    color: #ccc;
     letter-spacing: 3px;
-    text-shadow: 0 0 5px rgba(0, 234, 255, 0.5);
     text-transform: uppercase;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
 }
 
 .panel-value {
@@ -85,22 +75,27 @@ button {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
-    padding: 8px 16px;
+    padding: 10px 20px;
     cursor: pointer;
     font-family: inherit;
     font-size: 1rem;
     transition: all 0.2s;
     margin: 5px;
     pointer-events: auto;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 button:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.25);
     transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.6);
 }
 
 button:active {
-    transform: scale(0.95);
+    transform: scale(0.98);
 }
 
 #switch-style-button {
@@ -172,23 +167,16 @@ canvas {
 
 @keyframes floatUp {
     0% {
+        transform: translate(-50%, -50%) scale(0.5);
         opacity: 0;
-        transform: translate(-50%, -20%) scale(0.5);
     }
-    10% {
+    15% {
+        transform: translate(-50%, -100%) scale(1.2);
         opacity: 1;
-        transform: translate(-50%, -50%) scale(1.2);
-    }
-    20% {
-        transform: translate(-50%, -50%) scale(1.0);
-    }
-    80% {
-        opacity: 1;
-        transform: translate(-50%, -150%);
     }
     100% {
+        transform: translate(-50%, -200%) scale(1.0);
         opacity: 0;
-        transform: translate(-50%, -200%);
     }
 }
 

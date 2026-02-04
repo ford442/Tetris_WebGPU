@@ -51,12 +51,9 @@ export class VisualEffects {
     }
 
     updateVideoPosition(width: number, height: number): void {
-        // 1. Calculate a "Portal" size that matches the Tetris aspect ratio (10 cols x 20 rows = 1:2)
-        // We base it on height to ensure it fits on screen
-        const portalHeight = height * 0.9; // 90% of screen height
-        const portalWidth = portalHeight * 0.5; // Aspect ratio 0.5 (10/20)
+        const portalHeight = height * 0.9;
+        const portalWidth = portalHeight * 0.5;
 
-        // 2. Center the video container on the screen
         const centerX = (width - portalWidth) / 2;
         const centerY = (height - portalHeight) / 2;
 
@@ -65,17 +62,14 @@ export class VisualEffects {
         this.videoElement.style.width = `${portalWidth}px`;
         this.videoElement.style.height = `${portalHeight}px`;
 
-        // 3. Ensure the video fills this portal completely
         this.videoElement.style.objectFit = 'cover';
 
-        // 4. Optional: Add a border/glow to the video to frame the portal
         this.videoElement.style.boxShadow = '0 0 50px rgba(0, 200, 255, 0.2)';
         this.videoElement.style.borderRadius = '4px';
     }
 
     updateVideoForLevel(level: number, levelVideos?: string[]): void {
         if (!levelVideos || levelVideos.length === 0) {
-            // No videos configured for this theme
             this.videoElement.pause();
             this.videoElement.src = "";
             this.videoElement.style.display = 'none';
@@ -83,23 +77,19 @@ export class VisualEffects {
             return;
         }
 
-        // Cap level to available videos (uses last video for levels exceeding array length)
         const videoIndex = Math.min(level, levelVideos.length - 1);
         const videoSrc = levelVideos[videoIndex];
 
-        // Only update if the source is different from what we're tracking
         if (this.currentVideoSrc === videoSrc) {
-            return; // Already playing the correct video
+            return;
         }
 
         this.currentVideoSrc = videoSrc;
-        this.isVideoPlaying = false; // Reset state
+        this.isVideoPlaying = false;
         if (videoSrc) {
             this.videoElement.src = videoSrc;
-            // Don't show immediately, wait for 'playing' event
             this.videoElement.play().catch(e => {
                 console.log("Video autoplay failed", e);
-                // Fallback handled by catch + error listener
                 this.isVideoPlaying = false;
                 this.videoElement.style.display = 'none';
             });
@@ -117,16 +107,13 @@ export class VisualEffects {
         if (this.lockTimer > 0) this.lockTimer -= dt;
         if (this.lockTimer < 0) this.lockTimer = 0;
 
-        // Exponential decay for smooth game feel
         const decay = Math.exp(-dt * 5.0);
         this.shakeIntensity *= decay;
         this.aberrationIntensity *= decay;
 
-        // Warp surge decay
         this.warpSurge *= Math.exp(-dt * 2.0);
         if (this.warpSurge < 0.01) this.warpSurge = 0;
 
-        // Glitch decay
         this.glitchIntensity *= Math.exp(-dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
@@ -134,7 +121,7 @@ export class VisualEffects {
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
         if (this.shockwaveTimer > 0) {
-            this.shockwaveTimer += dt * 0.8; // Speed
+            this.shockwaveTimer += dt * 0.8;
             if (this.shockwaveTimer > 1.0) this.shockwaveTimer = 0.0;
         }
     }
@@ -152,14 +139,13 @@ export class VisualEffects {
     }
 
     triggerShake(magnitude: number, duration: number): void {
-        // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // JUICE: Increased max shake
+        this.shakeIntensity = Math.min(this.shakeIntensity, 8.0);
     }
 
     triggerAberration(magnitude: number): void {
         this.aberrationIntensity += magnitude;
-        this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
+        this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0);
     }
 
     triggerGlitch(intensity: number): void {
@@ -174,11 +160,8 @@ export class VisualEffects {
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
-        // console.log("Shockwave triggered", center, strength);
         this.shockwaveCenter = center;
         this.shockwaveParams = [width, strength, aberration, speed];
-        // Start effect at 0.01 to avoid 0.0 check failure
-        // The shader uses time * 2.0 for radius, so 0.01 is a small starting circle
         this.shockwaveTimer = 0.01;
     }
 
