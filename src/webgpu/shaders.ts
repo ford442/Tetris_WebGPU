@@ -79,6 +79,16 @@ export const PostProcessShaders = () => {
                     // Add chromatic aberration at the edge of the shockwave
                     shockwaveAberration = params.z * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
+
+                // Second ring (Echo) - NEON BRICKLAYER
+                let echoRadius = radius * 0.8;
+                let echoDiff = abs(dist - echoRadius);
+                if (echoDiff < width * 0.5) {
+                    let angle = (echoDiff / (width * 0.5)) * 3.14159;
+                    let distortion = cos(angle) * strength * 0.5 * (1.0 - time);
+                    let dir = normalize(uv - center);
+                    finalUV -= dir * distortion;
+                }
             }
 
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
