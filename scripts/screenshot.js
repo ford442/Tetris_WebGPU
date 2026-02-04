@@ -16,7 +16,9 @@ const { chromium } = require('playwright');
   await page.waitForSelector('#canvaswebgpu', { timeout: 10000 });
 
   // Ensure game started so blocks appear
-  await page.click('#start-button').catch(() => {});
+  await page.click('#start-button').catch((err) => {
+    console.log('Note: Start button not found or not clickable:', err.message);
+  });
   await page.waitForTimeout(800);
 
   const themes = [
@@ -27,7 +29,9 @@ const { chromium } = require('playwright');
 
   for (const t of themes) {
     console.log('Switching theme:', t.name);
-    await page.click(`#${t.id}`).catch(() => {});
+    await page.click(`#${t.id}`).catch((err) => {
+      console.log(`Warning: Could not switch to theme ${t.name}:`, err.message);
+    });
     // give it some time to settle and render
     await page.waitForTimeout(800);
 

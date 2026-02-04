@@ -46,10 +46,12 @@ export default class SoundManager {
     }
 
     private playNoise(duration: number, startTime: number = 0, vol: number = 1.0) {
-        if (!this.noiseBuffer || this.ctx.state === 'suspended') {
-             if (this.ctx.state === 'suspended') this.ctx.resume();
-             if (!this.noiseBuffer) this.initNoiseBuffer();
-             if (!this.noiseBuffer) return;
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        if (!this.noiseBuffer) {
+            this.initNoiseBuffer();
+            if (!this.noiseBuffer) return;
         }
 
         const source = this.ctx.createBufferSource();
@@ -130,10 +132,9 @@ export default class SoundManager {
         // Pitch shift based on combo (semitone step ~1.059)
         const pitchMod = Math.pow(1.059, Math.min(combo, 12)); // Cap at one octave shift
         const base = 523.25 * pitchMod; // C5 with combo modulation
-        // Major 7th chord: Root, Major 3rd, Perfect 5th, Major 7th
+        // Major 7th chord using Equal Temperament ratios
+        // Root, Major 3rd (1.2599), Perfect 5th (1.4983), Major 7th (1.8877)
         const chord = [base, base * 1.2599, base * 1.4983, base * 1.8877];
-        // Just Intonation approx: 1, 5/4, 3/2, 15/8
-        // Equal Temperament: 1, 1.26, 1.498, 1.888
 
         const vol = 0.4;
 
