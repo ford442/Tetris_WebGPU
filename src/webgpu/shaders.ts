@@ -328,6 +328,7 @@ export const GridShader = () => {
     const vertex = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
+            time : f32, // Offset 64
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -337,9 +338,18 @@ export const GridShader = () => {
         }
     `;
     const fragment = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            time : f32,
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.15); // Increased visibility for neon look
+            // Pulse the grid lines
+            let pulse = sin(uniforms.time * 3.0) * 0.5 + 0.5;
+            let alpha = 0.15 + pulse * 0.1;
+            return vec4<f32>(1.0, 1.0, 1.0, alpha);
         }
     `;
     return { vertex, fragment };
@@ -390,7 +400,7 @@ export const BackgroundShaders = () => {
 
           // Base deep space color - shifts to red as level increases
           // NEON BRICKLAYER: More dramatic shift from Calm Blue to Chaotic Red/Purple
-          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.2, 0.0, 0.1), levelFactor);
+          let deepSpace = mix(vec3<f32>(0.05, 0.0, 0.15), vec3<f32>(0.25, 0.0, 0.05), levelFactor);
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
@@ -473,7 +483,7 @@ export const BackgroundShaders = () => {
 
           // --- Global pulse effect ---
           // Pulse faster at higher levels
-          let pulseSpeed = 1.5 + levelFactor * 3.0;
+          let pulseSpeed = 1.5 + levelFactor * 4.0;
           let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
 
           // Combine all elements
@@ -690,7 +700,8 @@ export const Shaders = () => {
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech
                     let scanSpeed = 8.0;
-                    let scanY = fract(vUV.y * 20.0 - time * scanSpeed);
+                    // INCREASED Frequency: 20.0 -> 30.0
+                    let scanY = fract(vUV.y * 30.0 - time * scanSpeed);
                     let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY));
 
                     // Wireframe logic (from edgeGlow)
@@ -698,12 +709,17 @@ export const Shaders = () => {
 
                     let ghostColor = vColor.rgb * 1.5; // Brighten original color
 
-                    // Pulsing Alpha
-                    let ghostAlpha = 0.3 + 0.2 * sin(time * 10.0);
+                    // ENHANCED Pulse: 0.3 + 0.2*sin(10t) -> 0.4 + 0.1*sin(5t) (Slower, fuller)
+                    let ghostAlpha = 0.4 + 0.1 * sin(time * 5.0);
+
+                    // NEW Glitch effect
+                    let ghostGlitch = sin(vUV.y * 50.0 + time * 20.0) * 0.02;
 
                     var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
                                    + ghostColor * scanline * 0.5   // Scanlines
                                    + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
+
+                    ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
 
                     // Digital noise/flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
