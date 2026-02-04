@@ -18,6 +18,8 @@ export default class View {
   canvasWebGPU: HTMLCanvasElement;
   ctxWebGPU: GPUCanvasContext;
   isWebGPU: { result: boolean; description: string };
+  // resolves when WebGPU (and preRender) initialization is complete — callers should await this
+  ready: Promise<void>;
   playfildBorderWidth: number;
   playfildX: number;
   playfildY: number;
@@ -125,6 +127,7 @@ export default class View {
     this.canvasWebGPU.height = this.height;
     this.ctxWebGPU = this.canvasWebGPU.getContext("webgpu") as GPUCanvasContext;
     this.isWebGPU = { result: false, description: "Checking..." };
+    this.ready = Promise.resolve();
     this.playfildBorderWidth = 4;
     this.playfildX = this.playfildBorderWidth + 1;
     this.playfildY = this.playfildBorderWidth + 1;
@@ -151,20 +154,22 @@ export default class View {
     let divStatus = document.createElement("div");
     divStatus.innerText = this.isWebGPU.description;
     this.element.appendChild(divStatus);
-    this.CheckWebGPU().then((status) => {
+
+    // expose a readiness promise so callers (Controller) can wait for GPU initialization
+    this.ready = this.CheckWebGPU().then((status) => {
         if (divStatus.parentNode) {
             divStatus.parentNode.removeChild(divStatus);
         }
         if (status.result) {
             this.element.appendChild(this.canvasWebGPU);
-            this.preRender();
-            window.addEventListener('resize', this.resize.bind(this));
-            (window as any).setBlockStyle = (style: 'tech' | 'glass') => this.setBlockStyle(style);
+            // ensure preRender completion is awaited by callers relying on `ready`
+            return Promise.resolve(this.preRender());
         } else {
             let divError = document.createElement("div");
             divError.innerText = status.description;
             divError.style.color = "red";
             this.element.appendChild(divError);
+            return Promise.resolve();
         }
     });
   }

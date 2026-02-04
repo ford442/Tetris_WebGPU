@@ -65,7 +65,19 @@ export default class Controller {
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
     document.addEventListener("keyup", this.handleKeyUp.bind(this));
 
-    this.play();
+    // IMPORTANT: avoid racing with async GPU initialization in View.preRender()
+    // Wait for the View to be ready (View.ready resolves after CheckWebGPU + preRender)
+    if ((this.viewWebGPU as any)?.ready instanceof Promise) {
+      (this.viewWebGPU as any).ready.then(() => {
+        // start the game loop once the renderer is fully initialized
+        this.play();
+      }).catch(() => {
+        // if renderer fails to initialize, still start the non-GPU loop to keep gameplay available
+        this.play();
+      });
+    } else {
+      this.play();
+    }
   }
 
   // Called by gravity timer
