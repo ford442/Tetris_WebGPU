@@ -56,6 +56,7 @@ export default class View {
 
   lastEffectCounter: number = 0;
   useGlitch: boolean = false;
+  lastScore: number = 0;
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -78,13 +79,18 @@ export default class View {
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
+  // Block texture (shared)
+  blockTexture!: GPUTexture;
+  blockSampler!: GPUSampler;
+
   // Particles
   particlePipeline!: GPURenderPipeline;
-  particleStorageBuffer!: GPUBuffer; // Renamed from particleVertexBuffer
-  particleComputeUniformBuffer!: GPUBuffer; // Renamed
+  particleStorageBuffer!: GPUBuffer;
+  particleComputeUniformBuffer!: GPUBuffer;
   particleComputeBindGroup!: GPUBindGroup;
-  particleRenderBindGroup!: GPUBindGroup; // Renamed
+  particleRenderBindGroup!: GPUBindGroup;
   particleComputePipeline!: GPUComputePipeline;
+  particleUniformBuffer!: GPUBuffer;
   
   // Subsystems
   particleSystem: ParticleSystem;
@@ -93,10 +99,6 @@ export default class View {
   // Themes
   themes: Themes = themes;
   currentTheme: ThemeColors = themes.neon;
-
-  // Block Texture and Sampler
-  blockTexture!: GPUTexture;
-  blockSampler!: GPUSampler;
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -547,42 +549,12 @@ export default class View {
 
     // Check for Score Event (Floating Text)
     if (state.scoreEvent) {
-        // Simple deduplication based on frame or ID would be better, but since renderMainScreen is called every frame,
-        // we need to make sure we don't trigger this 60 times a second for the same event.
-        // However, Game.ts only returns the event ONCE (implied).
-        // Wait, Game.ts state is persistent.
-        // We need a mechanism to consume the event.
-        // Or checking against a lastEventID.
-        // Let's implement a simple counter check.
-        if (state.effectCounter !== this.lastEffectCounter && state.scoreEvent.text) {
-             this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
-
-             // NEON BRICKLAYER: Visual glitch for Back-to-Back for extra impact
-             if (state.scoreEvent.backToBack) {
-                 this.visualEffects.triggerGlitch(0.3);
-             }
-
-             this.lastEffectCounter = state.effectCounter;
-        }
-
-        // Actually Game.ts increments effectCounter on 'hardDrop', not score.
-        // So we need to ensure Game.ts increments something for Score too?
-        // Let's rely on the fact that if scoreEvent is present, it's a NEW event?
-        // No, Game.getState() returns the current state.
-        // I should modify Game.ts to clear scoreEvent after it's been read?
-        // Or add a sequence number to ScoreEvent.
-        // For now, let's assume we can compare objects or use a timestamp.
-        // But since I can't easily change Game.ts logic loop consumption model without refactoring,
-        // I'll add a 'timestamp' or ID to ScoreEvent.
-
-        // BETTER: Use score as a trigger? Score changes.
         if (this.lastScore !== state.score && state.scoreEvent.text) {
             this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
             this.lastScore = state.score;
         }
     }
 
-    // this.clearScreen(state);
     this.renderPlayfild_WebGPU(state);
     this.renderPiece(this.nextPieceContext, state.nextPiece, 30);
     this.renderPiece(this.holdPieceContext, state.holdPiece, 20);
@@ -614,44 +586,40 @@ export default class View {
     if (el) el.style.display = 'block';
   }
 
-  /**
-   * Generate mipmaps for a texture using WebGPU render pipeline
-   * This creates progressively smaller versions of the texture for optimal sampling at different distances
-   */
-  generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {
-    // Create a simple mipmap generation pipeline using blit operations
-    const blitShader = `
-      @group(0) @binding(0) var srcTexture: texture_2d<f32>;
-      @group(0) @binding(1) var srcSampler: sampler;
+  generateMipmaps(texture: GPUTexture, mipLevelCount: number) {
+    const shaderModule = this.device.createShaderModule({
+      code: `
+        @group(0) @binding(0) var mySampler: sampler;
+        @group(0) @binding(1) var myTexture: texture_2d<f32>;
 
-      struct VertexOutput {
-        @builtin(position) position: vec4<f32>,
-        @location(0) uv: vec2<f32>,
-      };
+        struct VertexOutput {
+          @builtin(position) position: vec4<f32>,
+          @location(0) uv: vec2<f32>,
+        };
 
-      @vertex
-      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        var pos = array<vec2<f32>, 6>(
-          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
-          vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0)
-        );
-        var uv = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
-          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0)
-        );
-        var output: VertexOutput;
-        output.position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
-        output.uv = uv[vertexIndex];
-        return output;
-      }
+        @vertex
+        fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+          var pos = array<vec2<f32>, 6>(
+            vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+            vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0)
+          );
+          var uv = array<vec2<f32>, 6>(
+            vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
+            vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0)
+          );
 
-      @fragment
-      fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-        return textureSample(srcTexture, srcSampler, uv);
-      }
-    `;
+          var output: VertexOutput;
+          output.position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
+          output.uv = uv[vertexIndex];
+          return output;
+        }
 
-    const shaderModule = this.device.createShaderModule({ code: blitShader });
+        @fragment
+        fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+          return textureSample(myTexture, mySampler, uv);
+        }
+      `,
+    });
 
     const pipeline = this.device.createRenderPipeline({
       layout: 'auto',
@@ -662,52 +630,54 @@ export default class View {
       fragment: {
         module: shaderModule,
         entryPoint: 'fragmentMain',
-        targets: [{ format: 'rgba8unorm' }],
+        targets: [{ format: this.blockTexture.format }],
+      },
+      primitive: {
+        topology: 'triangle-list',
       },
     });
 
     const sampler = this.device.createSampler({
       minFilter: 'linear',
-      magFilter: 'linear',
     });
 
-    const commandEncoder = this.device.createCommandEncoder();
+    let srcView = this.blockTexture.createView({
+      baseMipLevel: 0,
+      mipLevelCount: 1,
+    });
 
     for (let i = 1; i < mipLevelCount; i++) {
-      const srcView = texture.createView({
-        baseMipLevel: i - 1,
-        mipLevelCount: 1,
-      });
-
-      const dstView = texture.createView({
+      const dstView = this.blockTexture.createView({
         baseMipLevel: i,
         mipLevelCount: 1,
       });
 
-      const bindGroup = this.device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: srcView },
-          { binding: 1, resource: sampler },
-        ],
-      });
+      const commandEncoder = this.device.createCommandEncoder();
 
       const passEncoder = commandEncoder.beginRenderPass({
         colorAttachments: [{
           view: dstView,
           loadOp: 'clear',
           storeOp: 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          clearValue: [0, 0, 0, 0],
         }],
       });
 
       passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.draw(6, 1, 0, 0);
+      passEncoder.setBindGroup(0, this.device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: sampler },
+          { binding: 1, resource: srcView },
+        ],
+      }));
+      passEncoder.draw(6);
       passEncoder.end();
-    }
 
-    this.device.queue.submit([commandEncoder.finish()]);
+      this.device.queue.submit([commandEncoder.finish()]);
+
+      srcView = dstView;
+    }
   }
 
   //// ***** WEBGPU ***** ////
@@ -721,7 +691,6 @@ export default class View {
     this.canvasWebGPU.width = this.width * dpr;
     this.canvasWebGPU.height = this.height * dpr;
 
-   // const presentationFormat = this.ctxWebGPU.getPreferredFormat(adapter);
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
     this.ctxWebGPU.configure({
@@ -731,31 +700,32 @@ export default class View {
     });
 
     // --- 1. Load Texture & Sampler ---
-    // Use high-quality sampling with mipmaps and anisotropic filtering
-    // to reduce pixelation and improve rendering quality
     this.blockSampler = this.device.createSampler({
       magFilter: 'linear',
       minFilter: 'linear',
-      mipmapFilter: 'linear', // Enable trilinear filtering for smooth LOD transitions
+      mipmapFilter: 'linear',
       addressModeU: 'repeat',
       addressModeV: 'repeat',
-      maxAnisotropy: 16, // Enable anisotropic filtering for better quality at angles
+      maxAnisotropy: 16,
+    });
+
+    this.sampler = this.device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
     });
 
     try {
         const img = document.createElement('img');
-        // Use block.png as it exists in the repo
         img.src = 'block.png';
         await img.decode();
         const imageBitmap = await createImageBitmap(img);
 
-        // Calculate number of mip levels for optimal quality
         const mipLevelCount = Math.floor(Math.log2(Math.max(imageBitmap.width, imageBitmap.height))) + 1;
 
         this.blockTexture = this.device.createTexture({
           size: [imageBitmap.width, imageBitmap.height, 1],
           format: 'rgba8unorm',
-          mipLevelCount: mipLevelCount, // Enable mipmaps for better quality at different distances
+          mipLevelCount: mipLevelCount,
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.device.queue.copyExternalImageToTexture(
@@ -764,9 +734,7 @@ export default class View {
           [imageBitmap.width, imageBitmap.height]
         );
 
-        // Generate mipmaps using bilinear filtering
-        // This significantly improves quality by preventing aliasing at different viewing distances
-        this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
+        this.generateMipmaps(this.blockTexture, mipLevelCount);
     } catch (e) {
         // Fallback white texture
         this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -977,8 +945,6 @@ export default class View {
             module: this.device.createShaderModule({ code: particleShader.vertex }),
             entryPoint: 'main',
             buffers: [
-                // Use Storage Buffer as Vertex Buffer
-                // Stride: 64 bytes
                 {
                     arrayStride: 64,
                     stepMode: 'instance',
@@ -1062,15 +1028,6 @@ export default class View {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    // Create post-process sampler with high-quality filtering
-    this.sampler = this.device.createSampler({
-        magFilter: 'linear',
-        minFilter: 'linear',
-        mipmapFilter: 'linear', // Enable trilinear filtering
-        addressModeU: 'clamp-to-edge', // Prevent edge artifacts in post-processing
-        addressModeV: 'clamp-to-edge',
-    });
-
     // Offscreen Texture creation handled in Resize/Frame logic or here initially
     // We need to create it initially too
     this.offscreenTexture = this.device.createTexture({
@@ -1094,7 +1051,6 @@ export default class View {
         ]
     });
 
-
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
       size: 96, // Increased to accommodate useGlitch (offset 52)
@@ -1107,14 +1063,6 @@ export default class View {
     this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
-    // Apply shake
-    if (this.shakeTimer > 0) {
-        const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
-        const shakeY = (Math.random() - 0.5) * this.shakeMagnitude;
-        eyePosition[0] += shakeX;
-        eyePosition[1] += shakeY;
-    }
-
     let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
 
     Matrix.mat4.identity(this.VIEWMATRIX);
@@ -1161,21 +1109,18 @@ export default class View {
       new Float32Array([this.useGlitch ? 1.0 : 0.0])
     );
 
-    this.renderPlayfild_Border_WebGPU();
-
     this.vertexUniformBuffer = this.device.createBuffer({
       size: this.state.playfield.length * 10 * 256,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // --- Pre-create BindGroups for Dynamic Blocks (Cache) ---
-    // Max blocks = 20 rows * 10 cols = 200
-    // Each block uses a 256-byte slice of the uniform buffer
+    // --- 3. BIND GROUPS (Using the loaded texture) ---
+    // Cache Block BindGroups
     const maxBlocks = 200;
     this.uniformBindGroup_CACHE = [];
     for (let i = 0; i < maxBlocks; i++) {
         const bindGroup = this.device.createBindGroup({
-            label: `block_bindgroup_${i}`,
+            label: `block_bind_${i}`,
             layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 {
@@ -1201,6 +1146,9 @@ export default class View {
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
     }
+
+    // Border BindGroups
+    this.renderPlayfild_Border_WebGPU();
 
     this.Frame();
   }
@@ -1266,8 +1214,6 @@ export default class View {
     // --- PARTICLE UPDATE (COMPUTE) ---
     // 1. Upload new particles
     if (this.particleSystem.pendingUploads.length > 0) {
-        // Optimization: Coalesce writes if possible, but simplest is 1 write per batch
-        // Or write individual particles
         for(const upload of this.particleSystem.pendingUploads) {
             this.device.queue.writeBuffer(
                 this.particleStorageBuffer,
@@ -1295,7 +1241,6 @@ export default class View {
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.particleComputePipeline);
     computePass.setBindGroup(0, this.particleComputeBindGroup);
-    // Workgroup size 64. Count = maxParticles.
     computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
     computePass.end();
 
@@ -1322,36 +1267,25 @@ export default class View {
 
 
     // Block shader time (global update once per frame)
-    // 48 is the offset for 'time' in fragmentUniformBuffer
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
-    // Update glitch state for blocks
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
-    // Update lock percent for blocks (red pulse)
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
-    // Update level for blocks (glass refraction evolution)
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, new Float32Array([this.visualEffects.currentLevel]));
 
     // Update Shockwave Uniforms
-    // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
-    // Offset 48: level
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
         time, Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
         this.visualEffects.shockwaveTimer, 0, 0, 0
     ]));
-    // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 
-    // Write level at offset 48 (NEON BRICKLAYER)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, new Float32Array([this.visualEffects.currentLevel]));
-    // Write warpSurge at offset 52
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, new Float32Array([this.visualEffects.warpSurge]));
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
-    // const depthTexture = this.device.createTexture({ ... });
 
-    // 1. Render Background
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
@@ -1406,6 +1340,8 @@ export default class View {
     passEncoder.setVertexBuffer(1, this.normalBuffer);
     passEncoder.setVertexBuffer(2, this.uvBuffer);
 
+
+
     let length_of_uniformBindGroup_boder = this.uniformBindGroup_ARRAY_border.length;
     for (let index = 0; index < length_of_uniformBindGroup_boder; index++) {
       passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY_border[index]);
@@ -1418,13 +1354,9 @@ export default class View {
       passEncoder.draw(this.numberOfVertices);
     }
 
-    // Draw particles
-    // Always draw max particles, the shader will discard invisible/dead ones (scale=0 or alpha=0)
-    // Or we could track active count, but tracking active count with ring buffer is complex.
-    // Drawing all 4000 quads is cheap.
     passEncoder.setPipeline(this.particlePipeline);
     passEncoder.setBindGroup(0, this.particleRenderBindGroup);
-    passEncoder.setVertexBuffer(0, this.particleStorageBuffer); // Use storage buffer as vertex buffer
+    passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
     passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
 
     passEncoder.end();
@@ -1443,7 +1375,6 @@ export default class View {
     const ppPassEncoder = commandEncoder.beginRenderPass(ppPassDescriptor);
     ppPassEncoder.setPipeline(this.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
-    // Reuse background vertex buffer (quad)
     ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
     ppPassEncoder.draw(6);
     ppPassEncoder.end();
@@ -1467,24 +1398,20 @@ export default class View {
         if (!playfield[row][colom]) {
           continue;
         }
-        // Safety check: ensure we don't exceed cache
         if (blockIndex >= this.uniformBindGroup_CACHE.length) break;
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        let alpha = value < 0 ? 0.3 : 0.85; // 0.85 allows 15% of the video to show through
+        let alpha = value < 0 ? 0.3 : 0.85;
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
 
-        // NEON BRICKLAYER: Rotation Flash
-        // If this block is part of the active piece, brighten it during rotation
         if (this.visualEffects.rotationFlashTimer > 0 && activePiece) {
              const relX = colom - activePiece.x;
              const relY = row - activePiece.y;
              if (relY >= 0 && relY < activePiece.blocks.length && relX >= 0 && relX < activePiece.blocks[0].length) {
                   if (activePiece.blocks[relY][relX] !== 0) {
-                      // Add flash intensity
                       const flash = this.visualEffects.rotationFlashTimer * 3.0;
                       color = [
                           Math.min(color[0] + flash, 1.0),
@@ -1495,7 +1422,6 @@ export default class View {
              }
         }
 
-        // Retrieve pre-created bindgroup
         let uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
         const offset_ARRAY = blockIndex * 256;
 
@@ -1512,7 +1438,6 @@ export default class View {
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
-        // Write to the specific slice of the buffer
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 0,
@@ -1546,10 +1471,6 @@ export default class View {
   async renderPlayfild_Border_WebGPU() {
     if (!this.device) return;
 
-    // Подготовить буфер юниформов.
-    // Для рамки игрового поля
-    // данный буфер будет записан один раз и не меняеться в каждом кадре
-
     const state_Border = {
       playfield: [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -1577,10 +1498,7 @@ export default class View {
       ],
     };
 
-    this.x += 0.01;
     const playfield_length = state_Border.playfield.length;
-    // create uniform buffer and layout
-    // Расчитываем необходимый размер буфера
     const vertexUniformSizeBuffer = 200 * 256;
 
     this.vertexUniformBuffer_border = this.device.createBuffer({
@@ -1614,10 +1532,9 @@ export default class View {
               resource: {
                 buffer: this.fragmentUniformBuffer,
                 offset: 0,
-                size: 80, // Updated to match fragment buffer usage (allows up to offset 80 or more)
+                size: 80,
               },
             },
-            // Bind Texture & Sampler here too
             { binding: 2, resource: this.blockTexture.createView() },
             { binding: 3, resource: this.blockSampler }
           ],
@@ -1627,7 +1544,7 @@ export default class View {
         Matrix.mat4.identity(this.NORMALMATRIX);
 
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2 - 2.2, // выравниваю по размеру модельки одного блока
+          colom * 2.2 - 2.2,
           row * -2.2 + 2.2,
           0.0,
         ]);

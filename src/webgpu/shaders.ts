@@ -501,23 +501,23 @@ export const BackgroundShaders = () => {
 };
 
 export const Shaders = () => {
-  let params: any = {};
-  params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.5";
-  params.diffuseIntensity = "1.0";
-  params.specularIntensity = "30.0";
-  params.shininess = "1000.0";
-  params.specularColor = "(1.0, 1.0, 1.0)";
-  params.isPhong = "1";
+    let params: any = {};
+    params.color = "(0.0, 1.0, 0.0)";
+    params.ambientIntensity = "0.5";
+    params.diffuseIntensity = "1.0";
+    params.specularIntensity = "30.0";
+    params.shininess = "1000.0";
+    params.specularColor = "(1.0, 1.0, 1.0)";
+    params.isPhong = "1";
 
-  const vertex = `
-            struct Uniforms {
-                viewProjectionMatrix : mat4x4<f32>,
-                modelMatrix : mat4x4<f32>,
-                normalMatrix : mat4x4<f32>,  
-                colorVertex : vec4<f32>              
-            };
-            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+    const vertex = `
+        struct Uniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            modelMatrix : mat4x4<f32>,
+            normalMatrix : mat4x4<f32>,
+            colorVertex : vec4<f32>
+        };
+        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
             struct Output {
                 @builtin(position) Position : vec4<f32>,
@@ -539,7 +539,7 @@ export const Shaders = () => {
                 return output;
             }`;
 
-  const fragment = `
+    const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
@@ -555,7 +555,7 @@ export const Shaders = () => {
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-               
+
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
@@ -707,5 +707,5 @@ export const Shaders = () => {
                 return vec4<f32>(finalColor, 1.0);
             }`;
 
-  return { vertex, fragment };
+    return { vertex, fragment };
 };
