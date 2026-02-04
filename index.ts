@@ -25,7 +25,7 @@ uiContainer.innerHTML = `
       <div class="left-panel">
           <div class="panel-box hold-piece-container">
             <p class="panel-label">HOLD</p>
-            <canvas id="hold-piece-canvas" width="80" height="80"></canvas>
+            <canvas id="hold-piece-canvas" width="120" height="120"></canvas>
           </div>
 
            <div class="panel-box score-box">
@@ -124,6 +124,19 @@ uiContainer.innerHTML = `
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
       btn.blur();
+  });
+
+  const controlButtons = document.querySelector('.control-buttons');
+  const switchStyleButton = document.createElement('button');
+  switchStyleButton.id = 'switch-style-button';
+  switchStyleButton.textContent = 'STYLE';
+  controlButtons?.appendChild(switchStyleButton);
+
+  document.getElementById('switch-style-button')!.addEventListener('click', (e) => {
+    const newStyle = view.currentBlockStyle === 'tech' ? 'glass' : 'tech';
+    view.setBlockStyle(newStyle as 'tech' | 'glass');
+    const btn = e.target as HTMLButtonElement;
+    btn.blur();
   });
 
   window.game = game;

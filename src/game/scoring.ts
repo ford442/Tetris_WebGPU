@@ -48,7 +48,6 @@ export class ScoringSystem {
       const arr = new Array(10);
       arr.fill(0);
       playfield.unshift(arr);
-      this.lines += 1;
     }
 
     return clearedLines;
@@ -57,14 +56,7 @@ export class ScoringSystem {
   // Updates score based on action and returns a ScoreEvent for visuals
   updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
     if (linesCleared === 0) {
-      this.combo = -1; // Reset combo on no clear (drop without clear)
-      // Actually standard Tetris only resets combo when you lock a piece and DON'T clear lines.
-      // This method is called ONLY when lines are cleared in Game.ts currently?
-      // No, Game.ts calls updateScore even if linesCleared > 0.
-      // Wait, Game.ts: if (linesScore.length > 0) this.scoringSystem.updateScore(...)
-      // So this is only called on clears.
-      // I need a way to reset combo.
-      // I'll add a `resetCombo()` method and call it from Game.ts when a piece locks without clearing.
+      this.combo = -1;
       return null;
     }
 
@@ -91,7 +83,7 @@ export class ScoringSystem {
     // T-Spin Scoring
     if (tSpin) {
         switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break; // T-Spin No Line (not handled by current logic as lines > 0)
+            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
             case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
             case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
             case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;

@@ -21,19 +21,18 @@ export const PostProcessShaders = () => {
     `;
 
     const fragment = `
+        const FLASH_BLEND_STRENGTH: f32 = 0.6;
+
         struct Uniforms {
             time: f32,
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
-            // Align to 16 bytes for next field if needed, but here we just flow
-            // offset 0: time(4), 4: useGlitch(4), 8: center(8) -> 16
-            // offset 16: shockwaveTime(4), pad(12) -> 32
-            // offset 32: shockwaveParams(16) -> 48
-            // offset 48: level(4)
-            shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
-            level: f32,
-            warpSurge: f32, // Offset 52
+            aberrationStrength: f32,
+            padding1: vec2<f32>,
+            flashIntensity: f32,
+            padding2: vec3<f32>,
+            flashColor: vec3<f32>,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -41,138 +40,97 @@ export const PostProcessShaders = () => {
 
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
-            // Lens Distortion (Barrel)
-            let centeredUV = uv - 0.5;
-            let distSq = dot(centeredUV, centeredUV);
-            let distortStrength = 0.1; // K factor
-            let distortedUV = 0.5 + centeredUV * (1.0 + distSq * distortStrength);
-
-            var finalUV = distortedUV;
-            let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
+            var finalUV = uv;
 
             // Shockwave
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
-            let glitchStrength = uniforms.useGlitch; // Treated as intensity
-            let params = uniforms.shockwaveParams;
-            let level = uniforms.level;
+            let useGlitch = uniforms.useGlitch;
+            let aberrationStrength = uniforms.aberrationStrength;
 
-            // Shockwave Logic
-            var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dist = distance(uv, center);
-                // NEON BRICKLAYER: Use speed from params.w
-                let speed = max(params.w, 0.1);
-                let radius = time * speed;
-                let width = params.x * 1.5; // JUICE: Wider shockwave
-                let strength = params.y; // e.g. 0.05
+                let radius = time * 1.5;
+                let width = 0.15;
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
-                    // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
-                    let distortion = cos(angle) * strength * (1.0 - time); // Fade out
+                    let distortion = cos(angle) * 0.03 * (1.0 - time);
                     let dir = normalize(uv - center);
-
                     finalUV -= dir * distortion;
-
-                    // Add chromatic aberration at the edge of the shockwave
-                    shockwaveAberration = params.z * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
             }
 
-            // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
+            // Chromatic Aberration - distance-aware (Prism Effect)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
-            // Subtle permanent aberration at edges for arcade feel
-            // JUICE: Increased lens distortion at edges
-            let vignetteAberration = pow(distFromCenter, 2.5) * 0.02;
+            // Non-linear increase towards edges (Cubic)
+            var aberration = pow(distFromCenter, 3.0) * 0.025;
+            aberration = select(aberration, aberration * 3.0, useGlitch > 0.5);
+            let totalAberration = aberration + aberrationStrength;
 
-            // Level based aberration: Starts calm, gets glitchy at high levels
-            // Level 10+ = max stress
-            let levelStress = clamp(level / 12.0, 0.0, 1.0);
-            let levelAberration = levelStress * 0.008 * sin(uniforms.time * 2.0); // Breathing aberration
-
-            // NEON BRICKLAYER: Enhanced Glitch Logic
-            // Dynamic offset based on intensity, time, and Y position
-            let glitchOffset = glitchStrength * 0.05 * sin(finalUV.y * 50.0 + uniforms.time * 20.0);
-            // Tear effect: Random horizontal strips
-            let tear = step(0.95, fract(finalUV.y * 2.0 + uniforms.time * 10.0)) * glitchStrength * 0.05;
-            finalUV.x += tear;
-
-            let baseAberration = vignetteAberration + levelAberration;
-            // Add glitch aberration
-            let glitchAberration = glitchStrength * 0.03;
-            let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
-
-            // Chromatic Aberration with Glitch Offset
-            // R and B channels get offset by the glitch wave in opposite directions
-            // JUICE: Vertical aberration added for lens effect (scaled by UV y)
-            let vertAberration = totalAberration * (uv.y - 0.5) * 0.2;
-
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, vertAberration)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration, 0.0)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, vertAberration)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration, 0.0)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap but juicy)
             var color = vec3<f32>(r, g, b);
 
-            // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
-            // Sample 8 points for a smoother, wider halo
-            // JUICE: Wider spread (Increased base offset)
-            let offset = 0.006 * (1.0 + levelStress * 0.8);
-            let offset2 = offset * 2.2; // Even wider outer ring
-            var glow = vec3<f32>(0.0);
+            // Add subtle sharpening filter when glitch is OFF
+            if (useGlitch < 0.5) {
+                let texSize = vec2<f32>(textureDimensions(myTexture));
+                let texelSize = 1.0 / texSize;
+                let center = color;
+                let north = textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, texelSize.y)).rgb;
+                let south = textureSample(myTexture, mySampler, finalUV - vec2<f32>(0.0, texelSize.y)).rgb;
+                let east = textureSample(myTexture, mySampler, finalUV + vec2<f32>(texelSize.x, 0.0)).rgb;
+                let west = textureSample(myTexture, mySampler, finalUV - vec2<f32>(texelSize.x, 0.0)).rgb;
 
-            // Inner Ring
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, -offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, -offset)).rgb;
-
-            // Outer Ring (Diagonal)
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, -offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset2, 0.0)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset2, 0.0)).rgb;
-
-            glow *= 0.125; // Average of 8 samples
-
-            // Thresholding the glow
-            let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.45; // JUICE: Lower threshold (0.5 -> 0.45) for more glow
-            if (glowLum > bloomThreshold) {
-                 color += glow * 2.5; // JUICE: More intense bloom (2.0 -> 2.5)
+                // Simple Laplacian sharpen
+                let sharpened = center * 5.0 - (north + south + east + west);
+                color = mix(color, sharpened, 0.2); // Reduced sharpen slightly to avoid artifacts
             }
 
-            // High-pass boost for the core pixels
+            var finalColor = color;
+
+            // Calculate luminance for Bloom and Saturation
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            if (luminance > 0.6) {
-                 color += color * 0.4;
-            }
 
-            // Vignette darken (pulsing with beat)
-            let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
-            let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
-            let vignette = 1.0 - smoothstep(0.5, vignetteSize, distFromCenter);
-            color *= vignette;
+            // Enhanced Bloom: Cubic response for smoother high-end boost
+            let bloomThreshold = 0.55;
+            let bloomStrength = 0.85;
+            let bloomFactor = max(0.0, luminance - bloomThreshold);
+            // Squaring the factor creates a smoother knee and less wash-out in mid-tones
+            finalColor += color * (bloomFactor * bloomFactor) * bloomStrength;
 
-            // NEON BRICKLAYER: Warp Surge Flash
-            let warpSurge = uniforms.warpSurge;
-            if (warpSurge > 0.01) {
-                let invert = vec3<f32>(1.0) - color;
-                color = mix(color, invert, clamp(warpSurge * 0.8, 0.0, 0.8));
-            }
+            // Saturation boost for that "Neon" look
+            let gray = vec3<f32>(luminance);
+            finalColor = mix(gray, finalColor, 1.35);
 
-            // Scanlines
-            let scanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
-            color -= vec3<f32>(scanline);
+            // Vignette (Cinematic)
+            let distV = distance(uv, vec2<f32>(0.5));
+            let vignette = smoothstep(0.9, 0.2, distV * 1.1); // Darker corners
+            finalColor *= vignette;
 
-            if (!inBounds) {
-                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-            }
+            // Scanlines (Moving + Glitch interaction)
+            // Use time to slowly scroll scanlines
+            let scanSpeed = uniforms.time * 0.5;
+            let scanline = sin((uv.y - scanSpeed * 0.02) * 800.0) * 0.03;
 
-            return vec4<f32>(color, a);
+            finalColor -= vec3<f32>(scanline);
+
+            // Clamp to prevent negative values from subtractive scanlines
+            finalColor = max(vec3<f32>(0.0), finalColor);
+
+            // Apply flash overlay with gentle squared curve (color only)
+            let flashAmount = uniforms.flashIntensity * uniforms.flashIntensity;
+            finalColor = mix(finalColor, uniforms.flashColor, flashAmount * FLASH_BLEND_STRENGTH);
+
+            // Preserve texture alpha so background video remains visible
+            // Do NOT increase alpha during flash (avoids opaque 'purple mask')
+            let finalAlpha = a;
+
+            return vec4<f32>(finalColor, finalAlpha);
         }
     `;
 
@@ -183,7 +141,6 @@ export const ParticleShaders = () => {
     const vertex = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
-            time : f32, // Added time
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -191,7 +148,6 @@ export const ParticleShaders = () => {
             @builtin(position) Position : vec4<f32>,
             @location(0) color : vec4<f32>,
             @location(1) uv : vec2<f32>,
-            @location(2) lifeRatio : f32,
         };
 
         @vertex
@@ -199,14 +155,10 @@ export const ParticleShaders = () => {
             @location(0) particlePos : vec3<f32>,
             @location(1) particleColor : vec4<f32>,
             @location(2) particleScale : f32,
-            @location(3) particleLife : f32,
-            @location(4) particleMaxLife : f32,
-            @location(5) particleVel : vec3<f32>,
             @builtin(vertex_index) vertexIndex : u32
         ) -> VertexOutput {
             var output : VertexOutput;
 
-            // 6 vertices per particle (quad)
             let cornerIdx = vertexIndex % 6u;
 
             var pos = vec2<f32>(0.0);
@@ -219,95 +171,35 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
-            // Velocity Stretching (Neon Sparks)
-            // If particle is moving fast, stretch it along the velocity vector
-            let speed = length(particleVel);
-            var vOffset = vec3<f32>(pos * particleScale, 0.0);
-
-            if (speed > 0.5) { // JUICE: Threshold lowered
-                 let dir = normalize(particleVel);
-                 let right = normalize(cross(dir, vec3<f32>(0.0, 0.0, 1.0)));
-                 let stretch = 1.0 + speed * 0.1; // JUICE: More stretch
-                 vOffset = (right * pos.x * particleScale * 0.5) + (dir * pos.y * particleScale * stretch);
-            }
-
-            let worldPos = particlePos + vOffset;
+            let worldPos = particlePos + vec3<f32>(pos * particleScale, 0.0);
 
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
             output.color = particleColor;
             output.uv = uv;
-            // Calculate normalized life (1.0 = born, 0.0 = dead)
-            output.lifeRatio = clamp(particleLife / max(particleMaxLife, 0.001), 0.0, 1.0);
 
             return output;
         }
     `;
 
     const fragment = `
-        struct Uniforms {
-            viewProjectionMatrix : mat4x4<f32>,
-            time : f32,
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
-
         @fragment
-        fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>, @location(2) lifeRatio : f32) -> @location(0) vec4<f32> {
-            let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
+        fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>) -> @location(0) vec4<f32> {
+            let dist = length(uv - 0.5) * 2.0;
             if (dist > 1.0) {
                 discard;
             }
 
-            // "Hot Core" effect
-            // Intense center, rapid falloff
-            let intensity = exp(-dist * 4.0); // Sharper core
+            // Soft Particle Look
+            let glow = exp(-dist * 2.5); // Softer falloff
+            let core = exp(-dist * 5.0); // Bright center
 
-            // Sparkle shape (star)
-            let uvCentered = abs(uv - 0.5);
-            // Rotate UV 45 degrees for second cross
-            let rot = 0.7071;
-            let uvr = vec2<f32>(
-                uvCentered.x * rot - uvCentered.y * rot,
-                uvCentered.x * rot + uvCentered.y * rot
-            );
-            let uvrCentered = abs(uvr);
+            let alpha = glow * 0.8 + core * 0.5;
+            let finalAlpha = clamp(alpha * color.a, 0.0, 1.0);
 
-            // Create a soft glowing core
-            let core = exp(-length(uv - 0.5) * 5.0);
+            // Boost color for emissive look
+            let finalColor = color.rgb * (1.5 + core * 2.0);
 
-            // Create sharp rays
-            let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
-            let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
-
-            let sparkle = max(cross1, cross2 * 0.5);
-
-            // Combine
-            // Fade out as life decreases (lifeRatio goes 1 -> 0)
-            // But keep core bright until the very end
-            let alpha = intensity + core * 0.5 + sparkle * 0.8;
-            let finalAlpha = clamp(alpha * color.a * smoothstep(0.0, 0.2, lifeRatio), 0.0, 1.0);
-
-            // Color Shift:
-            // Hot White/Yellow at birth -> Theme Color -> Darker/Cooler at death
-            let hotColor = vec3<f32>(1.0, 1.0, 0.8); // Hot white-yellow
-            let baseColor = color.rgb;
-
-            // Mix based on life
-            // lifeRatio 1.0 -> 0.8 : Hot -> Base
-            // lifeRatio 0.8 -> 0.0 : Base
-            let mixFactor = smoothstep(0.8, 1.0, lifeRatio);
-            var finalColor = mix(baseColor, hotColor, mixFactor);
-
-            // JUICE: Pulse alpha for "alive" particles, sped up by low life
-            // Pulse faster when dying
-            let pulseSpeed = 20.0 + (1.0 - lifeRatio) * 30.0;
-            let pulse = 0.8 + 0.2 * sin(uv.x * pulseSpeed);
-
-            // Neon Flicker (JUICE)
-            // High frequency chaos for electrical look
-            let flicker = 0.7 + 0.3 * sin(uniforms.time * 80.0 + uv.x * 20.0);
-
-            // Boost brightness for neon effect
-            return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
+            return vec4<f32>(finalColor, finalAlpha);
         }
     `;
 
@@ -329,7 +221,7 @@ export const GridShader = () => {
     const fragment = `
         @fragment
         fn main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 1.0, 1.0, 0.15); // Increased visibility for neon look
+            return vec4<f32>(1.0, 1.0, 1.0, 0.08);
         }
     `;
     return { vertex, fragment };
@@ -346,7 +238,7 @@ export const BackgroundShaders = () => {
         fn main(@location(0) position: vec3<f32>) -> Output {
             var output: Output;
             output.Position = vec4<f32>(position, 1.0);
-            output.vUV = position.xy * 0.5 + 0.5; // Map -1..1 to 0..1
+            output.vUV = position.xy * 0.5 + 0.5;
             return output;
         }
     `;
@@ -354,144 +246,84 @@ export const BackgroundShaders = () => {
     const fragment = `
         struct Uniforms {
             time: f32,
-            level: f32, // Offset 4
-            resolution: vec2<f32>, // Offset 8 (align 8)
-            color1: vec3<f32>, // Offset 16 (align 16)
-            color2: vec3<f32>, // Offset 32
-            color3: vec3<f32>, // Offset 48
-            lockPercent: f32, // Offset 64
-            warpSurge: f32, // Offset 68
+            level: f32,
+            padding: vec2<f32>,
+            resolution: vec2<f32>,
+            color1: vec3<f32>,
+            color2: vec3<f32>,
+            color3: vec3<f32>,
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
         @fragment
         fn main(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-          let time = uniforms.time * 0.3; // Slower, calmer animation
-          let level = uniforms.level;
-          let lockPercent = uniforms.lockPercent;
-          let warpSurge = uniforms.warpSurge;
-          var uv = vUV;
+          let levelFactor = clamp(uniforms.level / 20.0, 0.0, 1.0);
+          // Speed increases with level
+          let time = uniforms.time * (0.3 + levelFactor * 0.5);
+          let uv = vUV;
+          let deepSpace = vec3<f32>(0.02, 0.01, 0.08);
 
-          // Modify parameters based on level
-          // Level 1: Calm blue
-          // Level 10: Chaotic red
-          // JUICE: Faster ramp up to "danger" colors (max at level 8)
-          let levelFactor = min(level * 0.125, 1.0);
-
-          // Base deep space color - shifts to red as level increases
-          // NEON BRICKLAYER: More dramatic shift from Calm Blue to Chaotic Red/Purple
-          let deepSpace = mix(vec3<f32>(0.0, 0.05, 0.15), vec3<f32>(0.2, 0.0, 0.1), levelFactor);
-
-          // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
-          // Warps the UVs towards the center as level increases
-          if (levelFactor > 0.0 || warpSurge > 0.0) {
-              let center = vec2<f32>(0.5, 0.5);
-              let dist = distance(uv, center);
-              // JUICE: Increased warp strength for higher levels
-              let warpStrength = (levelFactor * 0.3 + warpSurge * 0.15) * sin(uniforms.time * 2.0);
-              uv -= normalize(uv - center) * warpStrength * dist;
-          }
-
-          // --- Multi-layer perspective grid ---
           var grid = 0.0;
-          // Four layers of grids at different scales for depth
           for (var layer: i32 = 0; layer < 4; layer++) {
             let layer_f = f32(layer);
-            let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
+            let scale = exp2(layer_f);
 
-            // NEON BRICKLAYER: WARP SPEED
-            // Speed increases significantly with level to simulate warp acceleration
-            // JUICE: Uncapped speed based on raw level
-            let warpSpeed = 1.0 + level * 0.5 + warpSurge * 2.0;
-            let speed = (0.1 + layer_f * 0.05) * warpSpeed;
+            // Grid moves faster and more chaotically at higher levels
+            let speed = (0.1 + layer_f * 0.05) * (1.0 + levelFactor * 1.5);
 
-            // Perspective offset for each layer
             let perspectiveOffset = vec2<f32>(
               sin(time * speed) * (0.05 + layer_f * 0.02),
               cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
             );
 
-            // NEON BRICKLAYER: Grid Distortion from Warp Surge
-            let surgeDistortion = sin(uv.y * 20.0 + time * 10.0) * warpSurge * 0.05;
-            let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
+            let gridUV = (uv - 0.5) * scale + perspectiveOffset;
 
-            // Smooth grid lines that get thinner with distance
             let lineWidth = 0.02 / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
-            // Combine X and Y lines, fade distant layers
             let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
             grid = max(grid, layerGrid);
           }
 
-          // --- Dynamic neon color palette ---
-          // Cycle through cyberpunk colors
           let colorCycle = sin(time * 0.5) * 0.5 + 0.5;
+          let neonCyan = uniforms.color1;
+          let neonPurple = uniforms.color2;
+          let neonBlue = uniforms.color3;
 
-          // Bias colors towards red/purple at high levels
-          var neonCyan = uniforms.color1;
-          var neonPurple = uniforms.color2;
-          var neonBlue = uniforms.color3;
+          var gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
-          // Manual mix for level influence (mix towards red/orange)
-          let dangerColor = vec3<f32>(1.0, 0.2, 0.0);
-          neonCyan = mix(neonCyan, dangerColor, levelFactor * 0.5);
-          neonBlue = mix(neonBlue, vec3<f32>(0.5, 0.0, 0.0), levelFactor * 0.8);
+          // Inject "Danger" Red as level increases
+          let dangerColor = vec3<f32>(1.0, 0.0, 0.2);
+          gridColor = mix(gridColor, dangerColor, levelFactor * 0.6);
 
-          let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
-
-          // --- Multiple orbiting light sources ---
           var lights = vec3<f32>(0.0);
           for (var i: i32 = 0; i < 3; i++) {
             let idx = f32(i);
-            let angle = time * (0.3 + idx * 0.2) + idx * 2.094; // 120° separation
+            let angle = time * (0.3 + idx * 0.2) + idx * 2.094;
             let radius = 0.25 + idx * 0.1;
             let lightPos = vec2<f32>(
               0.5 + cos(angle) * radius,
               0.5 + sin(angle) * radius
             );
 
-            // Quadratic falloff for realistic lighting
             let dist = length(uv - lightPos);
             let intensity = 0.08 / (dist * dist + 0.01);
-
-            // Each light has a different color
             let lightColor = mix(neonCyan, neonPurple, sin(time + idx) * 0.5 + 0.5);
             lights += lightColor * intensity;
           }
 
-          // --- Global pulse effect ---
-          // Pulse faster at higher levels
-          let pulseSpeed = 1.5 + levelFactor * 3.0;
-          let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
+          let pulse = sin(time * 1.5) * 0.15 + 0.85;
 
-          // Combine all elements
           var finalColor = deepSpace;
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;
 
-          // --- Lock Tension (Pulse Red) ---
-          // Pulse gets faster and more intense as lockPercent approaches 1.0
-          if (lockPercent > 0.0) {
-             let tensionPulse = sin(time * (10.0 + lockPercent * 20.0)) * 0.5 + 0.5;
-             let redFlash = vec3<f32>(1.0, 0.0, 0.0) * lockPercent * tensionPulse * 0.3;
-             finalColor += redFlash;
-          }
-
-          // --- Vignette effect to focus on center ---
           let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
           finalColor *= vignette;
 
-          // --- Subtle film grain for texture ---
           let noise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
           finalColor += (noise - 0.5) * 0.03;
-
-          // Warp Surge Flash
-          finalColor += vec3<f32>(1.0) * warpSurge * 0.1;
-
-          // NEON BRICKLAYER: Hyper-Inversion
-          finalColor = mix(finalColor, vec3<f32>(1.0) - finalColor, clamp(warpSurge * 0.5, 0.0, 1.0));
 
           return vec4<f32>(finalColor, 1.0);
         }
@@ -500,42 +332,49 @@ export const BackgroundShaders = () => {
     return { vertex, fragment };
 };
 
-export const Shaders = () => {
+// Helper to select shader based on style
+export const getBlockShader = (style: string) => {
+    if (style === 'glass') {
+        return HolographicGlassShader();
+    }
+    return TechGemsShader();
+};
+
+export const TechGemsShader = () => {
     let params: any = {};
+    // define default input values:
     params.color = "(0.0, 1.0, 0.0)";
-    params.ambientIntensity = "0.5";
-    params.diffuseIntensity = "1.0";
-    params.specularIntensity = "30.0";
-    params.shininess = "1000.0";
+    params.diffuseIntensity = "1.2";
+    params.specularIntensity = "4.0";
+    params.shininess = "350.0";
     params.specularColor = "(1.0, 1.0, 1.0)";
-    params.isPhong = "1";
 
     const vertex = `
-        struct Uniforms {
-            viewProjectionMatrix : mat4x4<f32>,
-            modelMatrix : mat4x4<f32>,
-            normalMatrix : mat4x4<f32>,
-            colorVertex : vec4<f32>
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+            struct Uniforms {
+                viewProjectionMatrix : mat4x4<f32>,
+                modelMatrix : mat4x4<f32>,
+                normalMatrix : mat4x4<f32>,
+                colorVertex : vec4<f32>
+            };
+            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
             struct Output {
                 @builtin(position) Position : vec4<f32>,
                 @location(0) vPosition : vec4<f32>,
-                @location(1) vNormal : vec4<f32>,
+                @location(1) @interpolate(flat) vNormal : vec4<f32>,
                 @location(2) vColor : vec4<f32>,
                 @location(3) vUV : vec2<f32>
             };
-          
+
             @vertex
-            fn main(@location(0) position: vec4<f32>, @location(1) normal: vec4<f32>, @location(2) uv: vec2<f32>) -> Output {
+            fn main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> Output {
                 var output: Output;
-                let mPosition:vec4<f32> = uniforms.modelMatrix * position;
+                let mPosition:vec4<f32> = uniforms.modelMatrix * vec4<f32>(position, 1.0);
                 output.vPosition = mPosition;
-                output.vNormal   = uniforms.normalMatrix * normal;
+                output.vNormal   = uniforms.normalMatrix * vec4<f32>(normal, 0.0);
                 output.Position  = uniforms.viewProjectionMatrix * mPosition;
                 output.vColor    = uniforms.colorVertex;
-                output.vUV       = uv;
+                output.vUV = uv;
                 return output;
             }`;
 
@@ -546,53 +385,36 @@ export const Shaders = () => {
                 color : vec4<f32>,
                 time : f32,
                 useGlitch: f32,
-                lockPercent: f32, // Offset 56
-                level: f32,       // Offset 60
+                lockPercent: f32,
+                screenSize: vec2<f32>,
             };
             @binding(1) @group(0) var<uniform> uniforms : Uniforms;
-            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(2) @group(0) var mySampler: sampler;
+            @binding(3) @group(0) var myTexture: texture_2d<f32>;
 
             @fragment
-            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+            fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
 
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
                 let H:vec3<f32> = normalize(L + V);
 
-                // Level Evolution
-                let level = uniforms.level;
-                let levelFactor = min(level * 0.1, 1.0); // 0 to 1 over 10 levels
-
-                // Lighting
+                // --- Lighting Model ---
                 let diffuse:f32 = max(dot(N, L), 0.0);
+                let specularSharp:f32 = pow(max(dot(N, H), 0.0), ${params.shininess}) * 3.0;
+                let specularClear:f32 = pow(max(dot(N, H), 0.0), 16.0) * 0.5;
+                let ambient:f32 = 0.3;
 
-                // JUICE: Sharpness increases with level (Glassier)
-                let shininessBoost = 1.0 + levelFactor * 2.0;
-                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess} * shininessBoost);
-                specular += pow(max(dot(N, H), 0.0), 32.0 * shininessBoost) * 0.2;
-                let ambient:f32 = ${params.ambientIntensity};
+                // --- Texture Sampling ---
+                // Sample the block texture using standard UVs
+                let texColor = textureSample(myTexture, mySampler, vUV).rgb;
 
-                // --- TEXTURE SAMPLING ---
-                // Flip Y for correct image orientation
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                // Blend: Multiply vertex color (e.g., Cyan) with texture (Gray/White pattern)
+                var baseColor = vColor.xyz * texColor;
 
-                // Multiply texture with block color (modulate)
-                // Use the texture's alpha if needed, or assume opaque
-                var baseColor = vColor.rgb * texColor.rgb;
-
-                // --- Tech Pattern Overlay (Optional - kept for style) ---
-                let hexScale = 4.0;
-                let uvHex = vUV * hexScale;
-                let r = vec2<f32>(1.0, 1.73);
-                let h = r * 0.5;
-                let a = (uvHex - r * floor(uvHex / r)) - h;
-                let b = ((uvHex - h) - r * floor((uvHex - h) / r)) - h;
-                let guv = select(b, a, dot(a, a) < dot(b, b));
-                let hexEdge = smoothstep(0.45, 0.5, length(guv));
-
+                // --- Circuit Traces / Emissive Logic ---
+                // We keep the circuit trace logic for extra "tech" feel, but overlay it on the texture
                 let uvScale = 3.0;
                 let uvGrid = vUV * uvScale;
                 let gridPos = fract(uvGrid);
@@ -601,111 +423,300 @@ export const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                if (hexEdge > 0.5) { baseColor *= 0.8; } // JUICE: More contrast
-                if (isTrace > 0.5) { baseColor *= 0.5; }
+                if (isTrace > 0.5) {
+                    baseColor *= 0.6; // Darken traces slightly
+                }
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
+                var finalColor:vec3<f32> = baseColor * (ambient + diffuse * 0.9) + vec3<f32>${params.specularColor} * (specularSharp + specularClear);
 
-                // Emissive
-                let time = uniforms.time;
-                let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
-                let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0);
-
-                // Global breathing for all blocks
-                let breath = sin(time * 2.0) * 0.1 + 0.1;
-                // JUICE: Inner pulse frequency scales with level (Heartbeat)
-                let pulseFreq = 5.0 + level * 0.5;
-                let innerPulse = sin(time * pulseFreq) * (0.1 + level * 0.01);
-                finalColor += vColor.rgb * (breath + innerPulse);
+                // --- Emissive Elements (Dynamic Pulse) ---
+                // Pulse speed synced with time, higher intensity
+                let pulseSpeed = 3.0;
+                let pulsePos = sin(uniforms.time * pulseSpeed + vPosition.y * 0.5 + vPosition.x * 0.5) * 0.5 + 0.5;
 
                 if (isTrace > 0.5) {
-                    finalColor += vColor.rgb * pulsePos * 4.0;
+                    // Traces glow brighter and pulse
+                    let traceGlow = pulsePos * 8.0;
+                    finalColor += vColor.rgb * traceGlow * 0.6;
+                    // Add white core to traces
+                    finalColor += vec3<f32>(1.0) * traceGlow * 0.2;
                 }
 
-                // Fresnel (Boosted for Glass look)
-                // JUICE: Sharper falloff for distinct neon rim
-                let baseFresnel = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-                let fresnelTerm = baseFresnel; // Alias for legacy code
+                // --- Fresnel Rim Light (Enhanced) ---
+                let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 2.5); // Wider rim
+                let rimColor = vec3<f32>(0.4, 0.9, 1.0); // Brighter Cyan/White
+                finalColor += rimColor * fresnelTerm * 3.0; // Boosted intensity
 
-                // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
-                // Shift the fresnel curve for each channel based on level
-                let dispersion = 0.2 * levelFactor;
-                // Clamp bases to 0.0 to avoid NaN in pow()
-                let fR = pow(max(0.0, 1.0 - dot(N, V) * (1.0 - dispersion)), 5.0);
-                let fG = baseFresnel;
-                let fB = pow(max(0.0, 1.0 - dot(N, V) * (1.0 + dispersion)), 5.0);
+                // --- Edge Highlight ---
+                const EDGE_THRESHOLD = 0.6;
+                const SILHOUETTE_THRESHOLD = 0.2;
+                let edgeFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+                let edgeGlow = edgeFresnel * step(EDGE_THRESHOLD, edgeFresnel);
+                let isSilhouette = step(SILHOUETTE_THRESHOLD, abs(dot(N, V)));
+                finalColor += vec3<f32>(1.0) * edgeGlow * isSilhouette * 4.0;
 
-                var irid = vec3<f32>(fR, fG, fB);
-
-                // Add iridescence (oil slick) on top
-                irid += vec3<f32>(
-                    sin(baseFresnel * 10.0 + time) * 0.5 + 0.5,
-                    cos(baseFresnel * 10.0 + time) * 0.5 + 0.5,
-                    sin(baseFresnel * 15.0 + time) * 0.5 + 0.5
-                ) * 0.5;
-
-                finalColor += irid * (3.0 + levelFactor * 4.0); // JUICE: Stronger rim
-
-                // Edge Glow
-                let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
-                finalColor += vec3<f32>(1.0) * edgeGlow * (1.0 + levelFactor);
-
-                // Lock Tension Pulse (Heartbeat & Alarm)
-                let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.0) {
-                     // NEON BRICKLAYER: Full range pulse, but subtle at first
-                     let tension = smoothstep(0.0, 1.0, lockPercent);
-
-                     // Heartbeat rhythm: faster as it gets closer to 1.0
-                     let beatSpeed = 4.0 + tension * 60.0; // JUICE: Even faster panic mode
-                     let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
-                     let sharpPulse = pow(pulse, 2.0 + tension * 4.0); // Sharper as it gets critical
-
-                     // Digital Grid Scan Effect (Digitizing in/out)
-                     // Scanline that moves up/down based on pulse
-                     let scanY = fract(vUV.y * 10.0 + time * 5.0);
-                     let scanLine = step(0.9, scanY) * tension * sharpPulse;
-
-                     // Mix to Warning Red
-                     let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 0.6);
-
-                     // Add Scanline Emission
-                     finalColor += warningColor * scanLine * 2.0;
+                // --- Lock Pulse ---
+                let lockP = uniforms.lockPercent;
+                if (lockP > 0.0 && vColor.w > 0.8) {
+                   let pulseSpeed = 10.0 + lockP * 20.0;
+                   let whiteFlash = sin(uniforms.time * pulseSpeed) * 0.5 + 0.5;
+                   let intensity = lockP * 0.6 * whiteFlash;
+                   finalColor = mix(finalColor, vec3<f32>(1.0, 1.0, 1.0), intensity);
                 }
 
-                // Ghost Piece Logic
+                // --- Ghost Piece (Pulsing Hologram) ---
                 if (vColor.w < 0.4) {
-                    // Hologram Effect - High Tech
-                    let scanSpeed = 8.0;
-                    let scanY = fract(vUV.y * 20.0 - time * scanSpeed);
-                    let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY));
+                    let ghostPulse = sin(uniforms.time * 4.0) * 0.5 + 0.5;
+                    let scanY = fract(vPosition.y * 5.0 - uniforms.time * 2.0);
+                    let scanline = step(0.5, scanY) * 0.2;
+                    let alpha = 0.15 + ghostPulse * 0.15; // Pulse between 0.15 and 0.3
 
-                    // Wireframe logic (from edgeGlow)
-                    let wireframe = smoothstep(0.9, 0.95, uvEdgeDist);
-
-                    let ghostColor = vColor.rgb * 1.5; // Brighten original color
-
-                    // Pulsing Alpha
-                    let ghostAlpha = 0.3 + 0.2 * sin(time * 10.0);
-
-                    var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
-                                   + ghostColor * scanline * 0.5   // Scanlines
-                                   + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
-
-                    // Digital noise/flicker
-                    let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
-                    if (noise > 0.95) {
-                        ghostFinal += vec3<f32>(1.0); // Sparkle
-                    }
-
-                    return vec4<f32>(ghostFinal, ghostAlpha);
+                    let ghostColor = vColor.rgb * 3.0 + vec3<f32>(scanline);
+                    return vec4<f32>(ghostColor, alpha);
                 }
 
-                return vec4<f32>(finalColor, 1.0);
+                // --- Final Alpha ---
+                let finalAlpha = vColor.w;
+
+                return vec4<f32>(finalColor, finalAlpha);
             }`;
 
+    return {
+        vertex,
+        fragment,
+    };
+};
+
+export const HolographicGlassShader = () => {
+    // Reuse the same vertex shader as TechGems
+    const { vertex } = TechGemsShader();
+
+    const fragment = `
+        struct Uniforms {
+            lightPosition : vec4<f32>,
+            eyePosition : vec4<f32>,
+            color : vec4<f32>,
+            time : f32,
+            useGlitch: f32,
+            lockPercent: f32,
+            screenSize: vec2<f32>,
+        };
+        @binding(1) @group(0) var<uniform> uniforms : Uniforms;
+        @binding(2) @group(0) var screenSampler: sampler;
+        @binding(3) @group(0) var screenTexture: texture_2d<f32>;
+
+        @fragment
+        fn main(@builtin(position) fragCoord: vec4<f32>, @location(0) vPosition: vec4<f32>, @location(1) @interpolate(flat) vNormal: vec4<f32>, @location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+
+            var N:vec3<f32> = normalize(vNormal.xyz);
+            let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
+            let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
+            let H:vec3<f32> = normalize(L + V);
+
+            // --- Screen-space UVs for Refraction ---
+            // Normalize fragment coordinates to 0-1 range
+            let screenUV = fragCoord.xy / uniforms.screenSize;
+
+            // Refraction effect: offset UVs based on normal and view direction
+            // A simplified IOR (Index of Refraction) effect
+            let ior = 1.1; // Index of Refraction for glass-like effect
+            let refraction = refract(-V, N, 1.0 / ior);
+            let refractionUV = screenUV + refraction.xy * 0.05; // Adjust strength of effect
+
+            // Sample the background texture
+            let bgColor = textureSample(screenTexture, screenSampler, refractionUV).rgb;
+
+            // --- Glass Lighting ---
+            let diffuse:f32 = max(dot(N, L), 0.0);
+            let specular:f32 = pow(max(dot(N, H), 0.0), 300.0); // Sharp highlight for glass
+            let ambient:f32 = 0.1; // Glass is mostly transparent, low ambient
+
+            // --- Fresnel Effect for Edge Highlights ---
+            // Controls how reflective the surface is based on the viewing angle
+            let fresnelTerm = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+
+            // --- Ghost Piece ---
+            if (vColor.a < 0.4) {
+                 let time = uniforms.time;
+                 let scanY = fract(vUV.y * 20.0 - time * 2.0);
+                 let scanline = smoothstep(0.4, 0.5, scanY) - smoothstep(0.5, 0.6, scanY);
+                 let fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+                 let flicker = 0.5 + sin(time * 30.0 + vUV.y * 10.0) * 0.2;
+                 return vec4<f32>(vColor.rgb * fresnel * 8.0 * flicker + vec3<f32>(scanline * 0.5), 0.1 * flicker);
+            }
+
+            // --- Composition ---
+            // Base color is a mix of the block's color and the refracted background
+            let baseColor = mix(bgColor, vColor.rgb, 0.3); // 30% block color, 70% background
+
+            // Combine lighting components
+            var finalColor = baseColor * (ambient + diffuse * 0.8) + vec3<f32>(1.0) * specular * 3.0;
+
+            // Additive fresnel rim light - makes it glow at the edges
+            finalColor += vec3<f32>(0.8, 0.9, 1.0) * fresnelTerm * 2.0;
+
+            // Transparency: controlled by fresnel and base alpha
+            let finalAlpha = clamp(fresnelTerm + (1.0 - vColor.a), 0.1, 0.9);
+
+            return vec4<f32>(finalColor, finalAlpha);
+        }`;
+
+    return {
+        vertex,
+        fragment,
+    };
+};
+
+export const VideoBackgroundShader = () => {
+    const vertex = `
+        struct VertexOutput {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) uv : vec2<f32>,
+        };
+
+        @vertex
+        fn main(@location(0) position : vec3<f32>) -> VertexOutput {
+            var output : VertexOutput;
+            output.Position = vec4<f32>(position, 1.0);
+            output.uv = position.xy * 0.5 + 0.5;
+            output.uv.y = 1.0 - output.uv.y; // Correct standard video orientation
+            return output;
+        }
+    `;
+
+    const fragment = `
+        struct GameState {
+            screen_size: vec2<f32>,
+            time: f32,
+            dt: f32,
+
+            // Active Piece
+            piece_pos: vec2<f32>,
+
+            // NEW: Video Size for Aspect Ratio Correction
+            video_size: vec2<f32>,
+
+            piece_color: vec4<f32>,
+
+            // Line Clears (Packed into vec4 for alignment)
+            cleared_lines: vec4<f32>,
+            line_clear_params: vec4<f32>, // x=count, y=progress, z=padding, w=padding
+
+            // Stats
+            stats: vec4<f32>, // x=level, y=score, z=quality(LOD), w=debug_mode
+
+            // Locked Pieces Ring Buffer
+            // We use vec4 for alignment: x,y = pos, z = fade_strength, w = padding
+            locked_pieces: array<vec4<f32>, 200>,
+        };
+
+        @group(0) @binding(0) var<uniform> game: GameState;
+        @group(0) @binding(1) var videoSampler: sampler;
+        @group(0) @binding(2) var videoTexture: texture_external;
+
+        @fragment
+        fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
+            var finalUV = uv;
+            var finalColor = vec4<f32>(0.0);
+
+            // --- ASPECT RATIO CORRECTION (Cover Mode) ---
+            let screenW = game.screen_size.x;
+            let screenH = game.screen_size.y;
+            let vidW = select(1920.0, game.video_size.x, game.video_size.x > 1.0);
+            let vidH = select(1080.0, game.video_size.y, game.video_size.y > 1.0);
+
+            let screenRatio = screenW / max(1.0, screenH);
+            let videoRatio = vidW / max(1.0, vidH);
+
+            // Calculate scale to cover the screen
+            var scale = vec2<f32>(1.0, 1.0);
+
+            if (screenRatio > videoRatio) {
+                // Screen is wider: Fit Width, Crop Height
+                scale.y = videoRatio / screenRatio;
+            } else {
+                // Screen is taller: Fit Height, Crop Width
+                scale.x = screenRatio / videoRatio;
+            }
+
+            // Center the crop
+            let coverUV = (finalUV - 0.5) * scale + 0.5;
+
+            // Calculate screen pos for distance checks (approximate aspect ratio correction)
+            let aspect = game.screen_size.x / game.screen_size.y;
+            let screenUV = uv * vec2<f32>(aspect, 1.0);
+
+            // --- 1. GHOST PIECE BURN-IN ---
+            var totalDistortion = vec2<f32>(0.0);
+            let max_pieces = u32(200.0 * game.stats.z);
+
+            for (var i = 0u; i < max_pieces; i++) {
+                let data = game.locked_pieces[i];
+                if (data.z <= 0.001) { continue; }
+
+                let pieceUV = vec2<f32>(data.x / 10.0, 1.0 - (data.y / 20.0));
+                let pieceScreenUV = pieceUV * vec2<f32>(aspect, 1.0);
+
+                let dist = distance(screenUV, pieceScreenUV);
+                let radius = 0.15;
+                let influence = smoothstep(radius, 0.0, dist) * data.z;
+
+                totalDistortion += (screenUV - pieceScreenUV) * influence * 0.05;
+            }
+
+            // Apply distortion to our corrected UVs
+            let distortedUV = coverUV + totalDistortion;
+
+            // --- 2. ACTIVE PIECE GRAVITY WELL ---
+            let activePos = vec2<f32>(game.piece_pos.x / 10.0, 1.0 - (game.piece_pos.y / 20.0));
+            let activeDist = distance(screenUV, activePos * vec2<f32>(aspect, 1.0));
+            let activeInfluence = smoothstep(0.3, 0.0, activeDist) * 0.03;
+            let pulse = sin(game.time * 5.0) * 0.005;
+
+            let finalSampleUV = distortedUV + (screenUV - (activePos * vec2<f32>(aspect, 1.0))) * (activeInfluence + pulse);
+
+            // SAMPLE VIDEO
+            var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, finalSampleUV);
+
+            // --- 3. MULTI-LINE CASCADE ---
+            let lineCount = u32(game.line_clear_params.x);
+            if (lineCount > 0u) {
+                let progress = game.line_clear_params.y;
+                var celebration = vec3<f32>(0.0);
+                if (lineCount >= 4u) {
+                     let flash = sin(game.time * 15.0) * (1.0 - progress);
+                     celebration = vec3<f32>(flash * 0.2, flash * 0.1, flash * 0.3);
+                }
+
+                for (var i = 0u; i < lineCount; i++) {
+                    let lineY_raw = game.cleared_lines[i];
+                    let lineUV_Y = 1.0 - (lineY_raw / 20.0);
+                    let distToLine = abs(uv.y - lineUV_Y); // Use original UV for line position logic
+                    let stagger = f32(i) * 0.15;
+                    let wavePos = progress * (1.0 + stagger);
+                    let waveDist = abs(distToLine - wavePos * 0.5);
+                    let waveIntensity = smoothstep(0.1, 0.0, waveDist) * (1.0 - progress) * 2.0;
+
+                    videoColor.r += waveIntensity * 0.3;
+                    videoColor.b -= waveIntensity * 0.3;
+                    videoColor = vec4<f32>(videoColor.rgb + celebration, videoColor.a);
+                }
+            }
+
+            // --- 4. DEBUG VISUALIZATION ---
+            if (game.stats.w > 0.5) {
+                let distLen = length(totalDistortion) * 20.0;
+                videoColor.g += distLen;
+                if (activeDist < 0.3) { videoColor.r += 0.1; }
+            }
+
+            let levelBoost = 1.0 + game.stats.x * 0.05;
+            let gray = dot(videoColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            videoColor = mix(vec4<f32>(vec3<f32>(gray), 1.0), videoColor, 1.0 + levelBoost * 0.2);
+
+            return videoColor;
+        }
+    `;
     return { vertex, fragment };
 };
