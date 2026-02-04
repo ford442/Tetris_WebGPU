@@ -422,6 +422,8 @@ export default class Controller {
               while (this.actionTimers.left! > DAS + ARR) {
                   this.game.movePieceLeft();
                   this.soundManager.playMove();
+                  // NEON BRICKLAYER: DAS Trail
+                  this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                   this.actionTimers.left! -= ARR;
               }
           }
@@ -431,6 +433,8 @@ export default class Controller {
               while (this.actionTimers.right! > DAS + ARR) {
                   this.game.movePieceRight();
                   this.soundManager.playMove();
+                  // NEON BRICKLAYER: DAS Trail
+                  this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                   this.actionTimers.right! -= ARR;
               }
           }
