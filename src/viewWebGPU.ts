@@ -612,6 +612,20 @@ export default class View {
   renderEndScreen({ score }: any) {
     const el = document.getElementById('game-over');
     if (el) el.style.display = 'block';
+
+    // NEON BRICKLAYER: SYSTEM FAILURE EFFECT
+    this.visualEffects.triggerGlitch(1.0);
+    this.visualEffects.triggerAberration(1.0);
+    this.visualEffects.triggerFlash(0.5);
+  }
+
+  onMove(x: number, y: number) {
+      // NEON BRICKLAYER: DAS Trail
+      // Emit faint particles at the active piece center to visualize speed
+      const worldX = (x + 1.5) * 2.2;
+      const worldY = (y + 1.5) * -2.2;
+      // Faint cyan trail
+      this.particleSystem.emitParticles(worldX, worldY, 0.0, 2, [0.4, 0.9, 1.0, 0.6]);
   }
 
   /**
