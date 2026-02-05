@@ -460,6 +460,9 @@ export default class Controller {
 
              for (let i = 0; i < steps; i++) {
                  this.game.movePieceDown();
+                 // NEON BRICKLAYER: Soft Drop Trail
+                 this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
+
                  // If collision happened (handled in movePieceDown), break?
                  // movePieceDown resets position if collision.
                  // So we continue trying to move down?
