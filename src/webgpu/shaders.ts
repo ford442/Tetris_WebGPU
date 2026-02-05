@@ -150,7 +150,7 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.45; // JUICE: Lower threshold (0.5 -> 0.45) for more glow
+            let bloomThreshold = 0.40; // JUICE: Lower threshold (0.45 -> 0.40) for even more glow
             if (glowLum > bloomThreshold) {
                  color += glow * 2.5; // JUICE: More intense bloom (2.0 -> 2.5)
             }
@@ -525,7 +525,7 @@ export const Shaders = () => {
   params.color = "(0.0, 1.0, 0.0)";
   params.ambientIntensity = "0.5";
   params.diffuseIntensity = "1.0";
-  params.specularIntensity = "30.0";
+  params.specularIntensity = "50.0";
   params.shininess = "1000.0";
   params.specularColor = "(1.0, 1.0, 1.0)";
   params.isPhong = "1";
@@ -645,7 +645,7 @@ export const Shaders = () => {
 
                 // Fresnel (Boosted for Glass look)
                 // JUICE: Sharper falloff for distinct neon rim
-                let baseFresnel = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+                let baseFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
                 let fresnelTerm = baseFresnel; // Alias for legacy code
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
@@ -696,6 +696,10 @@ export const Shaders = () => {
                      finalColor += warningColor * scanLine * 2.0;
                 }
 
+                // Subtle Surface Noise (Texture)
+                let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+                finalColor += vec3<f32>(noise) * 0.03;
+
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech
@@ -703,6 +707,9 @@ export const Shaders = () => {
                     // INCREASED Frequency: 20.0 -> 30.0
                     let scanY = fract(vUV.y * 30.0 - time * scanSpeed);
                     let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY));
+
+                    // Landing Beam (Vertical Highlight)
+                    let beam = smoothstep(0.5, 0.0, abs(vUV.x - 0.5));
 
                     // Wireframe logic (from edgeGlow)
                     let wireframe = smoothstep(0.9, 0.95, uvEdgeDist);
@@ -722,6 +729,7 @@ export const Shaders = () => {
 
                     var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
                                    + ghostColor * scanline * 0.5   // Scanlines
+                                   + ghostColor * beam * 0.5       // Landing Beam
                                    + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
