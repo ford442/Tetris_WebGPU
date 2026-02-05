@@ -709,11 +709,16 @@ export const Shaders = () => {
 
                     let ghostColor = vColor.rgb * 1.5; // Brighten original color
 
-                    // ENHANCED Pulse: 0.3 + 0.2*sin(10t) -> 0.4 + 0.1*sin(5t) (Slower, fuller)
-                    let ghostAlpha = 0.4 + 0.1 * sin(time * 5.0);
+                    // NEON BRICKLAYER: Tension-based pulse
+                    let tension = smoothstep(0.5, 1.0, lockPercent);
+                    let pulseFreq = 5.0 + tension * 15.0; // Speed up significantly when locking
 
-                    // NEW Glitch effect
-                    let ghostGlitch = sin(vUV.y * 50.0 + time * 20.0) * 0.02;
+                    // ENHANCED Pulse: 0.3 + 0.2*sin(10t) -> 0.4 + 0.1*sin(5t) (Slower, fuller)
+                    let ghostAlpha = 0.4 + 0.1 * sin(time * pulseFreq);
+
+                    // NEW Glitch effect (Reacts to tension)
+                    let glitchAmp = 0.02 + tension * 0.05;
+                    let ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
 
                     var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
                                    + ghostColor * scanline * 0.5   // Scanlines
