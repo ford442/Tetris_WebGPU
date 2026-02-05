@@ -381,10 +381,10 @@ export default class View {
               // T-SPIN GOLD
               if (tSpin) {
                   color = [1.0, 0.8, 0.0, 1.0]; // GOLD
-                  count = 100 + (combo * 20); // NEON BRICKLAYER: Massive T-Spin Burst
+                  count = 150 + (combo * 20); // NEON BRICKLAYER: Massive T-Spin Burst
               } else if (lines.length === 4) {
                   color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
-                  count = 150 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
+                  count = 200 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
               }
@@ -514,14 +514,14 @@ export default class View {
           const worldY = r * -2.2;
           // More particles per block
           // Vary the X slightly for a thicker trail
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 8, trailColor);
+          this.particleSystem.emitParticles(worldX, worldY, 0.0, 12, trailColor);
       }
 
       // Impact particles at bottom
       const impactY = y * -2.2;
       const burstColor = [...themeColors, 1.0];
-      for (let i=0; i<60; i++) { // More particles!
-          const angle = (i / 60) * Math.PI * 2;
+      for (let i=0; i<80; i++) { // More particles!
+          const angle = (i / 80) * Math.PI * 2;
           const speed = 20.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
@@ -553,6 +553,16 @@ export default class View {
       this.visualEffects.triggerLevelUp();
       this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
       this.showFloatingText("LEVEL UP!", "WARP SPEED");
+
+      // Warp Speed Particles (Radial Burst)
+      const centerX = 5.0 * 2.2;
+      const centerY = 10.0 * -2.2;
+      for (let i = 0; i < 100; i++) {
+           const angle = Math.random() * Math.PI * 2;
+           const speed = 20.0 + Math.random() * 30.0;
+           // Cyan/White color
+           this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
+      }
     }
 
     // Check for Score Event (Floating Text)
