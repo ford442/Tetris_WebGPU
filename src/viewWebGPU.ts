@@ -460,6 +460,16 @@ export default class View {
 
   onRotate() {
       this.visualEffects.triggerRotate(0.2);
+
+      if (this.state && this.state.activePiece) {
+          const { x, y } = this.state.activePiece;
+          const worldX = (x + 1.5) * 2.2;
+          const worldY = (y + 1.5) * -2.2;
+          for (let i = 0; i < 12; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, 15.0, [0.8, 1.0, 1.0, 0.8]);
+          }
+      }
   }
 
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
