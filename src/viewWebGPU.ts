@@ -32,7 +32,7 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
-  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
+  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -544,6 +544,7 @@ export default class View {
   }
 
   renderMainScreen(state: any) {
+    this.state = state;
     // JUICE: Removed redundant triggerImpactEffects loop check.
     // Impact effects are triggered immediately by Controller -> onHardDrop for zero latency.
 
@@ -1337,6 +1338,19 @@ export default class View {
     // Update uniforms for particles (Render VP) & grid
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     this.device.queue.writeBuffer(this.particleUniformBuffer, 64, new Float32Array([time])); // Write time at offset 64
+
+    // NEON BRICKLAYER: Ghost Piece Landing Zone
+    let ghostX = -100.0;
+    let ghostWidth = 0.0;
+    if (this.state && this.state.activePiece) {
+        const widthInBlocks = this.state.activePiece.blocks[0].length;
+        const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
+        ghostX = gridCenterX * 2.2;
+        ghostWidth = widthInBlocks * 2.2;
+    }
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, new Float32Array([ghostX]));
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 72, new Float32Array([ghostWidth]));
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 76, new Float32Array([this.visualEffects.warpSurge]));
 
     // Update time for background and blocks
     // used 'time' calculated at start of frame

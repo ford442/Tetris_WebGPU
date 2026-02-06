@@ -329,27 +329,64 @@ export const GridShader = () => {
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
             time : f32, // Offset 64
+            ghostX : f32, // Offset 68
+            ghostWidth : f32, // Offset 72
+            warpSurge : f32, // Offset 76
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
+        struct VertexOutput {
+            @builtin(position) Position : vec4<f32>,
+            @location(0) vPos : vec3<f32>,
+        };
+
         @vertex
-        fn main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
-            return uniforms.viewProjectionMatrix * vec4<f32>(position, 1.0);
+        fn main(@location(0) position : vec3<f32>) -> VertexOutput {
+            var output : VertexOutput;
+            var pos = position;
+
+            // NEON BRICKLAYER: Grid Ripple on Impact
+            if (uniforms.warpSurge > 0.01) {
+                let wave = sin(pos.x * 0.5 + uniforms.time * 10.0) * uniforms.warpSurge * 0.5;
+                pos.y += wave;
+            }
+
+            output.Position = uniforms.viewProjectionMatrix * vec4<f32>(pos, 1.0);
+            output.vPos = pos;
+            return output;
         }
     `;
     const fragment = `
         struct Uniforms {
             viewProjectionMatrix : mat4x4<f32>,
             time : f32,
+            ghostX : f32,
+            ghostWidth : f32,
+            warpSurge : f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
         @fragment
-        fn main() -> @location(0) vec4<f32> {
+        fn main(@location(0) vPos : vec3<f32>) -> @location(0) vec4<f32> {
             // Pulse the grid lines
             let pulse = sin(uniforms.time * 3.0) * 0.5 + 0.5;
-            let alpha = 0.15 + pulse * 0.1;
-            return vec4<f32>(1.0, 1.0, 1.0, alpha);
+            var alpha = 0.15 + pulse * 0.1;
+            var color = vec3<f32>(1.0, 1.0, 1.0);
+
+            // NEON BRICKLAYER: Ghost Landing Zone
+            // Check if we are within the ghost width range
+            let dist = abs(vPos.x - uniforms.ghostX);
+            let halfWidth = uniforms.ghostWidth * 0.5;
+
+            // Highlight zone
+            if (dist < halfWidth) {
+                 // Pulse the landing zone
+                 let zonePulse = sin(uniforms.time * 10.0) * 0.5 + 0.5;
+                 alpha += 0.3 + zonePulse * 0.2;
+                 color = vec3<f32>(0.0, 1.0, 1.0); // Cyan glow
+            }
+
+            return vec4<f32>(color, alpha);
         }
     `;
     return { vertex, fragment };
