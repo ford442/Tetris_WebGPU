@@ -150,7 +150,7 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.40; // JUICE: Lower threshold (0.45 -> 0.40) for even more glow
+            let bloomThreshold = 0.35; // JUICE: Lower threshold (0.40 -> 0.35) for even more glow
             if (glowLum > bloomThreshold) {
                  color += glow * 2.5; // JUICE: More intense bloom (2.0 -> 2.5)
             }
@@ -382,7 +382,7 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 10.0) * 0.5 + 0.5;
-                 alpha += 0.3 + zonePulse * 0.2;
+                 alpha += 0.5 + zonePulse * 0.3;
                  color = vec3<f32>(0.0, 1.0, 1.0); // Cyan glow
             }
 
@@ -473,7 +473,7 @@ export const BackgroundShaders = () => {
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
             // Smooth grid lines that get thinner with distance
-            let lineWidth = 0.02 / scale;
+            let lineWidth = 0.03 / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
@@ -520,7 +520,7 @@ export const BackgroundShaders = () => {
 
           // --- Global pulse effect ---
           // Pulse faster at higher levels
-          let pulseSpeed = 1.5 + levelFactor * 4.0;
+          let pulseSpeed = 2.0 + levelFactor * 4.0;
           let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
 
           // Combine all elements
