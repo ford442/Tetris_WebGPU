@@ -361,6 +361,8 @@ export default class View {
 
   onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
+      // NEON BRICKLAYER: Grid Ripple on Clear
+      this.visualEffects.warpSurge = 0.5 + lines.length * 0.1;
 
       // NEON BRICKLAYER: Combo increases shake
       const shakeBase = tSpin ? 0.8 : 0.5;
@@ -432,7 +434,7 @@ export default class View {
                const particleColor = [...color, 1.0];
 
                // Radial burst for each color
-               for (let p = 0; p < 30; p++) {
+               for (let p = 0; p < 50; p++) {
                     const angle = Math.random() * Math.PI * 2;
                     const speed = 10.0 + Math.random() * 25.0; // High speed
                     this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, particleColor);
