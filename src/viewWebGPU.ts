@@ -302,17 +302,17 @@ export default class View {
           const b = Math.floor(color[2] * 255);
           const cssColor = `rgb(${r}, ${g}, ${b})`;
 
-          // 1. Glow
-          ctx.shadowBlur = 10;
+          // 1. Glow (ENHANCED)
+          ctx.shadowBlur = 15;
           ctx.shadowColor = cssColor;
 
           // 2. Stroke (Neon Tube)
           ctx.strokeStyle = cssColor;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 3;
           ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
           // 3. Faint Inner Fill (Glass)
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.3)`;
           ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
           // 4. Core Highlight
@@ -372,6 +372,15 @@ export default class View {
       // Emit particles for each cleared line
       lines.forEach(y => {
           const worldY = y * -2.2;
+
+          // NEW: Flash Burst (Large particles) across the line for impact
+          for (let i=0; i<5; i++) {
+               const lx = Math.random() * 10.0 * 2.2;
+               const angle = Math.random() * Math.PI * 2;
+               // White flash particles
+               this.particleSystem.emitParticlesRadial(lx, worldY, 0.0, angle, 30.0, [1.0, 1.0, 1.0, 1.0]);
+          }
+
           // Sweep across the line
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
@@ -511,11 +520,10 @@ export default class View {
       const themeColors = this.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
       const trailColor = [...themeColors, 0.8]; // Add alpha
 
-      for(let i=0; i<distance; i++) {
-          const r = startRow + i;
+      // ENHANCED: Smoother, denser trail (Interpolated steps)
+      for(let i=0; i<distance * 2; i++) {
+          const r = startRow + i * 0.5;
           const worldY = r * -2.2;
-          // More particles per block
-          // Vary the X slightly for a thicker trail
           this.particleSystem.emitParticles(worldX, worldY, 0.0, 12, trailColor);
       }
 
