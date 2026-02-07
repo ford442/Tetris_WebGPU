@@ -368,9 +368,9 @@ export const GridShader = () => {
 
         @fragment
         fn main(@location(0) vPos : vec3<f32>) -> @location(0) vec4<f32> {
-            // Pulse the grid lines
+            // Pulse the grid lines (ENHANCED)
             let pulse = sin(uniforms.time * 3.0) * 0.5 + 0.5;
-            var alpha = 0.15 + pulse * 0.1;
+            var alpha = 0.2 + pulse * 0.3; // Stronger, more visible pulse
             var color = vec3<f32>(1.0, 1.0, 1.0);
 
             // NEON BRICKLAYER: Ghost Landing Zone
@@ -491,10 +491,11 @@ export const BackgroundShaders = () => {
           var neonPurple = uniforms.color2;
           var neonBlue = uniforms.color3;
 
-          // Manual mix for level influence (mix towards red/orange)
-          let dangerColor = vec3<f32>(1.0, 0.2, 0.0);
-          neonCyan = mix(neonCyan, dangerColor, levelFactor * 0.5);
-          neonBlue = mix(neonBlue, vec3<f32>(0.5, 0.0, 0.0), levelFactor * 0.8);
+          // Manual mix for level influence (mix towards red/orange) (ENHANCED)
+          let dangerColor = vec3<f32>(1.0, 0.0, 0.3); // Neon Red
+          // Shift aggressively with level
+          neonCyan = mix(neonCyan, dangerColor, min(levelFactor * 1.5, 1.0));
+          neonBlue = mix(neonBlue, vec3<f32>(0.4, 0.0, 0.6), min(levelFactor * 1.2, 1.0)); // Deep Purple
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
@@ -673,8 +674,13 @@ export const Shaders = () => {
                 let breath = sin(time * 2.0) * 0.1 + 0.1;
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
-                let innerPulse = sin(time * pulseFreq) * (0.1 + level * 0.01);
+                // ENHANCED: Stronger, more vibrant inner pulse
+                let innerPulse = sin(time * pulseFreq) * (0.2 + level * 0.02);
                 finalColor += vColor.rgb * (breath + innerPulse);
+
+                // ENHANCED: Rim Lighting for better definition
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.5;
+                finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
                     finalColor += vColor.rgb * pulsePos * 4.0;
@@ -739,11 +745,12 @@ export const Shaders = () => {
 
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
-                    // Hologram Effect - High Tech
+                    // Hologram Effect - High Tech (ENHANCED)
                     let scanSpeed = 8.0;
                     // INCREASED Frequency: 20.0 -> 30.0
                     let scanY = fract(vUV.y * 30.0 - time * scanSpeed);
-                    let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY));
+                    // ENHANCED: Sharper, more visible scanline
+                    let scanline = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY)) * 2.0;
 
                     // Landing Beam (Vertical Highlight)
                     let beam = smoothstep(0.5, 0.0, abs(vUV.x - 0.5));
