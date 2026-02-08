@@ -311,8 +311,14 @@ export default class View {
           ctx.lineWidth = 3;
           ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // 3. Faint Inner Fill (Glass)
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.3)`;
+          // 3. Faint Inner Fill (Glass) - Gradient for Hotspot
+          const gradient = ctx.createRadialGradient(
+              px + blockSize / 2, py + blockSize / 2, 0,
+              px + blockSize / 2, py + blockSize / 2, blockSize / 1.5
+          );
+          gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.6)`); // Hot center
+          gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.1)`); // Fade edge
+          ctx.fillStyle = gradient;
           ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
           // 4. Core Highlight
@@ -1281,8 +1287,8 @@ export default class View {
     let camZ = 75.0;
 
     // "Breathing" sway
-    camX += Math.sin(time * 0.2) * 2.0;
-    camY += Math.cos(time * 0.3) * 1.0;
+    camX += Math.sin(time * 0.2) * 0.5;
+    camY += Math.cos(time * 0.3) * 0.25;
 
     // Apply Shake
     const shake = this.visualEffects.getShakeOffset();
