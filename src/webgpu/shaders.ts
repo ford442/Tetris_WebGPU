@@ -314,7 +314,7 @@ export const ParticleShaders = () => {
 
             // Neon Flicker (JUICE)
             // High frequency chaos for electrical look
-            let flicker = 0.7 + 0.3 * sin(uniforms.time * 80.0 + uv.x * 20.0);
+            let flicker = 0.5 + 0.5 * sin(uniforms.time * 80.0 + uv.x * 20.0);
 
             // Boost brightness for neon effect
             return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
@@ -382,7 +382,7 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 10.0) * 0.5 + 0.5;
-                 alpha += 0.5 + zonePulse * 0.3;
+                 alpha += 0.8 + zonePulse * 0.2;
                  color = vec3<f32>(0.0, 1.0, 1.0); // Cyan glow
             }
 
@@ -675,11 +675,11 @@ export const Shaders = () => {
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse
-                let innerPulse = sin(time * pulseFreq) * (0.2 + level * 0.02);
+                let innerPulse = sin(time * pulseFreq) * (0.4 + level * 0.03);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 // ENHANCED: Rim Lighting for better definition
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.5;
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * 0.8;
                 finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
@@ -765,7 +765,7 @@ export const Shaders = () => {
                     let pulseFreq = 5.0 + tension * 15.0; // Speed up significantly when locking
 
                     // ENHANCED Pulse: 0.3 + 0.2*sin(10t) -> 0.4 + 0.1*sin(5t) (Slower, fuller)
-                    let ghostAlpha = 0.4 + 0.1 * sin(time * pulseFreq);
+                    let ghostAlpha = 0.6 + 0.1 * sin(time * pulseFreq);
 
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.02 + tension * 0.05;
