@@ -368,34 +368,10 @@ export default class Controller {
       const state = this.game.getState();
       this.view.renderMainScreen(state);
       this.viewWebGPU.state = state;
-      // Note: viewWebGPU.Frame() is still running via its own RAF?
-      // We should probably rely on viewWebGPU.Frame() for rendering
-      // and just update state here.
-      // The Plan said: "Remove the independent Frame() loop in View".
-      // If we remove View.Frame, we must call view.Frame() here.
-      // BUT View.Frame is async/WebGPU based.
-      // It's safer to let View run its render loop (interpolation/effects)
-      // and Controller run logic loop.
-      // The "Unify game loop" request was to ensure Logic gets real DT.
-      // Logic loop IS here.
-      // If we kill View loop, we must ensure Controller runs at 60fps or calls View.render().
-      // Let's keep View loop for rendering (it handles particles etc smoothly)
-      // but ensure Controller pushes state.
-      // Actually, View.Frame uses `requestAnimationFrame`.
-      // If Controller also uses `requestAnimationFrame`, they are synced to screen refresh.
-      // So calling `viewWebGPU.render()` (or Frame logic) here is better than 2 RAF loops.
 
-      // However, `viewWebGPU.Frame` calls `requestAnimationFrame(this.Frame)`.
-      // I should change that to NOT call RAF if driven externally.
-      // Or simply update state here and let View render independently?
-      // Independent rendering allows logic to run slower/faster if decoupled,
-      // but here both are RAF.
-      // Let's stick to updating state here.
-      // But verify if View.Frame needs `dt`.
-      // View.Frame calculates its own `dt` currently (hardcoded 1/60).
-      // Ideally View.Frame should use real time too for effects.
-      // I won't touch View loop structure deeply to avoid breaking WebGPU swapchain timing,
-      // but I ensured View uses `performance.now()` for shader time.
+      // Call View.render directly (Synchronized with Game Loop)
+      // Pass dt in seconds
+      this.viewWebGPU.render(dt / 1000.0);
 
       this.gameLoopID = requestAnimationFrame(animate);
     };

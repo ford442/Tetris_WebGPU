@@ -150,9 +150,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.35; // JUICE: Lower threshold (0.40 -> 0.35) for even more glow
+            let bloomThreshold = 0.30; // JUICE: Lower threshold (0.35 -> 0.30) for even more glow
             if (glowLum > bloomThreshold) {
-                 color += glow * 2.5; // JUICE: More intense bloom (2.0 -> 2.5)
+                 color += glow * 3.0; // JUICE: More intense bloom (2.5 -> 3.0)
             }
 
             // High-pass boost for the core pixels
@@ -372,6 +372,12 @@ export const GridShader = () => {
             let pulse = sin(uniforms.time * 3.0) * 0.5 + 0.5;
             var alpha = 0.2 + pulse * 0.3; // Stronger, more visible pulse
             var color = vec3<f32>(1.0, 1.0, 1.0);
+
+            // Distance Fade (Fog)
+            let center = vec2<f32>(10.0, -20.0);
+            let distFromCenter = length(vPos.xy - center);
+            let fade = 1.0 - smoothstep(15.0, 30.0, distFromCenter);
+            alpha *= fade;
 
             // NEON BRICKLAYER: Ghost Landing Zone
             // Check if we are within the ghost width range
@@ -762,10 +768,13 @@ export const Shaders = () => {
 
                     // NEON BRICKLAYER: Tension-based pulse
                     let tension = smoothstep(0.5, 1.0, lockPercent);
-                    let pulseFreq = 5.0 + tension * 15.0; // Speed up significantly when locking
+                    let pulseFreq = 8.0 + tension * 15.0; // Speed up significantly when locking
 
-                    // ENHANCED Pulse: 0.3 + 0.2*sin(10t) -> 0.4 + 0.1*sin(5t) (Slower, fuller)
-                    let ghostAlpha = 0.6 + 0.1 * sin(time * pulseFreq);
+                    // ENHANCED Pulse: Slower, fuller
+                    let ghostAlpha = 0.6 + 0.2 * sin(time * pulseFreq);
+
+                    // Holographic Scanline
+                    let scanEffect = sin(vUV.y * 50.0 + time * 5.0) * 0.1;
 
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.02 + tension * 0.05;
@@ -777,6 +786,7 @@ export const Shaders = () => {
                                    + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
+                    ghostFinal += vec3<f32>(scanEffect); // Add scanline overlay
 
                     // Digital noise/flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
