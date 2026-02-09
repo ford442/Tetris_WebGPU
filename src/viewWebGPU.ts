@@ -556,6 +556,13 @@ export default class View {
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
       }
 
+      // Enhanced Ring Shockwave
+      for (let i = 0; i < 20; i++) {
+          const angle = (i / 20) * Math.PI * 2;
+          const r = 3.0;
+          this.particleSystem.emitParticles(worldX + Math.cos(angle) * r, impactY + Math.sin(angle) * r, 0.0, 1, burstColor);
+      }
+
       this.triggerImpactEffects(worldX, impactY, distance);
   }
 
@@ -662,7 +669,7 @@ export default class View {
       const worldX = (x + 1.5) * 2.2;
       const worldY = (y + 1.5) * -2.2;
       // Faint cyan trail
-      this.particleSystem.emitParticles(worldX, worldY, 0.0, 2, [0.4, 0.9, 1.0, 0.6]);
+      this.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.9, 1.0, 0.8]);
   }
 
   /**
@@ -1252,8 +1259,6 @@ export default class View {
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
     }
-
-    this.Frame();
   }
 
   CreateGPUBuffer = (
@@ -1271,9 +1276,8 @@ export default class View {
     return buffer;
   };
 
-  Frame = () => {
+  render = (dt: number) => {
     if (!this.device) return;
-    const dt = 1.0/60.0; // Approx dt
 
     // Update visual effects
     this.visualEffects.updateEffects(dt);
@@ -1513,7 +1517,6 @@ export default class View {
     ppPassEncoder.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
-    requestAnimationFrame(this.Frame);
   };
 
   async renderPlayfild_WebGPU(state: any) {
