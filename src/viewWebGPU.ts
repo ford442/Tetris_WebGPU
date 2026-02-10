@@ -561,11 +561,11 @@ export default class View {
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
       }
 
-      // Enhanced Ring Shockwave
-      for (let i = 0; i < 20; i++) {
-          const angle = (i / 20) * Math.PI * 2;
-          const r = 3.0;
-          this.particleSystem.emitParticles(worldX + Math.cos(angle) * r, impactY + Math.sin(angle) * r, 0.0, 1, burstColor);
+      // NEON BRICKLAYER: Impact Ring Shockwave
+      for (let i = 0; i < 40; i++) {
+          const angle = (i / 40) * Math.PI * 2;
+          const speed = 40.0; // High speed for shockwave
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
 
       this.triggerImpactEffects(worldX, impactY, distance);
@@ -1362,11 +1362,25 @@ export default class View {
     // NEON BRICKLAYER: Ghost Piece Landing Zone
     let ghostX = -100.0;
     let ghostWidth = 0.0;
+    // For UV Projection
+    let ghostUVX = -1.0;
+    let ghostUVW = 0.0;
+
     if (this.state && this.state.activePiece) {
         const widthInBlocks = this.state.activePiece.blocks[0].length;
         const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
         ghostX = gridCenterX * 2.2;
         ghostWidth = widthInBlocks * 2.2;
+
+        // Calculate UV space coordinates for Projection Beam
+        const camZ = 75.0;
+        const fov = (35 * Math.PI) / 180;
+        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+        const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+
+        // 10.0 is approx logical center X
+        ghostUVX = 0.5 + (ghostX - 10.0) / visibleWidth;
+        ghostUVW = ghostWidth / visibleWidth;
     }
     this.device.queue.writeBuffer(this.particleUniformBuffer, 68, new Float32Array([ghostX]));
     this.device.queue.writeBuffer(this.particleUniformBuffer, 72, new Float32Array([ghostWidth]));
@@ -1387,6 +1401,9 @@ export default class View {
     }
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array([lockPercent]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, new Float32Array([this.visualEffects.warpSurge]));
+    // Projection Beam Uniforms
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, new Float32Array([ghostUVX]));
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, new Float32Array([ghostUVW]));
 
 
     // Block shader time (global update once per frame)
