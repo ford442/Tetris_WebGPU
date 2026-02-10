@@ -160,6 +160,11 @@ export default class View {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    this.MODELMATRIX = Matrix.mat4.create();
+    this.NORMALMATRIX = Matrix.mat4.create();
+    this.VIEWMATRIX = Matrix.mat4.create();
+    this.PROJMATRIX = Matrix.mat4.create();
+    this.vpMatrix = Matrix.mat4.create();
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       ],
       lockTimer: 0,
@@ -1159,10 +1164,6 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    this.MODELMATRIX = Matrix.mat4.create();
-    this.NORMALMATRIX = Matrix.mat4.create();
-    this.VIEWMATRIX = Matrix.mat4.create();
-    this.PROJMATRIX = Matrix.mat4.create();
 
     let eyePosition = [0.0, -20.0, 75.0];
     // Apply shake
@@ -1193,7 +1194,6 @@ export default class View {
       150
     );
 
-    this.vpMatrix = Matrix.mat4.create();
     Matrix.mat4.identity(this.vpMatrix);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
