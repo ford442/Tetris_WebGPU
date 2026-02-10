@@ -28,6 +28,9 @@ export default class Controller {
     down: 0
   };
 
+  // Track last horizontal direction for SOCD cleaning
+  lastDirection: 'left' | 'right' | null = null;
+
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
     // Standard Arrows
@@ -158,11 +161,13 @@ export default class Controller {
     // Handle initial press actions
     switch (action) {
         case 'left':
+            this.lastDirection = 'left';
             this.game.movePieceLeft();
             this.soundManager.playMove();
             this.actionTimers.left = 0;
             break;
         case 'right':
+            this.lastDirection = 'right';
             this.game.movePieceRight();
             this.soundManager.playMove();
             this.actionTimers.right = 0;
@@ -392,7 +397,19 @@ export default class Controller {
   }
 
   handleInput(dt: number): void {
-      if (this.isActionPressed('left')) {
+      // SOCD Cleaning: Last Input Priority
+      let moveLeft = this.isActionPressed('left');
+      let moveRight = this.isActionPressed('right');
+
+      if (moveLeft && moveRight) {
+          if (this.lastDirection === 'left') {
+              moveRight = false;
+          } else {
+              moveLeft = false;
+          }
+      }
+
+      if (moveLeft) {
           this.actionTimers.left! += dt;
           if (this.actionTimers.left! > DAS) {
               while (this.actionTimers.left! > DAS + ARR) {
@@ -403,7 +420,7 @@ export default class Controller {
                   this.actionTimers.left! -= ARR;
               }
           }
-      } else if (this.isActionPressed('right')) {
+      } else if (moveRight) {
           this.actionTimers.right! += dt;
           if (this.actionTimers.right! > DAS) {
               while (this.actionTimers.right! > DAS + ARR) {
@@ -414,8 +431,6 @@ export default class Controller {
                   this.actionTimers.right! -= ARR;
               }
           }
-      } else {
-          // Reset handled by keyUp or manual check?
       }
 
       if (!this.isActionPressed('left')) {
