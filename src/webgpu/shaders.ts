@@ -424,6 +424,8 @@ export const BackgroundShaders = () => {
             color3: vec3<f32>, // Offset 48
             lockPercent: f32, // Offset 64
             warpSurge: f32, // Offset 68
+            ghostX: f32, // Offset 72 (UV space)
+            ghostWidth: f32, // Offset 76 (UV width)
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -556,6 +558,41 @@ export const BackgroundShaders = () => {
 
           // NEON BRICKLAYER: Hyper-Inversion
           finalColor = mix(finalColor, vec3<f32>(1.0) - finalColor, clamp(warpSurge * 0.5, 0.0, 1.0));
+
+          // NEON BRICKLAYER: Ghost Projection Beam
+          // Vertical beam indicating the drop zone
+          let ghostX = uniforms.ghostX;
+          let ghostW = uniforms.ghostWidth;
+
+          if (ghostW > 0.0) {
+              // Calculate distance to beam center
+              let distToBeam = abs(uv.x - ghostX);
+              let beamWidth = ghostW * 0.6; // Slightly wider than the piece
+
+              if (distToBeam < beamWidth) {
+                  // Soft edge for the beam
+                  let beamEdge = smoothstep(beamWidth, 0.0, distToBeam);
+
+                  // Vertical scan effect within the beam
+                  let beamScan = sin(uv.y * 50.0 - time * 20.0) * 0.1 + 0.9;
+
+                  // Pulse with tension/time
+                  let beamPulse = sin(time * 5.0) * 0.1 + 0.9;
+
+                  // Intensity fades at the top
+                  let beamFade = smoothstep(0.0, 0.8, uv.y);
+
+                  // Combine
+                  let beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
+                  // Mix with warning color if lockPercent is high
+                  if (lockPercent > 0.5) {
+                      beamColor = mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0);
+                  }
+
+                  let beamIntensity = 0.15 * beamEdge * beamScan * beamPulse * beamFade;
+                  finalColor += beamColor * beamIntensity;
+              }
+          }
 
           return vec4<f32>(finalColor, 1.0);
         }
