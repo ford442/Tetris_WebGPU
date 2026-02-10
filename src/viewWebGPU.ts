@@ -160,16 +160,16 @@ export default class View {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    this.MODELMATRIX = Matrix.mat4.create();
-    this.NORMALMATRIX = Matrix.mat4.create();
-    this.VIEWMATRIX = Matrix.mat4.create();
-    this.PROJMATRIX = Matrix.mat4.create();
-    this.vpMatrix = Matrix.mat4.create();
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       ],
       lockTimer: 0,
       lockDelayTime: 500,
     };
+    this.MODELMATRIX = Matrix.mat4.create();
+    this.NORMALMATRIX = Matrix.mat4.create();
+    this.VIEWMATRIX = Matrix.mat4.create();
+    this.PROJMATRIX = Matrix.mat4.create();
+    this.vpMatrix = Matrix.mat4.create();
     this.blockData = {};
     if (this.isWebGPU.result) {
       this.element.appendChild(this.canvasWebGPU);
