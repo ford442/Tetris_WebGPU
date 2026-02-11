@@ -256,6 +256,7 @@ export default class Game {
           // dt is in milliseconds
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime) {
+              this.effectCounter++; // Increment visual counter for locking (gravity)
               this.lockPiece();
               result.locked = true;
 
