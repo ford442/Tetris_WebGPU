@@ -1581,7 +1581,7 @@ export default class View {
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        let alpha = value < 0 ? 0.3 : 0.85; // 0.85 allows 15% of the video to show through
+        let alpha = value < 0 ? 0.3 : 1.0; // Ghost: 30% visible, Solid blocks: fully opaque
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
