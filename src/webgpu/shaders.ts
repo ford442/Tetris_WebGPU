@@ -583,7 +583,7 @@ export const BackgroundShaders = () => {
                   let beamFade = smoothstep(0.0, 0.8, uv.y);
 
                   // Combine
-                  let beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
+                  var beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
                   // Mix with warning color if lockPercent is high
                   if (lockPercent > 0.5) {
                       beamColor = mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0);
