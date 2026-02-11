@@ -407,31 +407,49 @@ export default class View {
               // Juice: Combo increases particle density
               let count = 20 + (combo * 5);
 
-              // T-SPIN GOLD
+              // T-SPIN (Purple/Magenta)
               if (tSpin) {
-                  color = [1.0, 0.8, 0.0, 1.0]; // GOLD
-                  count = 150 + (combo * 20); // NEON BRICKLAYER: Massive T-Spin Burst
+                  color = [1.0, 0.0, 1.0, 1.0]; // MAGENTA
+                  count = 150 + (combo * 25); // NEON BRICKLAYER: Massive T-Spin Burst
               } else if (lines.length === 4) {
-                  color = [0.5, 0.8, 1.0, 1.0]; // Bright Cyan/White
+                  color = [0.0, 1.0, 1.0, 1.0]; // CYAN (Tetris)
+                  // If Back-to-Back, make it Gold
+                  if (backToBack) {
+                      color = [1.0, 0.8, 0.0, 1.0]; // GOLD
+                  }
                   count = 200 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
+                  // Standard line clear
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
+
+                  // Combo Color (Red/Orange)
+                  if (combo > 1) {
+                       color = [1.0, 0.5 * (1.0/combo), 0.0, 1.0]; // Shift to Red as combo increases
+                  }
               }
 
-              // NEON BRICKLAYER: Back-to-Back Streak Effect
+              // NEON BRICKLAYER: Back-to-Back Streak Effect (Boost count)
               if (backToBack) {
-                  color = [1.0, 0.9, 0.2, 1.0]; // Distinct Golden/Electric Yellow
-                  count = Math.floor(count * 1.2);
+                  count = Math.floor(count * 1.5); // More particles!
               }
 
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
 
+              // COMBO SPARKS (Radial burst for high combos)
+              if (combo > 2 && c === 5) { // Center of line
+                   for (let i=0; i<20 + combo * 5; i++) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const speed = 15.0 + combo * 2.0;
+                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.2, 0.0, 1.0]); // Red Sparks
+                   }
+              }
+
               // If T-Spin, add a radial burst at the center of the line
               if (tSpin && c === 5) {
-                   for (let i=0; i<30; i++) {
-                      const angle = (i / 30) * Math.PI * 2;
-                      const speed = 20.0;
-                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.5, 0.0, 1.0]); // Orange/Gold
+                   for (let i=0; i<40; i++) {
+                      const angle = (i / 40) * Math.PI * 2;
+                      const speed = 25.0;
+                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.0, 1.0, 1.0]); // Magenta
                    }
                    // Add extra shockwave/aberration for T-Spin
                    this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
