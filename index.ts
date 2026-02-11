@@ -82,7 +82,7 @@ uiContainer.innerHTML = `
   const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
   const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 
-  const view = new View(
+  const view = await View.create(
       document.body,
       window.innerWidth,
       window.innerHeight,
