@@ -173,13 +173,20 @@ export default class View {
     this.blockData = {};
     if (this.isWebGPU.result) {
       this.element.appendChild(this.canvasWebGPU);
-      this.preRender();
       window.addEventListener('resize', this.resize.bind(this));
     } else {
       let divError = document.createElement("div");
       divError.innerText = this.isWebGPU.description;
       this.element.appendChild(divError);
     }
+  }
+
+  static async create(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D): Promise<View> {
+    const view = new View(element, width, height, rows, coloms, nextPieceContext, holdPieceContext);
+    if (view.isWebGPU.result) {
+      await view.preRender();
+    }
+    return view;
   }
 
   resize() {
