@@ -1278,7 +1278,7 @@ export default class View {
                     },
                 },
                 // Bind Texture & Sampler
-                { binding: 2, resource: this.blockTexture.createView() },
+                { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler }
             ],
         });
@@ -1727,7 +1727,7 @@ export default class View {
               },
             },
             // Bind Texture & Sampler here too
-            { binding: 2, resource: this.blockTexture.createView() },
+            { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
             { binding: 3, resource: this.blockSampler }
           ],
         });
