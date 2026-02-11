@@ -345,9 +345,9 @@ export const GridShader = () => {
             var output : VertexOutput;
             var pos = position;
 
-            // NEON BRICKLAYER: Grid Ripple on Impact
+            // NEON BRICKLAYER: Grid Ripple on Impact (Boosted)
             if (uniforms.warpSurge > 0.01) {
-                let wave = sin(pos.x * 0.5 + uniforms.time * 10.0) * uniforms.warpSurge * 0.5;
+                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 1.5;
                 pos.y += wave;
             }
 
@@ -388,7 +388,11 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 10.0) * 0.5 + 0.5;
-                 alpha += 0.8 + zonePulse * 0.2;
+                 alpha += 0.6 + zonePulse * 0.4; // More dynamic pulse
+                 // Add a subtle gradient to the zone
+                 let zoneGrad = 1.0 - (dist / halfWidth);
+                 alpha *= (0.5 + zoneGrad * 0.5);
+
                  color = vec3<f32>(0.0, 1.0, 1.0); // Cyan glow
             }
 
@@ -466,8 +470,8 @@ export const BackgroundShaders = () => {
 
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
-            // JUICE: Uncapped speed based on raw level
-            let warpSpeed = 1.0 + level * 0.5 + warpSurge * 2.0;
+            // JUICE: Uncapped speed based on raw level (Boosted)
+            let warpSpeed = 1.0 + level * 0.8 + warpSurge * 2.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -589,7 +593,8 @@ export const BackgroundShaders = () => {
                       beamColor = mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0);
                   }
 
-                  let beamIntensity = 0.15 * beamEdge * beamScan * beamPulse * beamFade;
+                  // BOOSTED Intensity
+                  let beamIntensity = 0.25 * beamEdge * beamScan * beamPulse * beamFade;
                   finalColor += beamColor * beamIntensity;
               }
           }
@@ -717,12 +722,12 @@ export const Shaders = () => {
                 let breath = sin(time * 2.0) * 0.1 + 0.1;
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
-                // ENHANCED: Stronger, more vibrant inner pulse
-                let innerPulse = sin(time * pulseFreq) * (0.4 + level * 0.03);
+                // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
+                let innerPulse = sin(time * pulseFreq) * (0.6 + level * 0.05);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
-                // ENHANCED: Rim Lighting for better definition
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * 0.8;
+                // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 1.5;
                 finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
@@ -731,16 +736,18 @@ export const Shaders = () => {
 
                 // Fresnel (Boosted for Glass look)
                 // JUICE: Sharper falloff for distinct neon rim
-                let baseFresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+                // Clamp bases to 0.0 to avoid NaN in pow()
+                let dotNV = max(dot(N, V), 0.0);
+                let baseFresnel = pow(1.0 - dotNV, 4.0);
                 let fresnelTerm = baseFresnel; // Alias for legacy code
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
                 // Shift the fresnel curve for each channel based on level
-                let dispersion = 0.2 * levelFactor;
-                // Clamp bases to 0.0 to avoid NaN in pow()
-                let fR = pow(max(0.0, 1.0 - dot(N, V) * (1.0 - dispersion)), 5.0);
+                let dispersion = 0.3 * levelFactor;
+
+                let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion)), 4.0);
                 let fG = baseFresnel;
-                let fB = pow(max(0.0, 1.0 - dot(N, V) * (1.0 + dispersion)), 5.0);
+                let fB = pow(max(0.0, 1.0 - dotNV * (1.0 + dispersion)), 4.0);
 
                 var irid = vec3<f32>(fR, fG, fB);
 
@@ -776,10 +783,10 @@ export const Shaders = () => {
 
                      // Mix to Warning Red
                      let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 0.6);
+                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 0.8);
 
                      // Add Scanline Emission
-                     finalColor += warningColor * scanLine * 2.0;
+                     finalColor += warningColor * scanLine * 3.0;
                 }
 
                 // Subtle Surface Noise (Texture)
