@@ -855,7 +855,10 @@ export default class View {
         // Generate mipmaps using bilinear filtering
         // This significantly improves quality by preventing aliasing at different viewing distances
         this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
+        
+        console.log('[Texture] Loaded block.png:', imageBitmap.width, 'x', imageBitmap.height, '| Mip levels:', mipLevelCount);
     } catch (e) {
+        console.error('[Texture] Failed to load block.png:', e);
         // Fallback white texture
         this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
         this.device.queue.writeTexture({ texture: this.blockTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
@@ -870,13 +873,23 @@ export default class View {
     this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
     this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs); // Create UV buffer
 
+    // Create shader modules with compilation info
+    const vertexModule = this.device.createShaderModule({ code: shader.vertex });
+    const fragmentModule = this.device.createShaderModule({ code: shader.fragment });
+    
+    // Log shader compilation info
+    vertexModule.getCompilationInfo().then(info => {
+        if (info.messages.length > 0) console.log('[Shader] Vertex:', info.messages);
+    });
+    fragmentModule.getCompilationInfo().then(info => {
+        if (info.messages.length > 0) console.log('[Shader] Fragment:', info.messages);
+    });
+    
     this.pipeline = this.device.createRenderPipeline({
       label: 'main pipeline',
       layout: "auto",
       vertex: {
-        module: this.device.createShaderModule({
-          code: shader.vertex,
-        }),
+        module: vertexModule,
         entryPoint: "main",
         buffers: [
           {
@@ -1581,7 +1594,7 @@ export default class View {
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        let alpha = value < 0 ? 0.3 : 1.0; // Ghost: 30% visible, Solid blocks: fully opaque
+        let alpha = value < 0 ? 0.3 : 0.85; // Ghost: 30% visible, Solid blocks: 85% opaque (glass effect)
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
