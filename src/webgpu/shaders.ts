@@ -617,16 +617,16 @@ export const BackgroundShaders = () => {
 };
 
 export const Shaders = () => {
-  let params: any = {};
-  params.color = "(0.0, 1.0, 0.0)";
-  params.ambientIntensity = "0.5";
-  params.diffuseIntensity = "1.0";
-  params.specularIntensity = "50.0";
-  params.shininess = "1000.0";
-  params.specularColor = "(1.0, 1.0, 1.0)";
-  params.isPhong = "1";
+    let params: any = {};
+    params.color = "(0.0, 1.0, 0.0)";
+    params.ambientIntensity = "0.5";
+    params.diffuseIntensity = "1.0";
+    params.specularIntensity = "50.0";
+    params.shininess = "1000.0";
+    params.specularColor = "(1.0, 1.0, 1.0)";
+    params.isPhong = "1";
 
-  const vertex = `
+    const vertex = `
             struct Uniforms {
                 viewProjectionMatrix : mat4x4<f32>,
                 modelMatrix : mat4x4<f32>,
@@ -655,7 +655,7 @@ export const Shaders = () => {
                 return output;
             }`;
 
-  const fragment = `
+    const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
                 eyePosition : vec4<f32>,
@@ -702,10 +702,13 @@ export const Shaders = () => {
                 }
 
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
-
-                // Multiply texture with block color (modulate)
-                // Use the texture's alpha if needed, or assume opaque
-                var baseColor = vColor.rgb * texColor.rgb;
+                
+                // Simple approach: show texture with very subtle color influence
+                // 80% texture, 20% block color tint
+                var baseColor = mix(texColor.rgb, vColor.rgb * texColor.rgb, 0.2);
+                
+                // Fixed alpha for now - solid blocks
+                let materialAlpha = 0.9;
 
                 // --- Tech Pattern Overlay (Optional - kept for style) ---
                 let hexScale = 4.0;
@@ -859,8 +862,10 @@ export const Shaders = () => {
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
 
-                return vec4<f32>(finalColor, 1.0);
+                // Combine material alpha with block type alpha (solid=0.85, ghost=0.3)
+                let finalAlpha = materialAlpha * vColor.w;
+                return vec4<f32>(finalColor, finalAlpha);
             }`;
 
-  return { vertex, fragment };
+    return { vertex, fragment };
 };
