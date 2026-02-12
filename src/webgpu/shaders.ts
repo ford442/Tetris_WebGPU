@@ -89,6 +89,16 @@ export const PostProcessShaders = () => {
                     let dir = normalize(uv - center);
                     finalUV -= dir * distortion;
                 }
+
+                // Third ring (Ripple)
+                let echoRadius2 = radius * 0.6;
+                let echoDiff2 = abs(dist - echoRadius2);
+                if (echoDiff2 < width * 0.5) {
+                    let angle = (echoDiff2 / (width * 0.5)) * 3.14159;
+                    let distortion = cos(angle) * strength * 0.25 * (1.0 - time);
+                    let dir = normalize(uv - center);
+                    finalUV -= dir * distortion;
+                }
             }
 
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
@@ -130,7 +140,7 @@ export const PostProcessShaders = () => {
             // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
             // Sample 8 points for a smoother, wider halo
             // JUICE: Wider spread (Increased base offset)
-            let offset = 0.006 * (1.0 + levelStress * 0.8);
+            let offset = 0.008 * (1.0 + levelStress * 0.8);
             let offset2 = offset * 2.2; // Even wider outer ring
             var glow = vec3<f32>(0.0);
 
@@ -150,9 +160,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.30; // JUICE: Lower threshold (0.35 -> 0.30) for even more glow
+            let bloomThreshold = 0.25; // JUICE: Lower threshold (0.30 -> 0.25) for even more glow
             if (glowLum > bloomThreshold) {
-                 color += glow * 3.0; // JUICE: More intense bloom (2.5 -> 3.0)
+                 color += glow * 3.0; // JUICE: More intense bloom
             }
 
             // High-pass boost for the core pixels
@@ -387,8 +397,8 @@ export const GridShader = () => {
             // Highlight zone
             if (dist < halfWidth) {
                  // Pulse the landing zone
-                 let zonePulse = sin(uniforms.time * 10.0) * 0.5 + 0.5;
-                 alpha += 0.6 + zonePulse * 0.4; // More dynamic pulse
+                 let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
+                 alpha += 0.8 + zonePulse * 0.4; // More dynamic pulse
                  // Add a subtle gradient to the zone
                  let zoneGrad = 1.0 - (dist / halfWidth);
                  alpha *= (0.5 + zoneGrad * 0.5);
@@ -681,7 +691,16 @@ export const Shaders = () => {
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- TEXTURE SAMPLING ---
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                // Flip Y for correct image orientation
+                var texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+
+                // Glitch Offset
+                if (uniforms.useGlitch > 0.0) {
+                     let glitchStrength = uniforms.useGlitch;
+                     let glitchOffset = glitchStrength * 0.05 * sin(texUV.y * 50.0 + uniforms.time * 20.0);
+                     texUV.x += glitchOffset;
+                }
+
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
                 
                 // Simple approach: show texture with very subtle color influence
@@ -725,11 +744,11 @@ export const Shaders = () => {
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
-                let innerPulse = sin(time * pulseFreq) * (0.6 + level * 0.05);
+                let innerPulse = sin(time * pulseFreq) * (0.8 + level * 0.08);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 1.5;
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 2.5;
                 finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
@@ -785,7 +804,7 @@ export const Shaders = () => {
 
                      // Mix to Warning Red
                      let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 0.8);
+                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 1.0);
 
                      // Add Scanline Emission
                      finalColor += warningColor * scanLine * 3.0;
