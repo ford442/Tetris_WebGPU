@@ -14,10 +14,10 @@ export const CubeData = () => {
   const boxSize = 1.0 - radius; // The distance from center to the start of the bevel
 
   // ADJUST THIS TO FIX YOUR SAMPLING:
-  // 1.0 = Texture wraps around the entire block (including curved corners)
-  // ~1.25 = (1.0 / boxSize) Texture fits exactly on the flat face (crops corners)
-  // 2.0 = Texture tiles twice across the face
-  const textureScale = 1.0;
+  // 1.0 = Shows entire texture (multiple tiles visible)
+  // 2.5 = Shows ~2-3 tiles, good balance of detail
+  // 3.5 = Shows ~1 tile, zoomed in
+  const textureScale = 2.5; // Balanced zoom to show marble detail
 
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
     // 1. Clamp to inner box
