@@ -417,7 +417,7 @@ export default class View {
                   if (backToBack) {
                       color = [1.0, 0.8, 0.0, 1.0]; // GOLD
                   }
-                  count = 200 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
+                  count = 300 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
                   // Standard line clear
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
@@ -430,7 +430,7 @@ export default class View {
 
               // NEON BRICKLAYER: Back-to-Back Streak Effect (Boost count)
               if (backToBack) {
-                  count = Math.floor(count * 1.5); // More particles!
+                  count = Math.floor(count * 2.0); // More particles!
               }
 
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
@@ -591,6 +591,21 @@ export default class View {
           const angle = (i / 40) * Math.PI * 2;
           const speed = 40.0; // High speed for shockwave
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
+      }
+
+      // Additional Shockwave Ring (Echo)
+      for (let i = 0; i < 40; i++) {
+          const angle = (i / 40) * Math.PI * 2 + (Math.PI / 40); // Offset angle
+          const speed = 30.0; // Slower echo
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
+      }
+
+      // Horizontal Splash (Ground impact)
+      for (let i = 0; i < 20; i++) {
+           const dir = i % 2 === 0 ? 1 : -1;
+           const speed = 20.0 + Math.random() * 20.0;
+           const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.2; // Mostly horizontal
+           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
 
       this.triggerImpactEffects(worldX, impactY, distance);
