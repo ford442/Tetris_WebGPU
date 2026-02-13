@@ -121,7 +121,7 @@ export const PostProcessShaders = () => {
 
             let baseAberration = vignetteAberration + levelAberration;
             // Add glitch aberration
-            let glitchAberration = glitchStrength * 0.03;
+            let glitchAberration = glitchStrength * 0.05;
             let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
 
             // Chromatic Aberration with Glitch Offset
@@ -160,9 +160,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.25; // JUICE: Lower threshold (0.30 -> 0.25) for even more glow
+            let bloomThreshold = 0.20; // JUICE: Lower threshold (0.25 -> 0.20) for even more glow
             if (glowLum > bloomThreshold) {
-                 color += glow * 3.0; // JUICE: More intense bloom
+                 color += glow * 4.0; // JUICE: More intense bloom
             }
 
             // High-pass boost for the core pixels
@@ -324,7 +324,7 @@ export const ParticleShaders = () => {
 
             // Neon Flicker (JUICE)
             // High frequency chaos for electrical look
-            let flicker = 0.5 + 0.5 * sin(uniforms.time * 80.0 + uv.x * 20.0);
+            let flicker = 0.5 + 0.5 * sin(uniforms.time * 120.0 + uv.x * 20.0);
 
             // Boost brightness for neon effect
             return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
@@ -357,7 +357,7 @@ export const GridShader = () => {
 
             // NEON BRICKLAYER: Grid Ripple on Impact (Boosted)
             if (uniforms.warpSurge > 0.01) {
-                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 1.5;
+                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 2.5;
                 pos.y += wave;
             }
 
@@ -481,7 +481,7 @@ export const BackgroundShaders = () => {
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
             // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 0.8 + warpSurge * 2.0;
+            let warpSpeed = 1.0 + level * 1.5 + warpSurge * 2.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -764,7 +764,7 @@ export const Shaders = () => {
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
                 // Shift the fresnel curve for each channel based on level
-                let dispersion = 0.3 * levelFactor;
+                let dispersion = 0.5 * levelFactor;
 
                 let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion)), 4.0);
                 let fG = baseFresnel;
@@ -858,6 +858,8 @@ export const Shaders = () => {
                     if (noise > 0.95) {
                         ghostFinal += vec3<f32>(1.0); // Sparkle
                     }
+
+                    ghostFinal *= 2.0; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
