@@ -160,9 +160,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.25; // JUICE: Lower threshold (0.30 -> 0.25) for even more glow
+            let bloomThreshold = 0.20; // JUICE: Even lower threshold for maximum neon
             if (glowLum > bloomThreshold) {
-                 color += glow * 3.0; // JUICE: More intense bloom
+                 color += glow * 4.0; // JUICE: Maximum bloom intensity
             }
 
             // High-pass boost for the core pixels
@@ -324,7 +324,7 @@ export const ParticleShaders = () => {
 
             // Neon Flicker (JUICE)
             // High frequency chaos for electrical look
-            let flicker = 0.5 + 0.5 * sin(uniforms.time * 80.0 + uv.x * 20.0);
+            let flicker = 0.5 + 0.5 * sin(uniforms.time * 120.0 + uv.x * 20.0);
 
             // Boost brightness for neon effect
             return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
@@ -357,7 +357,7 @@ export const GridShader = () => {
 
             // NEON BRICKLAYER: Grid Ripple on Impact (Boosted)
             if (uniforms.warpSurge > 0.01) {
-                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 1.5;
+                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 2.5;
                 pos.y += wave;
             }
 
@@ -398,7 +398,7 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
-                 alpha += 0.8 + zonePulse * 0.4; // More dynamic pulse
+                 alpha += 1.0 + zonePulse * 0.5; // More dynamic pulse
                  // Add a subtle gradient to the zone
                  let zoneGrad = 1.0 - (dist / halfWidth);
                  alpha *= (0.5 + zoneGrad * 0.5);
@@ -481,7 +481,7 @@ export const BackgroundShaders = () => {
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
             // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 0.8 + warpSurge * 2.0;
+            let warpSpeed = 1.0 + level * 1.0 + warpSurge * 3.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -744,11 +744,11 @@ export const Shaders = () => {
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
-                let innerPulse = sin(time * pulseFreq) * (0.8 + level * 0.08);
+                let innerPulse = sin(time * pulseFreq * 1.2) * (0.8 + level * 0.08);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 2.5;
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * 3.0;
                 finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
