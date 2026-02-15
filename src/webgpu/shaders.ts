@@ -121,7 +121,7 @@ export const PostProcessShaders = () => {
 
             let baseAberration = vignetteAberration + levelAberration;
             // Add glitch aberration
-            let glitchAberration = glitchStrength * 0.03;
+            let glitchAberration = glitchStrength * 0.05;
             let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
 
             // Chromatic Aberration with Glitch Offset
@@ -764,7 +764,7 @@ export const Shaders = () => {
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
                 // Shift the fresnel curve for each channel based on level
-                let dispersion = 0.3 * levelFactor;
+                let dispersion = 0.5 * levelFactor;
 
                 let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion)), 4.0);
                 let fG = baseFresnel;
@@ -858,6 +858,8 @@ export const Shaders = () => {
                     if (noise > 0.95) {
                         ghostFinal += vec3<f32>(1.0); // Sparkle
                     }
+
+                    ghostFinal *= 2.0; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
