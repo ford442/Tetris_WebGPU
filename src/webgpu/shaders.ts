@@ -160,9 +160,9 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.20; // JUICE: Lower threshold (0.25 -> 0.20) for even more glow
+            let bloomThreshold = 0.20; // JUICE: Even lower threshold for maximum neon
             if (glowLum > bloomThreshold) {
-                 color += glow * 4.0; // JUICE: More intense bloom
+                 color += glow * 4.0; // JUICE: Maximum bloom intensity
             }
 
             // High-pass boost for the core pixels
@@ -398,7 +398,7 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
-                 alpha += 0.8 + zonePulse * 0.4; // More dynamic pulse
+                 alpha += 1.0 + zonePulse * 0.5; // More dynamic pulse
                  // Add a subtle gradient to the zone
                  let zoneGrad = 1.0 - (dist / halfWidth);
                  alpha *= (0.5 + zoneGrad * 0.5);
@@ -481,7 +481,7 @@ export const BackgroundShaders = () => {
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
             // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 1.5 + warpSurge * 2.0;
+            let warpSpeed = 1.0 + level * 1.0 + warpSurge * 3.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -744,11 +744,11 @@ export const Shaders = () => {
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
-                let innerPulse = sin(time * pulseFreq) * (0.8 + level * 0.08);
+                let innerPulse = sin(time * pulseFreq * 1.2) * (0.8 + level * 0.08);
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 2.5;
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * 3.0;
                 finalColor += vColor.rgb * rimLight;
 
                 if (isTrace > 0.5) {
