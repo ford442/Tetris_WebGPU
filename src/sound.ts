@@ -181,4 +181,15 @@ export default class SoundManager {
         osc.start(now);
         osc.stop(now + 2.0);
     }
+
+    playLevelUp() {
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C4, E4, G4, C5
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'triangle', 0.1, i * 0.08, 0.4);
+            this.playTone(freq * 2, 'sine', 0.1, i * 0.08, 0.2); // Octave
+        });
+
+        // Final chime
+        this.playTone(1046.50 * 1.5, 'sine', 0.4, 0.4, 0.3); // G5 at 0.4s
+    }
 }
