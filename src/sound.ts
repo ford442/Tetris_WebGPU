@@ -102,14 +102,14 @@ export default class SoundManager {
 
     playHardDrop() {
         // Impact thud + electric zap
-        // 1. Low frequency kick
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
+        // 1. Low frequency kick (Thud)
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
         osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.15);
+        osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.15);
 
         gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
@@ -119,45 +119,75 @@ export default class SoundManager {
         osc.start();
         osc.stop(this.ctx.currentTime + 0.15);
 
-        // 2. Noise Burst (Impact)
-        this.playNoise(0.1, 0, 0.6);
+        // 2. High Frequency Zap (Laser drop)
+        const oscZap = this.ctx.createOscillator();
+        const gainZap = this.ctx.createGain();
+        oscZap.type = 'sawtooth';
+        oscZap.frequency.setValueAtTime(800, this.ctx.currentTime);
+        oscZap.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+
+        gainZap.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gainZap.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+        oscZap.connect(gainZap);
+        gainZap.connect(this.masterGain);
+        oscZap.start();
+        oscZap.stop(this.ctx.currentTime + 0.1);
+
+        // 3. Noise Burst (Impact)
+        this.playNoise(0.1, 0, 0.5);
     }
 
     playLock() {
-        this.playTone(440, 'square', 0.1, 0, 0.3);
-        this.playTone(880, 'sine', 0.05, 0.02, 0.2);
+        this.playTone(440, 'square', 0.1, 0, 0.2);
+        this.playTone(880, 'sine', 0.05, 0.02, 0.1);
     }
 
     playLineClear(lines: number, combo: number = 0, backToBack: boolean = false) {
-        // Pitch shift based on combo (semitone step ~1.059)
-        const pitchMod = Math.pow(1.059, Math.min(combo, 12)); // Cap at one octave shift
-        const base = 523.25 * pitchMod; // C5 with combo modulation
-        // Major 7th chord using Equal Temperament ratios
-        // Root, Major 3rd (1.2599), Perfect 5th (1.4983), Major 7th (1.8877)
+        // Pitch shift based on combo
+        const pitchMod = Math.pow(1.059, Math.min(combo, 12));
+        const base = 523.25 * pitchMod; // C5
+
+        // Cyberpunk Chord: Minor 9th or Major 7th? Let's go Major 7th for triumph.
         const chord = [base, base * 1.2599, base * 1.4983, base * 1.8877];
 
-        const vol = 0.4;
+        const vol = 0.3;
 
-        // Staggered arpeggio
+        // Staggered arpeggio with richer waveforms
         for (let i = 0; i < Math.min(lines, 4); i++) {
-             this.playTone(chord[i], 'triangle', 0.4, i * 0.04, vol);
-             this.playTone(chord[i] * 2, 'sine', 0.4, i * 0.04 + 0.01, vol * 0.5); // Octave overtone
+             // Use Square/Sawtooth for retro feel
+             this.playTone(chord[i], 'square', 0.3, i * 0.05, vol);
+             this.playTone(chord[i] * 2, 'sawtooth', 0.3, i * 0.05 + 0.02, vol * 0.4);
         }
 
         if (lines >= 4) {
-            // Tetris! - Full Chord Blast + noise sweep
-            this.playTone(chord[0] * 2, 'square', 0.8, 0.2, 0.3);
-            this.playTone(chord[2] * 2, 'square', 0.8, 0.2, 0.3);
+            // TETRIS! - Full Chord Blast + long sweep
+            // Play full chord simultaneously
+            chord.forEach((freq, i) => {
+                this.playTone(freq * 2, 'square', 0.6, 0.0, 0.2);
+            });
+
+            // Uplifting sweep
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(1200, this.ctx.currentTime + 0.5);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.5);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.5);
 
             // Cymbal-ish noise
-            const noiseDur = 0.6;
-            this.playNoise(noiseDur, 0, 0.4);
+            this.playNoise(0.8, 0, 0.3);
         }
 
         if (backToBack) {
-            // Extra "Zing" for Back-to-Back
-            this.playTone(1760 * pitchMod, 'sawtooth', 0.4, 0.0, 0.4);
-            this.playTone(1760 * 1.5 * pitchMod, 'sawtooth', 0.4, 0.1, 0.2);
+            // Back-to-Back: High pitch echo
+            this.playTone(1760 * pitchMod, 'sawtooth', 0.3, 0.1, 0.3);
+            this.playTone(1760 * 1.5 * pitchMod, 'sawtooth', 0.3, 0.2, 0.2);
         }
     }
 
