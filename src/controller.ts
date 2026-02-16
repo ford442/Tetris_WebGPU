@@ -37,17 +37,19 @@ export default class Controller {
     'ArrowLeft': 'left',
     'ArrowRight': 'right',
     'ArrowDown': 'down',
-    'ArrowUp': 'rotateCW',
+    'ArrowUp': 'hardDrop',
     'Space': 'hardDrop',
     'KeyC': 'hold',
     'ShiftLeft': 'hold',
     'ShiftRight': 'hold',
+    'KeyX': 'rotateCW',
+    'KeyZ': 'rotateCCW',
 
     // WASD + KL
     'KeyA': 'left',
     'KeyD': 'right',
     'KeyS': 'down',
-    'KeyW': 'down',
+    'KeyW': 'hardDrop',
     'KeyQ': 'rotateCCW',
     'KeyE': 'rotateCW',
     'KeyK': 'rotateCCW',
@@ -55,6 +57,7 @@ export default class Controller {
   };
 
   private lastTime: number = 0;
+  private lastLevel: number = 1;
 
   constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
     this.game = game;
@@ -85,6 +88,7 @@ export default class Controller {
     // Stop gravity timer - now handled in gameLoop
     this.stopTimer();
 
+    this.lastLevel = this.game.level;
     this.lastTime = performance.now();
     this.gameLoop();
   }
@@ -349,6 +353,12 @@ export default class Controller {
 
       // Game update (lock delay)
       const result = this.game.update(dt);
+
+      // Check level up
+      if (this.game.level > this.lastLevel) {
+          this.soundManager.playLevelUp();
+          this.lastLevel = this.game.level;
+      }
 
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;

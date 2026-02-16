@@ -363,7 +363,7 @@ export const GridShader = () => {
 
             // NEON BRICKLAYER: Grid Ripple on Impact (Boosted)
             if (uniforms.warpSurge > 0.01) {
-                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 2.5;
+                let wave = sin(pos.x * 0.8 + uniforms.time * 15.0) * uniforms.warpSurge * 3.5;
                 pos.y += wave;
             }
 
@@ -492,7 +492,7 @@ export const BackgroundShaders = () => {
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
             // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 1.0 + warpSurge * 3.0;
+            let warpSpeed = 1.0 + level * 1.0 + warpSurge * 5.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -909,7 +909,7 @@ export const Shaders = () => {
                         ghostFinal += vec3<f32>(1.0); // Sparkle
                     }
 
-                    ghostFinal *= 2.0; // Boost brightness
+                    ghostFinal *= 3.0; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
