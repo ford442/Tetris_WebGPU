@@ -4,7 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 160; // Delayed Auto Shift (ms) - Balanced Fast
 const ARR = 15;  // Auto Repeat Rate (ms) - Fast but controllable
-const SOFT_DROP_SPEED = 30; // Sonic Drop: Faster soft drop for better responsiveness
+const SOFT_DROP_SPEED = 20; // Sonic Drop: Faster soft drop for better responsiveness (50Hz)
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -333,8 +333,8 @@ export default class Controller {
 
       const level = this.game.getState().level;
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
-      // Level 1: 1000ms, Level 10: ~316ms, Level 15: ~160ms (Using 0.88 base)
-      const speedMs = Math.max(16, 1000 * Math.pow(0.88, level - 1));
+      // Tuned for better playability: 0.85 base makes it slightly faster
+      const speedMs = Math.max(16, 1000 * Math.pow(0.85, level - 1));
 
       // Accumulate gravity time?
       // Simplest: use a gravity timer here.
