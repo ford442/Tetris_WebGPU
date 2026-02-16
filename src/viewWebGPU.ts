@@ -399,6 +399,14 @@ export default class View {
                this.particleSystem.emitParticlesRadial(lx, worldY, 0.0, angle, 30.0, [1.0, 1.0, 1.0, 1.0]);
           }
 
+          // RING BLAST: Expanding ring of particles
+          for (let i=0; i<40; i++) {
+               const angle = (i / 40.0) * Math.PI * 2.0;
+               const speed = 20.0;
+               // Center X is roughly 5.0 * 2.2 = 11.0
+               this.particleSystem.emitParticlesRadial(11.0, worldY, 0.0, angle, speed, [1.0, 1.0, 1.0, 0.8]);
+          }
+
           // Sweep across the line
           for (let c=0; c<10; c++) {
               const worldX = c * 2.2;
@@ -587,10 +595,17 @@ export default class View {
       }
 
       // NEON BRICKLAYER: Impact Ring Shockwave
-      for (let i = 0; i < 40; i++) {
-          const angle = (i / 40) * Math.PI * 2;
-          const speed = 40.0; // High speed for shockwave
+      for (let i = 0; i < 60; i++) {
+          const angle = (i / 60.0) * Math.PI * 2.0;
+          const speed = 45.0; // High speed for shockwave
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
+      }
+
+      // SPARK BURST: High speed random sparks
+      for (let i=0; i<20; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 30.0 + Math.random() * 30.0;
+          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [1.0, 1.0, 0.8, 1.0]);
       }
 
       // Additional Shockwave Ring (Echo)

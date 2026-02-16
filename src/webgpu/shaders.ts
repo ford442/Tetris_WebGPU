@@ -324,10 +324,16 @@ export const ParticleShaders = () => {
 
             // Neon Flicker (JUICE)
             // High frequency chaos for electrical look
-            let flicker = 0.5 + 0.5 * sin(uniforms.time * 120.0 + uv.x * 20.0);
+            // Use pseudo-random noise for flicker
+            let noise = fract(sin(dot(uv, vec2<f32>(12.9898 + uniforms.time, 78.233))) * 43758.5453);
+            var flicker = 0.8 + 0.2 * sin(uniforms.time * 60.0);
+            if (noise > 0.9) { flicker *= 1.5; } // Random bright sparks
 
-            // Boost brightness for neon effect
-            return vec4<f32>(finalColor * 5.0 * lifeRatio, finalAlpha * pulse * flicker);
+            // Boost brightness significantly for small particles (sparkle)
+            var brightness = 4.0;
+            if (lifeRatio > 0.8) { brightness = 8.0; } // Initial burst is super bright
+
+            return vec4<f32>(finalColor * brightness * lifeRatio, finalAlpha * pulse * flicker);
         }
     `;
 
@@ -379,9 +385,12 @@ export const GridShader = () => {
         @fragment
         fn main(@location(0) vPos : vec3<f32>) -> @location(0) vec4<f32> {
             // Pulse the grid lines (ENHANCED)
-            let pulse = sin(uniforms.time * 3.0) * 0.5 + 0.5;
-            var alpha = 0.2 + pulse * 0.3; // Stronger, more visible pulse
-            var color = vec3<f32>(1.0, 1.0, 1.0);
+            // Add a secondary faster pulse for "energy flow" feel
+            let pulse1 = sin(uniforms.time * 2.0) * 0.5 + 0.5;
+            let pulse2 = sin(uniforms.time * 10.0 + vPos.y * 0.5) * 0.5 + 0.5;
+
+            var alpha = 0.15 + pulse1 * 0.2 + pulse2 * 0.15; // Combined pulse
+            var color = vec3<f32>(0.8, 0.9, 1.0); // Slightly blue-ish white
 
             // Distance Fade (Fog)
             let center = vec2<f32>(10.0, -20.0);
@@ -467,8 +476,10 @@ export const BackgroundShaders = () => {
               let center = vec2<f32>(0.5, 0.5);
               let dist = distance(uv, center);
               // JUICE: Increased warp strength for higher levels
-              let warpStrength = (levelFactor * 0.3 + warpSurge * 0.15) * sin(uniforms.time * 2.0);
-              uv -= normalize(uv - center) * warpStrength * dist;
+              // Stronger wobble at high levels
+              let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
+              let warpStrength = (levelFactor * 0.5 + warpSurge * 0.2) * wobble;
+              uv -= normalize(uv - center) * warpStrength * dist * dist; // Quadratic warp for "tunnel" feel
           }
 
           // --- Multi-layer perspective grid ---
@@ -514,10 +525,25 @@ export const BackgroundShaders = () => {
           var neonBlue = uniforms.color3;
 
           // Manual mix for level influence (mix towards red/orange) (ENHANCED)
-          let dangerColor = vec3<f32>(1.0, 0.0, 0.3); // Neon Red
+          let dangerColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
+          let warningColor = vec3<f32>(1.0, 0.5, 0.0); // Orange
+
           // Shift aggressively with level
-          neonCyan = mix(neonCyan, dangerColor, min(levelFactor * 1.5, 1.0));
-          neonBlue = mix(neonBlue, vec3<f32>(0.4, 0.0, 0.6), min(levelFactor * 1.2, 1.0)); // Deep Purple
+          // Level 0-5: Blue/Cyan -> Purple
+          // Level 5-10: Purple -> Red/Orange
+
+          if (level > 5.0) {
+               // High Level: Shift to Red/Orange
+               let highLevelFactor = min((level - 5.0) * 0.2, 1.0);
+               neonCyan = mix(neonCyan, dangerColor, highLevelFactor);
+               neonBlue = mix(neonBlue, vec3<f32>(0.3, 0.0, 0.0), highLevelFactor); // Dark Red
+               neonPurple = mix(neonPurple, warningColor, highLevelFactor * 0.7);
+          } else {
+               // Low Level: Shift to Purple
+               let lowLevelFactor = min(level * 0.2, 1.0);
+               neonCyan = mix(neonCyan, vec3<f32>(0.0, 0.5, 1.0), lowLevelFactor);
+               neonBlue = mix(neonBlue, vec3<f32>(0.2, 0.0, 0.8), lowLevelFactor);
+          }
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
@@ -695,10 +721,17 @@ export const Shaders = () => {
                 var texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
 
                 // Glitch Offset
+                var glitchColorMod = vec3<f32>(0.0);
                 if (uniforms.useGlitch > 0.0) {
                      let glitchStrength = uniforms.useGlitch;
                      let glitchOffset = glitchStrength * 0.05 * sin(texUV.y * 50.0 + uniforms.time * 20.0);
                      texUV.x += glitchOffset;
+
+                     // RGB Split (Chromatic Aberration) on the block texture
+                     let noise = fract(sin(dot(texUV, vec2<f32>(12.9898, 78.233)) + uniforms.time) * 43758.5453);
+                     if (noise > 0.9) {
+                         glitchColorMod = vec3<f32>(1.0) * glitchStrength;
+                     }
                 }
 
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
@@ -734,6 +767,9 @@ export const Shaders = () => {
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
 
+                // Add Glitch Mod
+                finalColor += glitchColorMod;
+
                 // Emissive
                 let time = uniforms.time;
                 let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
@@ -744,12 +780,26 @@ export const Shaders = () => {
                 // JUICE: Inner pulse frequency scales with level (Heartbeat)
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
-                let innerPulse = sin(time * pulseFreq * 1.2) * (0.8 + level * 0.08);
+                // Use a sharper sine wave (pow) for a heartbeat effect
+                let rawPulse = sin(time * pulseFreq * 1.2) * 0.5 + 0.5;
+                let sharpPulse = pow(rawPulse, 4.0); // Spikey pulse
+                let innerPulse = sharpPulse * (0.8 + level * 0.15); // Stronger with level
+
+                // Add a second, faster "jitter" pulse for high levels
+                if (level > 5.0) {
+                    innerPulse += sin(time * 20.0) * 0.1 * (level - 5.0) * 0.1;
+                }
+
                 finalColor += vColor.rgb * (breath + innerPulse);
 
                 // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * 3.0;
-                finalColor += vColor.rgb * rimLight;
+                // Rim light gets sharper and brighter
+                // Let's make it wider (lower power) but more intense
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (4.0 + level * 0.2);
+
+                // Rim Color Shift: Cyan tint on the rim
+                let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.5);
+                finalColor += rimColor * rimLight;
 
                 if (isTrace > 0.5) {
                     finalColor += vColor.rgb * pulsePos * 4.0;
