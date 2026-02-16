@@ -417,7 +417,7 @@ export default class View {
                   if (backToBack) {
                       color = [1.0, 0.8, 0.0, 1.0]; // GOLD
                   }
-                  count = 300 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
+                  count = 500 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
                   // Standard line clear
                   color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
@@ -430,7 +430,7 @@ export default class View {
 
               // NEON BRICKLAYER: Back-to-Back Streak Effect (Boost count)
               if (backToBack) {
-                  count = Math.floor(count * 2.0); // More particles!
+                  count = Math.floor(count * 2.5); // More particles!
               }
 
               this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
