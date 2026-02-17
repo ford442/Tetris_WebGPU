@@ -427,8 +427,9 @@ export default class View {
                   }
                   count = 500 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
               } else {
-                  // Standard line clear
-                  color = (Math.random() > 0.5 ? [0.0, 1.0, 1.0, 1.0] : [0.5, 0.0, 1.0, 1.0]); // Cyan/Purple
+                  // Standard line clear: Use random theme color
+                  const themeColor = this.currentTheme[Math.floor(Math.random() * 7) + 1] || [0.0, 1.0, 1.0];
+                  color = [...themeColor, 1.0];
 
                   // Combo Color (Red/Orange)
                   if (combo > 1) {
@@ -1625,7 +1626,7 @@ export default class View {
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
         // JUICE: Increased ghost visibility to 0.5 to compete with bloom
-        let alpha = value < 0 ? 0.5 : 0.85; // Ghost: 50% visible, Solid blocks: 85% opaque (glass effect)
+        let alpha = value < 0 ? 0.3 : 0.85; // Ghost: 30% visible, Solid blocks: 85% opaque (glass effect)
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
