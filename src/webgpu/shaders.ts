@@ -104,8 +104,8 @@ export const PostProcessShaders = () => {
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             // Subtle permanent aberration at edges for arcade feel
-            // JUICE: Increased lens distortion at edges
-            let vignetteAberration = pow(distFromCenter, 2.5) * 0.02;
+            // JUICE: Stronger lens distortion at edges for arcade CRT feel
+            let vignetteAberration = pow(distFromCenter, 3.0) * 0.03; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -160,9 +160,10 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.20; // JUICE: Even lower threshold for maximum neon
+            // JUICE: Lower threshold (0.15) to catch more mid-tones, Higher Intensity (4.5)
+            let bloomThreshold = 0.15;
             if (glowLum > bloomThreshold) {
-                 color += glow * 4.0; // JUICE: Maximum bloom intensity
+                 color += glow * 4.5;
             }
 
             // High-pass boost for the core pixels
@@ -385,12 +386,27 @@ export const GridShader = () => {
         @fragment
         fn main(@location(0) vPos : vec3<f32>) -> @location(0) vec4<f32> {
             // Pulse the grid lines (ENHANCED)
-            // Add a secondary faster pulse for "energy flow" feel
+            // Pulse 1: Base breathing (synced with time)
             let pulse1 = sin(uniforms.time * 2.0) * 0.5 + 0.5;
+
+            // Pulse 2: Energy Flow (moves up the grid)
             let pulse2 = sin(uniforms.time * 10.0 + vPos.y * 0.5) * 0.5 + 0.5;
 
             var alpha = 0.15 + pulse1 * 0.2 + pulse2 * 0.15; // Combined pulse
             var color = vec3<f32>(0.8, 0.9, 1.0); // Slightly blue-ish white
+
+            // Floor Glow (Bottom of the grid)
+            // Highlight the landing zone area near y = -43.0
+            let floorDist = abs(vPos.y - (-43.0));
+            // Glow within 8 units of bottom, stronger at very bottom
+            let floorGlow = smoothstep(8.0, 0.0, floorDist);
+
+            if (floorGlow > 0.0) {
+                 alpha += floorGlow * 0.6; // Make floor very visible
+                 // Cyan/Blue floor that reacts to pulse
+                 let floorColor = vec3<f32>(0.0, 1.0, 1.0);
+                 color = mix(color, floorColor, floorGlow * 0.8);
+            }
 
             // Distance Fade (Fog)
             let center = vec2<f32>(10.0, -20.0);
@@ -867,49 +883,54 @@ export const Shaders = () => {
                 // Ghost Piece Logic
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech (ENHANCED)
-                    let scanSpeed = 8.0;
-                    // INCREASED Frequency: 20.0 -> 30.0
-                    let scanY = fract(vUV.y * 30.0 - time * scanSpeed);
+                    // Faster scanlines for more energy
+                    let scanSpeed = 15.0;
+                    // INCREASED Frequency: 30.0 -> 40.0
+                    let scanY = fract(vUV.y * 40.0 - time * scanSpeed);
                     // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY)) * 2.0;
+                    let scanline = smoothstep(0.0, 0.15, scanY) * (1.0 - smoothstep(0.85, 1.0, scanY)) * 3.0;
 
                     // Landing Beam (Vertical Highlight)
-                    let beam = smoothstep(0.5, 0.0, abs(vUV.x - 0.5));
+                    let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
 
                     // Wireframe logic (from edgeGlow)
-                    let wireframe = smoothstep(0.9, 0.95, uvEdgeDist);
+                    let wireframe = smoothstep(0.9, 0.98, uvEdgeDist);
 
-                    let ghostColor = vColor.rgb * 1.5; // Brighten original color
+                    let ghostColor = vColor.rgb * 1.8; // Brighten original color further
 
                     // NEON BRICKLAYER: Tension-based pulse
-                    let tension = smoothstep(0.5, 1.0, lockPercent);
-                    let pulseFreq = 8.0 + tension * 15.0; // Speed up significantly when locking
+                    let tension = smoothstep(0.3, 1.0, lockPercent); // Start reacting earlier
+                    let pulseFreq = 10.0 + tension * 20.0; // Speed up significantly when locking
 
                     // ENHANCED Pulse: Slower, fuller
-                    let ghostAlpha = 0.6 + 0.2 * sin(time * pulseFreq);
+                    let ghostAlpha = 0.7 + 0.25 * sin(time * pulseFreq); // More opaque base
 
                     // Holographic Scanline
-                    let scanEffect = sin(vUV.y * 50.0 + time * 5.0) * 0.1;
+                    let scanEffect = sin(vUV.y * 80.0 + time * 8.0) * 0.15;
 
                     // NEW Glitch effect (Reacts to tension)
-                    let glitchAmp = 0.02 + tension * 0.05;
+                    let glitchAmp = 0.03 + tension * 0.1;
+                    // Chaotic glitch
                     let ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
+                    if (tension > 0.5 && fract(time * 10.0) > 0.8) {
+                         ghostGlitch += 0.1; // Big glitch jump
+                    }
 
-                    var ghostFinal = ghostColor * wireframe * 5.0  // Bright edges
-                                   + ghostColor * scanline * 0.5   // Scanlines
-                                   + ghostColor * beam * 0.5       // Landing Beam
-                                   + vec3<f32>(0.5, 0.8, 1.0) * fresnelTerm * 2.0; // Blue-ish rim
+                    var ghostFinal = ghostColor * wireframe * 6.0  // Bright edges
+                                   + ghostColor * scanline * 0.8   // Scanlines
+                                   + ghostColor * beam * 0.6       // Landing Beam
+                                   + vec3<f32>(0.5, 0.9, 1.0) * fresnelTerm * 3.0; // Cyan/Blue rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
                     ghostFinal += vec3<f32>(scanEffect); // Add scanline overlay
 
                     // Digital noise/flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
-                    if (noise > 0.95) {
-                        ghostFinal += vec3<f32>(1.0); // Sparkle
+                    if (noise > 0.92) {
+                        ghostFinal += vec3<f32>(1.5); // Sparkle
                     }
 
-                    ghostFinal *= 3.0; // Boost brightness
+                    ghostFinal *= 3.5; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
