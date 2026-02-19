@@ -160,10 +160,10 @@ export const PostProcessShaders = () => {
 
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            // JUICE: Lower threshold (0.15) to catch more mid-tones, Higher Intensity (4.5)
-            let bloomThreshold = 0.15;
+            // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
+            let bloomThreshold = 0.1;
             if (glowLum > bloomThreshold) {
-                 color += glow * 4.5;
+                 color += glow * 5.5;
             }
 
             // High-pass boost for the core pixels
@@ -521,8 +521,8 @@ export const BackgroundShaders = () => {
             let surgeDistortion = sin(uv.y * 20.0 + time * 10.0) * warpSurge * 0.05;
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
-            // Smooth grid lines that get thinner with distance
-            let lineWidth = 0.03 / scale;
+            // Smooth grid lines that get thinner with distance, but thicker with warp surge
+            let lineWidth = (0.03 + warpSurge * 0.02) / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
@@ -798,8 +798,8 @@ export const Shaders = () => {
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
                 // Use a sharper sine wave (pow) for a heartbeat effect
                 let rawPulse = sin(time * pulseFreq * 1.2) * 0.5 + 0.5;
-                let sharpPulse = pow(rawPulse, 4.0); // Spikey pulse
-                let innerPulse = sharpPulse * (0.8 + level * 0.15); // Stronger with level
+                let sharpPulse = pow(rawPulse, 2.0); // Broader pulse for more visibility
+                let innerPulse = sharpPulse * (0.8 + level * 0.2); // Stronger with level
 
                 // Add a second, faster "jitter" pulse for high levels
                 if (level > 5.0) {
@@ -811,7 +811,7 @@ export const Shaders = () => {
                 // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
                 // Rim light gets sharper and brighter
                 // Let's make it wider (lower power) but more intense
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (4.0 + level * 0.2);
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (5.0 + level * 0.3);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.5);
@@ -830,7 +830,7 @@ export const Shaders = () => {
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
                 // Shift the fresnel curve for each channel based on level
-                let dispersion = 0.5 * levelFactor;
+                let dispersion = 0.8 * levelFactor;
 
                 let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion)), 4.0);
                 let fG = baseFresnel;
@@ -884,11 +884,11 @@ export const Shaders = () => {
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech (ENHANCED)
                     // Faster scanlines for more energy
-                    let scanSpeed = 15.0;
+                    let scanSpeed = 25.0;
                     // INCREASED Frequency: 30.0 -> 40.0
                     let scanY = fract(vUV.y * 40.0 - time * scanSpeed);
                     // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.15, scanY) * (1.0 - smoothstep(0.85, 1.0, scanY)) * 3.0;
+                    let scanline = smoothstep(0.0, 0.15, scanY) * (1.0 - smoothstep(0.85, 1.0, scanY)) * 4.0;
 
                     // Landing Beam (Vertical Highlight)
                     let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
@@ -916,8 +916,13 @@ export const Shaders = () => {
                          ghostGlitch += 0.1; // Big glitch jump
                     }
 
+                    // Added Flicker
+                    if (fract(time * 30.0) > 0.95) {
+                        ghostAlpha *= 0.5;
+                    }
+
                     var ghostFinal = ghostColor * wireframe * 6.0  // Bright edges
-                                   + ghostColor * scanline * 0.8   // Scanlines
+                                   + ghostColor * scanline * 1.0   // Scanlines
                                    + ghostColor * beam * 0.6       // Landing Beam
                                    + vec3<f32>(0.5, 0.9, 1.0) * fresnelTerm * 3.0; // Cyan/Blue rim
 
@@ -930,7 +935,7 @@ export const Shaders = () => {
                         ghostFinal += vec3<f32>(1.5); // Sparkle
                     }
 
-                    ghostFinal *= 3.5; // Boost brightness
+                    ghostFinal *= 5.0; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
