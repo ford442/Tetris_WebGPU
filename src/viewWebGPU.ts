@@ -379,8 +379,8 @@ export default class View {
 
   onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
       this.visualEffects.triggerFlash(1.0);
-      // NEON BRICKLAYER: Grid Ripple on Clear
-      this.visualEffects.warpSurge = 0.5 + lines.length * 0.1;
+      // NEON BRICKLAYER: Grid Ripple on Clear (Boosted)
+      this.visualEffects.warpSurge = 0.8 + lines.length * 0.15;
 
       // NEON BRICKLAYER: Combo increases shake
       const shakeBase = tSpin ? 0.8 : 0.5;
@@ -551,8 +551,8 @@ export default class View {
       // JUICE: Warp Surge on impact to distort grid
       this.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.1, 1.0);
 
-      // Increase shake intensity
-      this.visualEffects.triggerShake(4.0 + distance * 0.3, 0.4); // NEON BRICKLAYER: Seismometer-breaking shake
+      // Increase shake intensity (Boosted)
+      this.visualEffects.triggerShake(6.0 + distance * 0.4, 0.4); // NEON BRICKLAYER: Seismometer-breaking shake
   }
 
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
@@ -575,9 +575,10 @@ export default class View {
       // Impact particles at bottom
       const impactY = y * -2.2;
       const burstColor = [...themeColors, 1.0];
-      for (let i=0; i<80; i++) { // More particles!
-          const angle = (i / 80) * Math.PI * 2;
-          const speed = 20.0;
+      this.visualEffects.triggerFlash(0.1); // Subtle flash on impact
+      for (let i=0; i<120; i++) { // Even More particles!
+          const angle = (i / 120) * Math.PI * 2;
+          const speed = 20.0 + Math.random() * 10.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
 
@@ -1625,8 +1626,8 @@ export default class View {
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        // JUICE: Increased ghost visibility to 0.5 to compete with bloom
-        let alpha = value < 0 ? 0.3 : 0.85; // Ghost: 30% visible, Solid blocks: 85% opaque (glass effect)
+        // JUICE: Increased ghost visibility to compete with bloom
+        let alpha = value < 0 ? 0.35 : 0.85; // Ghost: 35% visible, Solid blocks: 85% opaque (glass effect)
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
