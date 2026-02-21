@@ -576,8 +576,8 @@ export default class View {
       const impactY = y * -2.2;
       const burstColor = [...themeColors, 1.0];
       this.visualEffects.triggerFlash(0.1); // Subtle flash on impact
-      for (let i=0; i<120; i++) { // Even More particles!
-          const angle = (i / 120) * Math.PI * 2;
+      for (let i=0; i<150; i++) { // Even More particles!
+          const angle = (i / 150) * Math.PI * 2;
           const speed = 20.0 + Math.random() * 10.0;
           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
       }
@@ -1627,7 +1627,7 @@ export default class View {
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
         // JUICE: Increased ghost visibility to compete with bloom
-        let alpha = value < 0 ? 0.35 : 0.85; // Ghost: 35% visible, Solid blocks: 85% opaque (glass effect)
+        let alpha = value < 0 ? 0.5 : 0.85; // Ghost: 50% visible, Solid blocks: 85% opaque (glass effect)
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
