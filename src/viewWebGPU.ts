@@ -292,6 +292,24 @@ export default class View {
 
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Draw subtle grid background
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    const gridSize = blockSize;
+    for (let x = 0; x < ctx.canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, ctx.canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < ctx.canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(ctx.canvas.width, y);
+        ctx.stroke();
+    }
+
     if (!piece) return;
 
     const { blocks } = piece;
@@ -315,13 +333,18 @@ export default class View {
           const cssColor = `rgb(${r}, ${g}, ${b})`;
 
           // 1. Glow (ENHANCED)
-          ctx.shadowBlur = 15;
+          ctx.shadowBlur = 20;
           ctx.shadowColor = cssColor;
 
           // 2. Stroke (Neon Tube)
           ctx.strokeStyle = cssColor;
           ctx.lineWidth = 3;
           ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+
+          // Inner glow stroke
+          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
 
           // 3. Faint Inner Fill (Glass) - Gradient for Hotspot
           const gradient = ctx.createRadialGradient(
@@ -509,9 +532,21 @@ export default class View {
 
   onHold() {
       // Visual feedback for hold
-      this.visualEffects.triggerFlash(0.2); // Quick flash
-      // Maybe some particles at the center?
-      this.particleSystem.emitParticles(4.5 * 2.2, -10.0 * 2.2, 0.0, 30, [0.5, 0.0, 1.0, 1.0]); // Purple flash
+      this.visualEffects.triggerFlash(0.3); // Quick flash
+
+      // Radial burst of purple particles
+      const centerX = 4.5 * 2.2;
+      const centerY = -10.0 * 2.2;
+      const color = [0.8, 0.0, 1.0, 1.0]; // Bright Purple
+
+      for (let i = 0; i < 20; i++) {
+          const angle = (i / 20) * Math.PI * 2;
+          const speed = 15.0 + Math.random() * 10.0;
+          this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, color);
+      }
+
+      // Central sparks
+      this.particleSystem.emitParticles(centerX, centerY, 0.0, 10, [1.0, 1.0, 1.0, 1.0]);
   }
 
   onRotate() {

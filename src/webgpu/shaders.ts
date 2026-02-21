@@ -423,7 +423,7 @@ export const GridShader = () => {
             if (dist < halfWidth) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
-                 alpha += 1.0 + zonePulse * 0.5; // More dynamic pulse
+                 alpha += 1.5 + zonePulse * 0.8; // More dynamic pulse
                  // Add a subtle gradient to the zone
                  let zoneGrad = 1.0 - (dist / halfWidth);
                  alpha *= (0.5 + zoneGrad * 0.5);
@@ -870,7 +870,7 @@ export const Shaders = () => {
 
                      // Mix to Warning Red
                      let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 1.0);
+                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 1.5);
 
                      // Add Scanline Emission
                      finalColor += warningColor * scanLine * 3.0;
@@ -896,7 +896,7 @@ export const Shaders = () => {
                     // Wireframe logic (from edgeGlow)
                     let wireframe = smoothstep(0.9, 0.98, uvEdgeDist);
 
-                    let ghostColor = vColor.rgb * 1.8; // Brighten original color further
+                    let ghostColor = vColor.rgb * 2.5; // Brighten original color further
 
                     // NEON BRICKLAYER: Tension-based pulse
                     let tension = smoothstep(0.3, 1.0, lockPercent); // Start reacting earlier
