@@ -65,7 +65,7 @@ export const PostProcessShaders = () => {
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
                 let width = params.x * 1.5; // JUICE: Wider shockwave
-                let strength = params.y; // e.g. 0.05
+                let strength = params.y * 1.5; // e.g. 0.05
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
@@ -161,9 +161,9 @@ export const PostProcessShaders = () => {
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
             // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
-            let bloomThreshold = 0.1;
+            let bloomThreshold = 0.05;
             if (glowLum > bloomThreshold) {
-                 color += glow * 5.5;
+                 color += glow * 6.5;
             }
 
             // High-pass boost for the core pixels
@@ -332,7 +332,7 @@ export const ParticleShaders = () => {
 
             // Boost brightness significantly for small particles (sparkle)
             var brightness = 4.0;
-            if (lifeRatio > 0.8) { brightness = 8.0; } // Initial burst is super bright
+            if (lifeRatio > 0.8) { brightness = 12.0; } // Initial burst is super bright
 
             return vec4<f32>(finalColor * brightness * lifeRatio, finalAlpha * pulse * flicker);
         }
@@ -508,7 +508,7 @@ export const BackgroundShaders = () => {
             // NEON BRICKLAYER: WARP SPEED
             // Speed increases significantly with level to simulate warp acceleration
             // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 1.0 + warpSurge * 5.0;
+            let warpSpeed = 1.0 + level * 2.0 + warpSurge * 8.0;
             let speed = (0.1 + layer_f * 0.05) * warpSpeed;
 
             // Perspective offset for each layer
@@ -522,7 +522,7 @@ export const BackgroundShaders = () => {
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
             // Smooth grid lines that get thinner with distance, but thicker with warp surge
-            let lineWidth = (0.03 + warpSurge * 0.02) / scale;
+            let lineWidth = (0.04 + warpSurge * 0.05) / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
@@ -729,7 +729,7 @@ export const Shaders = () => {
                 // JUICE: Sharpness increases with level (Glassier)
                 let shininessBoost = 1.0 + levelFactor * 2.0;
                 var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess} * shininessBoost);
-                specular += pow(max(dot(N, H), 0.0), 32.0 * shininessBoost) * 0.2;
+                specular += pow(max(dot(N, H), 0.0), 64.0 * shininessBoost) * 0.4;
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- TEXTURE SAMPLING ---
@@ -797,8 +797,8 @@ export const Shaders = () => {
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
                 // Use a sharper sine wave (pow) for a heartbeat effect
-                let rawPulse = sin(time * pulseFreq * 1.2) * 0.5 + 0.5;
-                let sharpPulse = pow(rawPulse, 2.0); // Broader pulse for more visibility
+                let rawPulse = sin(time * pulseFreq * 1.5) * 0.5 + 0.5;
+                let sharpPulse = pow(rawPulse, 4.0); // Sharper heartbeat pulse
                 let innerPulse = sharpPulse * (0.8 + level * 0.2); // Stronger with level
 
                 // Add a second, faster "jitter" pulse for high levels
@@ -825,7 +825,7 @@ export const Shaders = () => {
                 // JUICE: Sharper falloff for distinct neon rim
                 // Clamp bases to 0.0 to avoid NaN in pow()
                 let dotNV = max(dot(N, V), 0.0);
-                let baseFresnel = pow(1.0 - dotNV, 4.0);
+                let baseFresnel = pow(1.0 - dotNV, 3.0);
                 let fresnelTerm = baseFresnel; // Alias for legacy code
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
