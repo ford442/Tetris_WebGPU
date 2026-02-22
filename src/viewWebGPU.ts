@@ -5,6 +5,18 @@ import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
+import {
+  onHardDrop as handleHardDrop,
+  onHold as handleHold,
+  onLineClear as handleLineClear,
+  onLock as handleLock,
+  onMove as handleMove,
+  onRotate as handleRotate,
+  renderEndScreen as handleRenderEndScreen,
+  renderMainScreen as handleRenderMainScreen,
+  showFloatingText as handleShowFloatingText,
+  triggerImpactEffects as handleImpactEffects,
+} from './webgpu/viewGameEvents.js';
 // @ts-ignore
 const glMatrix = Matrix;
 
@@ -372,370 +384,35 @@ export default class View {
   }
 
   showFloatingText(text: string, subText: string = "") {
-      const container = document.getElementById('ui-container');
-      if (!container) return;
-
-      const el = document.createElement('div');
-      el.className = 'floating-text';
-      // Center of screen usually good, but maybe slightly up
-      el.style.left = '50%';
-      el.style.top = '40%';
-
-      let html = `<span class="main-text">${text}</span>`;
-      if (subText) {
-          html += `<br><span class="sub-text">${subText}</span>`;
-      }
-      el.innerHTML = html;
-
-      // Add specific classes for styling based on text content
-      if (text.includes("TETRIS")) el.classList.add("tetris");
-      if (text.includes("T-SPIN")) el.classList.add("tspin");
-      if (text.includes("COMBO")) el.classList.add("combo");
-
-      container.appendChild(el);
-
-      // Remove after animation
-      setTimeout(() => {
-          el.remove();
-      }, 2000);
+      handleShowFloatingText(this, text, subText);
   }
 
   onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
-      this.visualEffects.triggerFlash(1.0);
-      // NEON BRICKLAYER: Grid Ripple on Clear (Boosted)
-      this.visualEffects.warpSurge = 0.8 + lines.length * 0.15;
-
-      // NEON BRICKLAYER: Combo increases shake
-      const shakeBase = tSpin ? 0.8 : 0.5;
-      const shakeBonus = Math.min(combo * 0.1, 1.0);
-      this.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.6 : 0.5);
-
-      // Emit particles for each cleared line
-      lines.forEach(y => {
-          const worldY = y * -2.2;
-
-          // NEW: Flash Burst (Large particles) across the line for impact
-          for (let i=0; i<5; i++) {
-               const lx = Math.random() * 10.0 * 2.2;
-               const angle = Math.random() * Math.PI * 2;
-               // White flash particles
-               this.particleSystem.emitParticlesRadial(lx, worldY, 0.0, angle, 30.0, [1.0, 1.0, 1.0, 1.0]);
-          }
-
-          // RING BLAST: Expanding ring of particles
-          for (let i=0; i<40; i++) {
-               const angle = (i / 40.0) * Math.PI * 2.0;
-               const speed = 20.0;
-               // Center X is roughly 5.0 * 2.2 = 11.0
-               this.particleSystem.emitParticlesRadial(11.0, worldY, 0.0, angle, speed, [1.0, 1.0, 1.0, 0.8]);
-          }
-
-          // Sweep across the line
-          for (let c=0; c<10; c++) {
-              const worldX = c * 2.2;
-
-              let color = [0.0, 1.0, 1.0, 1.0]; // Default Cyan
-              // Juice: Combo increases particle density
-              let count = 20 + (combo * 5);
-
-              // T-SPIN (Purple/Magenta)
-              if (tSpin) {
-                  color = [1.0, 0.0, 1.0, 1.0]; // MAGENTA
-                  count = 150 + (combo * 25); // NEON BRICKLAYER: Massive T-Spin Burst
-              } else if (lines.length === 4) {
-                  color = [0.0, 1.0, 1.0, 1.0]; // CYAN (Tetris)
-                  // If Back-to-Back, make it Gold
-                  if (backToBack) {
-                      color = [1.0, 0.8, 0.0, 1.0]; // GOLD
-                  }
-                  count = 500 + (combo * 20); // NEON BRICKLAYER: Screen-filling Tetris Rain
-              } else {
-                  // Standard line clear: Use random theme color
-                  const themeColor = this.currentTheme[Math.floor(Math.random() * 7) + 1] || [0.0, 1.0, 1.0];
-                  color = [...themeColor, 1.0];
-
-                  // Combo Color (Red/Orange)
-                  if (combo > 1) {
-                       color = [1.0, 0.5 * (1.0/combo), 0.0, 1.0]; // Shift to Red as combo increases
-                  }
-              }
-
-              // NEON BRICKLAYER: Back-to-Back Streak Effect (Boost count)
-              if (backToBack) {
-                  count = Math.floor(count * 2.5); // More particles!
-              }
-
-              this.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
-
-              // COMBO SPARKS (Radial burst for high combos)
-              if (combo > 2 && c === 5) { // Center of line
-                   for (let i=0; i<20 + combo * 5; i++) {
-                      const angle = Math.random() * Math.PI * 2;
-                      const speed = 15.0 + combo * 2.0;
-                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.2, 0.0, 1.0]); // Red Sparks
-                   }
-              }
-
-              // If T-Spin, add a radial burst at the center of the line
-              if (tSpin && c === 5) {
-                   for (let i=0; i<40; i++) {
-                      const angle = (i / 40) * Math.PI * 2;
-                      const speed = 25.0;
-                      this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.0, 1.0, 1.0]); // Magenta
-                   }
-                   // Add extra shockwave/aberration for T-Spin
-                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
-                   this.visualEffects.triggerGlitch(0.5);
-              }
-
-              // JUICE: Tetris Clear (4 lines) extra impact
-              if (lines.length === 4 && c === 5) {
-                   this.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1, 3.0); // Strong shockwave for Tetris
-              }
-          }
-      });
-
-      // NEON BRICKLAYER: ALL CLEAR JUICE
-      if (isAllClear) {
-           this.visualEffects.triggerShockwave([0.5, 0.5], 0.5, 0.3, 0.2, 4.0); // Massive Shockwave
-           this.visualEffects.triggerShake(1.5, 0.8); // Long Shake
-
-           // Rainbow Burst
-           const centerX = 5.0 * 2.2;
-           const centerY = 10.0 * -2.2;
-
-           for (let i = 1; i <= 7; i++) {
-               // Cycle through theme colors
-               let color = this.currentTheme[i];
-               if (!color) color = [1.0, 1.0, 1.0];
-               const particleColor = [...color, 1.0];
-
-               // Radial burst for each color
-               for (let p = 0; p < 50; p++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const speed = 10.0 + Math.random() * 25.0; // High speed
-                    this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, particleColor);
-               }
-           }
-      }
+      handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
   onLock() {
-      this.visualEffects.triggerLock(0.3);
-      this.visualEffects.triggerShake(0.2, 0.15);
-
-      // Trigger a central shockwave on lock for impact
-      // This satisfies the "Shockwave" implementation requirement and adds "Juice"
-      // width, strength, aberration
-      this.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05, 2.5);
+      handleLock(this);
   }
 
   onHold() {
-      // Visual feedback for hold
-      this.visualEffects.triggerFlash(0.3); // Quick flash
-
-      // Radial burst of purple particles
-      const centerX = 4.5 * 2.2;
-      const centerY = -10.0 * 2.2;
-      const color = [0.8, 0.0, 1.0, 1.0]; // Bright Purple
-
-      for (let i = 0; i < 20; i++) {
-          const angle = (i / 20) * Math.PI * 2;
-          const speed = 15.0 + Math.random() * 10.0;
-          this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, color);
-      }
-
-      // Central sparks
-      this.particleSystem.emitParticles(centerX, centerY, 0.0, 10, [1.0, 1.0, 1.0, 1.0]);
+      handleHold(this);
   }
 
   onRotate() {
-      this.visualEffects.triggerRotate(0.2);
-
-      if (this.state && this.state.activePiece) {
-          const { x, y } = this.state.activePiece;
-          const worldX = (x + 1.5) * 2.2;
-          const worldY = (y + 1.5) * -2.2;
-          for (let i = 0; i < 12; i++) {
-              const angle = Math.random() * Math.PI * 2;
-              this.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, 15.0, [0.8, 1.0, 1.0, 0.8]);
-          }
-      }
+      handleRotate(this);
   }
 
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
-      // Convert world pos to screen UV (approximate)
-      const camY = -20.0;
-      const camZ = 75.0;
-      const fov = (35 * Math.PI) / 180;
-      const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ; // ~47.3
-      const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-
-      const uvX = 0.5 + (worldX - 10.0) / visibleWidth; // 10.0 is approx center X
-      const uvY = 0.5 - (impactY - camY) / visibleHeight;
-
-      // Dynamic shockwave based on drop distance (Boosted for JUICE)
-      // NEON BRICKLAYER: Tuned for maximum impact
-      const strength = 0.8 + Math.min(distance * 0.08, 0.7); // JUICE: MAXIMUM IMPACT
-      const width = 0.4 + Math.min(distance * 0.04, 0.5);     // JUICE: Massive ripple
-      const aberration = 0.2 + Math.min(distance * 0.03, 0.5); // JUICE: Heavy glitch
-      const speed = 3.0 + Math.min(distance * 0.2, 2.0); // JUICE: Hyper speed shockwave
-
-      this.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
-
-      // JUICE: Warp Surge on impact to distort grid
-      this.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.1, 1.0);
-
-      // Increase shake intensity (Boosted)
-      this.visualEffects.triggerShake(6.0 + distance * 0.4, 0.4); // NEON BRICKLAYER: Seismometer-breaking shake
+      handleImpactEffects(this, worldX, impactY, distance);
   }
 
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
-      // Create a vertical trail of particles
-      const worldX = x * 2.2;
-      // Start from top of drop
-      const startRow = y - distance;
-
-      // NEON BRICKLAYER: Use actual piece color for trail
-      const themeColors = this.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
-      const trailColor = [...themeColors, 0.8]; // Add alpha
-
-      // ENHANCED: Smoother, denser trail (Interpolated steps)
-      for(let i=0; i<distance * 2; i++) {
-          const r = startRow + i * 0.5;
-          const worldY = r * -2.2;
-          this.particleSystem.emitParticles(worldX, worldY, 0.0, 12, trailColor);
-      }
-
-      // Impact particles at bottom
-      const impactY = y * -2.2;
-      const burstColor = [...themeColors, 1.0];
-      this.visualEffects.triggerFlash(0.1); // Subtle flash on impact
-      for (let i=0; i<150; i++) { // Even More particles!
-          const angle = (i / 150) * Math.PI * 2;
-          const speed = 20.0 + Math.random() * 10.0;
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
-      }
-
-      // Add a floor splash ripple
-      // Emit particles shooting left and right along the floor with upward bias
-      for (let i = 0; i < 20; i++) {
-          // Left side (aiming up-left)
-          const speedL = 8.0 + Math.random() * 12.0;
-          const angleL = Math.PI - Math.random() * 0.5; // 180 to ~150 degrees
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleL, speedL, burstColor);
-
-          // Right side (aiming up-right)
-          const speedR = 8.0 + Math.random() * 12.0;
-          const angleR = Math.random() * 0.5; // 0 to ~30 degrees
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
-      }
-
-      // NEON BRICKLAYER: Impact Ring Shockwave
-      for (let i = 0; i < 60; i++) {
-          const angle = (i / 60.0) * Math.PI * 2.0;
-          const speed = 45.0; // High speed for shockwave
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
-      }
-
-      // SPARK BURST: High speed random sparks
-      for (let i=0; i<20; i++) {
-          const angle = Math.random() * Math.PI * 2;
-          const speed = 30.0 + Math.random() * 30.0;
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [1.0, 1.0, 0.8, 1.0]);
-      }
-
-      // Additional Shockwave Ring (Echo)
-      for (let i = 0; i < 40; i++) {
-          const angle = (i / 40) * Math.PI * 2 + (Math.PI / 40); // Offset angle
-          const speed = 30.0; // Slower echo
-          this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
-      }
-
-      // Horizontal Splash (Ground impact)
-      for (let i = 0; i < 20; i++) {
-           const dir = i % 2 === 0 ? 1 : -1;
-           const speed = 20.0 + Math.random() * 20.0;
-           const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.2; // Mostly horizontal
-           this.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
-      }
-
-      this.triggerImpactEffects(worldX, impactY, distance);
+      handleHardDrop(this, x, y, distance, colorIdx);
   }
 
   renderMainScreen(state: any) {
-    this.state = state;
-    // JUICE: Removed redundant triggerImpactEffects loop check.
-    // Impact effects are triggered immediately by Controller -> onHardDrop for zero latency.
-
-    // Check if level has changed and update video accordingly
-    if (state.level !== this.visualEffects.currentLevel) {
-      this.visualEffects.currentLevel = state.level;
-      this.visualEffects.triggerLevelUp();
-      this.visualEffects.updateVideoForLevel(this.visualEffects.currentLevel, this.currentTheme.levelVideos);
-      this.showFloatingText("LEVEL UP!", "WARP SPEED");
-
-      // Warp Speed Particles (Radial Burst)
-      const centerX = 5.0 * 2.2;
-      const centerY = 10.0 * -2.2;
-      for (let i = 0; i < 100; i++) {
-           const angle = Math.random() * Math.PI * 2;
-           const speed = 20.0 + Math.random() * 30.0;
-           // Cyan/White color
-           this.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
-      }
-    }
-
-    // Check for Score Event (Floating Text)
-    if (state.scoreEvent) {
-        // Simple deduplication based on frame or ID would be better, but since renderMainScreen is called every frame,
-        // we need to make sure we don't trigger this 60 times a second for the same event.
-        // However, Game.ts only returns the event ONCE (implied).
-        // Wait, Game.ts state is persistent.
-        // We need a mechanism to consume the event.
-        // Or checking against a lastEventID.
-        // Let's implement a simple counter check.
-        if (state.effectCounter !== this.lastEffectCounter && state.scoreEvent.text) {
-             this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
-
-             // NEON BRICKLAYER: Visual glitch for Back-to-Back for extra impact
-             if (state.scoreEvent.backToBack) {
-                 this.visualEffects.triggerGlitch(0.3);
-             }
-
-             this.lastEffectCounter = state.effectCounter;
-        }
-
-        // Actually Game.ts increments effectCounter on 'hardDrop', not score.
-        // So we need to ensure Game.ts increments something for Score too?
-        // Let's rely on the fact that if scoreEvent is present, it's a NEW event?
-        // No, Game.getState() returns the current state.
-        // I should modify Game.ts to clear scoreEvent after it's been read?
-        // Or add a sequence number to ScoreEvent.
-        // For now, let's assume we can compare objects or use a timestamp.
-        // But since I can't easily change Game.ts logic loop consumption model without refactoring,
-        // I'll add a 'timestamp' or ID to ScoreEvent.
-
-        // BETTER: Use score as a trigger? Score changes.
-        if (this.lastScore !== state.score && state.scoreEvent.text) {
-            this.showFloatingText(state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
-            this.lastScore = state.score;
-        }
-    }
-
-    // this.clearScreen(state);
-    this.renderPlayfild_WebGPU(state);
-    this.renderPiece(this.nextPieceContext, state.nextPiece, 30);
-    this.renderPiece(this.holdPieceContext, state.holdPiece, 20);
-
-    const scoreEl = document.getElementById('score');
-    if (scoreEl) scoreEl.textContent = state.score;
-
-    const linesEl = document.getElementById('lines');
-    if (linesEl) linesEl.textContent = state.lines;
-
-    const levelEl = document.getElementById('level');
-    if (levelEl) levelEl.textContent = state.level;
+    handleRenderMainScreen(this, state);
   }
 
   clearScreen({ lines, score }: any) {
@@ -751,22 +428,11 @@ export default class View {
   }
 
   renderEndScreen({ score }: any) {
-    const el = document.getElementById('game-over');
-    if (el) el.style.display = 'block';
-
-    // NEON BRICKLAYER: SYSTEM FAILURE EFFECT
-    this.visualEffects.triggerGlitch(1.0);
-    this.visualEffects.triggerAberration(1.0);
-    this.visualEffects.triggerFlash(0.5);
+    handleRenderEndScreen(this);
   }
 
   onMove(x: number, y: number) {
-      // NEON BRICKLAYER: DAS Trail
-      // Emit faint particles at the active piece center to visualize speed
-      const worldX = (x + 1.5) * 2.2;
-      const worldY = (y + 1.5) * -2.2;
-      // Faint cyan trail
-      this.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.9, 1.0, 0.8]);
+      handleMove(this, x, y);
   }
 
   /**
