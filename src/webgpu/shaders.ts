@@ -419,8 +419,8 @@ export const GridShader = () => {
             let dist = abs(vPos.x - uniforms.ghostX);
             let halfWidth = uniforms.ghostWidth * 0.5;
 
-            // Highlight zone
-            if (dist < halfWidth) {
+            // Highlight zone (Floor Only)
+            if (dist < halfWidth && vPos.y < -35.0) {
                  // Pulse the landing zone
                  let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
                  alpha += 1.5 + zonePulse * 0.8; // More dynamic pulse
@@ -517,12 +517,12 @@ export const BackgroundShaders = () => {
               cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
             );
 
-            // NEON BRICKLAYER: Grid Distortion from Warp Surge
-            let surgeDistortion = sin(uv.y * 20.0 + time * 10.0) * warpSurge * 0.05;
+            // NEON BRICKLAYER: Grid Distortion from Warp Surge (Doubled intensity)
+            let surgeDistortion = sin(uv.y * 20.0 + time * 15.0) * warpSurge * 0.1;
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
             // Smooth grid lines that get thinner with distance, but thicker with warp surge
-            let lineWidth = (0.04 + warpSurge * 0.05) / scale;
+            let lineWidth = (0.04 + warpSurge * 0.1) / scale;
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
@@ -808,13 +808,12 @@ export const Shaders = () => {
 
                 finalColor += vColor.rgb * (breath + innerPulse);
 
-                // ENHANCED: Rim Lighting for better definition (Wider and Brighter)
-                // Rim light gets sharper and brighter
-                // Let's make it wider (lower power) but more intense
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (5.0 + level * 0.3);
+                // ENHANCED: Glass/Neon Rim Lighting
+                // Sharper falloff (power 4.0) for a more distinct edge
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (6.0 + level * 0.4);
 
                 // Rim Color Shift: Cyan tint on the rim
-                let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.5);
+                let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
                 finalColor += rimColor * rimLight;
 
                 if (isTrace > 0.5) {
@@ -854,9 +853,9 @@ export const Shaders = () => {
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.0) {
-                     // NEON BRICKLAYER: Full range pulse, but subtle at first
-                     let tension = smoothstep(0.0, 1.0, lockPercent);
+                if (lockPercent > 0.5) {
+                     // NEON BRICKLAYER: Only active when > 50% locked (Panic Mode)
+                     let tension = smoothstep(0.5, 1.0, lockPercent); // Remap 0.5->1.0 to 0.0->1.0
 
                      // Heartbeat rhythm: faster as it gets closer to 1.0
                      let beatSpeed = 4.0 + tension * 60.0; // JUICE: Even faster panic mode
