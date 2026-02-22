@@ -299,5 +299,6 @@ export function renderEndScreen(view: any): void {
 export function onMove(view: any, x: number, y: number): void {
   const worldX = (x + 1.5) * 2.2;
   const worldY = (y + 1.5) * -2.2;
-  view.particleSystem.emitParticles(worldX, worldY, 0.0, 5, [0.4, 0.9, 1.0, 0.8]);
+  // JUICE: Denser, brighter trail for better feedback
+  view.particleSystem.emitParticles(worldX, worldY, 0.0, 10, [0.6, 1.0, 1.0, 1.0]);
 }

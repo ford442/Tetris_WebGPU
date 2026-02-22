@@ -1327,8 +1327,9 @@ export default class View {
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        // JUICE: Increased ghost visibility to compete with bloom
-        let alpha = value < 0 ? 0.5 : 0.85; // Ghost: 50% visible, Solid blocks: 85% opaque (glass effect)
+        // JUICE: Ghost alpha set to 0.3 to trigger "Hologram" shader logic (< 0.4)
+        // Solid blocks set to 0.9 for glass effect
+        let alpha = value < 0 ? 0.3 : 0.9;
 
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
