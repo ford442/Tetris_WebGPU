@@ -2,6 +2,8 @@ import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
 import { ScoringSystem, ScoreEvent } from './game/scoring.js';
+import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
+import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
 
 export interface GameState {
@@ -109,53 +111,14 @@ export default class Game {
   }
 
   getState(): GameState {
-    // Reconstruct 2D array for View (could optimize view to use flat array later)
-    // Exposed activePiece for shader effects
-    const playfield2D: number[][] = [];
-    for (let y = 0; y < this.playfieldHeight; y++) {
-        const row = new Array(this.playfieldWidth);
-        for (let x = 0; x < this.playfieldWidth; x++) {
-            row[x] = this.getCell(x, y);
-        }
-        playfield2D.push(row);
-    }
-
-    if (!this.gameOver) {
-        // 1. Draw Ghost Piece (ONCE)
-        const ghostY = this.getGhostY();
-        const { x: pieceX, blocks } = this.activPiece;
-
-        // Draw Ghost (negative values)
-        for (let y = 0; y < blocks.length; y++) {
-            for (let x = 0; x < blocks[y].length; x++) {
-                if (blocks[y][x]) {
-                    const targetY = ghostY + y;
-                    const targetX = pieceX + x;
-                    if (targetY >= 0 && targetY < this.playfieldHeight &&
-                        targetX >= 0 && targetX < this.playfieldWidth) {
-                         if (playfield2D[targetY][targetX] === 0) {
-                             playfield2D[targetY][targetX] = -blocks[y][x];
-                         }
-                    }
-                }
-            }
-        }
-
-        // 2. Draw Active Piece
-        const { y: pY, x: pX } = this.activPiece; // Rename to avoid conflict
-        for (let y = 0; y < blocks.length; y++) {
-            for (let x = 0; x < blocks[y].length; x++) {
-                if (blocks[y][x]) {
-                     const targetY = pY + y;
-                     const targetX = pX + x;
-                     if (targetY >= 0 && targetY < this.playfieldHeight &&
-                         targetX >= 0 && targetX < this.playfieldWidth) {
-                            playfield2D[targetY][targetX] = blocks[y][x];
-                     }
-                }
-            }
-        }
-    }
+    const playfield2D = buildPlayfieldProjection({
+      playfieldWidth: this.playfieldWidth,
+      playfieldHeight: this.playfieldHeight,
+      getCell: this.getCell.bind(this),
+      isGameOver: this.gameOver,
+      activePiece: this.activPiece,
+      ghostY: this.gameOver ? this.activPiece.y : this.getGhostY(),
+    });
 
     return {
       score: this.score,
@@ -338,10 +301,7 @@ export default class Game {
   }
 
   private isPlayfieldEmpty(): boolean {
-      for (let i = 0; i < this.playfield.length; i++) {
-          if (this.playfield[i] !== 0) return false;
-      }
-      return true;
+      return isPlayfieldEmpty(this.playfield);
   }
 
   checkTSpin(): void {
@@ -500,50 +460,15 @@ export default class Game {
   }
 
   clearLine(): number[] {
-    // Optimized line clearing for flat array
-    const linesCleared: number[] = [];
-    const width = this.playfieldWidth;
-    const height = this.playfieldHeight;
-
-    // Check lines from top to bottom
-    for (let y = 0; y < height; y++) {
-        let full = true;
-        for (let x = 0; x < width; x++) {
-            if (this.getCell(x, y) === 0) {
-                full = false;
-                break;
-            }
-        }
-        if (full) {
-            linesCleared.push(y);
-        }
-    }
-
+    const linesCleared = clearFullLines(
+      this.playfield,
+      this.playfieldWidth,
+      this.playfieldHeight,
+      this.getCell.bind(this),
+    );
     if (linesCleared.length > 0) {
-        // Remove lines
-        // We can do this in place or by shifting
-        // Easier to reconstruct: Iterate from bottom up, copying rows that aren't cleared
-        const newPlayfield = new Int8Array(width * height);
-        let targetY = height - 1;
-
-        for (let y = height - 1; y >= 0; y--) {
-            if (!linesCleared.includes(y)) {
-                // Copy row y to targetY
-                const start = y * width;
-                const end = start + width;
-                // TypedArray.set or just loop
-                for(let k=0; k<width; k++) {
-                    newPlayfield[targetY * width + k] = this.playfield[start + k];
-                }
-                targetY--;
-            }
-        }
-        // Fill remaining top rows with 0 (already 0 by default)
-        // Write back to shared memory view to preserve WASM linkage
-        this.playfield.set(newPlayfield);
-        this.collisionDetector.updatePlayfield(this.playfield);
+      this.collisionDetector.updatePlayfield(this.playfield);
     }
-
     return linesCleared;
   }
 
