@@ -848,7 +848,7 @@ export default class View {
 
     // ViewProjection for particles
     this.particleUniformBuffer = this.device.createBuffer({
-        size: 80, // Mat4 (64) + Time (4) + Pad (12) = 80
+        size: 96, // Mat4 (64) + Time (4) + ghostX(4) + ghostW(4) + warp(4) + lock(4) + pad(12) = 96 (aligned)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1153,9 +1153,16 @@ export default class View {
         ghostUVX = 0.5 + (ghostX - 10.0) / visibleWidth;
         ghostUVW = ghostWidth / visibleWidth;
     }
+    // Calculate Lock Percent (Tension)
+    let lockPercent = 0.0;
+    if (this.state && this.state.lockTimer !== undefined && this.state.lockDelayTime) {
+        lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
+    }
+
     this.device.queue.writeBuffer(this.particleUniformBuffer, 68, new Float32Array([ghostX]));
     this.device.queue.writeBuffer(this.particleUniformBuffer, 72, new Float32Array([ghostWidth]));
     this.device.queue.writeBuffer(this.particleUniformBuffer, 76, new Float32Array([this.visualEffects.warpSurge]));
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 80, new Float32Array([lockPercent]));
 
     // Update time for background and blocks
     // used 'time' calculated at start of frame
@@ -1165,11 +1172,6 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([this.visualEffects.currentLevel]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
 
-    // Calculate Lock Percent (Tension)
-    let lockPercent = 0.0;
-    if (this.state && this.state.lockTimer !== undefined && this.state.lockDelayTime) {
-        lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
-    }
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array([lockPercent]));
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, new Float32Array([this.visualEffects.warpSurge]));
     // Projection Beam Uniforms

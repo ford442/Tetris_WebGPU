@@ -349,6 +349,7 @@ export const GridShader = () => {
             ghostX : f32, // Offset 68
             ghostWidth : f32, // Offset 72
             warpSurge : f32, // Offset 76
+            lockPercent: f32, // Offset 80
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -431,6 +432,18 @@ export const GridShader = () => {
                  color = vec3<f32>(0.0, 1.0, 1.0); // Cyan glow
             }
 
+            // NEON BRICKLAYER: Lock Tension Grid Warning
+            if (uniforms.lockPercent > 0.5) {
+                 let tension = (uniforms.lockPercent - 0.5) * 2.0;
+                 let warningPulse = sin(uniforms.time * 20.0) * 0.5 + 0.5;
+                 // Flash entire floor red/orange
+                 if (vPos.y < -35.0) {
+                     let red = vec3<f32>(1.0, 0.2, 0.0);
+                     color = mix(color, red, tension * warningPulse * 0.7);
+                     alpha += tension * warningPulse * 0.5;
+                 }
+            }
+
             return vec4<f32>(color, alpha);
         }
     `;
@@ -494,8 +507,33 @@ export const BackgroundShaders = () => {
               // JUICE: Increased warp strength for higher levels
               // Stronger wobble at high levels
               let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
-              let warpStrength = (levelFactor * 0.5 + warpSurge * 0.2) * wobble;
+              // Smoothed and clamped warp strength to prevent nausea
+              let warpStrength = clamp((levelFactor * 0.4 + warpSurge * 0.15) * wobble, -0.25, 0.25);
               uv -= normalize(uv - center) * warpStrength * dist * dist; // Quadratic warp for "tunnel" feel
+          }
+
+          // NEON BRICKLAYER: Parallax Starfield
+          var stars = 0.0;
+          for (var i: i32 = 0; i < 3; i++) {
+              let fi = f32(i);
+              let scale = 40.0 + fi * 20.0; // Different scales for depth
+              let speed = (0.2 + fi * 0.1) * (1.0 + level * 0.5 + warpSurge * 2.0); // Speed scales with level
+
+              // Shift UVs over time
+              let shift = vec2<f32>(0.0, -time * speed * 0.1);
+              let starUV = uv * scale + shift;
+
+              // Random noise
+              let noise = fract(sin(dot(starUV, vec2<f32>(12.9898 + fi, 78.233 + fi))) * 43758.5453);
+
+              // High threshold for sparse stars
+              let threshold = 0.98;
+              if (noise > threshold) {
+                  let brightness = (noise - threshold) / (1.0 - threshold);
+                  // Twinkle
+                  let twinkle = sin(time * 5.0 + noise * 100.0) * 0.5 + 0.5;
+                  stars += brightness * twinkle * (0.5 + fi * 0.2); // Distant stars are dimmer? Actually closer (higher i) should be brighter/faster
+              }
           }
 
           // --- Multi-layer perspective grid ---
@@ -590,6 +628,7 @@ export const BackgroundShaders = () => {
 
           // Combine all elements
           var finalColor = deepSpace;
+          finalColor += vec3<f32>(stars); // NEON BRICKLAYER: Add stars
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;
 
@@ -806,11 +845,17 @@ export const Shaders = () => {
                     innerPulse += sin(time * 20.0) * 0.1 * (level - 5.0) * 0.1;
                 }
 
-                finalColor += vColor.rgb * (breath + innerPulse);
+                // NEON BRICKLAYER: Volumetric Inner Plasma
+                // Gaseous look inside the block
+                let distCenter = distance(vUV, vec2<f32>(0.5));
+                let plasmaNoise = sin(vUV.x * 20.0 + time) * sin(vUV.y * 20.0 - time) * 0.5 + 0.5;
+                let innerGlow = smoothstep(0.5, 0.0, distCenter) * (0.5 + plasmaNoise * 0.3);
+
+                finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.5);
 
                 // ENHANCED: Glass/Neon Rim Lighting
-                // Sharper falloff (power 4.0) for a more distinct edge
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (6.0 + level * 0.4);
+                // Sharper falloff (power 5.0) for a more distinct edge
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * (8.0 + level * 0.5);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -846,10 +891,18 @@ export const Shaders = () => {
 
                 finalColor += irid * (3.0 + levelFactor * 4.0); // JUICE: Stronger rim
 
-                // Edge Glow
+                // NEON BRICKLAYER: Beveled Edge Highlight
+                // Simulates a rounded corner catching the light
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist); // Wider edge
+                let edgeGlow = smoothstep(0.85, 1.0, uvEdgeDist);
+
+                // Add directional highlight on the bevel
+                let lightDir2D = normalize(vec2<f32>(0.5, -1.0)); // Top-right light
+                let edgeDir = normalize(vUV - 0.5);
+                let bevelHighlight = max(dot(edgeDir, lightDir2D), 0.0) * edgeGlow;
+
                 finalColor += vec3<f32>(1.0) * edgeGlow * (1.0 + levelFactor);
+                finalColor += vec3<f32>(1.0) * bevelHighlight * 3.0; // Bright white specular on edge
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
@@ -907,6 +960,12 @@ export const Shaders = () => {
                     // Holographic Scanline
                     let scanEffect = sin(vUV.y * 80.0 + time * 8.0) * 0.15;
 
+                    // NEON BRICKLAYER: Ghost Grid Pattern
+                    // Adds a wireframe feel to the hologram
+                    let gridX = step(0.9, fract(vUV.x * 4.0));
+                    let gridY = step(0.9, fract(vUV.y * 4.0));
+                    let gridPattern = max(gridX, gridY) * 0.3;
+
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.03 + tension * 0.1;
                     // Chaotic glitch
@@ -927,6 +986,7 @@ export const Shaders = () => {
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
                     ghostFinal += vec3<f32>(scanEffect); // Add scanline overlay
+                    ghostFinal += vec3<f32>(gridPattern) * ghostColor; // Add grid pattern
 
                     // Digital noise/flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
