@@ -334,7 +334,10 @@ export default class Controller {
       const level = this.game.getState().level;
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
       // Tuned for better playability: 0.85 base makes it slightly faster
-      const speedMs = Math.max(16, 1000 * Math.pow(0.85, level - 1));
+      // Clamp to prevent infinite loop at extreme levels
+      let speedMs = 1000 * Math.pow(0.85, level - 1);
+      // Allow faster than 60Hz (16ms) but clamp to 0.5ms to avoid browser freeze
+      if (speedMs < 0.5) speedMs = 0.5;
 
       // Accumulate gravity time?
       // Simplest: use a gravity timer here.
@@ -346,9 +349,18 @@ export default class Controller {
       if (!this.gravityTimer) this.gravityTimer = 0;
       this.gravityTimer += dt;
 
-      while (this.gravityTimer > speedMs) {
+      // Limit catch-up steps to prevent freeze
+      let steps = 0;
+      const maxSteps = 20; // Grid height is 20, no need to simulate more per frame
+      while (this.gravityTimer > speedMs && steps < maxSteps) {
           this.game.movePieceDown();
           this.gravityTimer -= speedMs;
+          steps++;
+      }
+
+      // If we capped out, reset the timer to avoid backlog accumulation
+      if (steps >= maxSteps) {
+          this.gravityTimer = 0;
       }
 
       // Game update (lock delay)
