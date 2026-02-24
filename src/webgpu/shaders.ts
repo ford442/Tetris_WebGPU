@@ -105,7 +105,8 @@ export const PostProcessShaders = () => {
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             // Subtle permanent aberration at edges for arcade feel
             // JUICE: Stronger lens distortion at edges for arcade CRT feel
-            let vignetteAberration = pow(distFromCenter, 3.0) * 0.03; // Sharper curve, more intense at far corners
+            // ENHANCED: Increased base aberration
+            let vignetteAberration = pow(distFromCenter, 3.0) * 0.05; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -161,9 +162,10 @@ export const PostProcessShaders = () => {
             // Thresholding the glow
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
             // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
-            let bloomThreshold = 0.05;
+            // ENHANCED: Even more aggressive bloom for that neon look
+            let bloomThreshold = 0.02; // Very low threshold to catch almost everything
             if (glowLum > bloomThreshold) {
-                 color += glow * 6.5;
+                 color += glow * 8.0; // Boosted intensity
             }
 
             // High-pass boost for the core pixels
@@ -393,6 +395,9 @@ export const GridShader = () => {
             // Pulse 2: Energy Flow (moves up the grid)
             let pulse2 = sin(uniforms.time * 10.0 + vPos.y * 0.5) * 0.5 + 0.5;
 
+            // Pulse 3: Vertical beat (Game Speed)
+            let pulse3 = sin(uniforms.time * 20.0) * 0.5 + 0.5;
+
             var alpha = 0.15 + pulse1 * 0.2 + pulse2 * 0.15; // Combined pulse
             var color = vec3<f32>(0.8, 0.9, 1.0); // Slightly blue-ish white
 
@@ -400,13 +405,18 @@ export const GridShader = () => {
             // Highlight the landing zone area near y = -43.0
             let floorDist = abs(vPos.y - (-43.0));
             // Glow within 8 units of bottom, stronger at very bottom
-            let floorGlow = smoothstep(8.0, 0.0, floorDist);
+            // ENHANCED: Wider and brighter floor glow
+            let floorGlow = smoothstep(12.0, 0.0, floorDist);
 
             if (floorGlow > 0.0) {
-                 alpha += floorGlow * 0.6; // Make floor very visible
+                 alpha += floorGlow * 0.8; // Make floor very visible
                  // Cyan/Blue floor that reacts to pulse
                  let floorColor = vec3<f32>(0.0, 1.0, 1.0);
-                 color = mix(color, floorColor, floorGlow * 0.8);
+                 // Mix with magenta for style
+                 let floorColor2 = vec3<f32>(1.0, 0.0, 1.0);
+                 let finalFloor = mix(floorColor, floorColor2, pulse3);
+
+                 color = mix(color, finalFloor, floorGlow * 0.9);
             }
 
             // Distance Fade (Fog)
@@ -507,8 +517,19 @@ export const BackgroundShaders = () => {
               // JUICE: Increased warp strength for higher levels
               // Stronger wobble at high levels
               let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
+
+              // BOOSTED: Add rotation to the tunnel for more disorientation/speed feel
+              if (warpSurge > 0.0) {
+                  let angle = warpSurge * 0.1 * sin(time * 5.0);
+                  let c = cos(angle);
+                  let s = sin(angle);
+                  let centered = uv - center;
+                  uv = center + vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
+              }
+
               // Smoothed and clamped warp strength to prevent nausea
-              let warpStrength = clamp((levelFactor * 0.4 + warpSurge * 0.15) * wobble, -0.25, 0.25);
+              // BOOSTED: Increased max warp
+              let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.4, 0.4);
               uv -= normalize(uv - center) * warpStrength * dist * dist; // Quadratic warp for "tunnel" feel
           }
 
@@ -532,7 +553,13 @@ export const BackgroundShaders = () => {
                   let brightness = (noise - threshold) / (1.0 - threshold);
                   // Twinkle
                   let twinkle = sin(time * 5.0 + noise * 100.0) * 0.5 + 0.5;
-                  stars += brightness * twinkle * (0.5 + fi * 0.2); // Distant stars are dimmer? Actually closer (higher i) should be brighter/faster
+
+                  // ENHANCED: Star Streaks at high warp
+                  if (warpSpeed > 5.0) {
+                       brightness *= (1.0 + (warpSpeed - 5.0) * 0.2); // Brighter
+                  }
+
+                  stars += brightness * twinkle * (0.5 + fi * 0.2);
               }
           }
 
@@ -595,8 +622,9 @@ export const BackgroundShaders = () => {
           } else {
                // Low Level: Shift to Purple
                let lowLevelFactor = min(level * 0.2, 1.0);
-               neonCyan = mix(neonCyan, vec3<f32>(0.0, 0.5, 1.0), lowLevelFactor);
-               neonBlue = mix(neonBlue, vec3<f32>(0.2, 0.0, 0.8), lowLevelFactor);
+               // ENHANCED: More vibrant shift
+               neonCyan = mix(neonCyan, vec3<f32>(0.0, 0.8, 1.0), lowLevelFactor); // Brighter cyan
+               neonBlue = mix(neonBlue, vec3<f32>(0.4, 0.0, 1.0), lowLevelFactor); // Brighter purple/blue
           }
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
@@ -848,14 +876,20 @@ export const Shaders = () => {
                 // NEON BRICKLAYER: Volumetric Inner Plasma
                 // Gaseous look inside the block
                 let distCenter = distance(vUV, vec2<f32>(0.5));
-                let plasmaNoise = sin(vUV.x * 20.0 + time) * sin(vUV.y * 20.0 - time) * 0.5 + 0.5;
-                let innerGlow = smoothstep(0.5, 0.0, distCenter) * (0.5 + plasmaNoise * 0.3);
+                // ENHANCED: More complex noise for plasma effect
+                let plasmaTime = time * 2.0;
+                let plasmaNoise1 = sin(vUV.x * 10.0 + plasmaTime) * sin(vUV.y * 10.0 - plasmaTime);
+                let plasmaNoise2 = sin(vUV.x * 20.0 - plasmaTime * 0.5) * sin(vUV.y * 20.0 + plasmaTime * 0.5);
+                let plasmaNoise = (plasmaNoise1 + plasmaNoise2) * 0.25 + 0.5; // range 0..1
 
-                finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.5);
+                let innerGlow = smoothstep(0.5, 0.0, distCenter) * (0.6 + plasmaNoise * 0.4);
+
+                finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.8); // Boosted glow intensity
 
                 // ENHANCED: Glass/Neon Rim Lighting
                 // Sharper falloff (power 5.0) for a more distinct edge
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * (8.0 + level * 0.5);
+                // BOOSTED: Increased base intensity from 8.0 to 12.0
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * (12.0 + level * 0.8);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -869,7 +903,8 @@ export const Shaders = () => {
                 // JUICE: Sharper falloff for distinct neon rim
                 // Clamp bases to 0.0 to avoid NaN in pow()
                 let dotNV = max(dot(N, V), 0.0);
-                let baseFresnel = pow(1.0 - dotNV, 3.0);
+                // BOOSTED: Sharper fresnel curve (power 2.5 instead of 3.0)
+                let baseFresnel = pow(1.0 - dotNV, 2.5);
                 let fresnelTerm = baseFresnel; // Alias for legacy code
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
@@ -936,11 +971,11 @@ export const Shaders = () => {
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech (ENHANCED)
                     // Faster scanlines for more energy
-                    let scanSpeed = 25.0;
-                    // INCREASED Frequency: 30.0 -> 40.0
-                    let scanY = fract(vUV.y * 40.0 - time * scanSpeed);
+                    let scanSpeed = 15.0; // Slower scan speed for better visibility
+                    // INCREASED Frequency: 40.0 -> 60.0 (Finer lines)
+                    let scanY = fract(vUV.y * 60.0 - time * scanSpeed);
                     // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.15, scanY) * (1.0 - smoothstep(0.85, 1.0, scanY)) * 4.0;
+                    let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY)) * 8.0; // Double intensity
 
                     // Landing Beam (Vertical Highlight)
                     let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
