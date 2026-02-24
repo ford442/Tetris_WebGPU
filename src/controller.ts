@@ -90,6 +90,13 @@ export default class Controller {
 
     this.lastLevel = this.game.level;
     this.lastTime = performance.now();
+
+    // Reset timers to prevent jumps
+    this.gravityTimer = 0;
+    this.actionTimers.left = 0;
+    this.actionTimers.right = 0;
+    this.actionTimers.down = 0;
+
     this.gameLoop();
   }
 
@@ -134,6 +141,13 @@ export default class Controller {
 
   reset(): void {
     this.game.reset();
+
+    // Reset timers
+    this.gravityTimer = 0;
+    this.actionTimers.left = 0;
+    this.actionTimers.right = 0;
+    this.actionTimers.down = 0;
+
     this.play();
   }
 
