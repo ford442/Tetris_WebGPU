@@ -106,7 +106,7 @@ export const PostProcessShaders = () => {
             // Subtle permanent aberration at edges for arcade feel
             // JUICE: Stronger lens distortion at edges for arcade CRT feel
             // ENHANCED: Increased base aberration
-            let vignetteAberration = pow(distFromCenter, 3.0) * 0.05; // Sharper curve, more intense at far corners
+            let vignetteAberration = pow(distFromCenter, 4.0) * 0.08; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -163,9 +163,9 @@ export const PostProcessShaders = () => {
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
             // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
             // ENHANCED: Even more aggressive bloom for that neon look
-            let bloomThreshold = 0.02; // Very low threshold to catch almost everything
+            let bloomThreshold = 0.05; // Slightly higher threshold
             if (glowLum > bloomThreshold) {
-                 color += glow * 8.0; // Boosted intensity
+                 color += glow * 12.0; // Boosted intensity significantly
             }
 
             // High-pass boost for the core pixels
@@ -406,10 +406,10 @@ export const GridShader = () => {
             let floorDist = abs(vPos.y - (-43.0));
             // Glow within 8 units of bottom, stronger at very bottom
             // ENHANCED: Wider and brighter floor glow
-            let floorGlow = smoothstep(12.0, 0.0, floorDist);
+            let floorGlow = smoothstep(20.0, 0.0, floorDist);
 
             if (floorGlow > 0.0) {
-                 alpha += floorGlow * 0.8; // Make floor very visible
+                 alpha += floorGlow * 0.8 + pulse3 * 0.3; // Make floor very visible
                  // Cyan/Blue floor that reacts to pulse
                  let floorColor = vec3<f32>(0.0, 1.0, 1.0);
                  // Mix with magenta for style
@@ -866,7 +866,7 @@ export const Shaders = () => {
                 // Use a sharper sine wave (pow) for a heartbeat effect
                 let rawPulse = sin(time * pulseFreq * 1.5) * 0.5 + 0.5;
                 let sharpPulse = pow(rawPulse, 4.0); // Sharper heartbeat pulse
-                let innerPulse = sharpPulse * (0.8 + level * 0.2); // Stronger with level
+                let innerPulse = sharpPulse * (1.2 + level * 0.3); // Stronger with level
 
                 // Add a second, faster "jitter" pulse for high levels
                 if (level > 5.0) {
@@ -887,9 +887,9 @@ export const Shaders = () => {
                 finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.8); // Boosted glow intensity
 
                 // ENHANCED: Glass/Neon Rim Lighting
-                // Sharper falloff (power 5.0) for a more distinct edge
-                // BOOSTED: Increased base intensity from 8.0 to 12.0
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 5.0) * (12.0 + level * 0.8);
+                // Sharper falloff (power 3.0) for a more distinct edge
+                // BOOSTED: Increased base intensity from 12.0 to 15.0
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (15.0 + level * 1.0);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -1015,13 +1015,13 @@ export const Shaders = () => {
                     }
 
                     var ghostFinal = ghostColor * wireframe * 6.0  // Bright edges
-                                   + ghostColor * scanline * 1.0   // Scanlines
+                                   + ghostColor * scanline * 2.0   // Scanlines (Boosted)
                                    + ghostColor * beam * 0.6       // Landing Beam
                                    + vec3<f32>(0.5, 0.9, 1.0) * fresnelTerm * 3.0; // Cyan/Blue rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
                     ghostFinal += vec3<f32>(scanEffect); // Add scanline overlay
-                    ghostFinal += vec3<f32>(gridPattern) * ghostColor; // Add grid pattern
+                    ghostFinal += vec3<f32>(gridPattern) * ghostColor * 0.5; // Add grid pattern (Boosted)
 
                     // Digital noise/flicker
                     let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
