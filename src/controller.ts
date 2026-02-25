@@ -4,7 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 160; // Delayed Auto Shift (ms) - Balanced Fast
 const ARR = 15;  // Auto Repeat Rate (ms) - Fast but controllable
-const SOFT_DROP_SPEED = 20; // Sonic Drop: Faster soft drop for better responsiveness (50Hz)
+const SOFT_DROP_SPEED = 5; // Sonic Drop: Faster soft drop for better responsiveness (200Hz)
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -483,7 +483,7 @@ export default class Controller {
              let steps = Math.floor(this.actionTimers.down! / SOFT_DROP_SPEED);
              this.actionTimers.down! %= SOFT_DROP_SPEED;
              // Cap steps to prevent freeze/tunneling
-             if (steps > 20) steps = 20;
+             if (steps > 50) steps = 50;
 
              for (let i = 0; i < steps; i++) {
                  this.game.movePieceDown();
