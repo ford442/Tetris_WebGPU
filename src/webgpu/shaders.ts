@@ -163,9 +163,9 @@ export const PostProcessShaders = () => {
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
             // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
             // ENHANCED: Even more aggressive bloom for that neon look
-            let bloomThreshold = 0.05; // Slightly higher threshold
+            let bloomThreshold = 0.1; // Cleaner threshold
             if (glowLum > bloomThreshold) {
-                 color += glow * 12.0; // Boosted intensity significantly
+                 color += glow * 8.0; // Tuned intensity (less blinding)
             }
 
             // High-pass boost for the core pixels
@@ -432,9 +432,12 @@ export const GridShader = () => {
 
             // Highlight zone (Floor Only)
             if (dist < halfWidth && vPos.y < -35.0) {
-                 // Pulse the landing zone
-                 let zonePulse = sin(uniforms.time * 15.0) * 0.5 + 0.5;
-                 alpha += 1.5 + zonePulse * 0.8; // More dynamic pulse
+                 // Pulse the landing zone (Speed up with lock tension)
+                 let tension = uniforms.lockPercent;
+                 let pulseSpeed = 15.0 + tension * 40.0;
+                 let zonePulse = sin(uniforms.time * pulseSpeed) * 0.5 + 0.5;
+
+                 alpha += 1.5 + zonePulse * (0.8 + tension * 1.0); // More dynamic pulse
                  // Add a subtle gradient to the zone
                  let zoneGrad = 1.0 - (dist / halfWidth);
                  alpha *= (0.5 + zoneGrad * 0.5);
@@ -889,7 +892,7 @@ export const Shaders = () => {
                 // ENHANCED: Glass/Neon Rim Lighting
                 // Sharper falloff (power 3.0) for a more distinct edge
                 // BOOSTED: Increased base intensity from 12.0 to 15.0
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 3.0) * (15.0 + level * 1.0);
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (15.0 + level * 1.0);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -941,12 +944,12 @@ export const Shaders = () => {
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.5) {
-                     // NEON BRICKLAYER: Only active when > 50% locked (Panic Mode)
-                     let tension = smoothstep(0.5, 1.0, lockPercent); // Remap 0.5->1.0 to 0.0->1.0
+                if (lockPercent > 0.3) {
+                     // NEON BRICKLAYER: Only active when > 30% locked (Panic Mode starts earlier)
+                     let tension = smoothstep(0.3, 1.0, lockPercent); // Remap 0.3->1.0 to 0.0->1.0
 
                      // Heartbeat rhythm: faster as it gets closer to 1.0
-                     let beatSpeed = 4.0 + tension * 60.0; // JUICE: Even faster panic mode
+                     let beatSpeed = 8.0 + tension * 80.0; // JUICE: Even faster panic mode
                      let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
                      let sharpPulse = pow(pulse, 2.0 + tension * 4.0); // Sharper as it gets critical
 
@@ -971,11 +974,11 @@ export const Shaders = () => {
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech (ENHANCED)
                     // Faster scanlines for more energy
-                    let scanSpeed = 15.0; // Slower scan speed for better visibility
-                    // INCREASED Frequency: 40.0 -> 60.0 (Finer lines)
-                    let scanY = fract(vUV.y * 60.0 - time * scanSpeed);
+                    let scanSpeed = 30.0; // Faster scan speed
+                    // INCREASED Frequency: 60.0 -> 80.0 (Finer lines)
+                    let scanY = fract(vUV.y * 80.0 - time * scanSpeed);
                     // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.2, scanY) * (1.0 - smoothstep(0.8, 1.0, scanY)) * 8.0; // Double intensity
+                    let scanline = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY)) * 10.0; // Boosted intensity
 
                     // Landing Beam (Vertical Highlight)
                     let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
@@ -983,14 +986,14 @@ export const Shaders = () => {
                     // Wireframe logic (from edgeGlow)
                     let wireframe = smoothstep(0.9, 0.98, uvEdgeDist);
 
-                    let ghostColor = vColor.rgb * 2.5; // Brighten original color further
+                    let ghostColor = vColor.rgb * 3.0; // Brighten original color further
 
                     // NEON BRICKLAYER: Tension-based pulse
                     let tension = smoothstep(0.3, 1.0, lockPercent); // Start reacting earlier
-                    let pulseFreq = 10.0 + tension * 20.0; // Speed up significantly when locking
+                    let pulseFreq = 10.0 + tension * 40.0; // Speed up significantly when locking
 
-                    // ENHANCED Pulse: Slower, fuller
-                    let ghostAlpha = 0.7 + 0.25 * sin(time * pulseFreq); // More opaque base
+                    // ENHANCED Pulse: Slower, fuller, reacts to lock
+                    let ghostAlpha = 0.6 + 0.4 * sin(time * pulseFreq); // More dynamic range
 
                     // Holographic Scanline
                     let scanEffect = sin(vUV.y * 80.0 + time * 8.0) * 0.15;
@@ -999,7 +1002,7 @@ export const Shaders = () => {
                     // Adds a wireframe feel to the hologram
                     let gridX = step(0.9, fract(vUV.x * 4.0));
                     let gridY = step(0.9, fract(vUV.y * 4.0));
-                    let gridPattern = max(gridX, gridY) * 0.3;
+                    let gridPattern = max(gridX, gridY) * 0.5;
 
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.03 + tension * 0.1;
