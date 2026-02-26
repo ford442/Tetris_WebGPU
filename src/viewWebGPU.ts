@@ -305,22 +305,22 @@ export default class View {
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    // Draw subtle grid background
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // Draw grid background (Tech style)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
     const gridSize = blockSize;
-    for (let x = 0; x < ctx.canvas.width; x += gridSize) {
-        ctx.beginPath();
+
+    // Draw Grid
+    ctx.beginPath();
+    for (let x = 0; x <= ctx.canvas.width; x += gridSize) {
         ctx.moveTo(x, 0);
         ctx.lineTo(x, ctx.canvas.height);
-        ctx.stroke();
     }
-    for (let y = 0; y < ctx.canvas.height; y += gridSize) {
-        ctx.beginPath();
+    for (let y = 0; y <= ctx.canvas.height; y += gridSize) {
         ctx.moveTo(0, y);
         ctx.lineTo(ctx.canvas.width, y);
-        ctx.stroke();
     }
+    ctx.stroke();
 
     if (!piece) return;
 
@@ -331,6 +331,7 @@ export default class View {
     const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
     const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
 
+    // Draw blocks
     blocks.forEach((row: number[], y: number) => {
       row.forEach((value: number, x: number) => {
         if (value > 0) {
@@ -338,46 +339,47 @@ export default class View {
           const px = offsetX + x * blockSize;
           const py = offsetY + y * blockSize;
 
-          // Neon Style Rendering
           const r = Math.floor(color[0] * 255);
           const g = Math.floor(color[1] * 255);
           const b = Math.floor(color[2] * 255);
           const cssColor = `rgb(${r}, ${g}, ${b})`;
+          const brightColor = `rgb(${Math.min(r + 50, 255)}, ${Math.min(g + 50, 255)}, ${Math.min(b + 50, 255)})`;
 
-          // 1. Glow (ENHANCED)
-          ctx.shadowBlur = 20;
+          // Neon Glow Passes
+          ctx.save();
+
+          // Pass 1: Wide colored glow
           ctx.shadowColor = cssColor;
-
-          // 2. Stroke (Neon Tube)
-          ctx.strokeStyle = cssColor;
-          ctx.lineWidth = 3;
-          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
-
-          // Inner glow stroke
-          ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
-
-          // 3. Faint Inner Fill (Glass) - Gradient for Hotspot
-          const gradient = ctx.createRadialGradient(
-              px + blockSize / 2, py + blockSize / 2, 0,
-              px + blockSize / 2, py + blockSize / 2, blockSize / 1.5
-          );
-          gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.6)`); // Hot center
-          gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.1)`); // Fade edge
-          ctx.fillStyle = gradient;
+          ctx.shadowBlur = 30;
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
           ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // 4. Core Highlight
-          ctx.shadowBlur = 0; // Reset shadow for highlight
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-          const coreSize = 4;
-          ctx.fillRect(
-              px + blockSize / 2 - coreSize / 2,
-              py + blockSize / 2 - coreSize / 2,
-              coreSize,
-              coreSize
-          );
+          // Pass 2: Medium bright glow
+          ctx.shadowColor = cssColor;
+          ctx.shadowBlur = 15;
+          ctx.strokeStyle = brightColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
+
+          // Pass 3: Tight intense glow
+          ctx.shadowColor = 'white';
+          ctx.shadowBlur = 5;
+          ctx.fillStyle = `rgba(255, 255, 255, 0.4)`;
+          ctx.fillRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
+
+          ctx.restore();
+
+          // Glass Reflection / Bevel
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.beginPath();
+          ctx.moveTo(px + 2, py + blockSize - 2);
+          ctx.lineTo(px + 2, py + 2);
+          ctx.lineTo(px + blockSize - 2, py + 2);
+          ctx.lineTo(px + blockSize - 6, py + 6);
+          ctx.lineTo(px + 6, py + 6);
+          ctx.lineTo(px + 6, py + blockSize - 6);
+          ctx.closePath();
+          ctx.fill();
         }
       });
     });
