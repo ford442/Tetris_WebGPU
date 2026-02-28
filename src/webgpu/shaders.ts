@@ -867,7 +867,7 @@ export const Shaders = () => {
                 let pulseFreq = 5.0 + level * 0.5;
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
                 // Use a sharper sine wave (pow) for a heartbeat effect
-                let rawPulse = sin(time * pulseFreq * 1.5) * 0.5 + 0.5;
+                let rawPulse = sin(time * pulseFreq * 1.5 + level) * 0.5 + 0.5; // Added level to pulse
                 let sharpPulse = pow(rawPulse, 4.0); // Sharper heartbeat pulse
                 let innerPulse = sharpPulse * (1.2 + level * 0.3); // Stronger with level
 
@@ -890,9 +890,9 @@ export const Shaders = () => {
                 finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.8); // Boosted glow intensity
 
                 // ENHANCED: Glass/Neon Rim Lighting
-                // Sharper falloff (power 3.0) for a more distinct edge
-                // BOOSTED: Increased base intensity from 12.0 to 15.0
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (15.0 + level * 1.0);
+                // Sharper falloff (power 4.0) for a more distinct edge
+                // BOOSTED: Increased base intensity from 15.0 to 18.0
+                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (18.0 + level * 1.0);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -914,9 +914,10 @@ export const Shaders = () => {
                 // Shift the fresnel curve for each channel based on level
                 let dispersion = 0.8 * levelFactor;
 
-                let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion)), 4.0);
+                // Diamond refraction logic using dot(normal, view) modulated by level
+                let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion * 0.5)), 4.0);
                 let fG = baseFresnel;
-                let fB = pow(max(0.0, 1.0 - dotNV * (1.0 + dispersion)), 4.0);
+                let fB = pow(max(0.0, 1.0 - dotNV * (1.0 + dispersion * 0.5)), 4.0);
 
                 var irid = vec3<f32>(fR, fG, fB);
 
