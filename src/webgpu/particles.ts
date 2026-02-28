@@ -4,8 +4,6 @@
  * Now GPU-driven via Compute Shader
  */
 
-import { ParticleComputeShader } from './compute.js';
-
 export interface Particle {
     position: Float32Array; // x, y, z
     velocity: Float32Array; // vx, vy, vz
@@ -17,7 +15,7 @@ export interface Particle {
 
 export class ParticleSystem {
     particles: Particle[] = [];
-    maxParticles: number = 5000; // Capped at 5000 for performance (Neon Bricklayer)
+    maxParticles: number = 10000; // Increased to 10000 for Neon Bricklayer intensity
 
     // Ring Buffer strategy for emissions
     private emitIndex: number = 0;
@@ -33,32 +31,88 @@ export class ParticleSystem {
         return Math.random() * (max - min) + min;
     }
 
+    // Standard omni-directional burst
     emitParticles(x: number, y: number, z: number, count: number, color: number[]): void {
         for(let i=0; i<count; i++) {
              const angle = Math.random() * Math.PI * 2;
-             const speed = this.rand(2.0, 14.0);
+             const phi = Math.random() * Math.PI; // 3D spread
+             const speed = this.rand(5.0, 20.0); // JUICE: Faster particles
 
              this.addParticle(
                  x, y, z,
-                 Math.cos(angle)*speed, Math.sin(angle)*speed + 8.0, (Math.random()-0.5)*15.0,
+                 Math.cos(angle) * Math.sin(phi) * speed,
+                 Math.cos(phi) * speed + 10.0, // Upward bias
+                 Math.sin(angle) * Math.sin(phi) * speed,
                  color,
-                 0.8 + Math.random() * 0.6,
-                 Math.random() * 0.3 + 0.15
+                 0.5 + Math.random() * 0.5,
+                 Math.random() * 0.3 + 0.2
              );
         }
     }
 
-    emitParticlesRadial(x: number, y: number, z: number, angle: number, speed: number, color: number[]): void {
-        this.addParticle(
-            x, y, z,
-            Math.cos(angle)*speed, Math.sin(angle)*speed * 0.5, (Math.random()-0.5)*5.0,
-            color,
-            0.5 + Math.random() * 0.3,
-            Math.random() * 0.3 + 0.2
-        );
+    // Radial ring explosion (for hard drops / impacts)
+    emitParticlesRadial(x: number, y: number, z: number, count: number, radius: number, speed: number, color: number[]): void {
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2;
+            // Velocity purely horizontal
+            const vx = Math.cos(angle) * speed;
+            const vz = Math.sin(angle) * speed;
+
+            this.addParticle(
+                x + Math.cos(angle) * radius,
+                y,
+                z + Math.sin(angle) * radius,
+                vx,
+                this.rand(0.0, 5.0), // Slight upward pop
+                vz,
+                color,
+                0.8 + Math.random() * 0.4,
+                0.3 // Uniform scale
+            );
+        }
     }
 
-    private addParticle(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number[], life: number, scale: number) {
+    // Directional stream (for movement trails)
+    emitStream(x: number, y: number, z: number, count: number, dirX: number, dirY: number, color: number[]): void {
+        for (let i = 0; i < count; i++) {
+            const speed = this.rand(2.0, 5.0);
+            this.addParticle(
+                x + this.rand(-0.5, 0.5),
+                y + this.rand(-0.5, 0.5),
+                z,
+                dirX * speed * -0.5, // Trail behind
+                dirY * speed * -0.5,
+                0.0,
+                color,
+                0.4 + Math.random() * 0.3,
+                0.15 + Math.random() * 0.1
+            );
+        }
+    }
+
+    // Massive Explosion (Line Clears)
+    emitExplosion(x: number, y: number, z: number, count: number, color: number[]): void {
+        for (let i = 0; i < count; i++) {
+            // Sphere sampling
+            const theta = Math.random() * 2.0 * Math.PI;
+            const phi = Math.acos(2.0 * Math.random() - 1.0);
+            const speed = this.rand(10.0, 35.0); // High speed
+
+            const vx = Math.sin(phi) * Math.cos(theta) * speed;
+            const vy = Math.sin(phi) * Math.sin(theta) * speed;
+            const vz = Math.cos(phi) * speed;
+
+            this.addParticle(
+                x, y, z,
+                vx, vy, vz,
+                color,
+                1.0 + Math.random() * 0.5, // Longer life
+                0.3 + Math.random() * 0.3  // Larger scale
+            );
+        }
+    }
+
+    public addParticle(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number[], life: number, scale: number) {
         // GPU Layout: 16 floats (64 bytes)
         // 0-2: Pos
         // 3: pad
