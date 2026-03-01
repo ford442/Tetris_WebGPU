@@ -110,6 +110,14 @@ export default class View {
   blockTexture!: GPUTexture;
   blockSampler!: GPUSampler;
 
+  // Pre-allocated Float32Arrays for reduced GC pressure
+  private _f32_1 = new Float32Array(1);
+  private _f32_2 = new Float32Array(2);
+  private _f32_3 = new Float32Array(3);
+  private _f32_4 = new Float32Array(4);
+  private _f32_8 = new Float32Array(8);
+  private _f32_12 = new Float32Array(12);
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -296,9 +304,12 @@ export default class View {
         this.renderPlayfild_Border_WebGPU();
         // Update background colors
         const bgColors = this.currentTheme.backgroundColors;
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
+        this._f32_3.set(bgColors[0]);
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
+        this._f32_3.set(bgColors[1]);
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
+        this._f32_3.set(bgColors[2]);
+        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
     }
   }
 
@@ -732,9 +743,12 @@ export default class View {
 
     // Initialize background colors
     const bgColors = this.currentTheme.backgroundColors;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, new Float32Array(bgColors[0]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, new Float32Array(bgColors[1]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, new Float32Array(bgColors[2]));
+    this._f32_3.set(bgColors[0]);
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
+    this._f32_3.set(bgColors[1]);
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
+    this._f32_3.set(bgColors[2]);
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
 
     // --- Grid Pipeline ---
     const gridShader = GridShader();
@@ -947,7 +961,8 @@ export default class View {
         eyePosition[1] += shakeY;
     }
 
-    let lightPosition = new Float32Array([-5.0, 0.0, 0.0]);
+    let lightPosition = this._f32_3;
+    lightPosition.set([-5.0, 0.0, 0.0]);
 
     Matrix.mat4.identity(this.VIEWMATRIX);
     Matrix.mat4.lookAt(
@@ -975,21 +990,24 @@ export default class View {
       0,
       lightPosition
     );
+    this._f32_3.set(eyePosition);
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       16,
-      new Float32Array(eyePosition)
+      this._f32_3
     );
+    this._f32_4.set(this.currentTheme[5] || [1.0, 1.0, 1.0, 1.0]); // Fallback in case currentTheme[5] is missing
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       32,
-      new Float32Array(this.currentTheme[5])
+      this._f32_4
     );
     // Initial glitch state
+    this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
     this.device.queue.writeBuffer(
       this.fragmentUniformBuffer,
       52,
-      new Float32Array([this.useGlitch ? 1.0 : 0.0])
+      this._f32_1
     );
 
     this.renderPlayfild_Border_WebGPU();
@@ -1072,11 +1090,12 @@ export default class View {
     camX += shake.x;
     camY += shake.y;
 
-    const eyePosition = new Float32Array([camX, camY, camZ]);
+    const eyePosition = this._f32_3;
+    eyePosition.set([camX, camY, camZ]);
 
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
-      eyePosition,
+      [camX, camY, camZ],
       [9.0, -20.0, 0.0], // target
       [0.0, 1.0, 0.0] // up
     );
@@ -1111,7 +1130,8 @@ export default class View {
     const swCenter = this.visualEffects.shockwaveCenter;
     const swTimer = this.visualEffects.shockwaveTimer;
     // Layout: dt, time, swTimer, pad | swCenter(2), pad(2) | swParams(4)
-    const computeData = new Float32Array([
+    const computeData = this._f32_12;
+    computeData.set([
         dt, time, swTimer, 0.0,
         swCenter[0], swCenter[1], 0.0, 0.0,
         swParams[0], swParams[1], swParams[2], swParams[3]
@@ -1130,7 +1150,8 @@ export default class View {
 
     // Update uniforms for particles (Render VP) & grid
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, new Float32Array([time])); // Write time at offset 64
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, this._f32_1); // Write time at offset 64
 
     // NEON BRICKLAYER: Ghost Piece Landing Zone
     let ghostX = -100.0;
@@ -1161,51 +1182,69 @@ export default class View {
         lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
     }
 
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, new Float32Array([ghostX]));
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 72, new Float32Array([ghostWidth]));
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 76, new Float32Array([this.visualEffects.warpSurge]));
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 80, new Float32Array([lockPercent]));
+    this._f32_1[0] = ghostX;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, this._f32_1);
+    this._f32_1[0] = ghostWidth;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 72, this._f32_1);
+    this._f32_1[0] = this.visualEffects.warpSurge;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 76, this._f32_1);
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 80, this._f32_1);
 
     // Update time for background and blocks
     // used 'time' calculated at start of frame
 
     // Background time & level & Lock Pulse
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, new Float32Array([time]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, new Float32Array([this.visualEffects.currentLevel]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, new Float32Array([this.canvasWebGPU.width, this.canvasWebGPU.height]));
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, this._f32_1);
+    this._f32_1[0] = this.visualEffects.currentLevel;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, this._f32_1);
+    this._f32_2.set([this.canvasWebGPU.width, this.canvasWebGPU.height]);
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, this._f32_2);
 
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, new Float32Array([lockPercent]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, new Float32Array([this.visualEffects.warpSurge]));
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, this._f32_1);
+    this._f32_1[0] = this.visualEffects.warpSurge;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, this._f32_1);
     // Projection Beam Uniforms
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, new Float32Array([ghostUVX]));
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, new Float32Array([ghostUVW]));
+    this._f32_1[0] = ghostUVX;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, this._f32_1);
+    this._f32_1[0] = ghostUVW;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, this._f32_1);
 
 
     // Block shader time (global update once per frame)
     // 48 is the offset for 'time' in fragmentUniformBuffer
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, new Float32Array([time]));
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._f32_1);
     // Update glitch state for blocks
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, new Float32Array([this.useGlitch ? 1.0 : 0.0]));
+    this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
     // Update lock percent for blocks (red pulse)
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, new Float32Array([lockPercent]));
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, this._f32_1);
     // Update level for blocks (glass refraction evolution)
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, new Float32Array([this.visualEffects.currentLevel]));
+    this._f32_1[0] = this.visualEffects.currentLevel;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
 
     // Update Shockwave Uniforms
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
     // Offset 48: level
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, new Float32Array([
+    this._f32_8.set([
         time, Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
         this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
         this.visualEffects.shockwaveTimer, 0, 0, 0
-    ]));
+    ]);
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, this._f32_8);
     // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
 
     // Write level at offset 48 (NEON BRICKLAYER)
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, new Float32Array([this.visualEffects.currentLevel]));
+    this._f32_1[0] = this.visualEffects.currentLevel;
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_1);
     // Write warpSurge at offset 52
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, new Float32Array([this.visualEffects.warpSurge]));
+    this._f32_1[0] = this.visualEffects.warpSurge;
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, this._f32_1);
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
@@ -1391,10 +1430,12 @@ export default class View {
           offset_ARRAY + 128,
           this.NORMALMATRIX
         );
+        this._f32_4.set(color);
+        this._f32_4[3] = alpha;
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
-          new Float32Array([...color, alpha])
+          this._f32_4
         );
 
         this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
@@ -1514,10 +1555,12 @@ export default class View {
           offset_ARRAY + 128,
           this.NORMALMATRIX
         );
+        this._f32_4.set(this.currentTheme.border);
+        this._f32_4[3] = 1.0;
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer_border,
           offset_ARRAY + 192,
-          new Float32Array([...this.currentTheme.border, 1.0])
+          this._f32_4
         );
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
