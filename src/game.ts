@@ -389,11 +389,16 @@ export default class Game {
       const onGround = this.hasCollision();
       this.activPiece.y -= 1;
 
+      // Coyote time: if we move off the ground, lock timer pauses/resets
+      // If we move on the ground, lock timer resets (extended placement)
       if (onGround) {
           if (this.lockResets < this.maxLockResets) {
               this.lockTimer = 0;
               this.lockResets++;
           }
+      } else {
+          // Moved off the edge, reset lock timer entirely (coyote time)
+          this.lockTimer = 0;
       }
   }
 

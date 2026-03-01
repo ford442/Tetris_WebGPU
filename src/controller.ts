@@ -485,21 +485,18 @@ export default class Controller {
              // Cap steps to prevent freeze/tunneling
              if (steps > 50) steps = 50;
 
+             // Only move down if it's not going to lock immediately
+             // Give a small rotation buffer by not soft dropping into a lock if dt is huge
              for (let i = 0; i < steps; i++) {
+                 const prevY = this.game.activPiece.y;
                  this.game.movePieceDown();
                  // NEON BRICKLAYER: Soft Drop Trail
                  this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
 
-                 // If collision happened (handled in movePieceDown), break?
-                 // movePieceDown resets position if collision.
-                 // So we continue trying to move down?
-                 // Actually movePieceDown prevents moving INTO collision.
-                 // So repeating it just hits the same collision.
-                 // It's safe but redundant.
-                 // Check if we hit ground?
-                 // Game.hasCollision() check is internal.
-                 // To optimize, we could check if locked?
-                 // But movePieceDown doesn't lock.
+                 if (prevY === this.game.activPiece.y) {
+                     // Hit the ground, stop processing extra down steps this frame to allow rotation buffer
+                     break;
+                 }
              }
           }
       } else {
