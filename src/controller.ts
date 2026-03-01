@@ -31,6 +31,11 @@ export default class Controller {
   // Track last horizontal direction for SOCD cleaning
   lastDirection: 'left' | 'right' | null = null;
 
+  // Input buffering for game-feel improvements
+  bufferedAction: Action | null = null;
+  bufferedActionTime: number = 0;
+  readonly BUFFER_WINDOW: number = 100; // ms
+
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
     // Standard Arrows
@@ -201,6 +206,10 @@ export default class Controller {
                 this.game.rotatePiece(true);
                 if (this.game.activPiece.rotation !== rBefore) {
                      this.viewWebGPU.onRotate();
+                } else {
+                     // Jump buffer: if rotation failed, buffer it
+                     this.bufferedAction = 'rotateCW';
+                     this.bufferedActionTime = performance.now();
                 }
                 this.soundManager.playRotate();
             }
@@ -211,6 +220,10 @@ export default class Controller {
                 this.game.rotatePiece(false);
                 if (this.game.activPiece.rotation !== rBefore) {
                      this.viewWebGPU.onRotate();
+                } else {
+                     // Jump buffer: if rotation failed, buffer it
+                     this.bufferedAction = 'rotateCCW';
+                     this.bufferedActionTime = performance.now();
                 }
                 this.soundManager.playRotate();
             }
@@ -335,6 +348,9 @@ export default class Controller {
       const dt = time - this.lastTime;
       this.lastTime = time;
 
+      // 0. Process Buffered Actions
+      this.processBufferedAction(time);
+
       // 1. Handle Input (Movement)
       this.handleInput(dt);
 
@@ -418,6 +434,38 @@ export default class Controller {
     };
 
     this.gameLoopID = requestAnimationFrame(animate);
+  }
+
+  private processBufferedAction(currentTime: number): void {
+      if (!this.bufferedAction) return;
+
+      // Clear buffer if it's too old
+      if (currentTime - this.bufferedActionTime > this.BUFFER_WINDOW) {
+          this.bufferedAction = null;
+          return;
+      }
+
+      // Try to execute buffered action
+      let success = false;
+      if (this.bufferedAction === 'rotateCW') {
+          const rBefore = this.game.activPiece.rotation;
+          this.game.rotatePiece(true);
+          if (this.game.activPiece.rotation !== rBefore) {
+              this.viewWebGPU.onRotate();
+              success = true;
+          }
+      } else if (this.bufferedAction === 'rotateCCW') {
+          const rBefore = this.game.activPiece.rotation;
+          this.game.rotatePiece(false);
+          if (this.game.activPiece.rotation !== rBefore) {
+              this.viewWebGPU.onRotate();
+              success = true;
+          }
+      }
+
+      if (success) {
+          this.bufferedAction = null;
+      }
   }
 
   private gravityTimer: number = 0;
