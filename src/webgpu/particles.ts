@@ -21,9 +21,16 @@ export class ParticleSystem {
     private emitIndex: number = 0;
 
     // Pending uploads for the View to handle
-    public pendingUploads: { index: number, data: Float32Array }[] = [];
+    public pendingUploads: Float32Array;
+    public pendingUploadCount: number = 0;
+    public pendingUploadIndices: Uint32Array;
 
     constructor() {
+        // Pre-allocate buffer for a reasonable maximum number of emissions per frame
+        // Assuming max 1000 emissions per frame (which is very high)
+        const maxPerFrame = 1000;
+        this.pendingUploads = new Float32Array(maxPerFrame * 16);
+        this.pendingUploadIndices = new Uint32Array(maxPerFrame);
     }
 
     // Helper to get random float
@@ -124,16 +131,28 @@ export class ParticleSystem {
         // 14: MaxLife
         // 15: Pad1
 
-        const pData = new Float32Array(16);
-        pData[0] = x; pData[1] = y; pData[2] = z; // Pos
-        pData[4] = vx; pData[5] = vy; pData[6] = vz; // Vel (Offset 4 float = 16 bytes)
-        pData[8] = color[0]; pData[9] = color[1]; pData[10] = color[2]; pData[11] = color[3]; // Color (Offset 8 float = 32 bytes)
-        pData[12] = scale;
-        pData[13] = life;
-        pData[14] = life; // maxLife
+        if (this.pendingUploadCount < this.pendingUploadIndices.length) {
+            const offset = this.pendingUploadCount * 16;
+            this.pendingUploads[offset + 0] = x;
+            this.pendingUploads[offset + 1] = y;
+            this.pendingUploads[offset + 2] = z;
+            this.pendingUploads[offset + 3] = 0.0;
+            this.pendingUploads[offset + 4] = vx;
+            this.pendingUploads[offset + 5] = vy;
+            this.pendingUploads[offset + 6] = vz;
+            this.pendingUploads[offset + 7] = 0.0;
+            this.pendingUploads[offset + 8] = color[0];
+            this.pendingUploads[offset + 9] = color[1];
+            this.pendingUploads[offset + 10] = color[2];
+            this.pendingUploads[offset + 11] = color[3];
+            this.pendingUploads[offset + 12] = scale;
+            this.pendingUploads[offset + 13] = life;
+            this.pendingUploads[offset + 14] = life; // maxLife
+            this.pendingUploads[offset + 15] = 0.0;
 
-        // Push to a queue for the View to handle
-        this.pendingUploads.push({ index: this.emitIndex, data: pData });
+            this.pendingUploadIndices[this.pendingUploadCount] = this.emitIndex;
+            this.pendingUploadCount++;
+        }
 
         // Advance ring buffer
         this.emitIndex = (this.emitIndex + 1) % this.maxParticles;
@@ -141,7 +160,7 @@ export class ParticleSystem {
 
     // Clear pending after upload
     clearPending() {
-        this.pendingUploads = [];
+        this.pendingUploadCount = 0;
     }
 
     updateParticles(dt: number): void {

@@ -1112,14 +1112,18 @@ export default class View {
 
     // --- PARTICLE UPDATE (COMPUTE) ---
     // 1. Upload new particles
-    if (this.particleSystem.pendingUploads.length > 0) {
+    if (this.particleSystem.pendingUploadCount > 0) {
         // Optimization: Coalesce writes if possible, but simplest is 1 write per batch
         // Or write individual particles
-        for(const upload of this.particleSystem.pendingUploads) {
+        for(let i = 0; i < this.particleSystem.pendingUploadCount; i++) {
+            const index = this.particleSystem.pendingUploadIndices[i];
+            const offset = i * 16;
+            const dataSlice = this.particleSystem.pendingUploads.subarray(offset, offset + 16);
+
             this.device.queue.writeBuffer(
                 this.particleStorageBuffer,
-                upload.index * 64, // 64 bytes stride
-                upload.data
+                index * 64, // 64 bytes stride
+                dataSlice
             );
         }
         this.particleSystem.clearPending();
