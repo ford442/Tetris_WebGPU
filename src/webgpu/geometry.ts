@@ -17,7 +17,7 @@ export const CubeData = () => {
   // 1.0 = Shows entire texture (multiple tiles visible)
   // 2.5 = Shows ~2-3 tiles, good balance of detail
   // 3.5 = Shows ~1 tile, zoomed in
-  const textureScale = 2.5; // Balanced zoom to show marble detail
+  const textureScale = 1.0; // Shows entire texture
 
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
     // 1. Clamp to inner box
