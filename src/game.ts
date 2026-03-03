@@ -59,6 +59,11 @@ export default class Game {
   private collisionDetector: CollisionDetector;
   private scoringSystem: ScoringSystem;
 
+  // Pre-allocated array for WASM collision checks to avoid GC
+  private collisionCoordsCache: {x: number, y: number}[] = [
+      {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
+  ];
+
   constructor() {
     this.pieceGenerator = new PieceGenerator();
     // --- WASM INTEGRATION ---
@@ -408,14 +413,16 @@ export default class Game {
 
   hasCollisionPiece(piece: Piece): boolean {
     // --- WASM ACCELERATION ---
-    const coords: {x: number, y: number}[] = [];
     let count = 0;
     
     const blocks = piece.blocks;
     for (let r = 0; r < blocks.length; r++) {
         for (let c = 0; c < blocks[r].length; c++) {
             if (blocks[r][c] !== 0) {
-                coords.push({x: c, y: r});
+                if (count < 4) {
+                    this.collisionCoordsCache[count].x = c;
+                    this.collisionCoordsCache[count].y = r;
+                }
                 count++;
             }
         }
@@ -424,7 +431,7 @@ export default class Game {
     // Only use WASM for standard tetrominoes (4 blocks)
     if (count === 4) {
         try {
-            return WasmCore.get().checkCollision(coords, piece.x, piece.y);
+            return WasmCore.get().checkCollision(this.collisionCoordsCache, piece.x, piece.y);
         } catch (e) {
             // WASM not available or failed, fallback to JS
             return this.collisionDetector.hasCollision(piece);
