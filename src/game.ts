@@ -58,6 +58,7 @@ export default class Game {
   private pieceGenerator: PieceGenerator;
   private collisionDetector: CollisionDetector;
   private scoringSystem: ScoringSystem;
+  private projectedPlayfield: number[][] = [];
 
   // Pre-allocated array for WASM collision checks to avoid GC
   private collisionCoordsCache: {x: number, y: number}[] = [
@@ -123,6 +124,7 @@ export default class Game {
       isGameOver: this.gameOver,
       activePiece: this.activPiece,
       ghostY: this.gameOver ? this.activPiece.y : this.getGhostY(),
+      targetArray: this.projectedPlayfield
     });
 
     return {
