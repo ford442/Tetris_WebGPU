@@ -182,10 +182,13 @@ export class VisualEffects {
         this.shockwaveTimer = 0.01;
     }
 
+    private _shockwaveParamsF32 = new Float32Array(4);
     getShockwaveParams(): Float32Array {
-        return new Float32Array(this.shockwaveParams);
+        this._shockwaveParamsF32.set(this.shockwaveParams);
+        return this._shockwaveParamsF32;
     }
 
+    private _clearColors = { r: 0, g: 0, b: 0 };
     getClearColors(): { r: number, g: number, b: number } {
         let clearR = 0.0, clearG = 0.0, clearB = 0.0;
 
@@ -197,16 +200,21 @@ export class VisualEffects {
             clearB = this.lockTimer * 0.2;
         }
 
-        return { r: clearR, g: clearG, b: clearB };
+        this._clearColors.r = clearR;
+        this._clearColors.g = clearG;
+        this._clearColors.b = clearB;
+        return this._clearColors;
     }
 
+    private _shakeOffset = { x: 0, y: 0 };
     getShakeOffset(): { x: number, y: number } {
         if (this.shakeIntensity > 0) {
-            return {
-                x: (Math.random() - 0.5) * this.shakeIntensity,
-                y: (Math.random() - 0.5) * this.shakeIntensity
-            };
+            this._shakeOffset.x = (Math.random() - 0.5) * this.shakeIntensity;
+            this._shakeOffset.y = (Math.random() - 0.5) * this.shakeIntensity;
+            return this._shakeOffset;
         }
-        return { x: 0, y: 0 };
+        this._shakeOffset.x = 0;
+        this._shakeOffset.y = 0;
+        return this._shakeOffset;
     }
 }
