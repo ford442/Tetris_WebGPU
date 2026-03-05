@@ -236,6 +236,9 @@ export default class Controller {
                 this.game.hold();
                 this.soundManager.playMove();
                 this.viewWebGPU.onHold();
+            } else {
+                this.bufferedAction = 'hold';
+                this.bufferedActionTime = performance.now();
             }
             break;
     }
@@ -292,8 +295,13 @@ export default class Controller {
               this.performHardDrop();
               break;
           case 'hold':
-              this.game.hold();
-              this.soundManager.playMove();
+              if (this.game.canHold) {
+                  this.game.hold();
+                  this.soundManager.playMove();
+              } else {
+                  this.bufferedAction = 'hold';
+                  this.bufferedActionTime = performance.now();
+              }
               break;
       }
   }
@@ -459,6 +467,13 @@ export default class Controller {
           this.game.rotatePiece(false);
           if (this.game.activPiece.rotation !== rBefore) {
               this.viewWebGPU.onRotate();
+              success = true;
+          }
+      } else if (this.bufferedAction === 'hold') {
+          if (this.game.canHold) {
+              this.game.hold();
+              this.soundManager.playMove();
+              this.viewWebGPU.onHold();
               success = true;
           }
       }
