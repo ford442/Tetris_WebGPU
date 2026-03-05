@@ -1091,7 +1091,9 @@ export default class View {
     camY += shake.y;
 
     const eyePosition = this._f32_3;
-    eyePosition.set([camX, camY, camZ]);
+    eyePosition[0] = camX;
+    eyePosition[1] = camY;
+    eyePosition[2] = camZ;
 
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
@@ -1135,11 +1137,18 @@ export default class View {
     const swTimer = this.visualEffects.shockwaveTimer;
     // Layout: dt, time, swTimer, pad | swCenter(2), pad(2) | swParams(4)
     const computeData = this._f32_12;
-    computeData.set([
-        dt, time, swTimer, 0.0,
-        swCenter[0], swCenter[1], 0.0, 0.0,
-        swParams[0], swParams[1], swParams[2], swParams[3]
-    ]);
+    computeData[0] = dt;
+    computeData[1] = time;
+    computeData[2] = swTimer;
+    computeData[3] = 0.0;
+    computeData[4] = swCenter[0];
+    computeData[5] = swCenter[1];
+    computeData[6] = 0.0;
+    computeData[7] = 0.0;
+    computeData[8] = swParams[0];
+    computeData[9] = swParams[1];
+    computeData[10] = swParams[2];
+    computeData[11] = swParams[3];
     this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, computeData);
 
     // 3. Dispatch Compute
@@ -1203,7 +1212,8 @@ export default class View {
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, this._f32_1);
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, this._f32_1);
-    this._f32_2.set([this.canvasWebGPU.width, this.canvasWebGPU.height]);
+    this._f32_2[0] = this.canvasWebGPU.width;
+    this._f32_2[1] = this.canvasWebGPU.height;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, this._f32_2);
 
     this._f32_1[0] = lockPercent;
@@ -1234,11 +1244,14 @@ export default class View {
     // Update Shockwave Uniforms
     // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
     // Offset 48: level
-    this._f32_8.set([
-        time, Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
-        this.visualEffects.shockwaveCenter[0], this.visualEffects.shockwaveCenter[1],
-        this.visualEffects.shockwaveTimer, 0, 0, 0
-    ]);
+    this._f32_8[0] = time;
+    this._f32_8[1] = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
+    this._f32_8[2] = this.visualEffects.shockwaveCenter[0];
+    this._f32_8[3] = this.visualEffects.shockwaveCenter[1];
+    this._f32_8[4] = this.visualEffects.shockwaveTimer;
+    this._f32_8[5] = 0;
+    this._f32_8[6] = 0;
+    this._f32_8[7] = 0;
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, this._f32_8);
     // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
@@ -1381,6 +1394,11 @@ export default class View {
         let color = this.currentTheme[colorBlockindex];
         if (!color) color = this.currentTheme[0];
 
+        this._f32_4[0] = color[0];
+        this._f32_4[1] = color[1];
+        this._f32_4[2] = color[2];
+        this._f32_4[3] = alpha;
+
         // NEON BRICKLAYER: Rotation Flash
         // If this block is part of the active piece, brighten it during rotation
         if (this.visualEffects.rotationFlashTimer > 0 && activePiece) {
@@ -1390,11 +1408,9 @@ export default class View {
                   if (activePiece.blocks[relY][relX] !== 0) {
                       // Add flash intensity
                       const flash = this.visualEffects.rotationFlashTimer * 3.0;
-                      color = [
-                          Math.min(color[0] + flash, 1.0),
-                          Math.min(color[1] + flash, 1.0),
-                          Math.min(color[2] + flash, 1.0)
-                      ];
+                      this._f32_4[0] = Math.min(color[0] + flash, 1.0);
+                      this._f32_4[1] = Math.min(color[1] + flash, 1.0);
+                      this._f32_4[2] = Math.min(color[2] + flash, 1.0);
                   }
              }
         }
@@ -1434,8 +1450,6 @@ export default class View {
           offset_ARRAY + 128,
           this.NORMALMATRIX
         );
-        this._f32_4.set(color);
-        this._f32_4[3] = alpha;
         this.device.queue.writeBuffer(
           this.vertexUniformBuffer,
           offset_ARRAY + 192,
