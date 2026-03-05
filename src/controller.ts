@@ -34,7 +34,7 @@ export default class Controller {
   // Input buffering for game-feel improvements
   bufferedAction: Action | null = null;
   bufferedActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 120; // ms (Slightly longer window for better action leniency)
+  readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
