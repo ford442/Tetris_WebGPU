@@ -7,6 +7,7 @@ interface PlayfieldProjectionParams {
   isGameOver: boolean;
   activePiece: Piece;
   ghostY: number;
+  targetArray?: number[][];
 }
 
 export function buildPlayfieldProjection({
@@ -16,14 +17,22 @@ export function buildPlayfieldProjection({
   isGameOver,
   activePiece,
   ghostY,
+  targetArray
 }: PlayfieldProjectionParams): number[][] {
-  const playfield2D: number[][] = [];
-  for (let y = 0; y < playfieldHeight; y++) {
-    const row = new Array(playfieldWidth);
-    for (let x = 0; x < playfieldWidth; x++) {
-      row[x] = getCell(x, y);
+  const playfield2D: number[][] = targetArray || [];
+
+  // Initialize or reuse target array
+  if (playfield2D.length !== playfieldHeight) {
+    playfield2D.length = 0;
+    for (let y = 0; y < playfieldHeight; y++) {
+      playfield2D.push(new Array(playfieldWidth).fill(0));
     }
-    playfield2D.push(row);
+  }
+
+  for (let y = 0; y < playfieldHeight; y++) {
+    for (let x = 0; x < playfieldWidth; x++) {
+      playfield2D[y][x] = getCell(x, y);
+    }
   }
 
   if (!isGameOver) {
