@@ -8,33 +8,40 @@ import { Piece } from './pieces.js';
 export class CollisionDetector {
   private playfieldWidth: number;
   private playfieldHeight: number;
+  private isTypedArray: boolean;
 
   constructor(private playfield: Int8Array | number[][]) {
     // Detect dimensions if it's a number[][] (legacy) or assume standard if Int8Array
     // Since we are transitioning, let's support both but prioritize Int8Array logic
-    if (playfield instanceof Int8Array) {
+    this.isTypedArray = playfield instanceof Int8Array;
+    if (this.isTypedArray) {
         this.playfieldWidth = 10;
         this.playfieldHeight = 20;
     } else {
-        this.playfieldHeight = playfield.length;
-        this.playfieldWidth = playfield[0].length;
+        this.playfieldHeight = (playfield as number[][]).length;
+        this.playfieldWidth = (playfield as number[][])[0].length;
     }
   }
 
   updatePlayfield(playfield: Int8Array | number[][]): void {
     this.playfield = playfield;
+    this.isTypedArray = playfield instanceof Int8Array;
   }
 
   // Helper to get cell value regardless of array type
   private getCell(x: number, y: number): number {
-      if (this.playfield instanceof Int8Array) {
-          return this.playfield[y * this.playfieldWidth + x];
+      if (this.isTypedArray) {
+          return (this.playfield as Int8Array)[y * this.playfieldWidth + x];
       } else {
           return (this.playfield as number[][])[y][x];
       }
   }
 
   hasCollision(piece: Piece): boolean {
+    const isTypedArray = this.isTypedArray;
+    const playfield1D = isTypedArray ? (this.playfield as Int8Array) : null;
+    const playfield2D = !isTypedArray ? (this.playfield as number[][]) : null;
+
     const { x: pieceX, y: pieceY, blocks } = piece;
 
     // Optimization: Use bounds if available
@@ -74,7 +81,10 @@ export class CollisionDetector {
           // Note: targetY can be negative (above board), which is valid for non-overlap checks unless there are blocks there?
           // Usually playfield indices must be >= 0.
           if (targetY >= 0) {
-              if (this.getCell(targetX, targetY) !== 0) {
+              let cell = isTypedArray
+                  ? playfield1D![targetY * this.playfieldWidth + targetX]
+                  : playfield2D![targetY][targetX];
+              if (cell !== 0) {
                   return true;
               }
           }
