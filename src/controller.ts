@@ -34,6 +34,8 @@ export default class Controller {
   // Input buffering for game-feel improvements
   bufferedAction: Action | null = null;
   bufferedActionTime: number = 0;
+  bufferedMoveAction: Action | null = null;
+  bufferedMoveActionTime: number = 0;
   readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
@@ -185,14 +187,30 @@ export default class Controller {
     switch (action) {
         case 'left':
             this.lastDirection = 'left';
-            this.game.movePieceLeft();
-            this.soundManager.playMove();
+            {
+                const pxBefore = this.game.activPiece.x;
+                this.game.movePieceLeft();
+                if (this.game.activPiece.x === pxBefore) {
+                    this.bufferedMoveAction = 'left';
+                    this.bufferedMoveActionTime = performance.now();
+                } else {
+                    this.soundManager.playMove();
+                }
+            }
             this.actionTimers.left = 0;
             break;
         case 'right':
             this.lastDirection = 'right';
-            this.game.movePieceRight();
-            this.soundManager.playMove();
+            {
+                const pxBefore = this.game.activPiece.x;
+                this.game.movePieceRight();
+                if (this.game.activPiece.x === pxBefore) {
+                    this.bufferedMoveAction = 'right';
+                    this.bufferedMoveActionTime = performance.now();
+                } else {
+                    this.soundManager.playMove();
+                }
+            }
             this.actionTimers.right = 0;
             break;
         case 'down':
@@ -445,6 +463,27 @@ export default class Controller {
   }
 
   private processBufferedAction(currentTime: number): void {
+      if (this.bufferedMoveAction) {
+          if (currentTime - this.bufferedMoveActionTime > this.BUFFER_WINDOW) {
+              this.bufferedMoveAction = null;
+          } else {
+              let moveSuccess = false;
+              if (this.bufferedMoveAction === 'left') {
+                  const pxBefore = this.game.activPiece.x;
+                  this.game.movePieceLeft();
+                  if (this.game.activPiece.x !== pxBefore) moveSuccess = true;
+              } else if (this.bufferedMoveAction === 'right') {
+                  const pxBefore = this.game.activPiece.x;
+                  this.game.movePieceRight();
+                  if (this.game.activPiece.x !== pxBefore) moveSuccess = true;
+              }
+              if (moveSuccess) {
+                  this.soundManager.playMove();
+                  this.bufferedMoveAction = null;
+              }
+          }
+      }
+
       if (!this.bufferedAction) return;
 
       // Clear buffer if it's too old

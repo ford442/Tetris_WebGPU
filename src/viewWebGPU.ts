@@ -68,6 +68,7 @@ export default class View {
 
   lastEffectCounter: number = 0;
   useGlitch: boolean = false;
+  private _shakeOffsetSmoothed = {x: 0, y: 0};
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -1085,10 +1086,12 @@ export default class View {
     camX += Math.sin(time * 0.2) * 0.5;
     camY += Math.cos(time * 0.3) * 0.25;
 
-    // Apply Shake
+    // Apply Shake (Smoothed)
     const shake = this.visualEffects.getShakeOffset();
-    camX += shake.x;
-    camY += shake.y;
+    this._shakeOffsetSmoothed.x += (shake.x - this._shakeOffsetSmoothed.x) * 15.0 * dt;
+    this._shakeOffsetSmoothed.y += (shake.y - this._shakeOffsetSmoothed.y) * 15.0 * dt;
+    camX += this._shakeOffsetSmoothed.x;
+    camY += this._shakeOffsetSmoothed.y;
 
     const eyePosition = this._f32_3;
     eyePosition[0] = camX;
@@ -1374,7 +1377,7 @@ export default class View {
     this.x += 0.01;
     const playfield_length = playfield.length;
 
-    this.uniformBindGroup_ARRAY = [];
+    let arrayLength = 0;
     let blockIndex = 0; // Index for retrieving from CACHE
 
     for (let row = 0; row < playfield_length; row++) {
@@ -1456,11 +1459,13 @@ export default class View {
           this._f32_4
         );
 
-        this.uniformBindGroup_ARRAY.push(uniformBindGroup_next);
+        this.uniformBindGroup_ARRAY[arrayLength++] = uniformBindGroup_next;
 
         blockIndex++;
       }
     }
+
+    this.uniformBindGroup_ARRAY.length = arrayLength;
   }
 
   async renderPlayfild_Border_WebGPU() {
