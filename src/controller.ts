@@ -4,7 +4,7 @@ import SoundManager from "./sound.js";
 
 const DAS = 130; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
-const SOFT_DROP_SPEED = 2; // Sonic Drop: Even faster soft drop for instant tactile feedback
+const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -36,7 +36,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
+  readonly BUFFER_WINDOW: number = 200; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
