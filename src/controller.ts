@@ -22,10 +22,14 @@ export default class Controller {
   keys: { [key: string]: boolean } = {};
 
   // Timers for logical actions
-  actionTimers: { [key in Action]?: number } = {
+  actionTimers: Record<Action, number> = {
     left: 0,
     right: 0,
-    down: 0
+    down: 0,
+    rotateCW: 0,
+    rotateCCW: 0,
+    hardDrop: 0,
+    hold: 0
   };
 
   // Track last horizontal direction for SOCD cleaning
@@ -36,7 +40,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
+  readonly BUFFER_WINDOW: number = 200; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
@@ -548,25 +552,25 @@ export default class Controller {
       }
 
       if (moveLeft) {
-          this.actionTimers.left! += dt;
-          if (this.actionTimers.left! > DAS) {
-              while (this.actionTimers.left! > DAS + ARR) {
+          this.actionTimers.left += dt;
+          if (this.actionTimers.left > DAS) {
+              while (this.actionTimers.left > DAS + ARR) {
                   this.game.movePieceLeft();
                   this.soundManager.playMove();
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
-                  this.actionTimers.left! -= ARR;
+                  this.actionTimers.left -= ARR;
               }
           }
       } else if (moveRight) {
-          this.actionTimers.right! += dt;
-          if (this.actionTimers.right! > DAS) {
-              while (this.actionTimers.right! > DAS + ARR) {
+          this.actionTimers.right += dt;
+          if (this.actionTimers.right > DAS) {
+              while (this.actionTimers.right > DAS + ARR) {
                   this.game.movePieceRight();
                   this.soundManager.playMove();
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
-                  this.actionTimers.right! -= ARR;
+                  this.actionTimers.right -= ARR;
               }
           }
       }
@@ -579,11 +583,11 @@ export default class Controller {
       }
 
       if (this.isActionPressed('down')) {
-          this.actionTimers.down! += dt;
-          if (this.actionTimers.down! > SOFT_DROP_SPEED) {
+          this.actionTimers.down += dt;
+          if (this.actionTimers.down > SOFT_DROP_SPEED) {
              // Sonic Drop: Allow multiple steps per frame if dt is large
-             let steps = Math.floor(this.actionTimers.down! / SOFT_DROP_SPEED);
-             this.actionTimers.down! %= SOFT_DROP_SPEED;
+             let steps = (this.actionTimers.down / SOFT_DROP_SPEED) | 0;
+             this.actionTimers.down %= SOFT_DROP_SPEED;
              // Cap steps to prevent freeze/tunneling
              if (steps > 50) steps = 50;
 
