@@ -9,6 +9,7 @@ export class CollisionDetector {
   private playfieldWidth: number;
   private playfieldHeight: number;
   private isTypedArray: boolean;
+  private _boundsCache = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
   constructor(private playfield: Int8Array | number[][]) {
     // Detect dimensions if it's a number[][] (legacy) or assume standard if Int8Array
@@ -62,7 +63,11 @@ export class CollisionDetector {
                 }
             }
         }
-        bounds = { minX, maxX, minY, maxY };
+        this._boundsCache.minX = minX;
+        this._boundsCache.maxX = maxX;
+        this._boundsCache.minY = minY;
+        this._boundsCache.maxY = maxY;
+        bounds = this._boundsCache;
     }
 
     // Only iterate within bounds
