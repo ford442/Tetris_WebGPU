@@ -106,7 +106,8 @@ export const PostProcessShaders = () => {
             // Subtle permanent aberration at edges for arcade feel
             // JUICE: Stronger lens distortion at edges for arcade CRT feel
             // ENHANCED: Increased base aberration
-            let vignetteAberration = pow(distFromCenter, 4.0) * 0.08; // Sharper curve, more intense at far corners
+            let dist2 = distFromCenter * distFromCenter;
+            let vignetteAberration = dist2 * dist2 * 0.08; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -859,7 +860,10 @@ export const Shaders = () => {
                 // Emissive
                 let time = uniforms.time;
                 let sineWave = sin(time * 3.0 + vPosition.y * 0.5 + vPosition.x * 0.5);
-                let pulsePos = pow(sineWave * 0.5 + 0.5, 8.0);
+                let sineOff = sineWave * 0.5 + 0.5;
+                let sine2 = sineOff * sineOff;
+                let sine4 = sine2 * sine2;
+                let pulsePos = sine4 * sine4;
 
                 // Global breathing for all blocks
                 let breath = sin(time * 2.0) * 0.1 + 0.1;
@@ -868,7 +872,8 @@ export const Shaders = () => {
                 // ENHANCED: Stronger, more vibrant inner pulse (Boosted)
                 // Use a sharper sine wave (pow) for a heartbeat effect
                 let rawPulse = sin(time * pulseFreq * 1.5 + level) * 0.5 + 0.5; // Added level to pulse
-                let sharpPulse = pow(rawPulse, 4.0); // Sharper heartbeat pulse
+                let rawPulse2 = rawPulse * rawPulse;
+                let sharpPulse = rawPulse2 * rawPulse2; // Sharper heartbeat pulse
                 let innerPulse = sharpPulse * (1.2 + level * 0.3); // Stronger with level
 
                 // Add a second, faster "jitter" pulse for high levels
@@ -892,7 +897,9 @@ export const Shaders = () => {
                 // ENHANCED: Glass/Neon Rim Lighting
                 // Sharper falloff (power 4.0) for a more distinct edge
                 // BOOSTED: Increased base intensity from 15.0 to 18.0
-                let rimLight = pow(1.0 - max(dot(N, V), 0.0), 4.0) * (18.0 + level * 1.0);
+                let rimFalloff = 1.0 - max(dot(N, V), 0.0);
+                let rimFalloff2 = rimFalloff * rimFalloff;
+                let rimLight = rimFalloff2 * rimFalloff2 * (18.0 + level * 1.0);
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
@@ -915,9 +922,13 @@ export const Shaders = () => {
                 let dispersion = 0.8 * levelFactor;
 
                 // Diamond refraction logic using dot(normal, view) modulated by level
-                let fR = pow(max(0.0, 1.0 - dotNV * (1.0 - dispersion * 0.5)), 4.0);
+                let dispR = max(0.0, 1.0 - dotNV * (1.0 - dispersion * 0.5));
+                let dispR2 = dispR * dispR;
+                let fR = dispR2 * dispR2;
                 let fG = baseFresnel;
-                let fB = pow(max(0.0, 1.0 - dotNV * (1.0 + dispersion * 0.5)), 4.0);
+                let dispB = max(0.0, 1.0 - dotNV * (1.0 + dispersion * 0.5));
+                let dispB2 = dispB * dispB;
+                let fB = dispB2 * dispB2;
 
                 var irid = vec3<f32>(fR, fG, fB);
 
