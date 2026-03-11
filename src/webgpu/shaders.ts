@@ -835,6 +835,9 @@ export const Shaders = () => {
                 let atlasUV = (clamp(texUV, vec2<f32>(0.0), vec2<f32>(1.0)) * (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
                 let texColor = textureSample(blockTexture, blockSampler, atlasUV);
 
+                // The source texture is mostly warm gold metal plus cool frosted glass.
+                // Bias toward red/green and suppress blue so the gold frame reads as metal,
+                // then threshold that signal to split the material treatment.
                 let goldSignal = texColor.r + texColor.g - texColor.b * 0.75;
                 let metalMask = smoothstep(0.95, 1.45, goldSignal);
                 let glassMask = 1.0 - metalMask;
