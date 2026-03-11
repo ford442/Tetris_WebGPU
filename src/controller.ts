@@ -40,7 +40,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 200; // ms (Slightly longer window for better action leniency)
+  readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {

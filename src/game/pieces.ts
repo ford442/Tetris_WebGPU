@@ -10,6 +10,7 @@ export interface Piece {
   rotation: number; // 0: Spawn, 1: Right, 2: 180, 3: Left
   type: string;
   getBounds?(): { minX: number, maxX: number, minY: number, maxY: number };
+  _bounds?: { minX: number, maxX: number, minY: number, maxY: number };
 }
 
 export class PieceGenerator {
@@ -74,6 +75,7 @@ export class PieceGenerator {
     }
     piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
     piece.y = -2;
+    piece._bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
     // Attach getBounds method
     piece.getBounds = function() {
@@ -90,7 +92,11 @@ export class PieceGenerator {
           }
         }
       }
-      return { minX, maxX, minY, maxY };
+      this._bounds!.minX = minX;
+      this._bounds!.maxX = maxX;
+      this._bounds!.minY = minY;
+      this._bounds!.maxY = maxY;
+      return this._bounds!;
     };
 
     return piece;
