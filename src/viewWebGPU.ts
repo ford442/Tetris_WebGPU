@@ -2,6 +2,15 @@ import * as Matrix from "gl-matrix";
 import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders } from './webgpu/shaders.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
+import {
+  BLOCK_WORLD_SIZE,
+  BOARD_WORLD_CENTER_X,
+  BOARD_WORLD_CENTER_Y,
+  boardWorldX,
+  boardWorldY,
+  borderWorldX,
+  borderWorldY,
+} from './webgpu/renderMetrics.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
@@ -953,7 +962,7 @@ export default class View {
     });
 
 
-    let eyePosition = [0.0, -20.0, 75.0];
+    let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     // Apply shake
     if (this.shakeTimer > 0) {
         const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
@@ -969,7 +978,7 @@ export default class View {
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
-      [9.0, -20.0, 0.0], // target
+      [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0],
       [0.0, 1.0, 0.0] // up
     );
 
@@ -1079,7 +1088,7 @@ export default class View {
 
     // Base position
     let camX = 0.0;
-    let camY = -20.0;
+    let camY = BOARD_WORLD_CENTER_Y;
     let camZ = 75.0;
 
     // "Breathing" sway
@@ -1101,7 +1110,7 @@ export default class View {
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       [camX, camY, camZ],
-      [9.0, -20.0, 0.0], // target
+      [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0],
       [0.0, 1.0, 0.0] // up
     );
 
@@ -1179,8 +1188,8 @@ export default class View {
     if (this.state && this.state.activePiece) {
         const widthInBlocks = this.state.activePiece.blocks[0].length;
         const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
-        ghostX = gridCenterX * 2.2;
-        ghostWidth = widthInBlocks * 2.2;
+        ghostX = gridCenterX * BLOCK_WORLD_SIZE;
+        ghostWidth = widthInBlocks * BLOCK_WORLD_SIZE;
 
         // Calculate UV space coordinates for Projection Beam
         const camZ = 75.0;
@@ -1188,8 +1197,7 @@ export default class View {
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
         const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
 
-        // 10.0 is approx logical center X
-        ghostUVX = 0.5 + (ghostX - 10.0) / visibleWidth;
+        ghostUVX = 0.5 + (ghostX - BOARD_WORLD_CENTER_X) / visibleWidth;
         ghostUVW = ghostWidth / visibleWidth;
     }
     // Calculate Lock Percent (Tension)
@@ -1426,8 +1434,8 @@ export default class View {
         Matrix.mat4.identity(this.NORMALMATRIX);
 
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2,
-          row * -2.2,
+          boardWorldX(colom),
+          boardWorldY(row),
           0.0,
         ]);
 
@@ -1552,8 +1560,8 @@ export default class View {
         Matrix.mat4.identity(this.NORMALMATRIX);
 
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2 - 2.2, // выравниваю по размеру модельки одного блока
-          row * -2.2 + 2.2,
+          borderWorldX(colom),
+          borderWorldY(row),
           0.0,
         ]);
 
