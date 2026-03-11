@@ -14,10 +14,9 @@ export const CubeData = () => {
   const boxSize = 1.0 - radius; // The distance from center to the start of the bevel
 
   // ADJUST THIS TO FIX YOUR SAMPLING:
-  // 1.0 = Shows entire texture (multiple tiles visible)
-  // 2.5 = Shows ~2-3 tiles, good balance of detail
-  // 3.5 = Shows ~1 tile, zoomed in
-  const textureScale = 2.5; // Good balance of detail
+  // Keep the face UVs normalized because the shader now samples
+  // a single tile from the texture atlas for each block face.
+  const textureScale = 1.0;
 
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
     // 1. Clamp to inner box
