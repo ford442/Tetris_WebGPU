@@ -90,6 +90,8 @@ export default class View {
   offscreenTexture!: GPUTexture;
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
+  backgroundPassDescriptor!: GPURenderPassDescriptor;
+  ppPassDescriptor!: GPURenderPassDescriptor;
 
   // Particles
   particlePipeline!: GPURenderPipeline;
@@ -118,6 +120,8 @@ export default class View {
   private _f32_4 = new Float32Array(4);
   private _f32_8 = new Float32Array(8);
   private _f32_12 = new Float32Array(12);
+  private _camTarget = new Float32Array([9.0, -20.0, 0.0]);
+  private _camUp = new Float32Array([0.0, 1.0, 0.0]);
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -945,6 +949,38 @@ export default class View {
         ]
     });
 
+    this.backgroundPassDescriptor = {
+        colorAttachments: [{
+            view: this.offscreenTexture.createView(),
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
+    this.renderPassDescription = {
+      colorAttachments: [{
+          view: this.offscreenTexture.createView(),
+          loadOp: 'load',
+          storeOp: "store",
+      }],
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      },
+    };
+
+    this.ppPassDescriptor = {
+        colorAttachments: [{
+            view: this.ctxWebGPU.getCurrentTexture().createView(),
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
 
     //create uniform buffer and layout
     this.fragmentUniformBuffer = this.device.createBuffer({
@@ -969,8 +1005,8 @@ export default class View {
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
       eyePosition,
-      [9.0, -20.0, 0.0], // target
-      [0.0, 1.0, 0.0] // up
+      this._camTarget, // target
+      this._camUp // up
     );
 
     Matrix.mat4.identity(this.PROJMATRIX);
@@ -1100,9 +1136,9 @@ export default class View {
 
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
-      [camX, camY, camZ],
-      [9.0, -20.0, 0.0], // target
-      [0.0, 1.0, 0.0] // up
+      eyePosition,
+      this._camTarget, // target
+      this._camUp // up
     );
 
     // Update VP Matrix
@@ -1268,49 +1304,28 @@ export default class View {
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
     const textureViewOffscreen = this.offscreenTexture.createView();
-    // const depthTexture = this.device.createTexture({ ... });
+    (this.backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0].view = textureViewOffscreen;
+    (this.renderPassDescription.colorAttachments as GPURenderPassColorAttachment[])[0].view = textureViewOffscreen;
 
     // 1. Render Background
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
-
-    const backgroundPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewOffscreen,
-            clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    (this.backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0].clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
 
     if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this.backgroundPassDescriptor);
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
         bgPassEncoder.draw(6);
         bgPassEncoder.end();
     } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this.backgroundPassDescriptor);
         bgPassEncoder.end();
     }
 
     // 2. Render Playfield
     this.renderPlayfild_WebGPU(this.state);
-
-    this.renderPassDescription = {
-      colorAttachments: [{
-          view: textureViewOffscreen,
-          loadOp: 'load',
-          storeOp: "store",
-      }],
-      depthStencilAttachment: {
-        view: this.depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      },
-    };
 
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
 
@@ -1350,16 +1365,9 @@ export default class View {
 
     // *** Render Pass 2: Post Processing ***
     const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-    const ppPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewScreen,
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    (this.ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0].view = textureViewScreen;
 
-    const ppPassEncoder = commandEncoder.beginRenderPass(ppPassDescriptor);
+    const ppPassEncoder = commandEncoder.beginRenderPass(this.ppPassDescriptor);
     ppPassEncoder.setPipeline(this.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
     // Reuse background vertex buffer (quad)
@@ -1425,11 +1433,11 @@ export default class View {
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
 
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2,
-          row * -2.2,
-          0.0,
-        ]);
+        this._f32_3[0] = colom * 2.2;
+        this._f32_3[1] = row * -2.2;
+        this._f32_3[2] = 0.0;
+
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
 
         Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
@@ -1551,11 +1559,11 @@ export default class View {
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
 
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          colom * 2.2 - 2.2, // выравниваю по размеру модельки одного блока
-          row * -2.2 + 2.2,
-          0.0,
-        ]);
+        this._f32_3[0] = colom * 2.2 - 2.2; // выравниваю по размеру модельки одного блока
+        this._f32_3[1] = row * -2.2 + 2.2;
+        this._f32_3[2] = 0.0;
+
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
 
         Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
