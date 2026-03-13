@@ -100,6 +100,13 @@ export default class View {
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
+  // Render pass caching
+  private _offscreenTextureView!: GPUTextureView;
+  private _depthTextureView!: GPUTextureView;
+  private _backgroundPassDescriptor!: GPURenderPassDescriptor;
+  private _mainPassDescriptor!: GPURenderPassDescriptor;
+  private _ppPassDescriptor!: GPURenderPassDescriptor;
+
   // Particles
   particlePipeline!: GPURenderPipeline;
   particleStorageBuffer!: GPUBuffer; // Renamed from particleVertexBuffer
@@ -255,6 +262,7 @@ export default class View {
         format: presentationFormat,
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
+    this._offscreenTextureView = this.offscreenTexture.createView();
 
     // Recreate depth texture
     if (this.depthTexture) {
@@ -265,6 +273,18 @@ export default class View {
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
+    this._depthTextureView = this.depthTexture.createView();
+
+    // Update descriptors with new views
+    if (this._backgroundPassDescriptor && this._backgroundPassDescriptor.colorAttachments) {
+        (this._backgroundPassDescriptor.colorAttachments as Iterable<GPURenderPassColorAttachment>)[Symbol.iterator]().next().value.view = this._offscreenTextureView;
+    }
+    if (this._mainPassDescriptor && this._mainPassDescriptor.colorAttachments) {
+        (this._mainPassDescriptor.colorAttachments as Iterable<GPURenderPassColorAttachment>)[Symbol.iterator]().next().value.view = this._offscreenTextureView;
+    }
+    if (this._mainPassDescriptor && this._mainPassDescriptor.depthStencilAttachment) {
+        this._mainPassDescriptor.depthStencilAttachment.view = this._depthTextureView;
+    }
 
     // Recreate bindgroup with new texture
     if (this.postProcessPipeline) {
@@ -938,12 +958,47 @@ export default class View {
         format: presentationFormat,
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
+    this._offscreenTextureView = this.offscreenTexture.createView();
 
     this.depthTexture = this.device.createTexture({
       size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
+    this._depthTextureView = this.depthTexture.createView();
+
+    // Initialize Pass Descriptors
+    this._backgroundPassDescriptor = {
+        colorAttachments: [{
+            view: this._offscreenTextureView,
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
+
+    this._mainPassDescriptor = {
+      colorAttachments: [{
+          view: this._offscreenTextureView,
+          loadOp: 'load',
+          storeOp: "store",
+      }],
+      depthStencilAttachment: {
+        view: this._depthTextureView,
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      },
+    };
+
+    this._ppPassDescriptor = {
+        colorAttachments: [{
+            view: undefined as any, // Updated each frame
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            loadOp: 'clear',
+            storeOp: 'store'
+        }]
+    };
 
     this.postProcessBindGroup = this.device.createBindGroup({
         layout: this.postProcessPipeline.getBindGroupLayout(0),
@@ -1275,52 +1330,30 @@ export default class View {
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, this._f32_1);
 
     // *** Render Pass 1: Draw Scene to Offscreen Texture ***
-    const textureViewOffscreen = this.offscreenTexture.createView();
-    // const depthTexture = this.device.createTexture({ ... });
 
     // 1. Render Background
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
-    const backgroundPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewOffscreen,
-            clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as Iterable<GPURenderPassColorAttachment>)[Symbol.iterator]().next().value;
+    colorAttachment0.clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
 
     if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
         bgPassEncoder.draw(6);
         bgPassEncoder.end();
     } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
         bgPassEncoder.end();
     }
 
     // 2. Render Playfield
     this.renderPlayfild_WebGPU(this.state);
 
-    this.renderPassDescription = {
-      colorAttachments: [{
-          view: textureViewOffscreen,
-          loadOp: 'load',
-          storeOp: "store",
-      }],
-      depthStencilAttachment: {
-        view: this.depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      },
-    };
-
-    const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
+    const passEncoder = commandEncoder.beginRenderPass(this._mainPassDescriptor);
 
     // Render Grid
     passEncoder.setPipeline(this.gridPipeline);
@@ -1358,16 +1391,10 @@ export default class View {
 
     // *** Render Pass 2: Post Processing ***
     const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-    const ppPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewScreen,
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as Iterable<GPURenderPassColorAttachment>)[Symbol.iterator]().next().value;
+    ppColorAttachment0.view = textureViewScreen;
 
-    const ppPassEncoder = commandEncoder.beginRenderPass(ppPassDescriptor);
+    const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
     ppPassEncoder.setPipeline(this.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
     // Reuse background vertex buffer (quad)
