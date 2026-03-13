@@ -589,7 +589,8 @@ export default class Controller {
              let steps = (this.actionTimers.down / SOFT_DROP_SPEED) | 0;
              this.actionTimers.down %= SOFT_DROP_SPEED;
              // Cap steps to prevent freeze/tunneling
-             if (steps > 50) steps = 50;
+             // FIX: Latency - optimize maximum sonic drop steps
+             if (steps > 20) steps = 20;
 
              // Only move down if it's not going to lock immediately
              // Give a small rotation buffer by not soft dropping into a lock if dt is huge
