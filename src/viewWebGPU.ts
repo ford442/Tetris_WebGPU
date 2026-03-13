@@ -127,6 +127,11 @@ export default class View {
   private _f32_4 = new Float32Array(4);
   private _f32_8 = new Float32Array(8);
   private _f32_12 = new Float32Array(12);
+  private _camEye = new Float32Array(3);
+  private _camTarget = new Float32Array([BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0]);
+  private _camUp = new Float32Array([0.0, 1.0, 0.0]);
+  private _backgroundPassDescriptor: GPURenderPassDescriptor | null = null;
+  private _ppPassDescriptor: GPURenderPassDescriptor | null = null;
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -1107,11 +1112,14 @@ export default class View {
     eyePosition[1] = camY;
     eyePosition[2] = camZ;
 
+    this._camEye[0] = camX;
+    this._camEye[1] = camY;
+    this._camEye[2] = camZ;
     Matrix.mat4.lookAt(
       this.VIEWMATRIX,
-      [camX, camY, camZ],
-      [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0],
-      [0.0, 1.0, 0.0] // up
+      this._camEye,
+      this._camTarget,
+      this._camUp
     );
 
     // Update VP Matrix
@@ -1282,43 +1290,58 @@ export default class View {
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
 
-    const backgroundPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewOffscreen,
-            clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    if (!this._backgroundPassDescriptor) {
+        this._backgroundPassDescriptor = {
+            colorAttachments: [{
+                view: textureViewOffscreen,
+                clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
+                loadOp: 'clear',
+                storeOp: 'store'
+            }]
+        };
+    } else {
+        const colorAttachment = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+        colorAttachment.view = textureViewOffscreen;
+        colorAttachment.clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
+    }
 
     if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
         bgPassEncoder.draw(6);
         bgPassEncoder.end();
     } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(backgroundPassDescriptor);
+        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
         bgPassEncoder.end();
     }
 
     // 2. Render Playfield
     this.renderPlayfild_WebGPU(this.state);
 
-    this.renderPassDescription = {
-      colorAttachments: [{
-          view: textureViewOffscreen,
-          loadOp: 'load',
-          storeOp: "store",
-      }],
-      depthStencilAttachment: {
-        view: this.depthTexture.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store'
-      },
-    };
+    if (!this.renderPassDescription) {
+        this.renderPassDescription = {
+            colorAttachments: [{
+                view: textureViewOffscreen,
+                loadOp: 'load',
+                storeOp: "store",
+            }],
+            depthStencilAttachment: {
+                view: this.depthTexture.createView(),
+                depthClearValue: 1.0,
+                depthLoadOp: 'clear',
+                depthStoreOp: 'store'
+            },
+        };
+    } else {
+        const colorAttachment = (this.renderPassDescription.colorAttachments as GPURenderPassColorAttachment[])[0];
+        colorAttachment.view = textureViewOffscreen;
+        const depthStencilAttachment = this.renderPassDescription.depthStencilAttachment as GPURenderPassDepthStencilAttachment;
+        // Depth texture view needs to be updated if depthTexture was recreated (e.g. on resize)
+        // Optimization: only update if needed or just update it, it's a small object
+        depthStencilAttachment.view = this.depthTexture.createView();
+    }
 
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
 
@@ -1358,16 +1381,21 @@ export default class View {
 
     // *** Render Pass 2: Post Processing ***
     const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-    const ppPassDescriptor: GPURenderPassDescriptor = {
-        colorAttachments: [{
-            view: textureViewScreen,
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-            loadOp: 'clear',
-            storeOp: 'store'
-        }]
-    };
+    if (!this._ppPassDescriptor) {
+        this._ppPassDescriptor = {
+            colorAttachments: [{
+                view: textureViewScreen,
+                clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+                loadOp: 'clear',
+                storeOp: 'store'
+            }]
+        };
+    } else {
+        const colorAttachment = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+        colorAttachment.view = textureViewScreen;
+    }
 
-    const ppPassEncoder = commandEncoder.beginRenderPass(ppPassDescriptor);
+    const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
     ppPassEncoder.setPipeline(this.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
     // Reuse background vertex buffer (quad)
@@ -1433,11 +1461,10 @@ export default class View {
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
 
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          boardWorldX(colom),
-          boardWorldY(row),
-          0.0,
-        ]);
+        this._f32_3[0] = boardWorldX(colom);
+        this._f32_3[1] = boardWorldY(row);
+        this._f32_3[2] = 0.0;
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
 
         Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
@@ -1559,11 +1586,10 @@ export default class View {
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
 
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, [
-          borderWorldX(colom),
-          borderWorldY(row),
-          0.0,
-        ]);
+        this._f32_3[0] = borderWorldX(colom);
+        this._f32_3[1] = borderWorldY(row);
+        this._f32_3[2] = 0.0;
+        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
 
         Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
