@@ -26,10 +26,8 @@ import {
   showFloatingText as handleShowFloatingText,
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
-// @ts-ignore
-const glMatrix = Matrix;
 
-////
+const glMatrix = Matrix;
 
 export default class View {
   element: HTMLElement;
@@ -59,7 +57,7 @@ export default class View {
   numberOfVertices!: number;
   vertexBuffer!: GPUBuffer;
   normalBuffer!: GPUBuffer;
-  uvBuffer!: GPUBuffer; // Add UV buffer
+  uvBuffer!: GPUBuffer;
   pipeline!: GPURenderPipeline;
   fragmentUniformBuffer!: GPUBuffer;
   MODELMATRIX: any;
@@ -67,11 +65,10 @@ export default class View {
   VIEWMATRIX: any;
   PROJMATRIX: any;
   vpMatrix: any;
-  renderPassDescription!: GPURenderPassDescriptor;
   vertexUniformBuffer!: GPUBuffer;
   vertexUniformBuffer_border!: GPUBuffer;
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
-  uniformBindGroup_CACHE: GPUBindGroup[] = []; // Cache for dynamic blocks
+  uniformBindGroup_CACHE: GPUBindGroup[] = [];
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
   x: number = 0;
 
@@ -100,13 +97,21 @@ export default class View {
   depthTexture!: GPUTexture;
   sampler!: GPUSampler;
 
+  // Render pass caching - GC optimized (lazy init pattern)
+  private _offscreenTextureView!: GPUTextureView;
+  private _depthTextureView!: GPUTextureView;
+  private _backgroundPassDescriptor!: GPURenderPassDescriptor;
+  private _mainPassDescriptor!: GPURenderPassDescriptor;
+  private _ppPassDescriptor!: GPURenderPassDescriptor;
+
   // Particles
   particlePipeline!: GPURenderPipeline;
-  particleStorageBuffer!: GPUBuffer; // Renamed from particleVertexBuffer
-  particleComputeUniformBuffer!: GPUBuffer; // Renamed
+  particleStorageBuffer!: GPUBuffer;
+  particleComputeUniformBuffer!: GPUBuffer;
   particleComputeBindGroup!: GPUBindGroup;
-  particleRenderBindGroup!: GPUBindGroup; // Renamed
+  particleRenderBindGroup!: GPUBindGroup;
   particleComputePipeline!: GPUComputePipeline;
+  particleUniformBuffer!: GPUBuffer; // Added missing declaration
   
   // Subsystems
   particleSystem: ParticleSystem;
@@ -130,8 +135,6 @@ export default class View {
   private _camEye = new Float32Array(3);
   private _camTarget = new Float32Array([BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0]);
   private _camUp = new Float32Array([0.0, 1.0, 0.0]);
-  private _backgroundPassDescriptor: GPURenderPassDescriptor | null = null;
-  private _ppPassDescriptor: GPURenderPassDescriptor | null = null;
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -163,8 +166,7 @@ export default class View {
     this.playfildWidth = (this.width * 2) / 3;
     this.playfildHeight = this.height;
     this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
-    this.playfildInnerHeight =
-      this.playfildHeight - this.playfildBorderWidth * 2 - 2;
+    this.playfildInnerHeight = this.playfildHeight - this.playfildBorderWidth * 2 - 2;
 
     this.blockWidth = this.playfildInnerWidth / coloms;
     this.blockHeight = this.playfildInnerHeight / rows;
@@ -175,28 +177,7 @@ export default class View {
     this.panelHeight = this.height;
 
     this.state = {
-      playfield: [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ],
+      playfield: Array(20).fill(null).map(() => Array(10).fill(0)),
       lockTimer: 0,
       lockDelayTime: 500,
     };
@@ -230,17 +211,14 @@ export default class View {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
-    // Set internal resolution higher than CSS resolution
     this.canvasWebGPU.width = this.width * dpr;
     this.canvasWebGPU.height = this.height * dpr;
 
-    // Recalculate playfield dimensions
     this.playfildWidth = (this.width * 2) / 3;
     this.playfildHeight = this.height;
     this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
     this.playfildInnerHeight = this.playfildHeight - this.playfildBorderWidth * 2 - 2;
 
-    // Update video position with new dimensions
     this.visualEffects.updateVideoPosition(this.width, this.height);
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -251,7 +229,6 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    // Recreate offscreen texture
     if (this.offscreenTexture) {
         this.offscreenTexture.destroy();
     }
@@ -260,8 +237,8 @@ export default class View {
         format: presentationFormat,
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
+    this._offscreenTextureView = this.offscreenTexture.createView();
 
-    // Recreate depth texture
     if (this.depthTexture) {
         this.depthTexture.destroy();
     }
@@ -270,8 +247,21 @@ export default class View {
       format: "depth24plus",
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
+    this._depthTextureView = this.depthTexture.createView();
 
-    // Recreate bindgroup with new texture
+    // Update descriptors with new views - GC optimized pattern
+    if (this._backgroundPassDescriptor?.colorAttachments) {
+        const colorAttachment = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+        colorAttachment.view = this._offscreenTextureView;
+    }
+    if (this._mainPassDescriptor?.colorAttachments) {
+        const colorAttachment = (this._mainPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+        colorAttachment.view = this._offscreenTextureView;
+    }
+    if (this._mainPassDescriptor?.depthStencilAttachment) {
+        this._mainPassDescriptor.depthStencilAttachment.view = this._depthTextureView;
+    }
+
     if (this.postProcessPipeline) {
         this.postProcessBindGroup = this.device.createBindGroup({
             layout: this.postProcessPipeline.getBindGroupLayout(0),
@@ -304,20 +294,12 @@ export default class View {
 
   setTheme(themeName: keyof Themes) {
     this.currentTheme = this.themes[themeName];
-    this.visualEffects.currentLevel = 0; // Reset to level 0 when theme changes
+    this.visualEffects.currentLevel = 0;
 
-    // Handle Video Background - start with level 0 video
     this.visualEffects.updateVideoForLevel(0, this.currentTheme.levelVideos);
 
-    // Re-render border if possible, but borders are static buffers.
-    // We need to re-create border buffers or update them.
-    // renderPlayfild_Border_WebGPU handles re-creation of uniformBindGroup_ARRAY_border?
-    // It creates new buffers. So calling it is fine, but we must clear old ones ideally.
-    // For now JS GC will handle it, but WebGPU resources might leak if not careful.
-    // Given the scope, it's fine.
     if (this.device) {
         this.renderPlayfild_Border_WebGPU();
-        // Update background colors
         const bgColors = this.currentTheme.backgroundColors;
         this._f32_3.set(bgColors[0]);
         this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
@@ -331,12 +313,10 @@ export default class View {
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    // Draw grid background (Tech style)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
     const gridSize = blockSize;
 
-    // Draw Grid
     ctx.beginPath();
     for (let x = 0; x <= ctx.canvas.width; x += gridSize) {
         ctx.moveTo(x, 0);
@@ -351,13 +331,11 @@ export default class View {
     if (!piece) return;
 
     const { blocks } = piece;
-    // @ts-ignore
     const themeColors = Object.values(this.currentTheme);
 
     const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
     const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
 
-    // Draw blocks
     blocks.forEach((row: number[], y: number) => {
       row.forEach((value: number, x: number) => {
         if (value > 0) {
@@ -371,23 +349,18 @@ export default class View {
           const cssColor = `rgb(${r}, ${g}, ${b})`;
           const brightColor = `rgb(${Math.min(r + 50, 255)}, ${Math.min(g + 50, 255)}, ${Math.min(b + 50, 255)})`;
 
-          // Neon Glow Passes
           ctx.save();
-
-          // Pass 1: Wide colored glow
           ctx.shadowColor = cssColor;
           ctx.shadowBlur = 30;
           ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
           ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // Pass 2: Medium bright glow
           ctx.shadowColor = cssColor;
           ctx.shadowBlur = 15;
           ctx.strokeStyle = brightColor;
           ctx.lineWidth = 2;
           ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
 
-          // Pass 3: Tight intense glow
           ctx.shadowColor = 'white';
           ctx.shadowBlur = 5;
           ctx.fillStyle = `rgba(255, 255, 255, 0.4)`;
@@ -395,7 +368,6 @@ export default class View {
 
           ctx.restore();
 
-          // Glass Reflection / Bevel
           ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
           ctx.beginPath();
           ctx.moveTo(px + 2, py + blockSize - 2);
@@ -419,65 +391,27 @@ export default class View {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock() {
-      handleLock(this);
-  }
-
-  onHold() {
-      handleHold(this);
-  }
-
-  onRotate() {
-      handleRotate(this);
-  }
-
+  onLock() { handleLock(this); }
+  onHold() { handleHold(this); }
+  onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
       handleImpactEffects(this, worldX, impactY, distance);
   }
-
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
       handleHardDrop(this, x, y, distance, colorIdx);
   }
+  renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
+  renderEndScreen({ score }: any) { handleRenderEndScreen(this); }
+  onMove(x: number, y: number) { handleMove(this, x, y); }
 
-  renderMainScreen(state: any) {
-    handleRenderMainScreen(this, state);
-  }
-
-  clearScreen({ lines, score }: any) {
-    // Deprecated DOM manipulation
-  }
-
-  renderStartScreen() {
-      // Handled by UI overlay
-  }
-
-  renderPauseScreen() {
-      // Handled by UI overlay
-  }
-
-  renderEndScreen({ score }: any) {
-    handleRenderEndScreen(this);
-  }
-
-  onMove(x: number, y: number) {
-      handleMove(this, x, y);
-  }
-
-  /**
-   * Generate mipmaps for a texture using WebGPU render pipeline
-   * This creates progressively smaller versions of the texture for optimal sampling at different distances
-   */
   generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {
-    // Create a simple mipmap generation pipeline using blit operations
     const blitShader = `
       @group(0) @binding(0) var srcTexture: texture_2d<f32>;
       @group(0) @binding(1) var srcSampler: sampler;
-
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) uv: vec2<f32>,
       };
-
       @vertex
       fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         var pos = array<vec2<f32>, 6>(
@@ -493,7 +427,6 @@ export default class View {
         output.uv = uv[vertexIndex];
         return output;
       }
-
       @fragment
       fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
         return textureSample(srcTexture, srcSampler, uv);
@@ -501,529 +434,224 @@ export default class View {
     `;
 
     const shaderModule = this.device.createShaderModule({ code: blitShader });
-
     const pipeline = this.device.createRenderPipeline({
       layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vertexMain',
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fragmentMain',
-        targets: [{ format: 'rgba8unorm' }],
-      },
+      vertex: { module: shaderModule, entryPoint: 'vertexMain' },
+      fragment: { module: shaderModule, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
     });
 
-    const sampler = this.device.createSampler({
-      minFilter: 'linear',
-      magFilter: 'linear',
-    });
-
+    const sampler = this.device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
     const commandEncoder = this.device.createCommandEncoder();
 
     for (let i = 1; i < mipLevelCount; i++) {
-      const srcView = texture.createView({
-        baseMipLevel: i - 1,
-        mipLevelCount: 1,
-      });
-
-      const dstView = texture.createView({
-        baseMipLevel: i,
-        mipLevelCount: 1,
-      });
-
+      const srcView = texture.createView({ baseMipLevel: i - 1, mipLevelCount: 1 });
+      const dstView = texture.createView({ baseMipLevel: i, mipLevelCount: 1 });
       const bindGroup = this.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: srcView },
-          { binding: 1, resource: sampler },
-        ],
+        entries: [{ binding: 0, resource: srcView }, { binding: 1, resource: sampler }],
       });
-
       const passEncoder = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: dstView,
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        }],
+        colorAttachments: [{ view: dstView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }],
       });
-
       passEncoder.setPipeline(pipeline);
       passEncoder.setBindGroup(0, bindGroup);
       passEncoder.draw(6, 1, 0, 0);
       passEncoder.end();
     }
-
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
-  //// ***** WEBGPU ***** ////
-
   async preRender() {
     const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return; // Should handle error
+    if (!adapter) return;
     this.device = await adapter.requestDevice();
 
     const dpr = window.devicePixelRatio || 1;
     this.canvasWebGPU.width = this.width * dpr;
     this.canvasWebGPU.height = this.height * dpr;
 
-   // const presentationFormat = this.ctxWebGPU.getPreferredFormat(adapter);
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    this.ctxWebGPU.configure({ device: this.device, format: presentationFormat, alphaMode: 'premultiplied' });
 
-    this.ctxWebGPU.configure({
-      device: this.device,
-      format: presentationFormat,
-      alphaMode: 'premultiplied',
-    });
-
-    // --- 1. Load Texture & Sampler ---
-    // Use high-quality sampling with mipmaps and anisotropic filtering
-    // to reduce pixelation and improve rendering quality
     this.blockSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      mipmapFilter: 'linear', // Enable trilinear filtering for smooth LOD transitions
-      addressModeU: 'repeat',
-      addressModeV: 'repeat',
-      maxAnisotropy: 16, // Enable anisotropic filtering for better quality at angles
+      magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear',
+      addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: 16,
     });
 
     try {
         const img = document.createElement('img');
-        // Use block.png as it exists in the repo
         img.src = 'block.png';
         await img.decode();
         const imageBitmap = await createImageBitmap(img);
-
-        // Calculate number of mip levels for optimal quality
         const mipLevelCount = Math.floor(Math.log2(Math.max(imageBitmap.width, imageBitmap.height))) + 1;
-
         this.blockTexture = this.device.createTexture({
-          size: [imageBitmap.width, imageBitmap.height, 1],
-          format: 'rgba8unorm',
-          mipLevelCount: mipLevelCount, // Enable mipmaps for better quality at different distances
+          size: [imageBitmap.width, imageBitmap.height, 1], format: 'rgba8unorm', mipLevelCount,
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
-        this.device.queue.copyExternalImageToTexture(
-          { source: imageBitmap },
-          { texture: this.blockTexture },
-          [imageBitmap.width, imageBitmap.height]
-        );
-
-        // Generate mipmaps using bilinear filtering
-        // This significantly improves quality by preventing aliasing at different viewing distances
+        this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
-        
-        console.log('[Texture] Loaded block.png:', imageBitmap.width, 'x', imageBitmap.height, '| Mip levels:', mipLevelCount);
     } catch (e) {
         console.error('[Texture] Failed to load block.png:', e);
-        // Fallback white texture
         this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
         this.device.queue.writeTexture({ texture: this.blockTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
     }
 
-    // --- Main Block Pipeline ---
     const shader = Shaders();
     const cubeData = CubeData();
-
     this.numberOfVertices = cubeData.positions.length / 3;
     this.vertexBuffer = this.CreateGPUBuffer(this.device, cubeData.positions);
     this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
-    this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs); // Create UV buffer
+    this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs);
 
-    // Create shader modules with compilation info
     const vertexModule = this.device.createShaderModule({ code: shader.vertex });
     const fragmentModule = this.device.createShaderModule({ code: shader.fragment });
     
-    // Log shader compilation info
-    vertexModule.getCompilationInfo().then(info => {
-        if (info.messages.length > 0) console.log('[Shader] Vertex:', info.messages);
-    });
-    fragmentModule.getCompilationInfo().then(info => {
-        if (info.messages.length > 0) console.log('[Shader] Fragment:', info.messages);
-    });
+    vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) console.log('[Shader] Vertex:', info.messages); });
+    fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) console.log('[Shader] Fragment:', info.messages); });
     
     this.pipeline = this.device.createRenderPipeline({
-      label: 'main pipeline',
-      layout: "auto",
-      vertex: {
-        module: vertexModule,
-        entryPoint: "main",
-        buffers: [
-          {
-            arrayStride: 12,
-            attributes: [
-              {
-                shaderLocation: 0,
-                format: "float32x3",
-                offset: 0,
-              },
-            ],
-          },
-          {
-            arrayStride: 12,
-            attributes: [
-              {
-                shaderLocation: 1,
-                format: "float32x3",
-                offset: 0,
-              },
-            ],
-          },
-          {
-            arrayStride: 8, // vec2<f32>
-            attributes: [
-              {
-                shaderLocation: 2,
-                format: "float32x2",
-                offset: 0,
-              },
-            ],
-          },
-        ],
-      },
-      fragment: {
-        module: this.device.createShaderModule({
-          code: shader.fragment,
-        }),
-        entryPoint: "main",
-        targets: [
-          {
-            format: presentationFormat,
-            blend: {
-              color: {
-                srcFactor: "src-alpha",
-                dstFactor: "one-minus-src-alpha",
-                operation: "add",
-              },
-              alpha: {
-                srcFactor: "one",
-                dstFactor: "one-minus-src-alpha",
-                operation: "add",
-              },
-            },
-          },
-        ],
-      },
-      primitive: {
-        topology: "triangle-list",
-      },
-      depthStencil: {
-        format: "depth24plus",
-        depthWriteEnabled: true,
-        depthCompare: "less",
-      },
+      label: 'main pipeline', layout: "auto",
+      vertex: { module: vertexModule, entryPoint: "main", buffers: [
+        { arrayStride: 12, attributes: [{ shaderLocation: 0, format: "float32x3", offset: 0 }] },
+        { arrayStride: 12, attributes: [{ shaderLocation: 1, format: "float32x3", offset: 0 }] },
+        { arrayStride: 8, attributes: [{ shaderLocation: 2, format: "float32x2", offset: 0 }] },
+      ]},
+      fragment: { module: fragmentModule, entryPoint: "main", targets: [{ format: presentationFormat, blend: {
+        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+        alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
+      }}]},
+      primitive: { topology: "triangle-list" },
+      depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
     });
 
-    // --- Background Pipeline ---
     const backgroundShader = BackgroundShaders();
     const bgData = FullScreenQuadData();
     this.backgroundVertexBuffer = this.CreateGPUBuffer(this.device, bgData.positions);
-
     this.backgroundPipeline = this.device.createRenderPipeline({
-        label: 'background pipeline',
-        layout: 'auto',
-        vertex: {
-            module: this.device.createShaderModule({ code: backgroundShader.vertex }),
-            entryPoint: 'main',
-            buffers: [{
-                arrayStride: 12,
-                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }]
-            }]
-        },
-        fragment: {
-            module: this.device.createShaderModule({ code: backgroundShader.fragment }),
-            entryPoint: 'main',
-            targets: [{ format: presentationFormat }]
-        },
+        label: 'background pipeline', layout: 'auto',
+        vertex: { module: this.device.createShaderModule({ code: backgroundShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
+        fragment: { module: this.device.createShaderModule({ code: backgroundShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
         primitive: { topology: 'triangle-list' }
     });
 
-    // Background Uniforms
-    this.backgroundUniformBuffer = this.device.createBuffer({
-        size: 80, // INCREASED: time(4)+level(4)+res(8) + 3*colors(48) + lock(4)+pad(12) = 80
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    this.backgroundBindGroup = this.device.createBindGroup({
-        layout: this.backgroundPipeline.getBindGroupLayout(0),
-        entries: [{
-            binding: 0,
-            resource: { buffer: this.backgroundUniformBuffer }
-        }]
-    });
-
-    // Initialize background colors
+    this.backgroundUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.backgroundBindGroup = this.device.createBindGroup({ layout: this.backgroundPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.backgroundUniformBuffer } }] });
     const bgColors = this.currentTheme.backgroundColors;
-    this._f32_3.set(bgColors[0]);
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
-    this._f32_3.set(bgColors[1]);
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
-    this._f32_3.set(bgColors[2]);
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
+    this._f32_3.set(bgColors[0]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
+    this._f32_3.set(bgColors[1]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
+    this._f32_3.set(bgColors[2]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
 
-    // --- Grid Pipeline ---
     const gridShader = GridShader();
     const gridData = GridData();
     this.gridVertexCount = gridData.length / 3;
     this.gridVertexBuffer = this.CreateGPUBuffer(this.device, gridData);
-
     this.gridPipeline = this.device.createRenderPipeline({
-        label: 'grid pipeline',
-        layout: 'auto',
-        vertex: {
-            module: this.device.createShaderModule({ code: gridShader.vertex }),
-            entryPoint: 'main',
-            buffers: [{
-                arrayStride: 12,
-                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }]
-            }]
-        },
-        fragment: {
-            module: this.device.createShaderModule({ code: gridShader.fragment }),
-            entryPoint: 'main',
-            targets: [{
-                format: presentationFormat,
-                blend: {
-                    color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-                    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-                }
-            }]
-        },
+        label: 'grid pipeline', layout: 'auto',
+        vertex: { module: this.device.createShaderModule({ code: gridShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
+        fragment: { module: this.device.createShaderModule({ code: gridShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+        }}]},
         primitive: { topology: 'line-list' },
-        depthStencil: {
-            format: "depth24plus",
-            depthWriteEnabled: false,
-            depthCompare: "less",
-        }
+        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" }
     });
 
-
-    // --- Particle Compute Pipeline ---
-    // Initialize storage buffer (Shared between Compute and Render)
     this.particleStorageBuffer = this.device.createBuffer({
-        size: 64 * this.particleSystem.maxParticles, // 64 bytes per particle
+        size: 64 * this.particleSystem.maxParticles,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-
-    this.particleComputeUniformBuffer = this.device.createBuffer({
-        size: 48, // dt, time, swTimer, pad, swCenter(2), pad(2), swParams(4)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
+    this.particleComputeUniformBuffer = this.device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.particleComputePipeline = this.device.createComputePipeline({
-        label: 'particle compute pipeline',
-        layout: 'auto',
-        compute: {
-            module: this.device.createShaderModule({ code: ParticleComputeShader }),
-            entryPoint: 'main',
-        },
+        label: 'particle compute pipeline', layout: 'auto',
+        compute: { module: this.device.createShaderModule({ code: ParticleComputeShader }), entryPoint: 'main' },
     });
-
     this.particleComputeBindGroup = this.device.createBindGroup({
         layout: this.particleComputePipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: { buffer: this.particleStorageBuffer } },
-            { binding: 1, resource: { buffer: this.particleComputeUniformBuffer } }
-        ]
+        entries: [{ binding: 0, resource: { buffer: this.particleStorageBuffer } }, { binding: 1, resource: { buffer: this.particleComputeUniformBuffer } }]
     });
 
-
-    // --- Particle Render Pipeline ---
     const particleShader = ParticleShaders();
-
     this.particlePipeline = this.device.createRenderPipeline({
-        label: 'particle pipeline',
-        layout: 'auto',
-        vertex: {
-            module: this.device.createShaderModule({ code: particleShader.vertex }),
-            entryPoint: 'main',
-            buffers: [
-                // Use Storage Buffer as Vertex Buffer
-                // Stride: 64 bytes
-                {
-                    arrayStride: 64,
-                    stepMode: 'instance',
-                    attributes: [
-                        { shaderLocation: 0, format: 'float32x3', offset: 0 },  // pos
-                        { shaderLocation: 1, format: 'float32x4', offset: 32 }, // color (offset 32)
-                        { shaderLocation: 2, format: 'float32',   offset: 48 }, // scale (offset 48)
-                        { shaderLocation: 3, format: 'float32',   offset: 52 }, // life (offset 52)
-                        { shaderLocation: 4, format: 'float32',   offset: 56 }, // maxLife (offset 56)
-                        { shaderLocation: 5, format: 'float32x3', offset: 16 }, // velocity (offset 16)
-                    ]
-                }
+        label: 'particle pipeline', layout: 'auto',
+        vertex: { module: this.device.createShaderModule({ code: particleShader.vertex }), entryPoint: 'main', buffers: [{
+            arrayStride: 64, stepMode: 'instance',
+            attributes: [
+                { shaderLocation: 0, format: 'float32x3', offset: 0 },
+                { shaderLocation: 1, format: 'float32x4', offset: 32 },
+                { shaderLocation: 2, format: 'float32', offset: 48 },
+                { shaderLocation: 3, format: 'float32', offset: 52 },
+                { shaderLocation: 4, format: 'float32', offset: 56 },
+                { shaderLocation: 5, format: 'float32x3', offset: 16 },
             ]
-        },
-        fragment: {
-            module: this.device.createShaderModule({ code: particleShader.fragment }),
-            entryPoint: 'main',
-            targets: [{
-                format: presentationFormat,
-                blend: {
-                    color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' }, // Additive blending
-                    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-                }
-            }]
-        },
+        }]},
+        fragment: { module: this.device.createShaderModule({ code: particleShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+        }}]},
         primitive: { topology: 'triangle-list' },
-        depthStencil: {
-            format: 'depth24plus',
-            depthWriteEnabled: false, // Particles don't write to depth
-            depthCompare: 'less',
-        }
+        depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' }
     });
 
-    // ViewProjection for particles
-    this.particleUniformBuffer = this.device.createBuffer({
-        size: 96, // Mat4 (64) + Time (4) + ghostX(4) + ghostW(4) + warp(4) + lock(4) + pad(12) = 96 (aligned)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
+    this.particleUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.particleRenderBindGroup = this.device.createBindGroup({ layout: this.particlePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
+    this.gridBindGroup = this.device.createBindGroup({ layout: this.gridPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
 
-    this.particleRenderBindGroup = this.device.createBindGroup({
-        layout: this.particlePipeline.getBindGroupLayout(0),
-        entries: [{
-            binding: 0,
-            resource: { buffer: this.particleUniformBuffer }
-        }]
-    });
-
-    // Reuse particle uniform buffer for Grid (it needs VP matrix too)
-    this.gridBindGroup = this.device.createBindGroup({
-        layout: this.gridPipeline.getBindGroupLayout(0),
-        entries: [{
-            binding: 0,
-            resource: { buffer: this.particleUniformBuffer }
-        }]
-    });
-
-    // --- Post Process Pipeline ---
     const ppShader = PostProcessShaders();
-
     this.postProcessPipeline = this.device.createRenderPipeline({
-        label: 'post process pipeline',
-        layout: 'auto',
-        vertex: {
-            module: this.device.createShaderModule({ code: ppShader.vertex }),
-            entryPoint: 'main',
-            buffers: [{
-                arrayStride: 12,
-                attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] // reuse FullScreenQuadData
-            }]
-        },
-        fragment: {
-            module: this.device.createShaderModule({ code: ppShader.fragment }),
-            entryPoint: 'main',
-            targets: [{ format: presentationFormat }]
-        },
+        label: 'post process pipeline', layout: 'auto',
+        vertex: { module: this.device.createShaderModule({ code: ppShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
+        fragment: { module: this.device.createShaderModule({ code: ppShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({
-        size: 64, // Updated for shockwaveParams (vec4)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
-    // Create post-process sampler with high-quality filtering
-    this.sampler = this.device.createSampler({
-        magFilter: 'linear',
-        minFilter: 'linear',
-        mipmapFilter: 'linear', // Enable trilinear filtering
-        addressModeU: 'clamp-to-edge', // Prevent edge artifacts in post-processing
-        addressModeV: 'clamp-to-edge',
-    });
-
-    // Offscreen Texture creation handled in Resize/Frame logic or here initially
-    // We need to create it initially too
     this.offscreenTexture = this.device.createTexture({
         size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        format: presentationFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
+    this._offscreenTextureView = this.offscreenTexture.createView();
+    this.depthTexture = this.device.createTexture({ size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT });
+    this._depthTextureView = this.depthTexture.createView();
 
-    this.depthTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
+    // Initialize Pass Descriptors once - GC optimized
+    this._backgroundPassDescriptor = {
+        colorAttachments: [{ view: this._offscreenTextureView, clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, loadOp: 'clear', storeOp: 'store' }]
+    };
+    this._mainPassDescriptor = {
+      colorAttachments: [{ view: this._offscreenTextureView, loadOp: 'load', storeOp: "store" }],
+      depthStencilAttachment: { view: this._depthTextureView, depthClearValue: 1.0, depthLoadOp: 'clear', depthStoreOp: 'store' },
+    };
+    this._ppPassDescriptor = {
+        colorAttachments: [{ view: undefined as any, clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, loadOp: 'clear', storeOp: 'store' }]
+    };
 
     this.postProcessBindGroup = this.device.createBindGroup({
         layout: this.postProcessPipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: this.offscreenTexture.createView() }
-        ]
+        entries: [{ binding: 0, resource: { buffer: this.postProcessUniformBuffer } }, { binding: 1, resource: this.sampler }, { binding: 2, resource: this.offscreenTexture.createView() }]
     });
 
-
-    //create uniform buffer and layout
-    this.fragmentUniformBuffer = this.device.createBuffer({
-      size: 96, // Increased to accommodate useGlitch (offset 52)
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
+    this.fragmentUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
-    // Apply shake
-    if (this.shakeTimer > 0) {
-        const shakeX = (Math.random() - 0.5) * this.shakeMagnitude;
-        const shakeY = (Math.random() - 0.5) * this.shakeMagnitude;
-        eyePosition[0] += shakeX;
-        eyePosition[1] += shakeY;
-    }
-
     let lightPosition = this._f32_3;
     lightPosition.set([-5.0, 0.0, 0.0]);
 
     Matrix.mat4.identity(this.VIEWMATRIX);
-    Matrix.mat4.lookAt(
-      this.VIEWMATRIX,
-      eyePosition,
-      [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0],
-      [0.0, 1.0, 0.0] // up
-    );
-
+    Matrix.mat4.lookAt(this.VIEWMATRIX, eyePosition, [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0], [0.0, 1.0, 0.0]);
     Matrix.mat4.identity(this.PROJMATRIX);
-    let fovy = (35 * Math.PI) / 180;
-    Matrix.mat4.perspective(
-      this.PROJMATRIX,
-      fovy,
-      this.canvasWebGPU.width / this.canvasWebGPU.height,
-      1,
-      150
-    );
-
+    Matrix.mat4.perspective(this.PROJMATRIX, (35 * Math.PI) / 180, this.canvasWebGPU.width / this.canvasWebGPU.height, 1, 150);
     Matrix.mat4.identity(this.vpMatrix);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
-    this.device.queue.writeBuffer(
-      this.fragmentUniformBuffer,
-      0,
-      lightPosition
-    );
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, lightPosition);
     this._f32_3.set(eyePosition);
-    this.device.queue.writeBuffer(
-      this.fragmentUniformBuffer,
-      16,
-      this._f32_3
-    );
-    this._f32_4.set(this.currentTheme[5] || [1.0, 1.0, 1.0, 1.0]); // Fallback in case currentTheme[5] is missing
-    this.device.queue.writeBuffer(
-      this.fragmentUniformBuffer,
-      32,
-      this._f32_4
-    );
-    // Initial glitch state
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._f32_3);
+    this._f32_4.set(this.currentTheme[5] || [1.0, 1.0, 1.0, 1.0]);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 32, this._f32_4);
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
-    this.device.queue.writeBuffer(
-      this.fragmentUniformBuffer,
-      52,
-      this._f32_1
-    );
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
 
     this.renderPlayfild_Border_WebGPU();
 
@@ -1032,33 +660,14 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // --- Pre-create BindGroups for Dynamic Blocks (Cache) ---
-    // Max blocks = 20 rows * 10 cols = 200
-    // Each block uses a 256-byte slice of the uniform buffer
     const maxBlocks = 200;
     this.uniformBindGroup_CACHE = [];
     for (let i = 0; i < maxBlocks; i++) {
         const bindGroup = this.device.createBindGroup({
-            label: `block_bindgroup_${i}`,
-            layout: this.pipeline.getBindGroupLayout(0),
+            label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: this.vertexUniformBuffer,
-                        offset: i * 256,
-                        size: 208, // Data size is smaller than alignment
-                    },
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: this.fragmentUniformBuffer,
-                        offset: 0,
-                        size: 80, // Updated size matches creation
-                    },
-                },
-                // Bind Texture & Sampler
+                { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 80 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler }
             ],
@@ -1067,16 +676,8 @@ export default class View {
     }
   }
 
-  CreateGPUBuffer = (
-    device: any,
-    data: any,
-    usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-  ) => {
-    const buffer = device.createBuffer({
-      size: data.byteLength,
-      usage: usageFlag,
-      mappedAtCreation: true,
-    });
+  CreateGPUBuffer = (device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) => {
+    const buffer = device.createBuffer({ size: data.byteLength, usage: usageFlag, mappedAtCreation: true });
     new Float32Array(buffer.getMappedRange()).set(data);
     buffer.unmap();
     return buffer;
@@ -1084,23 +685,12 @@ export default class View {
 
   render = (dt: number) => {
     if (!this.device) return;
-
-    // Update visual effects
     this.visualEffects.updateEffects(dt);
-
-    // --- Camera Sway & Shake ---
     const time = (performance.now() - this.startTime) / 1000.0;
 
-    // Base position
-    let camX = 0.0;
-    let camY = BOARD_WORLD_CENTER_Y;
-    let camZ = 75.0;
-
-    // "Breathing" sway
-    camX += Math.sin(time * 0.2) * 0.5;
-    camY += Math.cos(time * 0.3) * 0.25;
-
-    // Apply Shake (Smoothed)
+    // Camera updates
+    let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
+    let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25;
     const shake = this.visualEffects.getShakeOffset();
     this._shakeOffsetSmoothed.x += (shake.x - this._shakeOffsetSmoothed.x) * 15.0 * dt;
     this._shakeOffsetSmoothed.y += (shake.y - this._shakeOffsetSmoothed.y) * 15.0 * dt;
@@ -1108,109 +698,61 @@ export default class View {
     camY += this._shakeOffsetSmoothed.y;
 
     const eyePosition = this._f32_3;
-    eyePosition[0] = camX;
-    eyePosition[1] = camY;
-    eyePosition[2] = camZ;
-
-    this._camEye[0] = camX;
-    this._camEye[1] = camY;
-    this._camEye[2] = camZ;
-    Matrix.mat4.lookAt(
-      this.VIEWMATRIX,
-      this._camEye,
-      this._camTarget,
-      this._camUp
-    );
-
-    // Update VP Matrix
+    eyePosition[0] = camX; eyePosition[1] = camY; eyePosition[2] = 75.0;
+    this._camEye[0] = camX; this._camEye[1] = camY; this._camEye[2] = 75.0;
+    Matrix.mat4.lookAt(this.VIEWMATRIX, this._camEye, this._camTarget, this._camUp);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, eyePosition);
 
-    // Update Fragment Uniforms (eyePosition at offset 16)
-    this.device.queue.writeBuffer(
-      this.fragmentUniformBuffer,
-      16,
-      eyePosition
-    );
-
-    // --- PARTICLE UPDATE (COMPUTE) ---
-    // 1. Upload new particles
+    // Particle upload
     if (this.particleSystem.pendingUploadCount > 0) {
-        // Optimization: Coalesce writes if possible, but simplest is 1 write per batch
-        // Or write individual particles
         for(let i = 0; i < this.particleSystem.pendingUploadCount; i++) {
             const index = this.particleSystem.pendingUploadIndices[i];
             const offset = i * 16;
             const dataSlice = this.particleSystem.pendingUploads.subarray(offset, offset + 16);
-
-            this.device.queue.writeBuffer(
-                this.particleStorageBuffer,
-                index * 64, // 64 bytes stride
-                dataSlice
-            );
+            this.device.queue.writeBuffer(this.particleStorageBuffer, index * 64, dataSlice);
         }
         this.particleSystem.clearPending();
     }
 
-    // 2. Update uniforms (dt, time)
+    // Compute uniforms
     const swParams = this.visualEffects.getShockwaveParams();
     const swCenter = this.visualEffects.shockwaveCenter;
     const swTimer = this.visualEffects.shockwaveTimer;
-    // Layout: dt, time, swTimer, pad | swCenter(2), pad(2) | swParams(4)
-    const computeData = this._f32_12;
-    computeData[0] = dt;
-    computeData[1] = time;
-    computeData[2] = swTimer;
-    computeData[3] = 0.0;
-    computeData[4] = swCenter[0];
-    computeData[5] = swCenter[1];
-    computeData[6] = 0.0;
-    computeData[7] = 0.0;
-    computeData[8] = swParams[0];
-    computeData[9] = swParams[1];
-    computeData[10] = swParams[2];
-    computeData[11] = swParams[3];
-    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, computeData);
+    this._f32_12[0] = dt; this._f32_12[1] = time; this._f32_12[2] = swTimer; this._f32_12[3] = 0.0;
+    this._f32_12[4] = swCenter[0]; this._f32_12[5] = swCenter[1]; this._f32_12[6] = 0.0; this._f32_12[7] = 0.0;
+    this._f32_12[8] = swParams[0]; this._f32_12[9] = swParams[1]; this._f32_12[10] = swParams[2]; this._f32_12[11] = swParams[3];
+    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
 
-    // 3. Dispatch Compute
     const commandEncoder = this.device.createCommandEncoder();
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.particleComputePipeline);
     computePass.setBindGroup(0, this.particleComputeBindGroup);
-    // Workgroup size 64. Count = maxParticles.
     computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
     computePass.end();
 
-
-    // Update uniforms for particles (Render VP) & grid
+    // Update render uniforms
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
     this._f32_1[0] = time;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, this._f32_1); // Write time at offset 64
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, this._f32_1);
 
-    // NEON BRICKLAYER: Ghost Piece Landing Zone
-    let ghostX = -100.0;
-    let ghostWidth = 0.0;
-    // For UV Projection
-    let ghostUVX = -1.0;
-    let ghostUVW = 0.0;
-
-    if (this.state && this.state.activePiece) {
+    // Ghost piece
+    let ghostX = -100.0, ghostWidth = 0.0, ghostUVX = -1.0, ghostUVW = 0.0;
+    if (this.state?.activePiece) {
         const widthInBlocks = this.state.activePiece.blocks[0].length;
         const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
         ghostX = gridCenterX * BLOCK_WORLD_SIZE;
         ghostWidth = widthInBlocks * BLOCK_WORLD_SIZE;
-
-        // Calculate UV space coordinates for Projection Beam
         const camZ = 75.0;
         const fov = (35 * Math.PI) / 180;
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
         const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-
         ghostUVX = 0.5 + (ghostX - BOARD_WORLD_CENTER_X) / visibleWidth;
         ghostUVW = ghostWidth / visibleWidth;
     }
-    // Calculate Lock Percent (Tension)
+    
     let lockPercent = 0.0;
-    if (this.state && this.state.lockTimer !== undefined && this.state.lockDelayTime) {
+    if (this.state?.lockTimer !== undefined && this.state?.lockDelayTime) {
         lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
     }
 
@@ -1223,87 +765,53 @@ export default class View {
     this._f32_1[0] = lockPercent;
     this.device.queue.writeBuffer(this.particleUniformBuffer, 80, this._f32_1);
 
-    // Update time for background and blocks
-    // used 'time' calculated at start of frame
-
-    // Background time & level & Lock Pulse
+    // Background uniforms
     this._f32_1[0] = time;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, this._f32_1);
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, this._f32_1);
-    this._f32_2[0] = this.canvasWebGPU.width;
-    this._f32_2[1] = this.canvasWebGPU.height;
+    this._f32_2[0] = this.canvasWebGPU.width; this._f32_2[1] = this.canvasWebGPU.height;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, this._f32_2);
-
     this._f32_1[0] = lockPercent;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, this._f32_1);
     this._f32_1[0] = this.visualEffects.warpSurge;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, this._f32_1);
-    // Projection Beam Uniforms
     this._f32_1[0] = ghostUVX;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, this._f32_1);
     this._f32_1[0] = ghostUVW;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, this._f32_1);
 
-
-    // Block shader time (global update once per frame)
-    // 48 is the offset for 'time' in fragmentUniformBuffer
+    // Block uniforms
     this._f32_1[0] = time;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._f32_1);
-    // Update glitch state for blocks
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
-    // Update lock percent for blocks (red pulse)
     this._f32_1[0] = lockPercent;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, this._f32_1);
-    // Update level for blocks (glass refraction evolution)
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
 
-    // Update Shockwave Uniforms
-    // Layout: time(0), useGlitch(4), center(8, 12), time_shock(16), pad(20,24,28), params(32..48)
-    // Offset 48: level
+    // Post-process uniforms
     this._f32_8[0] = time;
     this._f32_8[1] = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
     this._f32_8[2] = this.visualEffects.shockwaveCenter[0];
     this._f32_8[3] = this.visualEffects.shockwaveCenter[1];
     this._f32_8[4] = this.visualEffects.shockwaveTimer;
-    this._f32_8[5] = 0;
-    this._f32_8[6] = 0;
-    this._f32_8[7] = 0;
+    this._f32_8[5] = 0; this._f32_8[6] = 0; this._f32_8[7] = 0;
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, this._f32_8);
-    // Write params at offset 32 (vec4 alignment)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
-
-    // Write level at offset 48 (NEON BRICKLAYER)
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_1);
-    // Write warpSurge at offset 52
     this._f32_1[0] = this.visualEffects.warpSurge;
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, this._f32_1);
 
-    // *** Render Pass 1: Draw Scene to Offscreen Texture ***
-    const textureViewOffscreen = this.offscreenTexture.createView();
-    // const depthTexture = this.device.createTexture({ ... });
-
-    // 1. Render Background
+    // RENDER PASSES
+    
+    // 1. Background
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
-
-    if (!this._backgroundPassDescriptor) {
-        this._backgroundPassDescriptor = {
-            colorAttachments: [{
-                view: textureViewOffscreen,
-                clearValue: { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 },
-                loadOp: 'clear',
-                storeOp: 'store'
-            }]
-        };
-    } else {
-        const colorAttachment = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-        colorAttachment.view = textureViewOffscreen;
-        colorAttachment.clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
-    }
+    const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+    colorAttachment0.clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
 
     if (!renderVideo) {
         const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
@@ -1317,88 +825,48 @@ export default class View {
         bgPassEncoder.end();
     }
 
-    // 2. Render Playfield
+    // 2. Main scene
     this.renderPlayfild_WebGPU(this.state);
-
-    if (!this.renderPassDescription) {
-        this.renderPassDescription = {
-            colorAttachments: [{
-                view: textureViewOffscreen,
-                loadOp: 'load',
-                storeOp: "store",
-            }],
-            depthStencilAttachment: {
-                view: this.depthTexture.createView(),
-                depthClearValue: 1.0,
-                depthLoadOp: 'clear',
-                depthStoreOp: 'store'
-            },
-        };
-    } else {
-        const colorAttachment = (this.renderPassDescription.colorAttachments as GPURenderPassColorAttachment[])[0];
-        colorAttachment.view = textureViewOffscreen;
-        const depthStencilAttachment = this.renderPassDescription.depthStencilAttachment as GPURenderPassDepthStencilAttachment;
-        // Depth texture view needs to be updated if depthTexture was recreated (e.g. on resize)
-        // Optimization: only update if needed or just update it, it's a small object
-        depthStencilAttachment.view = this.depthTexture.createView();
-    }
-
-    const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescription);
-
-    // Render Grid
+    const passEncoder = commandEncoder.beginRenderPass(this._mainPassDescriptor);
+    
+    // Grid
     passEncoder.setPipeline(this.gridPipeline);
     passEncoder.setBindGroup(0, this.gridBindGroup);
     passEncoder.setVertexBuffer(0, this.gridVertexBuffer);
     passEncoder.draw(this.gridVertexCount);
 
+    // Blocks
     passEncoder.setPipeline(this.pipeline);
     passEncoder.setVertexBuffer(0, this.vertexBuffer);
     passEncoder.setVertexBuffer(1, this.normalBuffer);
     passEncoder.setVertexBuffer(2, this.uvBuffer);
 
-    let length_of_uniformBindGroup_boder = this.uniformBindGroup_ARRAY_border.length;
-    for (let index = 0; index < length_of_uniformBindGroup_boder; index++) {
+    for (let index = 0; index < this.uniformBindGroup_ARRAY_border.length; index++) {
       passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY_border[index]);
       passEncoder.draw(this.numberOfVertices);
     }
 
-    let length_of_uniformBindGroup = this.uniformBindGroup_ARRAY.length;
-    for (let index = 0; index < length_of_uniformBindGroup; index++) {
+    for (let index = 0; index < this.uniformBindGroup_ARRAY.length; index++) {
       passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY[index]);
       passEncoder.draw(this.numberOfVertices);
     }
 
-    // Draw particles
-    // Always draw max particles, the shader will discard invisible/dead ones (scale=0 or alpha=0)
-    // Or we could track active count, but tracking active count with ring buffer is complex.
-    // Drawing all 4000 quads is cheap.
+    // Particles
     passEncoder.setPipeline(this.particlePipeline);
     passEncoder.setBindGroup(0, this.particleRenderBindGroup);
-    passEncoder.setVertexBuffer(0, this.particleStorageBuffer); // Use storage buffer as vertex buffer
+    passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
     passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
 
     passEncoder.end();
 
-    // *** Render Pass 2: Post Processing ***
+    // 3. Post-process
     const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-    if (!this._ppPassDescriptor) {
-        this._ppPassDescriptor = {
-            colorAttachments: [{
-                view: textureViewScreen,
-                clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-                loadOp: 'clear',
-                storeOp: 'store'
-            }]
-        };
-    } else {
-        const colorAttachment = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-        colorAttachment.view = textureViewScreen;
-    }
-
+    const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+    ppColorAttachment0.view = textureViewScreen;
+    
     const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
     ppPassEncoder.setPipeline(this.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
-    // Reuse background vertex buffer (quad)
     ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
     ppPassEncoder.draw(6);
     ppPassEncoder.end();
@@ -1409,43 +877,27 @@ export default class View {
   async renderPlayfild_WebGPU(state: any) {
     if (!this.device) return;
     const { playfield, activePiece } = state;
-
-    this.x += 0.01;
-    const playfield_length = playfield.length;
-
     let arrayLength = 0;
-    let blockIndex = 0; // Index for retrieving from CACHE
+    let blockIndex = 0;
 
-    for (let row = 0; row < playfield_length; row++) {
+    for (let row = 0; row < playfield.length; row++) {
       for (let colom = 0; colom < playfield[row].length; colom++) {
-        if (!playfield[row][colom]) {
-          continue;
-        }
-        // Safety check: ensure we don't exceed cache
+        if (!playfield[row][colom]) continue;
         if (blockIndex >= this.uniformBindGroup_CACHE.length) break;
 
         let value = playfield[row][colom];
         let colorBlockindex = Math.abs(value);
-        // JUICE: Ghost alpha set to 0.3 to trigger "Hologram" shader logic (< 0.4)
-        // Solid blocks set to 0.9 for glass effect
         let alpha = value < 0 ? 0.3 : 0.9;
+        let color = this.currentTheme[colorBlockindex] || this.currentTheme[0];
 
-        let color = this.currentTheme[colorBlockindex];
-        if (!color) color = this.currentTheme[0];
+        this._f32_4[0] = color[0]; this._f32_4[1] = color[1]; this._f32_4[2] = color[2]; this._f32_4[3] = alpha;
 
-        this._f32_4[0] = color[0];
-        this._f32_4[1] = color[1];
-        this._f32_4[2] = color[2];
-        this._f32_4[3] = alpha;
-
-        // NEON BRICKLAYER: Rotation Flash
-        // If this block is part of the active piece, brighten it during rotation
+        // Rotation flash
         if (this.visualEffects.rotationFlashTimer > 0 && activePiece) {
              const relX = colom - activePiece.x;
              const relY = row - activePiece.y;
              if (relY >= 0 && relY < activePiece.blocks.length && relX >= 0 && relX < activePiece.blocks[0].length) {
                   if (activePiece.blocks[relY][relX] !== 0) {
-                      // Add flash intensity
                       const flash = this.visualEffects.rotationFlashTimer * 3.0;
                       this._f32_4[0] = Math.min(color[0] + flash, 1.0);
                       this._f32_4[1] = Math.min(color[1] + flash, 1.0);
@@ -1454,130 +906,53 @@ export default class View {
              }
         }
 
-        // Retrieve pre-created bindgroup
-        let uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
+        const uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
         const offset_ARRAY = blockIndex * 256;
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
-
-        this._f32_3[0] = boardWorldX(colom);
-        this._f32_3[1] = boardWorldY(row);
-        this._f32_3[2] = 0.0;
+        this._f32_3[0] = boardWorldX(colom); this._f32_3[1] = boardWorldY(row); this._f32_3[2] = 0.0;
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-
-        Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
-        // Write to the specific slice of the buffer
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 0,
-          this.vpMatrix
-        );
-
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 64,
-          this.MODELMATRIX
-        );
-
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 128,
-          this.NORMALMATRIX
-        );
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer,
-          offset_ARRAY + 192,
-          this._f32_4
-        );
+        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 0, this.vpMatrix);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 64, this.MODELMATRIX);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 128, this.NORMALMATRIX);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 192, this._f32_4);
 
         this.uniformBindGroup_ARRAY[arrayLength++] = uniformBindGroup_next;
-
         blockIndex++;
       }
     }
-
     this.uniformBindGroup_ARRAY.length = arrayLength;
   }
 
   async renderPlayfild_Border_WebGPU() {
     if (!this.device) return;
-
-    // Подготовить буфер юниформов.
-    // Для рамки игрового поля
-    // данный буфер будет записан один раз и не меняеться в каждом кадре
-
+    
     const state_Border = {
       playfield: [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        ...Array(20).fill([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
       ],
     };
 
-    this.x += 0.01;
-    const playfield_length = state_Border.playfield.length;
-    // create uniform buffer and layout
-    // Расчитываем необходимый размер буфера
     const vertexUniformSizeBuffer = 200 * 256;
-
-    this.vertexUniformBuffer_border = this.device.createBuffer({
-      size: vertexUniformSizeBuffer,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
+    this.vertexUniformBuffer_border = this.device.createBuffer({ size: vertexUniformSizeBuffer, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.uniformBindGroup_ARRAY_border = [];
     let offset_ARRAY = 0;
 
-    for (let row = 0; row < playfield_length; row++) {
+    for (let row = 0; row < state_Border.playfield.length; row++) {
       for (let colom = 0; colom < state_Border.playfield[row].length; colom++) {
-        if (!state_Border.playfield[row][colom]) {
-          continue;
-        }
+        if (!state_Border.playfield[row][colom]) continue;
 
-        let uniformBindGroup_next = this.device.createBindGroup({
-          label : "uniformBindGroup_next 635",
-          layout: this.pipeline.getBindGroupLayout(0),
+        const uniformBindGroup_next = this.device.createBindGroup({
+          label: "uniformBindGroup_next 635", layout: this.pipeline.getBindGroupLayout(0),
           entries: [
-            {
-              binding: 0,
-              resource: {
-                buffer: this.vertexUniformBuffer_border,
-                offset: offset_ARRAY,
-                size: 208,
-              },
-            },
-            {
-              binding: 1,
-              resource: {
-                buffer: this.fragmentUniformBuffer,
-                offset: 0,
-                size: 80, // Updated to match fragment buffer usage (allows up to offset 80 or more)
-              },
-            },
-            // Bind Texture & Sampler here too
+            { binding: 0, resource: { buffer: this.vertexUniformBuffer_border, offset: offset_ARRAY, size: 208 } },
+            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 80 } },
             { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
             { binding: 3, resource: this.blockSampler }
           ],
@@ -1585,43 +960,19 @@ export default class View {
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
-
-        this._f32_3[0] = borderWorldX(colom);
-        this._f32_3[1] = borderWorldY(row);
-        this._f32_3[2] = 0.0;
+        this._f32_3[0] = borderWorldX(colom); this._f32_3[1] = borderWorldY(row); this._f32_3[2] = 0.0;
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-
-        Matrix.mat4.identity(this.NORMALMATRIX);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
 
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer_border,
-          offset_ARRAY + 0,
-          this.vpMatrix
-        );
-
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer_border,
-          offset_ARRAY + 64,
-          this.MODELMATRIX
-        ); //
-
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer_border,
-          offset_ARRAY + 128,
-          this.NORMALMATRIX
-        );
+        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 0, this.vpMatrix);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 64, this.MODELMATRIX);
+        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 128, this.NORMALMATRIX);
         this._f32_4.set(this.currentTheme.border);
         this._f32_4[3] = 1.0;
-        this.device.queue.writeBuffer(
-          this.vertexUniformBuffer_border,
-          offset_ARRAY + 192,
-          this._f32_4
-        );
+        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 192, this._f32_4);
 
         this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
-
         offset_ARRAY += 256;
       }
     }
@@ -1631,13 +982,7 @@ export default class View {
     let description = "Great, your current browser supports WebGPU!";
     let result = true;
     if (!navigator.gpu) {
-      description = `Your current browser does not support WebGPU! Make sure you are on a system 
-                         with WebGPU enabled. Currently, SPIR-WebGPU is only supported in  
-                         <a href="https://www.google.com/chrome/canary/">Chrome canary</a>
-                         with the flag "enable-unsafe-webgpu" enabled. See the 
-                         <a href="https://github.com/gpuweb/gpuweb/wiki/Implementation-Status"> 
-                         Implementation Status</a> page for more details.                   
-                        `;
+      description = `Your current browser does not support WebGPU! Make sure you are on a system with WebGPU enabled.`;
       result = false;
     }
     return { result, description };
