@@ -65,6 +65,11 @@ export default class Game {
       {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
   ];
 
+  // Pre-allocated result object for update loop to avoid GC
+  private _updateResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
+      linesCleared: [], locked: false, gameOver: false, tSpin: false
+  };
+
   constructor() {
     this.pieceGenerator = new PieceGenerator();
     // --- WASM INTEGRATION ---
@@ -212,10 +217,12 @@ export default class Game {
 
   // Called every frame
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-      const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-          linesCleared: [], locked: false, gameOver: false, tSpin: false
-      };
-      if (this.gameOver) return result;
+      this._updateResult.linesCleared = [];
+      this._updateResult.locked = false;
+      this._updateResult.gameOver = false;
+      this._updateResult.tSpin = false;
+
+      if (this.gameOver) return this._updateResult;
 
       // Check if piece is on the ground
       this.activPiece.y += 1;
@@ -228,7 +235,7 @@ export default class Game {
           if (this.lockTimer > this.lockDelayTime) {
               this.effectCounter++; // Increment visual counter for locking (gravity)
               this.lockPiece();
-              result.locked = true;
+              this._updateResult.locked = true;
 
               const wasTSpin = this.isTSpin;
 
@@ -236,20 +243,20 @@ export default class Game {
               if (linesScore.length > 0) {
                   const isAllClear = this.isPlayfieldEmpty();
                   this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-                  result.linesCleared = linesScore;
-                  result.tSpin = wasTSpin;
+                  this._updateResult.linesCleared = linesScore;
+                  this._updateResult.tSpin = wasTSpin;
               } else {
                   this.scoringSystem.resetCombo();
                   this.scoreEvent = null;
               }
 
               this.updatePieces();
-              if (this.gameOver) result.gameOver = true;
+              if (this.gameOver) this._updateResult.gameOver = true;
           }
       } else {
           this.lockTimer = 0;
       }
-      return result;
+      return this._updateResult;
   }
 
   movePieceLeft(): void {
