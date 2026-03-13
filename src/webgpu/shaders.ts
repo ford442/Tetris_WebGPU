@@ -3,6 +3,14 @@
  * Contains all shader code for the Tetris WebGPU renderer
  */
 
+import {
+    BLOCK_TEXTURE_ATLAS_COLUMNS,
+    BLOCK_TEXTURE_ATLAS_ROWS,
+    BLOCK_TEXTURE_TILE_COLUMN,
+    BLOCK_TEXTURE_TILE_ROW,
+    BLOCK_TEXTURE_TILE_INSET,
+} from './renderMetrics.js';
+
 export const PostProcessShaders = () => {
     const vertex = `
         struct VertexOutput {
@@ -822,14 +830,28 @@ export const Shaders = () => {
                      }
                 }
 
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
-                
-                // Simple approach: show texture with very subtle color influence
-                // 80% texture, 20% block color tint
-                var baseColor = mix(texColor.rgb, vColor.rgb * texColor.rgb, 0.2);
-                
-                // Fixed alpha for now - solid blocks
-                let materialAlpha = 0.9;
+                let atlasTiles = vec2<f32>(${BLOCK_TEXTURE_ATLAS_COLUMNS}.0, ${BLOCK_TEXTURE_ATLAS_ROWS}.0);
+                let atlasTile = vec2<f32>(${BLOCK_TEXTURE_TILE_COLUMN}.0, ${BLOCK_TEXTURE_TILE_ROW}.0);
+                let atlasInset = vec2<f32>(${BLOCK_TEXTURE_TILE_INSET}, ${BLOCK_TEXTURE_TILE_INSET});
+                let atlasUV = (clamp(texUV, vec2<f32>(0.0), vec2<f32>(1.0)) * (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
+                let texColor = textureSample(blockTexture, blockSampler, atlasUV);
+
+                // The source texture is mostly warm gold metal plus cool frosted glass.
+                // Bias toward red/green and suppress blue so the gold frame reads as metal,
+                // then threshold that signal to split the material treatment.
+                let goldSignal = texColor.r + texColor.g - texColor.b * 0.75;
+                let metalMask = smoothstep(0.95, 1.45, goldSignal);
+                let glassMask = 1.0 - metalMask;
+
+                let goldColor = mix(texColor.rgb, vec3<f32>(1.0, 0.84, 0.36), 0.22);
+                let glassColor = mix(
+                    texColor.rgb,
+                    texColor.rgb * 0.78 + vColor.rgb * 0.22 + vec3<f32>(0.06, 0.08, 0.1),
+                    0.32
+                );
+                var baseColor = mix(glassColor, goldColor, metalMask);
+
+                let materialAlpha = mix(0.72, 0.96, metalMask);
 
                 // --- Tech Pattern Overlay (Optional - kept for style) ---
                 let hexScale = 4.0;
@@ -849,8 +871,8 @@ export const Shaders = () => {
                 let lineY = step(1.0 - gridThick, gridPos.y) + step(gridPos.y, gridThick);
                 let isTrace = max(lineX, lineY);
 
-                if (hexEdge > 0.5) { baseColor *= 0.8; } // JUICE: More contrast
-                if (isTrace > 0.5) { baseColor *= 0.5; }
+                if (hexEdge > 0.5) { baseColor *= mix(0.92, 0.98, metalMask); }
+                if (isTrace > 0.5) { baseColor *= mix(0.75, 0.92, metalMask); }
 
                 // --- Composition ---
                 var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
@@ -893,7 +915,8 @@ export const Shaders = () => {
 
                 let innerGlow = smoothstep(0.5, 0.0, distCenter) * (0.6 + plasmaNoise * 0.4);
 
-                finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.8); // Boosted glow intensity
+                let emissiveStrength = mix(0.45, 0.18, metalMask);
+                finalColor += vColor.rgb * (breath + innerPulse + innerGlow * 0.8) * emissiveStrength;
 
                 // ENHANCED: Glass/Neon Rim Lighting
                 // Sharper falloff (power 4.0) for a more distinct edge
@@ -904,7 +927,8 @@ export const Shaders = () => {
 
                 // Rim Color Shift: Cyan tint on the rim
                 let rimColor = mix(vColor.rgb, vec3<f32>(0.5, 1.0, 1.0), 0.6);
-                finalColor += rimColor * rimLight;
+                let rimStrength = mix(0.18, 0.08, metalMask);
+                finalColor += rimColor * rimLight * rimStrength;
 
                 if (isTrace > 0.5) {
                     finalColor += vColor.rgb * pulsePos * 4.0;
@@ -943,7 +967,7 @@ export const Shaders = () => {
                     sin(baseFresnel * 15.0 + time) * 0.5 + 0.5
                 ) * 0.5;
 
-                finalColor += irid * (3.0 + levelFactor * 4.0); // JUICE: Stronger rim
+                finalColor += irid * (0.5 + levelFactor * 0.8) * glassMask;
 
                 // NEON BRICKLAYER: Beveled Edge Highlight
                 // Simulates a rounded corner catching the light
@@ -955,8 +979,8 @@ export const Shaders = () => {
                 let edgeDir = normalize(vUV - 0.5);
                 let bevelHighlight = max(dot(edgeDir, lightDir2D), 0.0) * edgeGlow;
 
-                finalColor += vec3<f32>(1.0) * edgeGlow * (1.0 + levelFactor);
-                finalColor += vec3<f32>(1.0) * bevelHighlight * 3.0; // Bright white specular on edge
+                finalColor += vec3<f32>(1.0) * edgeGlow * (0.3 + levelFactor * 0.2 + metalMask * 0.15);
+                finalColor += vec3<f32>(1.0) * bevelHighlight * mix(1.6, 0.9, metalMask);
 
                 // Lock Tension Pulse (Heartbeat & Alarm)
                 let lockPercent = uniforms.lockPercent;
