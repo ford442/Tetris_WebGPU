@@ -15,6 +15,12 @@ import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import {
+  PROCEDURAL_BLOCK_TEXTURE_SIZE,
+  getTextureMipLevelCount,
+  paintProceduralBlockTexture,
+  resolveBlockTextureUrl,
+} from './webgpu/blockTexture.js';
+import {
   onHardDrop as handleHardDrop,
   onHold as handleHold,
   onLineClear as handleLineClear,
@@ -461,6 +467,52 @@ export default class View {
     this.device.queue.submit([commandEncoder.finish()]);
   }
 
+  private createSolidFallbackTexture(): GPUTexture {
+    const texture = this.device.createTexture({
+      size: [1, 1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.device.queue.writeTexture(
+      { texture },
+      new Uint8Array([255, 255, 255, 255]),
+      { bytesPerRow: 4 },
+      [1, 1, 1]
+    );
+    return texture;
+  }
+
+  private createProceduralFallbackTexture(): GPUTexture {
+    const size = PROCEDURAL_BLOCK_TEXTURE_SIZE;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Unable to create procedural fallback texture context');
+    }
+
+    paintProceduralBlockTexture(ctx, size);
+
+    const mipLevelCount = getTextureMipLevelCount(size, size);
+    const texture = this.device.createTexture({
+      size: [size, size, 1],
+      format: 'rgba8unorm',
+      mipLevelCount,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: canvas },
+      { texture },
+      [size, size]
+    );
+    this.generateMipmaps(texture, size, size, mipLevelCount);
+
+    return texture;
+  }
+
   async preRender() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) return;
@@ -479,21 +531,59 @@ export default class View {
     });
 
     try {
-        const img = document.createElement('img');
-        img.src = 'block.png';
-        await img.decode();
-        const imageBitmap = await createImageBitmap(img);
-        const mipLevelCount = Math.floor(Math.log2(Math.max(imageBitmap.width, imageBitmap.height))) + 1;
+        const textureUrl = resolveBlockTextureUrl(import.meta.url);
+        console.log('[Texture] Loading from:', textureUrl);
+        const textureLoadTimeoutMs = 10000;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = textureUrl;
+
+        await new Promise<void>((resolve, reject) => {
+          let timeoutId = 0;
+          const cleanup = () => {
+            window.clearTimeout(timeoutId);
+            img.onload = null;
+            img.onerror = null;
+          };
+          timeoutId = window.setTimeout(() => {
+            cleanup();
+            reject(new Error(`Timed out loading ${textureUrl} after ${textureLoadTimeoutMs}ms`));
+          }, textureLoadTimeoutMs);
+          img.onload = () => {
+            cleanup();
+            resolve();
+          };
+          img.onerror = () => {
+            cleanup();
+            reject(new Error(`Failed to load ${textureUrl}`));
+          };
+        });
+
+        // Preserve the authored texture data for direct WebGPU upload without browser-side premultiplication or color transforms.
+        const imageBitmap = await createImageBitmap(img, {
+          premultiplyAlpha: 'none',
+          colorSpaceConversion: 'none',
+        });
+        const mipLevelCount = getTextureMipLevelCount(imageBitmap.width, imageBitmap.height);
         this.blockTexture = this.device.createTexture({
-          size: [imageBitmap.width, imageBitmap.height, 1], format: 'rgba8unorm', mipLevelCount,
+          size: [imageBitmap.width, imageBitmap.height, 1],
+          format: 'rgba8unorm',
+          mipLevelCount,
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
+        console.log('[Texture] Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'mips:', mipLevelCount);
     } catch (e) {
-        console.error('[Texture] Failed to load block.png:', e);
-        this.blockTexture = this.device.createTexture({ size: [1, 1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-        this.device.queue.writeTexture({ texture: this.blockTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1, 1]);
+        console.error('[Texture] Failed to load block texture:', e);
+        try {
+          this.blockTexture = this.createProceduralFallbackTexture();
+          console.warn('[Texture] Using procedural fallback texture');
+        } catch (fallbackError) {
+          console.error('[Texture] Procedural fallback failed, using solid texture:', fallbackError);
+          this.blockTexture = this.createSolidFallbackTexture();
+        }
     }
 
     const shader = Shaders();
@@ -876,6 +966,10 @@ export default class View {
 
   async renderPlayfild_WebGPU(state: any) {
     if (!this.device) return;
+    if (!this.blockTexture) {
+      console.warn('[Render] blockTexture not initialized');
+      return;
+    }
     const { playfield, activePiece } = state;
     let arrayLength = 0;
     let blockIndex = 0;
