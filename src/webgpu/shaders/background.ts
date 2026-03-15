@@ -98,8 +98,8 @@ export const BackgroundShaders = () => {
                   let twinkle = sin(time * 5.0 + noise * 100.0) * 0.5 + 0.5;
 
                   // ENHANCED: Star Streaks at high warp
-                  if (warpSpeed > 5.0) {
-                       brightness *= (1.0 + (warpSpeed - 5.0) * 0.2); // Brighter
+                  if (warpSurge > 5.0) {
+                       brightness *= (1.0 + (warpSurge - 5.0) * 0.2); // Brighter
                   }
 
                   stars += brightness * twinkle * (0.5 + fi * 0.2);

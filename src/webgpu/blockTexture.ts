@@ -19,7 +19,7 @@ export interface BlockTexturePainter {
 }
 
 export function resolveBlockTextureUrl(moduleUrl: string): string {
-  return new URL('../../block.png', moduleUrl).href;
+  return '/block.png';
 }
 
 export function getTextureMipLevelCount(width: number, height: number): number {
