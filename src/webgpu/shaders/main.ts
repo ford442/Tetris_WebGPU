@@ -172,7 +172,7 @@ export const Shaders = () => {
                 let rawPulse = sin(time * pulseFreq * 1.5 + level) * 0.5 + 0.5; // Added level to pulse
                 let rawPulse2 = rawPulse * rawPulse;
                 let sharpPulse = rawPulse2 * rawPulse2; // Sharper heartbeat pulse
-                let innerPulse = sharpPulse * (1.2 + level * 0.3); // Stronger with level
+                var innerPulse = sharpPulse * (1.2 + level * 0.3); // Stronger with level
 
                 // Add a second, faster "jitter" pulse for high levels
                 if (level > 5.0) {

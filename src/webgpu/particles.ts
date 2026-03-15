@@ -58,7 +58,8 @@ export class ParticleSystem {
     }
 
     // Radial ring explosion (for hard drops / impacts)
-    emitParticlesRadial(x: number, y: number, z: number, count: number, radius: number, speed: number, color: number[]): void {
+    emitParticlesRadial(x: number, y: number, z: number, count: number, speed: number, color: number[]): void {
+        const radius = 1.0; // Default radius for particle spread
         for (let i = 0; i < count; i++) {
             const angle = (i / count) * Math.PI * 2;
             // Velocity purely horizontal
