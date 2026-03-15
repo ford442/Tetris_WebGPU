@@ -317,7 +317,7 @@ export const Shaders = () => {
                     let pulseFreq = 10.0 + tension * 40.0; // Speed up significantly when locking
 
                     // ENHANCED Pulse: Slower, fuller, reacts to lock
-                    let ghostAlpha = 0.6 + 0.4 * sin(time * pulseFreq); // More dynamic range
+                    var ghostAlpha = 0.6 + 0.4 * sin(time * pulseFreq); // More dynamic range
 
                     // Holographic Scanline
                     let scanEffect = sin(vUV.y * 80.0 + time * 8.0) * 0.15;
@@ -331,7 +331,7 @@ export const Shaders = () => {
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.03 + tension * 0.1;
                     // Chaotic glitch
-                    let ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
+                    var ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
                     if (tension > 0.5 && fract(time * 10.0) > 0.8) {
                          ghostGlitch += 0.1; // Big glitch jump
                     }
