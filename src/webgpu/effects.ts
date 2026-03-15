@@ -83,8 +83,12 @@ export class VisualEffects {
             return;
         }
 
-        // Cap level to available videos (uses last video for levels exceeding array length)
-        const videoIndex = Math.min(level, levelVideos.length - 1);
+        // Increase cycling frequency at higher levels
+        // Levels 0-11: one video per level
+        // Levels 12-23: cycle through videos twice (2x speed)
+        // Levels 24+: cycle through videos 3x, etc.
+        const cycleMultiplier = 1 + Math.floor(level / levelVideos.length);
+        const videoIndex = (level * cycleMultiplier) % levelVideos.length;
         const videoSrc = levelVideos[videoIndex];
 
         // Only update if the source is different from what we're tracking
