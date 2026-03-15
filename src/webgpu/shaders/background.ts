@@ -93,7 +93,7 @@ export const BackgroundShaders = () => {
               // High threshold for sparse stars
               let threshold = 0.98;
               if (noise > threshold) {
-                  let brightness = (noise - threshold) / (1.0 - threshold);
+                  var brightness = (noise - threshold) / (1.0 - threshold);
                   // Twinkle
                   let twinkle = sin(time * 5.0 + noise * 100.0) * 0.5 + 0.5;
 

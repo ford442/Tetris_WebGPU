@@ -18,8 +18,8 @@ export interface BlockTexturePainter {
   strokeRect(x: number, y: number, width: number, height: number): void;
 }
 
-export function resolveBlockTextureUrl(_moduleUrl: string): string {
-  return import.meta.env.BASE_URL + 'block.png';
+export function resolveBlockTextureUrl(moduleUrl: string): string {
+  return './block.png';
 }
 
 export function getTextureMipLevelCount(width: number, height: number): number {
