@@ -1,0 +1,19 @@
+--- src/controller.ts
++++ src/controller.ts
+@@ -590,13 +590,9 @@
+              this.actionTimers.down %= SOFT_DROP_SPEED;
+              // Cap steps to prevent freeze/tunneling
+              // FIX: Latency - optimize maximum sonic drop steps
+-             // Only calculate getGhostY if we might actually do steps. If steps is larger than game height, cap it.
+-             // The maximum drop distance is the playfield height (20) plus hidden rows.
+-             if (steps > 22) {
+-                 steps = 22;
+-             }
+-             const maxDrop = Math.max(0, this.game.getGhostY() - this.game.activPiece.y);
+-             if (steps > maxDrop) steps = maxDrop;
++             // Rather than calling the expensive `getGhostY` every frame just to cap steps,
++             // cap it to the maximum playfield height (20) plus hidden rows (2), relying on the break below.
++             if (steps > 22) steps = 22;
+
+              // Only move down if it's not going to lock immediately
+              // Give a small rotation buffer by not soft dropping into a lock if dt is huge
