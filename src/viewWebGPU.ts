@@ -533,23 +533,43 @@ export default class View {
     try {
         const textureUrl = resolveBlockTextureUrl(import.meta.url);
         console.log('[Texture] Loading from:', textureUrl);
+        const textureLoadTimeoutMs = 10000;
 
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.src = textureUrl;
 
         await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error(`Failed to load ${textureUrl}`));
+          let timeoutId = 0;
+          const cleanup = () => {
+            window.clearTimeout(timeoutId);
+            img.onload = null;
+            img.onerror = null;
+          };
+          timeoutId = window.setTimeout(() => {
+            cleanup();
+            reject(new Error(`Timed out loading ${textureUrl} after ${textureLoadTimeoutMs}ms`));
+          }, textureLoadTimeoutMs);
+          img.onload = () => {
+            cleanup();
+            resolve();
+          };
+          img.onerror = () => {
+            cleanup();
+            reject(new Error(`Failed to load ${textureUrl}`));
+          };
         });
 
+        // Preserve the authored texture data for direct WebGPU upload without browser-side premultiplication or color transforms.
         const imageBitmap = await createImageBitmap(img, {
           premultiplyAlpha: 'none',
           colorSpaceConversion: 'none',
         });
         const mipLevelCount = getTextureMipLevelCount(imageBitmap.width, imageBitmap.height);
         this.blockTexture = this.device.createTexture({
-          size: [imageBitmap.width, imageBitmap.height, 1], format: 'rgba8unorm', mipLevelCount,
+          size: [imageBitmap.width, imageBitmap.height, 1],
+          format: 'rgba8unorm',
+          mipLevelCount,
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
