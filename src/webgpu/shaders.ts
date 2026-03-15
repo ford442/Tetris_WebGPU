@@ -807,8 +807,9 @@ export const Shaders = () => {
 
                 // JUICE: Sharpness increases with level (Glassier)
                 let shininessBoost = 1.0 + levelFactor * 2.0;
-                var specular:f32 = pow(max(dot(N, H), 0.0), ${params.shininess} * shininessBoost);
-                specular += pow(max(dot(N, H), 0.0), 64.0 * shininessBoost) * 0.4;
+                let dotNH = max(dot(N, H), 0.0);
+                var specular:f32 = pow(dotNH, ${params.shininess} * shininessBoost);
+                specular += pow(dotNH, 64.0 * shininessBoost) * 0.4;
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- TEXTURE SAMPLING ---
@@ -938,7 +939,10 @@ export const Shaders = () => {
                 // Clamp bases to 0.0 to avoid NaN in pow()
                 let dotNV = max(dot(N, V), 0.0);
                 // BOOSTED: Sharper fresnel curve (power 2.5 instead of 3.0)
-                let baseFresnel = pow(1.0 - dotNV, 2.5);
+                // Use chained multiplication where possible. For 2.5 we can use base2 * sqrt(base).
+                let fresnelBase = 1.0 - dotNV;
+                let fresnelBase2 = fresnelBase * fresnelBase;
+                let baseFresnel = fresnelBase2 * sqrt(fresnelBase);
                 let fresnelTerm = baseFresnel; // Alias for legacy code
 
                 // NEON BRICKLAYER: Diamond Refraction (Real Dispersion)
@@ -987,7 +991,16 @@ export const Shaders = () => {
                      // Heartbeat rhythm: faster as it gets closer to 1.0
                      let beatSpeed = 8.0 + tension * 80.0; // JUICE: Even faster panic mode
                      let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
-                     let sharpPulse = pow(pulse, 2.0 + tension * 4.0); // Sharper as it gets critical
+
+                     // Optimization: Replace pow with chained multiplication where possible.
+                     // The power is between 2.0 and 6.0 based on tension. We can approximate or use pow.
+                     // Actually, since pow is somewhat expensive and the tension is [0..1],
+                     // an integer power like 2, 4 or 6 through chained multiplication is faster.
+                     // A mix between 2 and 6:
+                     let pulse2 = pulse * pulse;
+                     let pulse4 = pulse2 * pulse2;
+                     let pulse6 = pulse4 * pulse2;
+                     let sharpPulse = mix(pulse2, pulse6, tension);
 
                      // Digital Grid Scan Effect (Digitizing in/out)
                      // Scanline that moves up/down based on pulse
