@@ -44,6 +44,7 @@ export const GridShader = () => {
             ghostX : f32,
             ghostWidth : f32,
             warpSurge : f32,
+            lockPercent: f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
