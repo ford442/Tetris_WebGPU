@@ -28,7 +28,8 @@ const DEFAULT_LEVEL_VIDEOS = [
   './assets/video/bg8.mp4',
   './assets/video/bg9.mp4',
   './assets/video/bg10.mp4',
-  './assets/video/bg11.mp4'
+  './assets/video/bg11.mp4',
+  './assets/video/bg12.mp4'
 ];
 
 export const themes: Themes = {
