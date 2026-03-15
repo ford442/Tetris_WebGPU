@@ -47,7 +47,7 @@ describe('block texture helpers', () => {
   it('resolves the block texture asset from the public root', () => {
     expect(
       resolveBlockTextureUrl('https://example.com/src/webgpu/blockTexture.ts')
-    ).toBe('/block.png');
+    ).toBe('./block.png');
   });
 
   it('computes mip levels from the largest texture dimension', () => {
