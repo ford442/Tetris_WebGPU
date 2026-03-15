@@ -8,9 +8,9 @@ export const BOARD_WORLD_CENTER_X =
 export const BOARD_WORLD_CENTER_Y =
   -((BOARD_ROWS - 1) * BLOCK_WORLD_SIZE) / 2;
 
-export const BLOCK_TEXTURE_ATLAS_COLUMNS = 5;
+export const BLOCK_TEXTURE_ATLAS_COLUMNS = 4;
 export const BLOCK_TEXTURE_ATLAS_ROWS = 3;
-export const BLOCK_TEXTURE_TILE_COLUMN = 2;
+export const BLOCK_TEXTURE_TILE_COLUMN = 1;
 export const BLOCK_TEXTURE_TILE_ROW = 1;
 // Keep a small inset inside the chosen atlas tile to avoid filtering bleed
 // from neighboring tiles along the gold frame seams.

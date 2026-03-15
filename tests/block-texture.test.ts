@@ -44,10 +44,10 @@ class MockPainter implements BlockTexturePainter {
 }
 
 describe('block texture helpers', () => {
-  it('resolves the block texture asset from the public root', () => {
+  it('resolves the block texture asset from the deployment base', () => {
     expect(
       resolveBlockTextureUrl('https://example.com/src/webgpu/blockTexture.ts')
-    ).toBe('/block.png');
+    ).toBe('/tetris-webgpu/block.png');
   });
 
   it('computes mip levels from the largest texture dimension', () => {
