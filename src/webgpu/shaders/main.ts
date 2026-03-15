@@ -331,7 +331,7 @@ export const Shaders = () => {
                     // NEW Glitch effect (Reacts to tension)
                     let glitchAmp = 0.03 + tension * 0.1;
                     // Chaotic glitch
-                    let ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
+                    var ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
                     if (tension > 0.5 && fract(time * 10.0) > 0.8) {
                          ghostGlitch += 0.1; // Big glitch jump
                     }
