@@ -589,7 +589,6 @@ export default class Controller {
              let steps = (this.actionTimers.down / SOFT_DROP_SPEED) | 0;
              this.actionTimers.down %= SOFT_DROP_SPEED;
              // Cap steps to prevent freeze/tunneling
-             // FIX: Latency - optimize maximum sonic drop steps
              // Rather than calling the expensive `getGhostY` every frame just to cap steps,
              // cap it to the maximum playfield height (20) plus hidden rows (2), relying on the break below.
              if (steps > 22) steps = 22;
