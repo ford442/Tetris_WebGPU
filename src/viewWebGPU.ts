@@ -57,6 +57,9 @@ export default class View {
   panelY: number;
   panelWidth: number;
   panelHeight: number;
+  visualX: number = 0;
+  visualY: number = 0;
+  private _previousActivePiece: any = null;
   state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
   blockData: any;
   device!: GPUDevice;
@@ -775,7 +778,30 @@ export default class View {
 
   render = (dt: number) => {
     if (!this.device) return;
-    this.visualEffects.updateEffects(dt);
+
+    // Safety cap dt to prevent massive jumps on lag spikes
+    const clampedDt = Math.min(dt, 0.1);
+
+    // Smooth Piece Interpolation (Exponential Decay Lerp)
+    if (this.state && this.state.activePiece) {
+      const targetX = this.state.activePiece.x;
+      const targetY = this.state.activePiece.y;
+
+      // If the active piece object reference changed (e.g. piece spawned or held), snap instantly
+      if (this._previousActivePiece !== this.state.activePiece) {
+        this.visualX = targetX;
+        this.visualY = targetY;
+        this._previousActivePiece = this.state.activePiece;
+      } else {
+        const smoothingFactor = 25.0; // Higher = Snappier, Lower = Smoother
+        this.visualX = targetX + (this.visualX - targetX) * Math.exp(-clampedDt * smoothingFactor);
+        this.visualY = targetY + (this.visualY - targetY) * Math.exp(-clampedDt * smoothingFactor);
+      }
+    } else {
+      this._previousActivePiece = null;
+    }
+
+    this.visualEffects.updateEffects(clampedDt);
     const time = (performance.now() - this.startTime) / 1000.0;
 
     // Camera updates
@@ -986,16 +1012,23 @@ export default class View {
 
         this._f32_4[0] = color[0]; this._f32_4[1] = color[1]; this._f32_4[2] = color[2]; this._f32_4[3] = alpha;
 
-        // Rotation flash
-        if (this.visualEffects.rotationFlashTimer > 0 && activePiece) {
+        let isSolidActivePieceBlock = false;
+
+        // Visual Active Piece Interpolation
+        if (activePiece) {
              const relX = colom - activePiece.x;
              const relY = row - activePiece.y;
              if (relY >= 0 && relY < activePiece.blocks.length && relX >= 0 && relX < activePiece.blocks[0].length) {
-                  if (activePiece.blocks[relY][relX] !== 0) {
-                      const flash = this.visualEffects.rotationFlashTimer * 3.0;
-                      this._f32_4[0] = Math.min(color[0] + flash, 1.0);
-                      this._f32_4[1] = Math.min(color[1] + flash, 1.0);
-                      this._f32_4[2] = Math.min(color[2] + flash, 1.0);
+                  if (activePiece.blocks[relY][relX] !== 0 && value > 0) {
+                      isSolidActivePieceBlock = true;
+
+                      // Rotation flash
+                      if (this.visualEffects.rotationFlashTimer > 0) {
+                          const flash = this.visualEffects.rotationFlashTimer * 3.0;
+                          this._f32_4[0] = Math.min(color[0] + flash, 1.0);
+                          this._f32_4[1] = Math.min(color[1] + flash, 1.0);
+                          this._f32_4[2] = Math.min(color[2] + flash, 1.0);
+                      }
                   }
              }
         }
@@ -1005,7 +1038,18 @@ export default class View {
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
-        this._f32_3[0] = boardWorldX(colom); this._f32_3[1] = boardWorldY(row); this._f32_3[2] = 0.0;
+
+        if (isSolidActivePieceBlock) {
+             const relX = colom - activePiece.x;
+             const relY = row - activePiece.y;
+             this._f32_3[0] = boardWorldX(this.visualX + relX);
+             this._f32_3[1] = boardWorldY(this.visualY + relY);
+             this._f32_3[2] = 0.0;
+        } else {
+             this._f32_3[0] = boardWorldX(colom);
+             this._f32_3[1] = boardWorldY(row);
+             this._f32_3[2] = 0.0;
+        }
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
         Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
         Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
