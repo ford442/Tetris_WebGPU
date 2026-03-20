@@ -40,7 +40,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 120; // ms (Slightly longer window for better action leniency)
+  readonly BUFFER_WINDOW: number = 150; // ms (Slightly longer window for better action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
@@ -251,7 +251,14 @@ export default class Controller {
             }
             break;
         case 'hardDrop':
-            this.performHardDrop();
+            {
+                const yBefore = this.game.activPiece?.y;
+                this.performHardDrop();
+                if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
+                    this.bufferedAction = 'hardDrop';
+                    this.bufferedActionTime = performance.now();
+                }
+            }
             break;
         case 'hold':
             if (this.game.canHold) {
@@ -314,7 +321,14 @@ export default class Controller {
               }
               break;
           case 'hardDrop':
-              this.performHardDrop();
+              {
+                  const yBefore = this.game.activPiece?.y;
+                  this.performHardDrop();
+                  if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
+                      this.bufferedAction = 'hardDrop';
+                      this.bufferedActionTime = performance.now();
+                  }
+              }
               break;
           case 'hold':
               if (this.game.canHold) {
@@ -517,6 +531,12 @@ export default class Controller {
               this.game.hold();
               this.soundManager.playMove();
               this.viewWebGPU.onHold();
+              success = true;
+          }
+      } else if (this.bufferedAction === 'hardDrop') {
+          const yBefore = this.game.activPiece?.y;
+          this.performHardDrop();
+          if (this.game.activPiece?.y !== yBefore) {
               success = true;
           }
       }
