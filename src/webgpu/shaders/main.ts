@@ -83,8 +83,10 @@ export const Shaders = () => {
                 // JUICE: Sharpness increases with level (Glassier)
                 let shininessBoost = 1.0 + levelFactor * 2.0;
                 let dotNH = max(dot(N, H), 0.0);
+
                 var specular:f32 = pow(dotNH, ${params.shininess} * shininessBoost);
                 specular += pow(dotNH, 64.0 * shininessBoost) * 0.4;
+
                 let ambient:f32 = ${params.ambientIntensity};
 
                 // --- TEXTURE SAMPLING ---
