@@ -27,20 +27,23 @@ export function clearFullLines(
   }
 
   if (linesCleared.length > 0) {
-    const newPlayfield = new Int8Array(playfieldWidth * playfieldHeight);
     let targetY = playfieldHeight - 1;
 
     for (let y = playfieldHeight - 1; y >= 0; y--) {
       if (!linesCleared.includes(y)) {
-        const start = y * playfieldWidth;
-        for (let k = 0; k < playfieldWidth; k++) {
-          newPlayfield[targetY * playfieldWidth + k] = playfield[start + k];
+        if (targetY !== y) {
+          const targetStart = targetY * playfieldWidth;
+          const sourceStart = y * playfieldWidth;
+          playfield.copyWithin(targetStart, sourceStart, sourceStart + playfieldWidth);
         }
         targetY--;
       }
     }
 
-    playfield.set(newPlayfield);
+    // Clear the remaining rows at the top
+    if (targetY >= 0) {
+        playfield.fill(0, 0, (targetY + 1) * playfieldWidth);
+    }
   }
 
   return linesCleared;
