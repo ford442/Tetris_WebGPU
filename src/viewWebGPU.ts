@@ -808,8 +808,12 @@ export default class View {
     let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
     let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25;
     const shake = this.visualEffects.getShakeOffset();
-    this._shakeOffsetSmoothed.x += (shake.x - this._shakeOffsetSmoothed.x) * 15.0 * dt;
-    this._shakeOffsetSmoothed.y += (shake.y - this._shakeOffsetSmoothed.y) * 15.0 * dt;
+
+    // Smooth Camera Shake Interpolation using exponential decay (frame-rate independent)
+    const shakeDecay = Math.exp(-clampedDt * 15.0);
+    this._shakeOffsetSmoothed.x = shake.x + (this._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
+    this._shakeOffsetSmoothed.y = shake.y + (this._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
+
     camX += this._shakeOffsetSmoothed.x;
     camY += this._shakeOffsetSmoothed.y;
 
