@@ -70,6 +70,9 @@ export default class Game {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
   };
 
+  // Pre-allocated temporary piece for rotation checks to avoid GC
+  private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
+
   constructor() {
     this.pieceGenerator = new PieceGenerator();
     // --- WASM INTEGRATION ---
@@ -365,13 +368,13 @@ export default class Game {
     if (type === 'O') return;
 
     // Use temp piece for testing rotation to avoid mutation
-    const tempPiece = { ...this.activPiece }; // shallow clone
-    tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
-    tempPiece.rotation = nextRotation;
+    Object.assign(this._tempPiece, this.activPiece);
+    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
+    this._tempPiece.rotation = nextRotation;
 
-    if (!this.hasCollisionPiece(tempPiece)) {
-      this.activPiece.blocks = tempPiece.blocks;
-      this.activPiece.rotation = tempPiece.rotation;
+    if (!this.hasCollisionPiece(this._tempPiece)) {
+      this.activPiece.blocks = this._tempPiece.blocks;
+      this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
       return;
@@ -382,15 +385,15 @@ export default class Game {
     if (!kicks || kicks.length === 0) return;
 
     for (const [ox, oy] of kicks) {
-        tempPiece.x = this.activPiece.x + ox;
-        tempPiece.y = this.activPiece.y + oy;
+        this._tempPiece.x = this.activPiece.x + ox;
+        this._tempPiece.y = this.activPiece.y + oy;
 
-        if (!this.hasCollisionPiece(tempPiece)) {
+        if (!this.hasCollisionPiece(this._tempPiece)) {
             // Apply successful kick
-            this.activPiece.x = tempPiece.x;
-            this.activPiece.y = tempPiece.y;
-            this.activPiece.blocks = tempPiece.blocks;
-            this.activPiece.rotation = tempPiece.rotation;
+            this.activPiece.x = this._tempPiece.x;
+            this.activPiece.y = this._tempPiece.y;
+            this.activPiece.blocks = this._tempPiece.blocks;
+            this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             this.checkTSpin(); // Check T-Spin after kick
             return;
