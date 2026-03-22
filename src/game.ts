@@ -73,6 +73,28 @@ export default class Game {
   // Pre-allocated temporary piece for rotation checks to avoid GC
   private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
 
+  private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
+      linesCleared: [], locked: false, gameOver: false, tSpin: false
+  };
+
+  private _gameStateCache: GameState = {
+    score: 0,
+    level: 1,
+    lines: 0,
+    nextPiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
+    holdPiece: null,
+    activePiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
+    isGameOver: false,
+    playfield: [],
+    lockTimer: 0,
+    lockDelayTime: 0,
+    effectEvent: null,
+    effectCounter: 0,
+    lastDropPos: null,
+    lastDropDistance: 0,
+    scoreEvent: null
+  };
+
   constructor() {
     this.pieceGenerator = new PieceGenerator();
     // --- WASM INTEGRATION ---
@@ -135,23 +157,23 @@ export default class Game {
       targetArray: this.projectedPlayfield
     });
 
-    return {
-      score: this.score,
-      level: this.level,
-      lines: this.lines,
-      nextPiece: this.nextPiece,
-      holdPiece: this.holdPieceObj,
-      activePiece: this.activPiece,
-      isGameOver: this.gameOver,
-      playfield: playfield2D,
-      lockTimer: this.lockTimer, // Exposed for Visual Pulse Effect
-      lockDelayTime: this.lockDelayTime,
-      effectEvent: this.effectEvent,
-      effectCounter: this.effectCounter,
-      lastDropPos: this.lastDropPos,
-      lastDropDistance: this.lastDropDistance,
-      scoreEvent: this.scoreEvent
-    }
+    this._gameStateCache.score = this.score;
+    this._gameStateCache.level = this.level;
+    this._gameStateCache.lines = this.lines;
+    this._gameStateCache.nextPiece = this.nextPiece;
+    this._gameStateCache.holdPiece = this.holdPieceObj;
+    this._gameStateCache.activePiece = this.activPiece;
+    this._gameStateCache.isGameOver = this.gameOver;
+    this._gameStateCache.playfield = playfield2D;
+    this._gameStateCache.lockTimer = this.lockTimer;
+    this._gameStateCache.lockDelayTime = this.lockDelayTime;
+    this._gameStateCache.effectEvent = this.effectEvent;
+    this._gameStateCache.effectCounter = this.effectCounter;
+    this._gameStateCache.lastDropPos = this.lastDropPos;
+    this._gameStateCache.lastDropDistance = this.lastDropDistance;
+    this._gameStateCache.scoreEvent = this.scoreEvent;
+
+    return this._gameStateCache;
   }
 
   getGhostY(): number {
@@ -159,9 +181,10 @@ export default class Game {
   }
 
   hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-    const result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-        linesCleared: [], locked: false, gameOver: false, tSpin: false
-    };
+    this._hardDropResult.linesCleared.length = 0;
+    this._hardDropResult.locked = false;
+    this._hardDropResult.gameOver = false;
+    this._hardDropResult.tSpin = false;
 
     // Check if hard drop moves the piece
     const ghostY = this.getGhostY();
@@ -182,7 +205,7 @@ export default class Game {
 
     // Force lock
     this.lockPiece();
-    result.locked = true;
+    this._hardDropResult.locked = true;
 
     // Capture T-Spin state before updatePieces resets everything
     const wasTSpin = this.isTSpin;
@@ -191,17 +214,17 @@ export default class Game {
     if (linesScore.length > 0) {
         const isAllClear = this.isPlayfieldEmpty();
         this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-        result.linesCleared = linesScore;
-        result.tSpin = wasTSpin;
+        this._hardDropResult.linesCleared = linesScore;
+        this._hardDropResult.tSpin = wasTSpin;
     } else {
         this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
         this.scoreEvent = null;
     }
 
     this.updatePieces();
-    if (this.gameOver) result.gameOver = true;
+    if (this.gameOver) this._hardDropResult.gameOver = true;
 
-    return result;
+    return this._hardDropResult;
   }
 
   reset(): void {
@@ -220,7 +243,7 @@ export default class Game {
 
   // Called every frame
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-      this._updateResult.linesCleared = [];
+      this._updateResult.linesCleared.length = 0;
       this._updateResult.locked = false;
       this._updateResult.gameOver = false;
       this._updateResult.tSpin = false;
@@ -416,6 +439,7 @@ export default class Game {
       } else {
           // Moved off the edge, reset lock timer entirely (coyote time)
           this.lockTimer = 0;
+          this.lockResets = 0; // Treat the piece as entirely fresh
       }
   }
 
