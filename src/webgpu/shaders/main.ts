@@ -125,9 +125,9 @@ export const Shaders = () => {
                 // --- Composition ---
                 // Energy-conserving: ambient provides floor (0.3), diffuse scales remaining (0.7)
                 // so total light factor stays in [0.3, 1.0] and never blows out the texture.
-                let lightFactor = 0.3 + diffuse * 0.7;
-                // Specular is metalMask-weighted and kept small to not overpower the texture
-                let specularStrength = mix(0.15, 0.5, metalMask);
+                let lightFactor = 0.25 + diffuse * 0.65; // max = 0.9, leaves room for specular
+                // Very subtle specular: just a glint on metal, barely visible on glass
+                let specularStrength = mix(0.04, 0.12, metalMask);
                 var finalColor:vec3<f32> = baseColor * lightFactor + vec3<f32>${params.specularColor} * specular * specularStrength;
 
                 // Add Glitch Mod
@@ -261,7 +261,7 @@ export const Shaders = () => {
 
                 // Combine material alpha with block type alpha (solid=0.85, ghost=0.3)
                 let finalAlpha = materialAlpha * vColor.w;
-                return vec4<f32>(finalColor, finalAlpha);
+                return vec4<f32>(clamp(finalColor, vec3<f32>(0.0), vec3<f32>(1.0)), finalAlpha);
             }`;
 
     return { vertex, fragment };
