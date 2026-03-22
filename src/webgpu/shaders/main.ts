@@ -80,8 +80,6 @@ export const Shaders = () => {
                 // Single tight specular highlight for polished surface
                 var specular:f32 = pow(dotNH, 800.0);
 
-                let ambient:f32 = ${params.ambientIntensity};
-
                 // --- TEXTURE SAMPLING ---
                 // Flip Y for correct image orientation
                 var texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
@@ -125,7 +123,12 @@ export const Shaders = () => {
                 // Tech pattern overlay removed to let the raw texture show through
 
                 // --- Composition ---
-                var finalColor:vec3<f32> = baseColor * (ambient + diffuse) + vec3<f32>${params.specularColor} * specular;
+                // Energy-conserving: ambient provides floor (0.3), diffuse scales remaining (0.7)
+                // so total light factor stays in [0.3, 1.0] and never blows out the texture.
+                let lightFactor = 0.3 + diffuse * 0.7;
+                // Specular is metalMask-weighted and kept small to not overpower the texture
+                let specularStrength = mix(0.15, 0.5, metalMask);
+                var finalColor:vec3<f32> = baseColor * lightFactor + vec3<f32>${params.specularColor} * specular * specularStrength;
 
                 // Add Glitch Mod
                 finalColor += glitchColorMod;
