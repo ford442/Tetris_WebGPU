@@ -931,7 +931,11 @@ export default class View {
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
     const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-    colorAttachment0.clearValue = { r: clearColors.r, g: clearColors.g, b: clearColors.b, a: 0.0 };
+    const clearValue = colorAttachment0.clearValue as GPUColorDict;
+    clearValue.r = clearColors.r;
+    clearValue.g = clearColors.g;
+    clearValue.b = clearColors.b;
+    clearValue.a = 0.0;
 
     if (!renderVideo) {
         const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
