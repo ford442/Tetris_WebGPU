@@ -810,7 +810,7 @@ export default class View {
     const shake = this.visualEffects.getShakeOffset();
 
     // Smooth Camera Shake Interpolation using exponential decay (frame-rate independent)
-    const shakeDecay = Math.exp(-clampedDt * 15.0);
+    const shakeDecay = Math.exp(-clampedDt * 10.0);
     this._shakeOffsetSmoothed.x = shake.x + (this._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
     this._shakeOffsetSmoothed.y = shake.y + (this._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
 
