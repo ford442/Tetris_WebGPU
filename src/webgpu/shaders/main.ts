@@ -78,7 +78,16 @@ export const Shaders = () => {
 
                 let dotNH = max(dot(N, H), 0.0);
                 // Single tight specular highlight for polished surface
-                var specular:f32 = pow(dotNH, 800.0);
+                // Optimized: Replace expensive pow(dotNH, 800.0) with chained multiplications
+                // approximating a high exponent (256.0) to avoid ALU bloating/denormal stalls.
+                let s2 = dotNH * dotNH;
+                let s4 = s2 * s2;
+                let s8 = s4 * s4;
+                let s16 = s8 * s8;
+                let s32 = s16 * s16;
+                let s64 = s32 * s32;
+                let s128 = s64 * s64;
+                var specular:f32 = s128 * s128; // 256.0
 
                 // --- TEXTURE SAMPLING ---
                 // Flip Y for correct image orientation
