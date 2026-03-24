@@ -2,7 +2,7 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 
-const DAS = 130; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
+const DAS = 120; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
 const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
 
@@ -40,7 +40,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 100; // ms (Shorter window for snappier action leniency)
+  readonly BUFFER_WINDOW: number = 150; // ms (Shorter window for snappier action leniency)
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
