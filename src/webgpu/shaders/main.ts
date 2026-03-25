@@ -117,7 +117,7 @@ export const Shaders = () => {
                 // Bias toward red/green and suppress blue so the gold frame reads as metal,
                 // then threshold that signal to split the material treatment.
                 let goldSignal = texColor.r + texColor.g - texColor.b * 0.75;
-                let metalMask = smoothstep(0.95, 1.45, goldSignal);
+                let metalMask = clamp((goldSignal - 0.95) / 0.5, 0.0, 1.0);
                 let glassMask = 1.0 - metalMask;
 
                 // Gold: very light warm push (8%) -- the texture is already gold
@@ -146,7 +146,7 @@ export const Shaders = () => {
                 let time = uniforms.time;
                 let breath = sin(time * 1.5) * 0.03 + 0.03;
                 let distCenter = distance(vUV, vec2<f32>(0.5));
-                let centerGlow = smoothstep(0.45, 0.1, distCenter);
+                let centerGlow = clamp((0.45 - distCenter) / 0.35, 0.0, 1.0);
                 finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.5;
 
                 // Gentle rim lighting -- just enough to outline the block shape
