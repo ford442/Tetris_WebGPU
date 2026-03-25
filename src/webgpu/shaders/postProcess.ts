@@ -178,7 +178,7 @@ export const PostProcessShaders = () => {
             // Vignette darken (pulsing with beat)
             let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
             let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
-            let vignette = 1.0 - smoothstep(0.5, vignetteSize, distFromCenter);
+            let vignette = 1.0 - clamp((distFromCenter - 0.5) / (vignetteSize - 0.5), 0.0, 1.0);
             color *= vignette;
 
             // NEON BRICKLAYER: Warp Surge Flash
