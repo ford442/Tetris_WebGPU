@@ -212,7 +212,7 @@ export const BackgroundShaders = () => {
           }
 
           // --- Vignette effect to focus on center ---
-          let vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5));
+          let vignette = 1.0 - clamp((length(uv - 0.5) - 0.4) / 0.8, 0.0, 1.0);
           finalColor *= vignette;
 
           // --- Subtle film grain for texture ---
@@ -246,7 +246,7 @@ export const BackgroundShaders = () => {
                   let beamPulse = sin(time * 5.0) * 0.1 + 0.9;
 
                   // Intensity fades at the top
-                  let beamFade = smoothstep(0.0, 0.8, uv.y);
+                  let beamFade = clamp(uv.y / 0.8, 0.0, 1.0);
 
                   // Combine
                   var beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
