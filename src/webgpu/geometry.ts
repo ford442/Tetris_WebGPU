@@ -13,7 +13,6 @@ export const CubeData = () => {
   const radius = 0.2; // Size of the rounded corner
   const boxSize = 1.0 - radius; // The distance from center to the start of the bevel
 
-  // ADJUST THIS TO FIX YOUR SAMPLING:
   // Keep the face UVs normalized because the shader now samples
   // a single tile from the texture atlas for each block face.
   const textureScale = 1.0;
