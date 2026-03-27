@@ -60,6 +60,9 @@ export default class Game {
   private scoringSystem: ScoringSystem;
   private projectedPlayfield: number[][] = [];
 
+  // Bound methods to prevent per-frame garbage collection
+  private boundGetCell: (x: number, y: number) => number;
+
   // Pre-allocated array for WASM collision checks to avoid GC
   private collisionCoordsCache: {x: number, y: number}[] = [
       {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
@@ -111,6 +114,7 @@ export default class Game {
     // ------------------------
     this.collisionDetector = new CollisionDetector(this.playfield);
     this.scoringSystem = new ScoringSystem();
+    this.boundGetCell = this.getCell.bind(this);
     this.reset();
   }
 
@@ -150,7 +154,7 @@ export default class Game {
     const playfield2D = buildPlayfieldProjection({
       playfieldWidth: this.playfieldWidth,
       playfieldHeight: this.playfieldHeight,
-      getCell: this.getCell.bind(this),
+      getCell: this.boundGetCell,
       isGameOver: this.gameOver,
       activePiece: this.activPiece,
       ghostY: this.gameOver ? this.activPiece.y : this.getGhostY(),
@@ -512,7 +516,7 @@ export default class Game {
       this.playfield,
       this.playfieldWidth,
       this.playfieldHeight,
-      this.getCell.bind(this),
+      this.boundGetCell,
     );
     if (linesCleared.length > 0) {
       this.collisionDetector.updatePlayfield(this.playfield);
