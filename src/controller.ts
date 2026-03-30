@@ -40,7 +40,7 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 150; // ms
+  readonly BUFFER_WINDOW: number = 80; // ms - Snappier jump buffer
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
