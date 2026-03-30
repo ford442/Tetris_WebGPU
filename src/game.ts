@@ -76,6 +76,11 @@ export default class Game {
   // Pre-allocated temporary piece for rotation checks to avoid GC
   private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
 
+  // Pre-allocated corners for T-Spin checks to avoid GC
+  private _tSpinCorners: { x: number, y: number }[] = [
+      { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
+  ];
+
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
   };
@@ -204,7 +209,14 @@ export default class Game {
     // NEON BRICKLAYER: Trigger Hard Drop Shockwave (Juice) - Params tuned in View
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
-    this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
+
+    // Reuse existing object if possible to prevent GC
+    if (!this.lastDropPos) {
+        this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
+    } else {
+        this.lastDropPos.x = this.activPiece.x;
+        this.lastDropPos.y = this.activPiece.y;
+    }
     this.lastDropDistance = distance;
 
     // Force lock
@@ -362,15 +374,15 @@ export default class Game {
       const px = this.activPiece.x;
       const py = this.activPiece.y;
 
-      const corners = [
-          { x: px,     y: py     }, // Top-Left
-          { x: px + 2, y: py     }, // Top-Right
-          { x: px,     y: py + 2 }, // Bottom-Left
-          { x: px + 2, y: py + 2 }  // Bottom-Right
-      ];
+      // Use pre-allocated array to avoid GC
+      this._tSpinCorners[0].x = px;     this._tSpinCorners[0].y = py;
+      this._tSpinCorners[1].x = px + 2; this._tSpinCorners[1].y = py;
+      this._tSpinCorners[2].x = px;     this._tSpinCorners[2].y = py + 2;
+      this._tSpinCorners[3].x = px + 2; this._tSpinCorners[3].y = py + 2;
 
       let occupied = 0;
-      for (const c of corners) {
+      for (let i = 0; i < 4; i++) {
+          const c = this._tSpinCorners[i];
           // Check if out of bounds or occupied
           if (c.x < 0 || c.x >= this.playfieldWidth || c.y >= this.playfieldHeight) {
               occupied++;
@@ -395,7 +407,12 @@ export default class Game {
     if (type === 'O') return;
 
     // Use temp piece for testing rotation to avoid mutation
-    Object.assign(this._tempPiece, this.activPiece);
+    // Replace Object.assign with explicit assignments to avoid GC overhead
+    this._tempPiece.x = this.activPiece.x;
+    this._tempPiece.y = this.activPiece.y;
+    this._tempPiece.type = this.activPiece.type;
+    // getBounds isn't strictly needed for the temp piece if hasCollisionPiece uses fallback
+    // or WASM uses exact blocks array. We copy the exact blocks anyway.
     this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
     this._tempPiece.rotation = nextRotation;
 
