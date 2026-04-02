@@ -29,11 +29,23 @@ export const SRS_KICKS_I: { [key: string]: number[][] } = {
   '0-3': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]]
 };
 
-export function rotatePieceBlocks(blocks: number[][], clockwise: boolean): number[][] {
+export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, targetArray?: number[][]): number[][] {
   const length = blocks.length;
-  const temp: number[][] = [];
-  for (let i = 0; i < length; i++) {
-    temp[i] = new Array(length).fill(0);
+  const temp: number[][] = targetArray || [];
+
+  // Initialize or resize target array avoiding GC if possible
+  if (temp.length !== length) {
+    temp.length = 0;
+    for (let i = 0; i < length; i++) {
+      temp.push(new Array(length).fill(0));
+    }
+  } else {
+    // Ensure inner arrays match length
+    for (let i = 0; i < length; i++) {
+      if (temp[i].length !== length) {
+        temp[i] = new Array(length).fill(0);
+      }
+    }
   }
 
   // Perform basic rotation
