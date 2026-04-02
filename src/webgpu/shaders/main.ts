@@ -168,7 +168,7 @@ export const Shaders = () => {
                 let lockPercent = uniforms.lockPercent;
                 if (lockPercent > 0.3) {
                      // NEON BRICKLAYER: Only active when > 30% locked (Panic Mode starts earlier)
-                     let tension = smoothstep(0.3, 1.0, lockPercent); // Remap 0.3->1.0 to 0.0->1.0
+                     let tension = clamp((lockPercent - 0.3) / 0.7, 0.0, 1.0); // Remap 0.3->1.0 to 0.0->1.0
 
                      // Heartbeat rhythm: faster as it gets closer to 1.0
                      let beatSpeed = 8.0 + tension * 80.0; // JUICE: Even faster panic mode
@@ -209,18 +209,20 @@ export const Shaders = () => {
                     // INCREASED Frequency: 60.0 -> 80.0 (Finer lines)
                     let scanY = fract(vUV.y * 80.0 - time * scanSpeed);
                     // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY)) * 10.0; // Boosted intensity
+                    let scan1 = clamp(scanY / 0.1, 0.0, 1.0);
+                    let scan2 = clamp((scanY - 0.9) / 0.1, 0.0, 1.0);
+                    let scanline = scan1 * (1.0 - scan2) * 10.0; // Boosted intensity
 
                     // Landing Beam (Vertical Highlight)
-                    let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
+                    let beam = clamp((abs(vUV.x - 0.5) - 0.6) / -0.6, 0.0, 1.0) * 0.8;
 
                     // Wireframe logic (from edgeGlow)
-                    let wireframe = smoothstep(0.9, 0.98, uvEdgeDist);
+                    let wireframe = clamp((uvEdgeDist - 0.9) / 0.08, 0.0, 1.0);
 
                     let ghostColor = vColor.rgb * 3.0; // Brighten original color further
 
                     // NEON BRICKLAYER: Tension-based pulse
-                    let tension = smoothstep(0.3, 1.0, lockPercent); // Start reacting earlier
+                    let tension = clamp((lockPercent - 0.3) / 0.7, 0.0, 1.0); // Start reacting earlier
                     let pulseFreq = 10.0 + tension * 40.0; // Speed up significantly when locking
 
                     // ENHANCED Pulse: Slower, fuller, reacts to lock

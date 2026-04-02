@@ -4,14 +4,20 @@
  */
 
 export const CubeData = () => {
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const uvs: number[] = [];
-
   // --- CONFIGURATION ---
   const segments = 16;
   const radius = 0.2; // Size of the rounded corner
   const boxSize = 1.0 - radius; // The distance from center to the start of the bevel
+
+  // 6 faces * (segments * segments) quads per face * 6 vertices per quad * 3 components per vertex
+  const totalVertices = 6 * (segments * segments) * 6;
+  const positions = new Float32Array(totalVertices * 3);
+  const normals = new Float32Array(totalVertices * 3);
+  const uvs = new Float32Array(totalVertices * 2);
+
+  let pIndex = 0;
+  let nIndex = 0;
+  let uIndex = 0;
 
   // Keep the face UVs normalized because the shader now samples
   // a single tile from the texture atlas for each block face.
@@ -46,8 +52,13 @@ export const CubeData = () => {
     const fy = innerY + ny * radius;
     const fz = innerZ + nz * radius;
 
-    positions.push(fx, fy, fz);
-    normals.push(nx, ny, nz);
+    positions[pIndex++] = fx;
+    positions[pIndex++] = fy;
+    positions[pIndex++] = fz;
+
+    normals[nIndex++] = nx;
+    normals[nIndex++] = ny;
+    normals[nIndex++] = nz;
 
     // 5. UV Mapping with Scale
     const p: any = { x: fx, y: fy, z: fz };
@@ -61,7 +72,8 @@ export const CubeData = () => {
     u = (u - 0.5) * textureScale + 0.5;
     v = (v - 0.5) * textureScale + 0.5;
 
-    uvs.push(u, v);
+    uvs[uIndex++] = u;
+    uvs[uIndex++] = v;
   };
 
   const buildFace = (uAxis: string, vAxis: string, wAxis: string, wVal: number, uDir: number, vDir: number) => {
@@ -101,7 +113,7 @@ export const CubeData = () => {
   buildFace('x', 'z', 'y',  1,  1, -1);
   buildFace('x', 'z', 'y', -1,  1, -1);
 
-  return { positions: new Float32Array(positions), normals: new Float32Array(normals), uvs: new Float32Array(uvs) };
+  return { positions, normals, uvs };
 };
 
 export const FullScreenQuadData = () => {
@@ -117,20 +129,33 @@ export const FullScreenQuadData = () => {
 };
 
 export const GridData = () => {
-    const positions: number[] = [];
+    // 9 vertical lines * 2 points * 3 components = 54
+    // 19 horizontal lines * 2 points * 3 components = 114
+    // Total = 168
+    const positions = new Float32Array(168);
+    let index = 0;
+
     const yTop = 1.1;
     const yBottom = -42.9;
     for (let i = 1; i <= 9; i++) {
         const x = i * 2.2 - 1.1;
-        positions.push(x, yTop, -0.5);
-        positions.push(x, yBottom, -0.5);
+        positions[index++] = x;
+        positions[index++] = yTop;
+        positions[index++] = -0.5;
+        positions[index++] = x;
+        positions[index++] = yBottom;
+        positions[index++] = -0.5;
     }
     const xLeft = -1.1;
     const xRight = 20.9;
     for (let j = 1; j <= 19; j++) {
         const y = j * -2.2 + 1.1;
-        positions.push(xLeft, y, -0.5);
-        positions.push(xRight, y, -0.5);
+        positions[index++] = xLeft;
+        positions[index++] = y;
+        positions[index++] = -0.5;
+        positions[index++] = xRight;
+        positions[index++] = y;
+        positions[index++] = -0.5;
     }
-    return new Float32Array(positions);
+    return positions;
 };
