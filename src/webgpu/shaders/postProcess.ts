@@ -68,11 +68,13 @@ export const PostProcessShaders = () => {
                 let strength = params.y * 1.5; // e.g. 0.05
                 let diff = dist - radius;
 
+                // Pre-calculate direction vector once to eliminate redundant ALU operations
+                let dir = normalize(uv - center);
+
                 if (abs(diff) < width) {
                     // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * strength * (1.0 - time); // Fade out
-                    let dir = normalize(uv - center);
 
                     finalUV -= dir * distortion;
 
@@ -86,7 +88,6 @@ export const PostProcessShaders = () => {
                 if (echoDiff < width * 0.5) {
                     let angle = (echoDiff / (width * 0.5)) * 3.14159;
                     let distortion = cos(angle) * strength * 0.5 * (1.0 - time);
-                    let dir = normalize(uv - center);
                     finalUV -= dir * distortion;
                 }
 
@@ -96,7 +97,6 @@ export const PostProcessShaders = () => {
                 if (echoDiff2 < width * 0.5) {
                     let angle = (echoDiff2 / (width * 0.5)) * 3.14159;
                     let distortion = cos(angle) * strength * 0.25 * (1.0 - time);
-                    let dir = normalize(uv - center);
                     finalUV -= dir * distortion;
                 }
             }
