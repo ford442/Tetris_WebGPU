@@ -81,6 +81,8 @@ export default class Game {
       { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
   ];
 
+  private _linesClearedCache: number[] = [];
+
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
   };
@@ -230,7 +232,10 @@ export default class Game {
     if (linesScore.length > 0) {
         const isAllClear = this.isPlayfieldEmpty();
         this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-        this._hardDropResult.linesCleared = linesScore;
+        this._hardDropResult.linesCleared.length = 0;
+        for (let i = 0; i < linesScore.length; i++) {
+            this._hardDropResult.linesCleared.push(linesScore[i]);
+        }
         this._hardDropResult.tSpin = wasTSpin;
     } else {
         this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
@@ -285,7 +290,10 @@ export default class Game {
               if (linesScore.length > 0) {
                   const isAllClear = this.isPlayfieldEmpty();
                   this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-                  this._updateResult.linesCleared = linesScore;
+                  this._updateResult.linesCleared.length = 0;
+                  for (let i = 0; i < linesScore.length; i++) {
+                      this._updateResult.linesCleared.push(linesScore[i]);
+                  }
                   this._updateResult.tSpin = wasTSpin;
               } else {
                   this.scoringSystem.resetCombo();
@@ -534,6 +542,7 @@ export default class Game {
       this.playfieldWidth,
       this.playfieldHeight,
       this.boundGetCell,
+      this._linesClearedCache
     );
     if (linesCleared.length > 0) {
       this.collisionDetector.updatePlayfield(this.playfield);

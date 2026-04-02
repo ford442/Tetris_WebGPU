@@ -10,8 +10,10 @@ export function clearFullLines(
   playfieldWidth: number,
   playfieldHeight: number,
   getCell: (x: number, y: number) => number,
+  outLinesCleared?: number[]
 ): number[] {
-  const linesCleared: number[] = [];
+  const linesCleared: number[] = outLinesCleared || [];
+  linesCleared.length = 0;
 
   for (let y = 0; y < playfieldHeight; y++) {
     let full = true;
