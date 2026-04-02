@@ -75,6 +75,7 @@ export default class Game {
 
   // Pre-allocated temporary piece for rotation checks to avoid GC
   private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
+  private _tempBlocks: number[][] = [];
 
   // Pre-allocated corners for T-Spin checks to avoid GC
   private _tSpinCorners: { x: number, y: number }[] = [
@@ -413,11 +414,12 @@ export default class Game {
     this._tempPiece.type = this.activPiece.type;
     // getBounds isn't strictly needed for the temp piece if hasCollisionPiece uses fallback
     // or WASM uses exact blocks array. We copy the exact blocks anyway.
-    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
+    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn, this._tempBlocks);
     this._tempPiece.rotation = nextRotation;
 
     if (!this.hasCollisionPiece(this._tempPiece)) {
-      this.activPiece.blocks = this._tempPiece.blocks;
+      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+      this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
@@ -436,7 +438,8 @@ export default class Game {
             // Apply successful kick
             this.activPiece.x = this._tempPiece.x;
             this.activPiece.y = this._tempPiece.y;
-            this.activPiece.blocks = this._tempPiece.blocks;
+            // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+            this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             this.checkTSpin(); // Check T-Spin after kick
