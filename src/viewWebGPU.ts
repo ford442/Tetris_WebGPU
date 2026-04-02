@@ -1059,8 +1059,7 @@ export default class View {
              this._f32_3[2] = 0.0;
         }
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        // NORMALMATRIX remains Identity since there is no rotation/scale
 
         this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 0, this.vpMatrix);
         this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 64, this.MODELMATRIX);
@@ -1108,8 +1107,7 @@ export default class View {
         Matrix.mat4.identity(this.NORMALMATRIX);
         this._f32_3[0] = borderWorldX(colom); this._f32_3[1] = borderWorldY(row); this._f32_3[2] = 0.0;
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-        Matrix.mat4.invert(this.NORMALMATRIX, this.MODELMATRIX);
-        Matrix.mat4.transpose(this.NORMALMATRIX, this.NORMALMATRIX);
+        // NORMALMATRIX remains Identity since there is no rotation/scale
 
         this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 0, this.vpMatrix);
         this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 64, this.MODELMATRIX);
