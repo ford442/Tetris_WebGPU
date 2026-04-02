@@ -131,8 +131,10 @@ export const BackgroundShaders = () => {
 
             // Smooth grid lines that get thinner with distance, but thicker with warp surge
             let lineWidth = (0.04 + warpSurge * 0.1) / scale;
-            let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
-            let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
+            let valX = abs(fract(gridUV.x) - 0.5);
+            let valY = abs(fract(gridUV.y) - 0.5);
+            let gridX = clamp((valX - (0.5 - lineWidth)) / lineWidth, 0.0, 1.0);
+            let gridY = clamp((valY - (0.5 - lineWidth)) / lineWidth, 0.0, 1.0);
 
             // Combine X and Y lines, fade distant layers
             let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
@@ -237,7 +239,7 @@ export const BackgroundShaders = () => {
 
               if (distToBeam < beamWidth) {
                   // Soft edge for the beam
-                  let beamEdge = smoothstep(beamWidth, 0.0, distToBeam);
+                  let beamEdge = clamp((distToBeam - beamWidth) / -beamWidth, 0.0, 1.0);
 
                   // Vertical scan effect within the beam
                   let beamScan = sin(uv.y * 50.0 - time * 20.0) * 0.1 + 0.9;

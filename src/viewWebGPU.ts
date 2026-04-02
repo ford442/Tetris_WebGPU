@@ -769,12 +769,12 @@ export default class View {
     }
   }
 
-  CreateGPUBuffer = (device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) => {
+  CreateGPUBuffer(device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) {
     const buffer = device.createBuffer({ size: data.byteLength, usage: usageFlag, mappedAtCreation: true });
     new Float32Array(buffer.getMappedRange()).set(data);
     buffer.unmap();
     return buffer;
-  };
+  }
 
   render = (dt: number) => {
     if (!this.device) return;
@@ -1124,7 +1124,7 @@ export default class View {
     }
   }
 
-  CheckWebGPU = () => {
+  CheckWebGPU() {
     let description = "Great, your current browser supports WebGPU!";
     let result = true;
     if (!navigator.gpu) {
@@ -1132,5 +1132,5 @@ export default class View {
       result = false;
     }
     return { result, description };
-  };
+  }
 }
