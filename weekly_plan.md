@@ -8,3 +8,5 @@ During the weekly scan for performance optimizations and game-feel polish, I fou
 Because the codebase is currently free of these specific TODO/FIX markers and recent game-feel optimizations have already been integrated into the controller module, no further actionable code changes were required for this task.
 
 Future scans should ensure that the repository branch is synced properly and monitor for new game-feel features or latency regressions.
+
+**Update (Current Run):** Replaced `Math.exp` calls in `src/viewWebGPU.ts` piece and camera interpolation with a faster `1.0 / (1.0 + x)` approximation to further reduce ALU operations per frame. Optimization check completed.

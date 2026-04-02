@@ -794,8 +794,9 @@ export default class View {
         this._previousActivePiece = this.state.activePiece;
       } else {
         const smoothingFactor = 25.0; // Higher = Snappier, Lower = Smoother
-        this.visualX = targetX + (this.visualX - targetX) * Math.exp(-clampedDt * smoothingFactor);
-        this.visualY = targetY + (this.visualY - targetY) * Math.exp(-clampedDt * smoothingFactor);
+        const expDecayPiece = 1.0 / (1.0 + clampedDt * smoothingFactor);
+        this.visualX = targetX + (this.visualX - targetX) * expDecayPiece;
+        this.visualY = targetY + (this.visualY - targetY) * expDecayPiece;
       }
     } else {
       this._previousActivePiece = null;
@@ -809,8 +810,8 @@ export default class View {
     let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25;
     const shake = this.visualEffects.getShakeOffset();
 
-    // Smooth Camera Shake Interpolation using exponential decay (frame-rate independent)
-    const shakeDecay = Math.exp(-clampedDt * 10.0);
+    // Smooth Camera Shake Interpolation using fast exponential decay approximation
+    const shakeDecay = 1.0 / (1.0 + clampedDt * 10.0);
     this._shakeOffsetSmoothed.x = shake.x + (this._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
     this._shakeOffsetSmoothed.y = shake.y + (this._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
 
