@@ -121,17 +121,17 @@ export class VisualEffects {
         if (this.lockTimer > 0) this.lockTimer -= dt;
         if (this.lockTimer < 0) this.lockTimer = 0;
 
-        // Exponential decay for smooth game feel
-        const decay = Math.exp(-dt * 3.0);
+        // Exponential decay for smooth game feel (fast algebraic approximation)
+        const decay = 1.0 / (1.0 + dt * 3.0);
         this.shakeIntensity *= decay;
         this.aberrationIntensity *= decay;
 
         // Warp surge decay
-        this.warpSurge *= Math.exp(-dt * 1.5);
+        this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
         if (this.warpSurge < 0.01) this.warpSurge = 0;
 
         // Glitch decay
-        this.glitchIntensity *= Math.exp(-dt * 3.0);
+        this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
