@@ -26,14 +26,11 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
-            // Align to 16 bytes for next field if needed, but here we just flow
-            // offset 0: time(4), 4: useGlitch(4), 8: center(8) -> 16
-            // offset 16: shockwaveTime(4), pad(12) -> 32
-            // offset 32: shockwaveParams(16) -> 48
-            // offset 48: level(4)
+            currentLevel: f32,          // ← was missing
+            warpSurge: f32,             // ← was missing
+            useEnhancedPostProcess: f32,
+            padding: f32,               // explicit padding
             shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
-            level: f32,
-            warpSurge: f32, // Offset 52
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -152,18 +149,19 @@ export const PostProcessShaders = () => {
             glow += textureSample(myTexture, mySampler, finalUV + dY).rgb * 0.1875;
             glow += textureSample(myTexture, mySampler, finalUV - dY).rgb * 0.1875;
 
-            // Thresholding with smooth knee for better falloff
+            // Tuned bloom that preserves texture detail
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.08;
-            let knee = 0.05;
+            let bloomThreshold = 0.35;   // higher = protects glass texture
+            let knee = 0.12;
             let contrib = max(glowLum - bloomThreshold + knee, 0.0);
-            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 6.0;
+            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 3.2;  // lowered from 6.0
+
             color += glow * bloomIntensity;
 
-            // High-pass boost for the core pixels
+            // Optional softer secondary boost
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            if (luminance > 0.6) {
-                 color += color * 0.4;
+            if (luminance > 0.78) {
+                color += color * 0.18;
             }
 
             // Vignette darken (pulsing with beat)

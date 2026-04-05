@@ -65,9 +65,22 @@ export const Shaders = () => {
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
             @binding(3) @group(0) var blockSampler: sampler;
 
+            // Material uniforms for PBR (binding 4)
+            struct MaterialUniforms {
+                metallic: f32,
+                roughness: f32,
+                transmission: f32,
+                padding: f32
+            };
+            @binding(4) @group(0) var<uniform> materialUniforms : MaterialUniforms;
+
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-               
+                // Read the new material uniforms
+                let metallic = materialUniforms.metallic;
+                let roughness = materialUniforms.roughness;
+                let transmission = materialUniforms.transmission;
+
                 var N:vec3<f32> = normalize(vNormal.xyz);
                 let L:vec3<f32> = normalize(uniforms.lightPosition.xyz - vPosition.xyz);
                 let V:vec3<f32> = normalize(uniforms.eyePosition.xyz - vPosition.xyz);
@@ -300,6 +313,15 @@ export const Shaders = () => {
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
+
+                // Simple PBR mix
+                // Re-read texture for base color
+                let baseColor = textureSample(blockTexture, blockSampler, atlasUV);
+                let pbrColor = mix(baseColor.rgb, baseColor.rgb * materialUniforms.metallic, materialUniforms.metallic);
+                pbrColor = mix(pbrColor, vec3<f32>(1.0), materialUniforms.transmission * 0.4); // glass highlight
+                
+                // Blend PBR with existing lighting
+                finalColor = mix(finalColor, pbrColor, 0.3);
 
                 // Combine material alpha with block type alpha (solid=0.85, ghost=0.3)
                 let finalAlpha = materialAlpha * vColor.w;
