@@ -25,12 +25,22 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 }
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
-  view.visualEffects.triggerFlash(1.0);
-  view.visualEffects.warpSurge = 0.8 + lines.length * 0.15;
-
-  const shakeBase = tSpin ? 0.8 : 0.5;
-  const shakeBonus = Math.min(combo * 0.1, 1.0);
-  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.6 : 0.5);
+  // Enhanced flash based on number of lines
+  const flashIntensity = Math.min(0.5 + lines.length * 0.25, 1.5);
+  view.visualEffects.triggerFlash(flashIntensity);
+  
+  // Warp surge based on line count
+  view.visualEffects.warpSurge = 1.0 + lines.length * 0.3 + (combo * 0.2);
+  
+  // Screen shake with more intensity for bigger clears
+  const shakeBase = tSpin ? 1.0 : (0.3 + lines.length * 0.2);
+  const shakeBonus = Math.min(combo * 0.15, 1.5);
+  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.7 : 0.6);
+  
+  // Chromatic aberration for big clears
+  if (lines.length >= 4 || tSpin || combo >= 3) {
+    view.visualEffects.triggerAberration(0.3 + lines.length * 0.1);
+  }
 
   lines.forEach((y: number) => {
     const worldY = y * -2.2;
@@ -122,10 +132,27 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   }
 }
 
-export function onLock(view: any): void {
+export function onLock(view: any, isTSpin: boolean = false): void {
   view.visualEffects.triggerLock(0.3);
-  view.visualEffects.triggerShake(0.2, 0.15);
-  view.visualEffects.triggerShockwave([0.5, 0.5], 0.2, 0.1, 0.05, 2.5);
+  view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
+  view.visualEffects.triggerShockwave([0.5, 0.5], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+  
+  if (isTSpin && view.state?.activePiece) {
+    // Extra T-Spin lock effects
+    const { x, y } = view.state.activePiece;
+    const worldX = (x + 1) * 2.2;
+    const worldY = (y + 1) * -2.2;
+    
+    // Purple burst at lock point
+    for (let i = 0; i < 30; i++) {
+      const angle = (i / 30) * Math.PI * 2;
+      view.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, 20.0, [1.0, 0.0, 1.0, 1.0]);
+    }
+    
+    // Flash effect
+    view.visualEffects.triggerFlash(0.4);
+    view.visualEffects.triggerAberration(0.3);
+  }
 }
 
 export function onHold(view: any): void {
@@ -238,21 +265,89 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   triggerImpactEffects(view, worldX, impactY, distance);
 }
 
+import { levelUpCelebration } from '../effects/levelUpCelebration.js';
+
 export function renderMainScreen(view: any, state: any): void {
   view.state = state;
 
-  if (state.level !== view.visualEffects.currentLevel) {
-    view.visualEffects.currentLevel = state.level;
-    view.visualEffects.triggerLevelUp();
-    view.visualEffects.updateVideoForLevel(view.visualEffects.currentLevel, view.currentTheme.levelVideos);
-    showFloatingText(view, "LEVEL UP!", "WARP SPEED");
+  // Handle T-Spin Ready indicator
+  const tSpinIndicator = document.getElementById('tspin-indicator');
+  if (tSpinIndicator) {
+    if (state.isTSpinReady && !state.isGameOver) {
+      tSpinIndicator.classList.add('active');
+      // Trigger particles occasionally while T-Spin is ready
+      if (Math.random() < 0.1 && state.activePiece) {
+        const { x, y } = state.activePiece;
+        const worldX = (x + 1) * 2.2;
+        const worldY = (y + 1) * -2.2;
+        view.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, Math.random() * Math.PI * 2, 10.0, [1.0, 0.0, 1.0, 0.8]);
+      }
+    } else {
+      tSpinIndicator.classList.remove('active');
+    }
+  }
 
+  if (state.level !== view.visualEffects.currentLevel) {
+    const oldLevel = view.visualEffects.currentLevel;
+    view.visualEffects.currentLevel = state.level;
+    
+    // Get level config for enhanced effects
+    const config = levelUpCelebration.getLevelConfig(state.level);
+    
+    // Trigger enhanced level up effects
+    view.visualEffects.triggerLevelUp(state.level);
+    view.visualEffects.updateVideoForLevel(view.visualEffects.currentLevel, view.currentTheme.levelVideos);
+    
+    // Show floating text with level color
+    showFloatingText(view, `LEVEL ${state.level}!`, "WARP SPEED");
+    
+    // Create big level up overlay for significant levels (every 5 levels or first level up)
+    if (state.level === 1 || state.level % 5 === 0 || state.level > oldLevel + 1) {
+      levelUpCelebration.addLevelUpStyles();
+      levelUpCelebration.createLevelUpOverlay(state.level);
+    }
+
+    // Enhanced particle burst with level colors
     const centerX = 5.0 * 2.2;
     const centerY = 10.0 * -2.2;
-    for (let i = 0; i < 100; i++) {
+    
+    // Parse colors for particle system
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? [
+        parseInt(result[1], 16) / 255,
+        parseInt(result[2], 16) / 255,
+        parseInt(result[3], 16) / 255,
+        1.0
+      ] : [1.0, 1.0, 1.0, 1.0];
+    };
+    
+    const primaryColor = hexToRgb(config.primaryColor);
+    const secondaryColor = hexToRgb(config.secondaryColor);
+    
+    // Primary color burst
+    for (let i = 0; i < config.particleCount; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 20.0 + Math.random() * 30.0;
-      view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, [0.8, 1.0, 1.0, 1.0]);
+      const speed = 25.0 + Math.random() * 40.0;
+      view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, primaryColor);
+    }
+    
+    // Secondary color burst (offset)
+    for (let i = 0; i < config.particleCount / 2; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 15.0 + Math.random() * 30.0;
+      view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, secondaryColor);
+    }
+    
+    // Ring explosions
+    for (let ring = 0; ring < 3; ring++) {
+      setTimeout(() => {
+        for (let i = 0; i < 40; i++) {
+          const angle = (i / 40) * Math.PI * 2;
+          const speed = 30.0 + ring * 15.0;
+          view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, ring % 2 === 0 ? primaryColor : secondaryColor);
+        }
+      }, ring * 100);
     }
   }
 
@@ -287,13 +382,49 @@ export function renderMainScreen(view: any, state: any): void {
   if (levelEl) levelEl.textContent = state.level;
 }
 
-export function renderEndScreen(view: any): void {
-  const el = document.getElementById('game-over');
-  if (el) el.style.display = 'block';
+import { gameOverAnimation } from '../effects/gameOverAnimation.js';
 
-  view.visualEffects.triggerGlitch(1.0);
-  view.visualEffects.triggerAberration(1.0);
-  view.visualEffects.triggerFlash(0.5);
+export function renderEndScreen(view: any, state: any): void {
+  // Add styles first
+  gameOverAnimation.addGameOverStyles();
+  
+  // Trigger dramatic visual effects
+  gameOverAnimation.triggerGameOverEffects(view);
+  
+  // Get high score info
+  const highScoreManager = view.game?.getHighScoreManager?.();
+  const highScore = highScoreManager?.getHighestScore?.();
+  const isNewHighScore = highScoreManager && state.score > 0 && state.score >= (highScore?.score || 0);
+  
+  // Create enhanced overlay
+  setTimeout(() => {
+    const overlay = gameOverAnimation.createGameOverOverlay({
+      score: state.score,
+      lines: state.lines,
+      level: state.level,
+      highScore: highScore?.score || 0,
+      isNewHighScore
+    });
+    
+    // Wire up buttons
+    const retryBtn = document.getElementById('game-over-retry');
+    const menuBtn = document.getElementById('game-over-menu');
+    
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        overlay.remove();
+        view.controller?.reset?.();
+      });
+    }
+    
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        overlay.remove();
+        // Could navigate to menu here
+        location.reload();
+      });
+    }
+  }, 800); // Delay to let effects play
 }
 
 export function renderPauseScreen(view: any): void {

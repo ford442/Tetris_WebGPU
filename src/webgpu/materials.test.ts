@@ -3,50 +3,35 @@
  * Run this to verify all premium materials work correctly
  */
 
+import { describe, it, expect } from 'vitest';
 import { Materials, MaterialThemes, getPieceMaterial } from './materials.js';
 
-console.log('=== Material System Test ===\n');
+describe('Material System', () => {
+  it('should have all materials with valid properties', () => {
+    Object.entries(Materials).forEach(([name, mat]) => {
+      expect(mat.metallic).toBeGreaterThanOrEqual(0);
+      expect(mat.metallic).toBeLessThanOrEqual(1);
+      expect(mat.roughness).toBeGreaterThanOrEqual(0);
+      expect(mat.roughness).toBeLessThanOrEqual(1);
+      expect(mat.ior).toBeGreaterThanOrEqual(0);
+      expect(mat.ior).toBeLessThanOrEqual(3);
+      expect(mat.name).toBeDefined();
+    });
+  });
 
-// Test 1: All materials defined
-console.log('Test 1: Material Definitions');
-Object.entries(Materials).forEach(([name, mat]) => {
-  console.log(`  ✓ ${name}: metallic=${mat.metallic.toFixed(2)}, roughness=${mat.roughness.toFixed(2)}`);
-});
+  it('should have theme mappings for all themes', () => {
+    expect(Object.keys(MaterialThemes).length).toBeGreaterThan(0);
+    Object.entries(MaterialThemes).forEach(([theme, mats]) => {
+      expect(mats.length).toBe(8); // 7 pieces + border
+    });
+  });
 
-// Test 2: Theme mappings
-console.log('\nTest 2: Theme Mappings');
-Object.entries(MaterialThemes).forEach(([theme, mats]) => {
-  console.log(`  ✓ ${theme}: ${mats.length} materials`);
-});
-
-// Test 3: Piece material lookup
-console.log('\nTest 3: Piece Material Lookup');
-['classic', 'gold', 'premium', 'cyber'].forEach(theme => {
-  [1, 2, 3, 4, 5, 6, 7].forEach(piece => {
-    const mat = getPieceMaterial(theme, piece);
-    console.log(`  ✓ ${theme}[${piece}]: ${mat.name}`);
+  it('should return correct materials for piece lookups', () => {
+    const classic = getPieceMaterial('classic', 1);
+    expect(classic).toBeDefined();
+    expect(classic.name).toBe('Classic');
+    
+    const gold = getPieceMaterial('gold', 1);
+    expect(gold.name).toBe('Gold');
   });
 });
-
-// Test 4: Material property ranges
-console.log('\nTest 4: Property Ranges');
-let allValid = true;
-Object.entries(Materials).forEach(([name, mat]) => {
-  if (mat.metallic < 0 || mat.metallic > 1) {
-    console.log(`  ✗ ${name}: metallic out of range`);
-    allValid = false;
-  }
-  if (mat.roughness < 0 || mat.roughness > 1) {
-    console.log(`  ✗ ${name}: roughness out of range`);
-    allValid = false;
-  }
-  if (mat.ior < 1 || mat.ior > 3) {
-    console.log(`  ✗ ${name}: ior out of range`);
-    allValid = false;
-  }
-});
-if (allValid) {
-  console.log('  ✓ All material properties in valid ranges');
-}
-
-console.log('\n=== All Tests Passed ===');

@@ -20,6 +20,7 @@ uiContainer.innerHTML = `
   <div class="header">
       <h1>TETRIS</h1>
       <div id="combo-display" class="combo-display">COMBO x0</div>
+      <div id="tspin-indicator" class="tspin-indicator">⚡ T-SPIN READY ⚡</div>
   </div>
 
   <div class="main-layout">
@@ -82,19 +83,56 @@ uiContainer.innerHTML = `
   <!-- Pause Menu Overlay -->
   <div id="pause-menu" class="pause-menu" style="display: none;">
     <div class="pause-menu-content">
-      <h2>PAUSED</h2>
-      <button id="resume-button" class="pause-btn">RESUME</button>
-      <button id="restart-button" class="pause-btn">RESTART</button>
-      <div class="pause-volume-controls">
-        <div class="volume-row">
-          <label>Music:</label>
-          <input type="range" id="pause-music-volume" min="0" max="100" value="50">
+      <h2 class="pause-title">PAUSED</h2>
+      
+      <!-- Current Stats -->
+      <div class="pause-stats">
+        <div class="pause-stat">
+          <span class="pause-stat-label">SCORE</span>
+          <span id="pause-score" class="pause-stat-value">0</span>
         </div>
-        <div class="volume-row">
-          <label>SFX:</label>
-          <input type="range" id="pause-sfx-volume" min="0" max="100" value="35">
+        <div class="pause-stat">
+          <span class="pause-stat-label">LEVEL</span>
+          <span id="pause-level" class="pause-stat-value">1</span>
+        </div>
+        <div class="pause-stat">
+          <span class="pause-stat-label">LINES</span>
+          <span id="pause-lines" class="pause-stat-value">0</span>
         </div>
       </div>
+      
+      <div class="pause-buttons">
+        <button id="resume-button" class="pause-btn pause-btn-primary">RESUME</button>
+        <button id="restart-button" class="pause-btn">RESTART</button>
+      </div>
+      
+      <div class="pause-volume-section">
+        <h3>AUDIO</h3>
+        <div class="pause-volume-controls">
+          <div class="volume-row">
+            <label>🎵 Music:</label>
+            <input type="range" id="pause-music-volume" min="0" max="100" value="30">
+          </div>
+          <div class="volume-row">
+            <label>🔊 SFX:</label>
+            <input type="range" id="pause-sfx-volume" min="0" max="100" value="35">
+          </div>
+        </div>
+      </div>
+      
+      <!-- Controls Reference -->
+      <div class="pause-controls">
+        <h3>CONTROLS</h3>
+        <div class="controls-grid">
+          <div class="control-item"><span class="key">←→</span> Move</div>
+          <div class="control-item"><span class="key">↑</span> Rotate</div>
+          <div class="control-item"><span class="key">↓</span> Soft Drop</div>
+          <div class="control-item"><span class="key">SPACE</span> Hard Drop</div>
+          <div class="control-item"><span class="key">C</span> Hold Piece</div>
+          <div class="control-item"><span class="key">ESC</span> Pause</div>
+        </div>
+      </div>
+      
       <p class="pause-hint">Press Enter or Escape to resume</p>
     </div>
   </div>
@@ -127,25 +165,24 @@ uiContainer.innerHTML = `
       holdPieceCtx
   );
 
-  // NEW: Wire view reference for reactive systems
+  // Connect game to view for reactive events
   game.view = view;
 
-  // NEW: Enable premium visuals preset
+  // Enable premium visuals preset (FXAA, film grain, CRT, bloom, supersampling)
   view.setPremiumVisualsPreset({
-    renderScale: 1.0,        // Start at native resolution
-    enhancedPostProcess: true,
-    reactiveVideo: true,
-    reactiveMusic: false     // Enable when ready to test audio
+    renderScale: 1.5,        // 1.5x supersampling - crisp visuals
+    useEnhancedPostProcess: true,
+    useReactiveVideo: true,  // Videos speed up/slow/reverse/glitch
+    useReactiveMusic: true   // Music reacts to gameplay
   });
 
-  // NEW: Initialize reactive music when sound manager is ready
+  // Initialize reactive music when sound manager is ready
   soundManager.onReady = () => {
     if (soundManager.audioContext && soundManager.masterGain) {
-      view.initReactiveMusic(soundManager.audioContext, soundManager.masterGain);
+      view.initReactiveMusic?.(soundManager.audioContext, soundManager.masterGain);
       view.useReactiveMusic = true;
     }
   };
-
   const controller = new Controller(game, view, view, soundManager);
 
   // Initialize high score display
@@ -219,11 +256,11 @@ uiContainer.innerHTML = `
     }
   });
 
-  // SFX volume control (master gain)
+  // SFX volume control
   const pauseSfxVolumeSlider = document.getElementById('pause-sfx-volume') as HTMLInputElement;
   pauseSfxVolumeSlider?.addEventListener('input', (e) => {
-    // Note: This would need additional implementation in SoundManager to separate SFX from music
-    // For now, this is a placeholder for the UI
+    const volume = parseInt((e.target as HTMLInputElement).value) / 100;
+    soundManager.setSfxVolume(volume);
   });
 
   // Pause menu buttons

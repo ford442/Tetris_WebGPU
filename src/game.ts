@@ -1,11 +1,11 @@
 import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
-import { ScoringSystem, ScoreEvent, HighScoreManager, HighScoreEntry } from './game/scoring.js';
+import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
 import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
-import View from './viewWebGPU.js';
+import type View from './viewWebGPU.js';
 
 export interface GameState {
   score: number;
@@ -23,6 +23,7 @@ export interface GameState {
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
+  isTSpinReady: boolean;
 }
 
 export default class Game {
@@ -104,7 +105,8 @@ export default class Game {
     effectCounter: 0,
     lastDropPos: null,
     lastDropDistance: 0,
-    scoreEvent: null
+    scoreEvent: null,
+    isTSpinReady: false
   };
 
   // NEW: View reference for reactive system hooks
@@ -174,6 +176,20 @@ export default class Game {
     return this.scoringSystem.saveHighScore();
   }
 
+  // Set view reference for reactive events
+  // ==================== REACTIVE EVENT HOOKS ====================
+  private triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
+    this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin, isAllClear);
+  }
+
+  private triggerLevelUpReactive(newLevel: number): void {
+    this.view?.onLevelUpReactive?.(newLevel);
+  }
+
+  private triggerTSpinReactive(type: 'normal' | 'mini'): void {
+    this.view?.onTSpinReactive?.(type);
+  }
+
   getState(): GameState {
     const playfield2D = buildPlayfieldProjection({
       playfieldWidth: this.playfieldWidth,
@@ -200,6 +216,7 @@ export default class Game {
     this._gameStateCache.lastDropPos = this.lastDropPos;
     this._gameStateCache.lastDropDistance = this.lastDropDistance;
     this._gameStateCache.scoreEvent = this.scoreEvent;
+    this._gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
 
     return this._gameStateCache;
   }
@@ -254,14 +271,10 @@ export default class Game {
             this._hardDropResult.linesCleared.push(linesScore[i]);
         }
         this._hardDropResult.tSpin = wasTSpin;
-        
-        // NEW: Trigger reactive systems
-        if (this.view) {
-            this.view.onLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-            if (wasTSpin) this.view.onTSpinReactive();
-            if (isAllClear) this.view.onPerfectClearReactive();
-            if (this.scoreEvent?.levelUp) this.view.onLevelUpReactive(this.level);
-        }
+        // Trigger reactive event for line clear
+        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+        if (wasTSpin) this.triggerTSpinReactive('normal');
+        if (isAllClear) this.view?.onPerfectClearReactive?.();
     } else {
         this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
         this.scoreEvent = null;
@@ -314,19 +327,19 @@ export default class Game {
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
                   const isAllClear = this.isPlayfieldEmpty();
+                  const previousLevel = this.level;
                   this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
                   this._updateResult.linesCleared.length = 0;
                   for (let i = 0; i < linesScore.length; i++) {
                       this._updateResult.linesCleared.push(linesScore[i]);
                   }
                   this._updateResult.tSpin = wasTSpin;
-                  
-                  // NEW: Trigger reactive systems
-                  if (this.view) {
-                      this.view.onLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-                      if (wasTSpin) this.view.onTSpinReactive();
-                      if (isAllClear) this.view.onPerfectClearReactive();
-                      if (this.scoreEvent?.levelUp) this.view.onLevelUpReactive(this.level);
+                  // Trigger reactive event for line clear
+                  this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+                  if (wasTSpin) this.view?.onTSpinReactive?.();
+                  // Check for level up and trigger reactive event
+                  if (this.level > previousLevel) {
+                      this.triggerLevelUpReactive(this.level);
                   }
               } else {
                   this.scoringSystem.resetCombo();
@@ -463,6 +476,10 @@ export default class Game {
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
+      // Trigger T-Spin reactive if detected
+      if (this.isTSpin && this.activPiece.type === 'T') {
+        this.triggerTSpinReactive('normal');
+      }
       return;
     }
 
@@ -483,6 +500,10 @@ export default class Game {
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             this.checkTSpin(); // Check T-Spin after kick
+            // Trigger T-Spin reactive if detected
+            if (this.isTSpin && this.activPiece.type === 'T') {
+              this.triggerTSpinReactive('normal');
+            }
             return;
         }
     }
