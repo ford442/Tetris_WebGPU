@@ -296,6 +296,11 @@ export function renderEndScreen(view: any): void {
   view.visualEffects.triggerFlash(0.5);
 }
 
+export function renderPauseScreen(view: any): void {
+  // Pause screen is handled by DOM overlay
+  // Visual effects could be added here (e.g., dim the board)
+}
+
 export function onMove(view: any, x: number, y: number): void {
   const worldX = (x + 1.5) * 2.2;
   const worldY = (y + 1.5) * -2.2;

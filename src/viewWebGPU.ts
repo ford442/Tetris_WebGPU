@@ -29,6 +29,7 @@ import {
   onRotate as handleRotate,
   renderEndScreen as handleRenderEndScreen,
   renderMainScreen as handleRenderMainScreen,
+  renderPauseScreen as handleRenderPauseScreen,
   showFloatingText as handleShowFloatingText,
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
@@ -60,7 +61,7 @@ export default class View {
   visualX: number = 0;
   visualY: number = 0;
   private _previousActivePiece: any = null;
-  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
+  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string | null, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
   blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
@@ -411,6 +412,7 @@ export default class View {
   }
   renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
   renderEndScreen({ score }: any) { handleRenderEndScreen(this); }
+  renderPauseScreen() { handleRenderPauseScreen(this); }
   onMove(x: number, y: number) { handleMove(this, x, y); }
 
   generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {

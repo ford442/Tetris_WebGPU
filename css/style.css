@@ -29,6 +29,14 @@ h1 {
     pointer-events: auto;
 }
 
+.header {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: auto;
+}
+
 .main-layout {
     display: flex;
     justify-content: space-between;
@@ -175,6 +183,160 @@ canvas {
     }
 }
 
+/* Combo Display */
+.combo-display {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #00ff00;
+    text-shadow: 0 0 10px #00ff00, 0 0 20px rgba(0, 255, 0, 0.5);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.2s, transform 0.2s;
+    margin-top: 5px;
+}
+
+.combo-display.active {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.combo-display.combo-pulse {
+    animation: comboPulse 0.4s ease-out;
+}
+
+@keyframes comboPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.3);
+        text-shadow: 0 0 20px #00ff00, 0 0 40px rgba(0, 255, 0, 0.8);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* High Score Box */
+.high-score-box .panel-value {
+    color: #ffd700;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+}
+
+/* Music Controls */
+.music-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.music-controls .volume-slider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.music-controls input[type="range"] {
+    width: 80px;
+    cursor: pointer;
+}
+
+.music-controls button {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+}
+
+/* Pause Menu */
+.pause-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    pointer-events: auto;
+}
+
+.pause-menu-content {
+    background: rgba(20, 20, 40, 0.95);
+    border: 2px solid rgba(0, 255, 255, 0.5);
+    border-radius: 15px;
+    padding: 40px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.3), inset 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.pause-menu-content h2 {
+    font-size: 3rem;
+    margin: 0;
+    color: #00ffff;
+    text-shadow: 0 0 10px #00ffff, 0 0 20px rgba(0, 255, 255, 0.5);
+    letter-spacing: 5px;
+}
+
+.pause-btn {
+    width: 200px;
+    padding: 12px 24px;
+    font-size: 1.2rem;
+    background: rgba(0, 255, 255, 0.1);
+    border: 2px solid rgba(0, 255, 255, 0.5);
+    color: #00ffff;
+    border-radius: 8px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.pause-btn:hover {
+    background: rgba(0, 255, 255, 0.3);
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+
+.pause-btn:active {
+    transform: scale(0.95);
+}
+
+.pause-volume-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 200px;
+    margin-top: 10px;
+}
+
+.volume-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.volume-row label {
+    font-size: 0.9rem;
+    color: #aaa;
+}
+
+.volume-row input[type="range"] {
+    width: 120px;
+    cursor: pointer;
+}
+
+.pause-hint {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 10px;
+}
+
 /* Themes */
 .pastel-theme .panel-box {
     border-color: rgba(255, 182, 193, 0.5);
@@ -196,4 +358,50 @@ canvas {
 .futuristic-theme h1 {
     font-family: 'Courier New', Courier, monospace; /* Placeholder for a tech font */
     letter-spacing: 5px;
+}
+
+/* Neon theme pause menu adjustments */
+.neon-theme .pause-menu-content {
+    border-color: rgba(0, 255, 255, 0.5);
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+}
+
+.neon-theme .pause-btn {
+    border-color: rgba(0, 255, 255, 0.5);
+    color: #00ffff;
+}
+
+/* Pastel theme pause menu adjustments */
+.pastel-theme .pause-menu-content {
+    border-color: rgba(255, 182, 193, 0.5);
+    box-shadow: 0 0 30px rgba(255, 182, 193, 0.3);
+}
+
+.pastel-theme .pause-menu-content h2 {
+    color: #ffb6c1;
+    text-shadow: 0 0 10px rgba(255, 182, 193, 0.5);
+}
+
+.pastel-theme .pause-btn {
+    border-color: rgba(255, 182, 193, 0.5);
+    color: #ffb6c1;
+}
+
+/* Futuristic theme pause menu adjustments */
+.futuristic-theme .pause-menu-content {
+    border-color: rgba(100, 200, 255, 0.8);
+    border-radius: 0;
+    clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+}
+
+.futuristic-theme .pause-menu-content h2 {
+    color: #64c8ff;
+    text-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+}
+
+.futuristic-theme .pause-btn {
+    border-color: rgba(100, 200, 255, 0.8);
+    color: #64c8ff;
+    border-radius: 0;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
