@@ -18,14 +18,23 @@ export class VisualEffects {
     shockwaveCenter: number[] = [0.5, 0.5];
     shockwaveParams: number[] = [0.15, 0.08, 0.03, 2.0]; // width, strength, aberration, speed
 
-    // Video background state
+    // Video background state with smooth crossfading
     videoElement: HTMLVideoElement;
+    standbyVideoElement: HTMLVideoElement;
     isVideoPlaying: boolean = false;
     currentLevel: number = 0;
     currentVideoSrc: string = '';
+    pendingVideoSrc: string = '';
+    
+    // Crossfade state
+    isCrossfading: boolean = false;
+    crossfadeProgress: number = 0;
+    crossfadeDuration: number = 2.0; // 2 seconds
+    primaryOpacity: number = 1.0;
+    standbyOpacity: number = 0.0;
 
     constructor(parentElement: HTMLElement, width: number, height: number) {
-        // Setup Video Element
+        // Setup Primary Video Element
         this.videoElement = document.createElement('video');
         this.videoElement.autoplay = true;
         this.videoElement.loop = true;
@@ -34,8 +43,21 @@ export class VisualEffects {
         this.videoElement.style.zIndex = '-1'; // Behind canvas
         this.videoElement.style.display = 'none';
         this.videoElement.style.objectFit = 'contain';
+        this.videoElement.style.transition = 'opacity 0.1s linear';
 
-        // Fallback detection
+        // Setup Standby Video Element (for crossfading)
+        this.standbyVideoElement = document.createElement('video');
+        this.standbyVideoElement.autoplay = false;
+        this.standbyVideoElement.loop = true;
+        this.standbyVideoElement.muted = true;
+        this.standbyVideoElement.style.position = 'absolute';
+        this.standbyVideoElement.style.zIndex = '-2'; // Behind primary
+        this.standbyVideoElement.style.display = 'none';
+        this.standbyVideoElement.style.objectFit = 'contain';
+        this.standbyVideoElement.style.opacity = '0';
+        this.standbyVideoElement.style.transition = 'opacity 0.1s linear';
+
+        // Fallback detection for primary
         this.videoElement.addEventListener('error', () => {
             console.warn('Video background failed to load. Falling back to shader.');
             this.isVideoPlaying = false;
@@ -46,13 +68,20 @@ export class VisualEffects {
             this.videoElement.style.display = 'block';
         });
 
+        // Standby video events
+        this.standbyVideoElement.addEventListener('canplay', () => {
+            if (this.pendingVideoSrc) {
+                this.startCrossfade();
+            }
+        });
+
         parentElement.appendChild(this.videoElement);
+        parentElement.appendChild(this.standbyVideoElement);
         this.updateVideoPosition(width, height);
     }
 
     updateVideoPosition(width: number, height: number): void {
         // 1. Calculate a "Portal" size that matches the Tetris aspect ratio (10 cols x 20 rows = 1:2)
-        // We base it on height to ensure it fits on screen
         const portalHeight = height * 0.9; // 90% of screen height
         const portalWidth = portalHeight * 0.5; // Aspect ratio 0.5 (10/20)
 
@@ -60,17 +89,16 @@ export class VisualEffects {
         const centerX = (width - portalWidth) / 2;
         const centerY = (height - portalHeight) / 2;
 
-        this.videoElement.style.left = `${centerX}px`;
-        this.videoElement.style.top = `${centerY}px`;
-        this.videoElement.style.width = `${portalWidth}px`;
-        this.videoElement.style.height = `${portalHeight}px`;
-
-        // 3. Ensure the video fills this portal completely
-        this.videoElement.style.objectFit = 'cover';
-
-        // 4. Optional: Add a border/glow to the video to frame the portal
-        this.videoElement.style.boxShadow = '0 0 50px rgba(0, 200, 255, 0.2)';
-        this.videoElement.style.borderRadius = '4px';
+        // Apply to both primary and standby videos
+        [this.videoElement, this.standbyVideoElement].forEach(video => {
+            video.style.left = `${centerX}px`;
+            video.style.top = `${centerY}px`;
+            video.style.width = `${portalWidth}px`;
+            video.style.height = `${portalHeight}px`;
+            video.style.objectFit = 'cover';
+            video.style.boxShadow = '0 0 50px rgba(0, 200, 255, 0.2)';
+            video.style.borderRadius = '4px';
+        });
     }
 
     updateVideoForLevel(level: number, levelVideos?: string[]): void {
@@ -84,34 +112,66 @@ export class VisualEffects {
         }
 
         // Increase cycling frequency at higher levels
-        // Levels 0-11: one video per level
-        // Levels 12-23: cycle through videos twice (2x speed)
-        // Levels 24+: cycle through videos 3x, etc.
         const cycleMultiplier = 1 + Math.floor(level / levelVideos.length);
         const videoIndex = (level * cycleMultiplier) % levelVideos.length;
         const videoSrc = levelVideos[videoIndex];
 
-        // Only update if the source is different from what we're tracking
+        // Only update if the source is different
         if (this.currentVideoSrc === videoSrc) {
             return; // Already playing the correct video
         }
 
-        this.currentVideoSrc = videoSrc;
-        this.isVideoPlaying = false; // Reset state
-        if (videoSrc) {
-            this.videoElement.src = videoSrc;
-            // Don't show immediately, wait for 'playing' event
-            this.videoElement.play().catch(e => {
-                console.log("Video autoplay failed", e);
-                // Fallback handled by catch + error listener
-                this.isVideoPlaying = false;
-                this.videoElement.style.display = 'none';
-            });
-        } else {
-            this.videoElement.pause();
-            this.videoElement.src = "";
-            this.videoElement.style.display = 'none';
+        // Start crossfade: load new video into standby
+        this.pendingVideoSrc = videoSrc;
+        this.standbyVideoElement.src = videoSrc;
+        this.standbyVideoElement.load();
+        
+        // If already crossfading, reset
+        if (this.isCrossfading) {
+            this.isCrossfading = false;
+            this.crossfadeProgress = 0;
         }
+    }
+
+    startCrossfade(): void {
+        if (!this.pendingVideoSrc) return;
+        
+        this.isCrossfading = true;
+        this.crossfadeProgress = 0;
+        
+        // Start playing standby video
+        this.standbyVideoElement.play().catch(e => {
+            console.log("Standby video autoplay failed", e);
+        });
+        
+        console.log('[Video] Starting crossfade to:', this.pendingVideoSrc);
+    }
+
+    completeCrossfade(): void {
+        if (!this.pendingVideoSrc) return;
+        
+        // Swap videos: standby becomes primary
+        const oldPrimary = this.videoElement;
+        this.videoElement = this.standbyVideoElement;
+        this.standbyVideoElement = oldPrimary;
+        
+        // Update z-index
+        this.videoElement.style.zIndex = '-1';
+        this.standbyVideoElement.style.zIndex = '-2';
+        
+        // Reset opacity
+        this.videoElement.style.opacity = '1';
+        this.standbyVideoElement.style.opacity = '0';
+        this.standbyVideoElement.style.display = 'none';
+        
+        // Update state
+        this.currentVideoSrc = this.pendingVideoSrc;
+        this.pendingVideoSrc = '';
+        this.isCrossfading = false;
+        this.crossfadeProgress = 0;
+        this.isVideoPlaying = true;
+        
+        console.log('[Video] Crossfade complete, now playing:', this.currentVideoSrc);
     }
 
     updateEffects(dt: number): void {
@@ -140,6 +200,27 @@ export class VisualEffects {
         if (this.shockwaveTimer > 0) {
             this.shockwaveTimer += dt * 0.8; // Speed
             if (this.shockwaveTimer > 1.0) this.shockwaveTimer = 0.0;
+        }
+
+        // Handle video crossfade animation
+        if (this.isCrossfading) {
+            this.crossfadeProgress += dt / this.crossfadeDuration;
+            
+            if (this.crossfadeProgress >= 1.0) {
+                // Crossfade complete
+                this.completeCrossfade();
+            } else {
+                // Update opacity during crossfade
+                const t = this.crossfadeProgress;
+                // Smoothstep for smoother transition
+                const smoothT = t * t * (3.0 - 2.0 * t);
+                this.primaryOpacity = 1.0 - smoothT;
+                this.standbyOpacity = smoothT;
+                
+                this.videoElement.style.opacity = this.primaryOpacity.toString();
+                this.standbyVideoElement.style.opacity = this.standbyOpacity.toString();
+                this.standbyVideoElement.style.display = 'block';
+            }
         }
     }
 

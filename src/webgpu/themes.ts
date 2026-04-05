@@ -26,11 +26,50 @@ export interface Themes {
   chrome: ThemeColors;  // NEW
 }
 
-const DEFAULT_LEVEL_VIDEOS = [
-  './assets/video/bg1.mp4',
-  './assets/video/bg2.mp4',
-  './assets/video/bg3.mp4'
-];
+// Theme-specific video playlists for Ethereal Floating Hardware Panel aesthetic
+export const ThemeVideos = {
+  // Space theme - cosmic nebulas, starfields, orbital views
+  Space: [
+    './assets/video/space_nebula.mp4',
+    './assets/video/space_orbit.mp4',
+    './assets/video/space_starfield.mp4',
+    './assets/video/space_warp.mp4'
+  ],
+  
+  // Underwater theme - deep ocean, caustics, bioluminescence
+  Underwater: [
+    './assets/video/ocean_deep.mp4',
+    './assets/video/ocean_caustics.mp4',
+    './assets/video/ocean_bioluminescence.mp4',
+    './assets/video/ocean_currents.mp4'
+  ],
+  
+  // Cyberpunk theme - neon cityscapes, digital grids, matrix rain
+  Cyberpunk: [
+    './assets/video/cyber_city.mp4',
+    './assets/video/cyber_grid.mp4',
+    './assets/video/cyber_matrix.mp4',
+    './assets/video/cyber_glitch.mp4'
+  ],
+  
+  // Ethereal theme - soft clouds, aurora, void
+  Ethereal: [
+    './assets/video/ethereal_clouds.mp4',
+    './assets/video/ethereal_aurora.mp4',
+    './assets/video/ethereal_void.mp4',
+    './assets/video/ethereal_mist.mp4'
+  ],
+  
+  // Default fallback videos
+  Default: [
+    './assets/video/bg1.mp4',
+    './assets/video/bg2.mp4',
+    './assets/video/bg3.mp4'
+  ]
+};
+
+// Backward compatibility
+const DEFAULT_LEVEL_VIDEOS = ThemeVideos.Default;
 
 export const themes: Themes = {
   pastel: {
@@ -43,7 +82,7 @@ export const themes: Themes = {
     6: [0.88, 0.75, 0.91], // T
     7: [1.0, 0.8, 0.82],   // Z
     border: [0.82, 0.77, 0.91],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Ethereal,
     backgroundColors: [
       [1.0, 0.8, 0.82],   // Pink
       [0.69, 0.92, 0.95], // Mint
@@ -61,7 +100,7 @@ export const themes: Themes = {
     6: [0.5, 0.0, 1.0], // Purple for T
     7: [1.0, 0.0, 0.0], // Red for Z
     border: [1.0, 1.0, 1.0],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Cyberpunk,
     backgroundColors: [
       [0.0, 0.9, 1.0], // Neon Cyan
       [0.8, 0.3, 1.0], // Neon Purple
@@ -79,7 +118,7 @@ export const themes: Themes = {
     6: [0.6, 0.0, 0.9], // Purple
     7: [0.9, 0.0, 0.0], // Red
     border: [0.5, 0.8, 1.0],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Space,
     backgroundColors: [
       [0.0, 0.9, 0.9], // Cyan
       [0.6, 0.0, 0.9], // Purple
@@ -98,7 +137,7 @@ export const themes: Themes = {
     6: [1.0, 0.82, 0.12],
     7: [0.97, 0.79, 0.08],
     border: [0.83, 0.69, 0.22],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Space,
     backgroundColors: [
       [0.4, 0.3, 0.1],
       [0.6, 0.45, 0.15],
@@ -117,7 +156,7 @@ export const themes: Themes = {
     6: [0.9, 0.7, 1.0],
     7: [1.0, 0.7, 0.75],
     border: [0.9, 0.95, 1.0],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Underwater,
     backgroundColors: [
       [0.1, 0.15, 0.25],
       [0.15, 0.2, 0.35],
@@ -136,7 +175,7 @@ export const themes: Themes = {
     6: [0.95, 0.98, 1.0], // T - Glass
     7: [0.9, 0.1, 0.15],  // Z - Ruby
     border: [0.8, 0.7, 0.5],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Space,
     backgroundColors: [
       [0.2, 0.1, 0.15],
       [0.15, 0.1, 0.2],
@@ -155,7 +194,7 @@ export const themes: Themes = {
     6: [1.0, 0.0, 0.5],   // T - Pink neon
     7: [1.0, 0.0, 0.0],   // Z - Red neon
     border: [0.0, 0.8, 1.0],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Cyberpunk,
     backgroundColors: [
       [0.0, 0.1, 0.15],
       [0.05, 0.0, 0.1],
@@ -174,7 +213,7 @@ export const themes: Themes = {
     6: [0.91, 0.91, 0.91],
     7: [0.93, 0.93, 0.93],
     border: [0.7, 0.7, 0.7],
-    levelVideos: DEFAULT_LEVEL_VIDEOS,
+    levelVideos: ThemeVideos.Space,
     backgroundColors: [
       [0.15, 0.15, 0.2],
       [0.2, 0.2, 0.25],
