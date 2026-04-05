@@ -133,11 +133,22 @@ export const Shaders = () => {
 
                 // --- Composition ---
                 // Energy-conserving: ambient provides floor (0.3), diffuse scales remaining (0.7)
-                // so total light factor stays in [0.3, 1.0] and never blows out the texture.
                 let lightFactor = 0.3 + diffuse * 0.7;
                 // Specular is metalMask-weighted and kept small to not overpower the texture
                 let specularStrength = mix(0.15, 0.5, metalMask);
                 var finalColor:vec3<f32> = baseColor * lightFactor + vec3<f32>${params.specularColor} * specular * specularStrength;
+
+                // ENHANCED: Iridescent specular for glass blocks
+                // Oil-slick rainbow effect on the glass surfaces
+                if (glassMask > 0.5) {
+                    let iridescence = sin(dotNV * 8.0 - time * 0.5) * 0.5 + 0.5;
+                    let rainbow = vec3<f32>(
+                        sin(iridescence * 6.28) * 0.5 + 0.5,
+                        sin(iridescence * 6.28 + 2.09) * 0.5 + 0.5,
+                        sin(iridescence * 6.28 + 4.18) * 0.5 + 0.5
+                    );
+                    finalColor += rainbow * specular * 0.15 * glassMask;
+                }
 
                 // Add Glitch Mod
                 finalColor += glitchColorMod;
@@ -149,11 +160,15 @@ export const Shaders = () => {
                 let centerGlow = clamp((0.45 - distCenter) / 0.35, 0.0, 1.0);
                 finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.5;
 
-                // Gentle rim lighting -- just enough to outline the block shape
+                // ENHANCED rim lighting -- more pronounced edge glow
                 let rimFalloff = 1.0 - max(dot(N, V), 0.0);
                 let rimFalloff2 = rimFalloff * rimFalloff;
-                let rimLight = rimFalloff2 * rimFalloff2 * 4.0;
-                finalColor += vec3<f32>(1.0) * rimLight * 0.04;
+                let rimFalloff4 = rimFalloff2 * rimFalloff2;
+                let rimLight = rimFalloff4 * rimFalloff4 * 6.0; // Sharper, brighter rim
+                
+                // Color the rim based on piece color for glass, white for metal
+                let rimColor = mix(vColor.rgb * 0.8, vec3<f32>(1.0), metalMask);
+                finalColor += rimColor * rimLight * 0.08;
 
                 // Simple fresnel (needed for ghost piece downstream)
                 let dotNV = max(dot(N, V), 0.0);
@@ -164,106 +179,124 @@ export const Shaders = () => {
                 // Edge distance (needed for ghost piece wireframe downstream)
                 let uvEdgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
 
-                // Lock Tension Pulse (Heartbeat & Alarm)
+                // Lock Tension Pulse (Heartbeat & Alarm) - ENHANCED
                 let lockPercent = uniforms.lockPercent;
-                if (lockPercent > 0.3) {
-                     // NEON BRICKLAYER: Only active when > 30% locked (Panic Mode starts earlier)
-                     let tension = smoothstep(0.3, 1.0, lockPercent); // Remap 0.3->1.0 to 0.0->1.0
-
-                     // Heartbeat rhythm: faster as it gets closer to 1.0
-                     let beatSpeed = 8.0 + tension * 80.0; // JUICE: Even faster panic mode
-                     let pulse = sin(time * beatSpeed) * 0.5 + 0.5;
-
-                     // Optimization: Replace pow with chained multiplication where possible.
-                     // The power is between 2.0 and 6.0 based on tension. We can approximate or use pow.
-                     // Actually, since pow is somewhat expensive and the tension is [0..1],
-                     // an integer power like 2, 4 or 6 through chained multiplication is faster.
-                     // A mix between 2 and 6:
-                     let pulse2 = pulse * pulse;
-                     let pulse4 = pulse2 * pulse2;
-                     let pulse6 = pulse4 * pulse2;
-                     let sharpPulse = mix(pulse2, pulse6, tension);
-
-                     // Digital Grid Scan Effect (Digitizing in/out)
-                     // Scanline that moves up/down based on pulse
-                     let scanY = fract(vUV.y * 10.0 + time * 5.0);
-                     let scanLine = step(0.9, scanY) * tension * sharpPulse;
-
-                     // Mix to Warning Red
-                     let warningColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-                     finalColor = mix(finalColor, warningColor, tension * sharpPulse * 1.5);
-
+                if (lockPercent > 0.25) {
+                     // Start earlier for more tension build-up
+                     let tension = smoothstep(0.25, 1.0, lockPercent);
+                     
+                     // Dual-frequency heartbeat: slow thump + fast panic
+                     let slowBeat = sin(time * 6.0) * 0.5 + 0.5;
+                     let fastBeat = sin(time * (15.0 + tension * 40.0)) * 0.5 + 0.5;
+                     let pulse = mix(slowBeat, fastBeat, tension);
+                     
+                     // Sharpen the pulse
+                     let sharpPulse = pulse * pulse * pulse;
+                     
+                     // Digital Grid Scan Effect
+                     let scanY = fract(vUV.y * 12.0 + time * 4.0);
+                     let scanLine = step(0.92, scanY) * tension * 0.7;
+                     
+                     // Warning colors: orange -> red -> white hot
+                     let warnOrange = vec3<f32>(1.0, 0.5, 0.0);
+                     let warnRed = vec3<f32>(1.0, 0.0, 0.15);
+                     let warnHot = vec3<f32>(1.0, 0.3, 0.3);
+                     let warningColor = mix(warnOrange, warnRed, tension);
+                     warningColor = mix(warningColor, warnHot, sharpPulse * tension);
+                     
+                     // Apply with intensity that increases near lock
+                     let intensity = tension * sharpPulse * 1.2;
+                     finalColor = mix(finalColor, warningColor, intensity);
+                     
                      // Add Scanline Emission
-                     finalColor += warningColor * scanLine * 3.0;
+                     finalColor += warningColor * scanLine * 4.0 * (0.5 + sharpPulse * 0.5);
+                     
+                     // Edge warning pulse
+                     let edgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                     if (edgeDist > 0.85 && sharpPulse > 0.7) {
+                         finalColor += warnHot * 0.5;
+                     }
                 }
 
                 // Subtle Surface Noise (Texture)
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
                 finalColor += vec3<f32>(noise) * 0.015;
 
-                // Ghost Piece Logic
+                // Ghost Piece Logic - ENHANCED
                 if (vColor.w < 0.4) {
                     // Hologram Effect - High Tech (ENHANCED)
-                    // Faster scanlines for more energy
-                    let scanSpeed = 30.0; // Faster scan speed
-                    // INCREASED Frequency: 60.0 -> 80.0 (Finer lines)
-                    let scanY = fract(vUV.y * 80.0 - time * scanSpeed);
-                    // ENHANCED: Sharper, more visible scanline
-                    let scanline = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY)) * 10.0; // Boosted intensity
+                    let scanSpeed = 35.0; // Faster scan speed
+                    let scanY = fract(vUV.y * 90.0 - time * scanSpeed);
+                    // Multi-band scanline for more tech feel
+                    let scanline1 = smoothstep(0.0, 0.08, scanY) * (1.0 - smoothstep(0.92, 1.0, scanY));
+                    let scanline2 = smoothstep(0.5, 0.54, scanY) * (1.0 - smoothstep(0.96, 1.0, scanY));
+                    let scanline = (scanline1 + scanline2 * 0.5) * 8.0;
 
-                    // Landing Beam (Vertical Highlight)
-                    let beam = smoothstep(0.6, 0.0, abs(vUV.x - 0.5)) * 0.8;
+                    // Landing Beam (Vertical Highlight) - wider and more pronounced
+                    let beam = smoothstep(0.7, 0.0, abs(vUV.x - 0.5)) * 1.2;
 
-                    // Wireframe logic (from edgeGlow)
-                    let wireframe = smoothstep(0.9, 0.98, uvEdgeDist);
+                    // Enhanced wireframe with depth
+                    let wireframe = smoothstep(0.88, 0.98, uvEdgeDist);
+                    let innerWire = smoothstep(0.75, 0.85, uvEdgeDist) * 0.4;
 
-                    let ghostColor = vColor.rgb * 3.0; // Brighten original color further
+                    // Brighten original color further
+                    let ghostColor = vColor.rgb * 3.5;
 
-                    // NEON BRICKLAYER: Tension-based pulse
-                    let tension = smoothstep(0.3, 1.0, lockPercent); // Start reacting earlier
-                    let pulseFreq = 10.0 + tension * 40.0; // Speed up significantly when locking
+                    // Tension-based pulse
+                    let tension = smoothstep(0.25, 1.0, lockPercent);
+                    let pulseFreq = 12.0 + tension * 35.0;
+                    
+                    // Ghost alpha with more variation
+                    let baseAlpha = 0.55 + 0.35 * sin(time * pulseFreq);
+                    // Add breathing pattern
+                    let breath = sin(time * 2.5) * 0.1 + 0.9;
+                    var ghostAlpha = baseAlpha * breath;
 
-                    // ENHANCED Pulse: Slower, fuller, reacts to lock
-                    var ghostAlpha = 0.6 + 0.4 * sin(time * pulseFreq); // More dynamic range
+                    // Holographic scan effect
+                    let scanEffect = sin(vUV.y * 70.0 + time * 10.0) * 0.12;
+                    let horizontalScan = sin(vUV.x * 40.0 - time * 6.0) * 0.08;
 
-                    // Holographic Scanline
-                    let scanEffect = sin(vUV.y * 80.0 + time * 8.0) * 0.15;
+                    // Ghost Grid Pattern - finer details
+                    let gridX = step(0.92, fract(vUV.x * 6.0));
+                    let gridY = step(0.92, fract(vUV.y * 6.0));
+                    let gridPattern = max(gridX, gridY) * 0.6;
 
-                    // NEON BRICKLAYER: Ghost Grid Pattern
-                    // Adds a wireframe feel to the hologram
-                    let gridX = step(0.9, fract(vUV.x * 4.0));
-                    let gridY = step(0.9, fract(vUV.y * 4.0));
-                    let gridPattern = max(gridX, gridY) * 0.5;
-
-                    // NEW Glitch effect (Reacts to tension)
-                    let glitchAmp = 0.03 + tension * 0.1;
-                    // Chaotic glitch
-                    var ghostGlitch = sin(vUV.y * 50.0 + time * (20.0 + tension * 50.0)) * glitchAmp;
-                    if (tension > 0.5 && fract(time * 10.0) > 0.8) {
-                         ghostGlitch += 0.1; // Big glitch jump
+                    // Glitch effect (Reacts to tension)
+                    let glitchAmp = 0.04 + tension * 0.12;
+                    var ghostGlitch = sin(vUV.y * 60.0 + time * (25.0 + tension * 40.0)) * glitchAmp;
+                    if (tension > 0.4 && fract(time * 12.0) > 0.85) {
+                         ghostGlitch += 0.15;
                     }
 
-                    // Added Flicker
-                    if (fract(time * 30.0) > 0.95) {
-                        ghostAlpha *= 0.5;
+                    // Flicker effect
+                    let flickerNoise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time * 20.0) * 43758.5453);
+                    if (flickerNoise > 0.94) {
+                        ghostAlpha *= 0.4;
                     }
 
-                    var ghostFinal = ghostColor * wireframe * 6.0  // Bright edges
-                                   + ghostColor * scanline * 2.0   // Scanlines (Boosted)
-                                   + ghostColor * beam * 0.6       // Landing Beam
-                                   + vec3<f32>(0.5, 0.9, 1.0) * fresnelTerm * 3.0; // Cyan/Blue rim
+                    // Combine all effects
+                    var ghostFinal = ghostColor * (wireframe + innerWire) * 7.0  // Bright edges
+                                   + ghostColor * scanline * 2.5                  // Scanlines
+                                   + ghostColor * beam * 0.8                      // Landing Beam
+                                   + vec3<f32>(0.4, 0.85, 1.0) * fresnelTerm * 4.0; // Cyan/Blue rim
 
-                    ghostFinal += vec3<f32>(ghostGlitch); // Add glitch to color
-                    ghostFinal += vec3<f32>(scanEffect); // Add scanline overlay
-                    ghostFinal += vec3<f32>(gridPattern) * ghostColor * 0.5; // Add grid pattern (Boosted)
+                    ghostFinal += vec3<f32>(ghostGlitch);                        // Glitch
+                    ghostFinal += vec3<f32>(scanEffect + horizontalScan);        // Scan overlays
+                    ghostFinal += vec3<f32>(gridPattern) * ghostColor * 0.6;      // Grid pattern
 
-                    // Digital noise/flicker
-                    let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
-                    if (noise > 0.92) {
-                        ghostFinal += vec3<f32>(1.5); // Sparkle
+                    // Digital noise sparkles
+                    let sparkleNoise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time * 3.0) * 43758.5453);
+                    if (sparkleNoise > 0.96) {
+                        ghostFinal += vec3<f32>(2.0); // Bright sparkle
+                    }
+                    
+                    // Tension warning overlay
+                    if (tension > 0.6) {
+                        let warnOverlay = vec3<f32>(1.0, 0.2, 0.0) * tension * 0.3;
+                        ghostFinal += warnOverlay;
                     }
 
-                    ghostFinal *= 5.0; // Boost brightness
+                    ghostFinal *= 4.5; // Boost brightness
 
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
