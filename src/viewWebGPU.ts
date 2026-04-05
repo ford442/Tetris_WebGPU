@@ -17,6 +17,8 @@ import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
 import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
+import { lineClearAnimator } from './effects/lineClearAnimation.js';
+import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import {
   PROCEDURAL_BLOCK_TEXTURE_SIZE,
   getTextureMipLevelCount,
@@ -428,10 +430,14 @@ export default class View {
   }
 
   onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
+      // Trigger DOM-based line flash effect
+      lineFlashEffect.flashLines(lines);
+      
+      // Trigger the main line clear effects
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock() { handleLock(this); }
+  onLock(isTSpin: boolean = false) { handleLock(this, isTSpin); }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
@@ -441,7 +447,7 @@ export default class View {
       handleHardDrop(this, x, y, distance, colorIdx);
   }
   renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
-  renderEndScreen({ score }: any) { handleRenderEndScreen(this); }
+  renderEndScreen(state: any) { handleRenderEndScreen(this, state); }
   renderPauseScreen() { handleRenderPauseScreen(this); }
   onMove(x: number, y: number) { handleMove(this, x, y); }
 
@@ -835,6 +841,7 @@ export default class View {
     }
 
     this.visualEffects.updateEffects(clampedDt);
+    lineClearAnimator.update(clampedDt);
     const time = (performance.now() - this.startTime) / 1000.0;
 
     // Camera updates

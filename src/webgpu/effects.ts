@@ -170,11 +170,16 @@ export class VisualEffects {
         this.glitchIntensity = intensity;
     }
 
-    triggerLevelUp(): void {
-        this.warpSurge = 8.0;
-        this.triggerFlash(1.0);
-        this.triggerShockwave([0.5, 0.5], 2.0, 0.2, 0.1);
-        this.triggerGlitch(0.8);
+    triggerLevelUp(level: number = 1): void {
+        // Scale effects with level
+        const intensity = Math.min(1.0 + (level * 0.1), 2.0);
+        
+        this.warpSurge = 8.0 + (level * 0.5);
+        this.triggerFlash(intensity);
+        this.triggerShockwave([0.5, 0.5], 2.0 * intensity, 0.25 * intensity, 0.15, 3.0);
+        this.triggerGlitch(0.8 + (level * 0.05));
+        this.triggerAberration(0.5 + (level * 0.05));
+        this.triggerShake(2.0 + (level * 0.2), 0.8);
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
@@ -220,5 +225,93 @@ export class VisualEffects {
         this._shakeOffset.x = 0;
         this._shakeOffset.y = 0;
         return this._shakeOffset;
+    }
+
+    // ==================== REACTIVE VIDEO & MUSIC ====================
+    private reactiveVideoEnabled: boolean = false;
+    private reactiveMusicEnabled: boolean = false;
+    private videoPlaybackRate: number = 1.0;
+
+    setReactiveVideoEnabled(enabled: boolean): void {
+        this.reactiveVideoEnabled = enabled;
+        console.log('[VisualEffects] Reactive video:', enabled ? 'enabled' : 'disabled');
+    }
+
+    setReactiveMusicEnabled(enabled: boolean): void {
+        this.reactiveMusicEnabled = enabled;
+        console.log('[VisualEffects] Reactive music:', enabled ? 'enabled' : 'disabled');
+    }
+
+    triggerReactiveVideo(eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', intensity: number, data?: any): void {
+        if (!this.reactiveVideoEnabled) return;
+
+        switch (eventType) {
+            case 'lineClear':
+                // Speed up video on line clears
+                this.videoPlaybackRate = 1.0 + (intensity * 2.0);
+                this.videoElement.playbackRate = Math.min(this.videoPlaybackRate, 4.0);
+                
+                // Glitch effect for big clears
+                if (intensity > 0.5) {
+                    this.triggerGlitch(intensity * 0.5);
+                }
+                break;
+                
+            case 'levelUp':
+                // Reverse video momentarily on level up
+                this.videoElement.playbackRate = -2.0;
+                setTimeout(() => {
+                    if (this.videoElement) {
+                        this.videoElement.playbackRate = 1.0;
+                    }
+                }, 300);
+                this.triggerWarpSurge(1.0);
+                break;
+                
+            case 'tSpin':
+                // Slow motion for T-Spin
+                this.videoElement.playbackRate = 0.3;
+                setTimeout(() => {
+                    if (this.videoElement) {
+                        this.videoElement.playbackRate = 1.0;
+                    }
+                }, 500);
+                break;
+                
+            case 'gameOver':
+                // Freeze frame
+                this.videoElement.pause();
+                break;
+        }
+    }
+
+    triggerReactiveMusic(eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', intensity: number, data?: any): void {
+        if (!this.reactiveMusicEnabled) return;
+
+        // These are hooks for music system integration
+        // The actual music manipulation would be handled by the SoundManager
+        // We just log for now - the real implementation would emit events
+        switch (eventType) {
+            case 'lineClear':
+                // Music would: pitch shift up, add filter sweep
+                console.log('[ReactiveMusic] Line clear - intensity:', intensity.toFixed(2));
+                break;
+            case 'levelUp':
+                // Music would: transition to next section, add layer
+                console.log('[ReactiveMusic] Level up - new section');
+                break;
+            case 'tSpin':
+                // Music would: accent hit, stutter effect
+                console.log('[ReactiveMusic] T-Spin - accent');
+                break;
+            case 'gameOver':
+                // Music would: slow down, fade out
+                console.log('[ReactiveMusic] Game over - fade');
+                break;
+        }
+    }
+
+    triggerWarpSurge(intensity: number = 1.0): void {
+        this.warpSurge = intensity * 10.0;
     }
 }

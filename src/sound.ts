@@ -151,6 +151,7 @@ export class MusicManager {
 export default class SoundManager {
     private ctx: AudioContext;
     private masterGain: GainNode;
+    private sfxGain: GainNode;
     private noiseBuffer: AudioBuffer | null = null;
     private pinkNoiseBuffer: AudioBuffer | null = null;
     private enabled: boolean = true;
@@ -164,6 +165,11 @@ export default class SoundManager {
         this.masterGain.gain.value = 0.35;
         this.masterGain.connect(this.ctx.destination);
 
+        // SFX gain node (separate from music)
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.gain.value = 1.0;
+        this.sfxGain.connect(this.masterGain);
+
         this.initNoiseBuffers();
         
         // Initialize MusicManager
@@ -171,6 +177,14 @@ export default class SoundManager {
         
         // Try to load placeholder music (will gracefully fail if not available)
         this.loadPlaceholderMusic();
+    }
+
+    setSfxVolume(volume: number): void {
+        this.sfxGain.gain.value = Math.max(0, Math.min(1, volume));
+    }
+
+    getSfxVolume(): number {
+        return this.sfxGain.gain.value;
     }
 
     private async loadPlaceholderMusic(): Promise<void> {
@@ -279,7 +293,7 @@ export default class SoundManager {
             gain.connect(panner as StereoPannerNode);
             (panner as StereoPannerNode).connect(this.masterGain);
         } else {
-            gain.connect(this.masterGain);
+            gain.connect(this.sfxGain);
         }
 
         osc.start(t);
@@ -357,9 +371,9 @@ export default class SoundManager {
         if (panner) {
             panner.pan.value = pan;
             gain.connect(panner);
-            panner.connect(this.masterGain);
+            panner.connect(this.sfxGain);
         } else {
-            gain.connect(this.masterGain);
+            gain.connect(this.sfxGain);
         }
 
         source.start(t);
@@ -379,7 +393,7 @@ export default class SoundManager {
         gain.gain.setValueAtTime(0.6 * intensity, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start(t);
         osc.stop(t + 0.15);
 
@@ -419,7 +433,7 @@ export default class SoundManager {
         gain.gain.setValueAtTime(vol, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start(t);
         osc.stop(t + 0.02);
 
@@ -474,7 +488,7 @@ export default class SoundManager {
         
         osc.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start(t);
         osc.stop(t + 0.12);
 
@@ -525,7 +539,7 @@ export default class SoundManager {
         gain.gain.setValueAtTime(0.15, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         osc.start(t);
         osc.stop(t + 0.08);
 
@@ -685,7 +699,7 @@ export default class SoundManager {
         sweepGain.gain.setValueAtTime(0.2, t);
         sweepGain.gain.linearRampToValueAtTime(0, t + 0.6);
         sweep.connect(sweepGain);
-        sweepGain.connect(this.masterGain);
+        sweepGain.connect(this.sfxGain);
         sweep.start(t);
         sweep.stop(t + 0.6);
 
@@ -790,7 +804,7 @@ export default class SoundManager {
         
         drone.connect(filter);
         filter.connect(droneGain);
-        droneGain.connect(this.masterGain);
+        droneGain.connect(this.sfxGain);
         drone.start(t);
         drone.stop(t + 2.5);
 

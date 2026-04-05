@@ -175,6 +175,16 @@ export default class Controller {
   private showPauseMenu(): void {
     const pauseMenu = document.getElementById('pause-menu');
     if (pauseMenu) {
+      // Update pause menu stats
+      const state = this.game.getState();
+      const pauseScore = document.getElementById('pause-score');
+      const pauseLevel = document.getElementById('pause-level');
+      const pauseLines = document.getElementById('pause-lines');
+      
+      if (pauseScore) pauseScore.textContent = state.score.toLocaleString();
+      if (pauseLevel) pauseLevel.textContent = state.level.toString();
+      if (pauseLines) pauseLines.textContent = state.lines.toString();
+      
       pauseMenu.style.display = 'flex';
     }
   }
@@ -442,7 +452,7 @@ export default class Controller {
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          this.viewWebGPU.onLock(result.tSpin);
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
@@ -526,7 +536,7 @@ export default class Controller {
           this.updateComboDisplay(combo);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          this.viewWebGPU.onLock(result.tSpin);
           // Reset combo display when piece locks without clearing
           if (this.game.scoringSystem.combo < 0) {
             this.updateComboDisplay(0);
