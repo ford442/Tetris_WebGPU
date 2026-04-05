@@ -1,9 +1,119 @@
+export class MusicManager {
+    private ctx: AudioContext;
+    private musicGain: GainNode;
+    private currentSource: AudioBufferSourceNode | null = null;
+    private currentBuffer: AudioBuffer | null = null;
+    private isPlaying: boolean = false;
+    private isPaused: boolean = false;
+    private currentUrl: string | null = null;
+    private playbackStartTime: number = 0;
+    private pausedAt: number = 0;
+    private loop: boolean = true;
+
+    constructor(audioContext: AudioContext, masterGain: GainNode) {
+        this.ctx = audioContext;
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = 0.5;
+        this.musicGain.connect(masterGain);
+    }
+
+    setVolume(volume: number): void {
+        this.musicGain.gain.value = Math.max(0, Math.min(1, volume));
+    }
+
+    getVolume(): number {
+        return this.musicGain.gain.value;
+    }
+
+    async load(url: string): Promise<boolean> {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.warn(`MusicManager: Failed to load audio from ${url}`);
+                return false;
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            this.currentBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            this.currentUrl = url;
+            return true;
+        } catch (e) {
+            console.warn(`MusicManager: Error loading audio from ${url}:`, e);
+            return false;
+        }
+    }
+
+    play(): void {
+        if (!this.currentBuffer) {
+            console.warn('MusicManager: No audio buffer loaded');
+            return;
+        }
+
+        if (this.isPlaying) {
+            this.stop();
+        }
+
+        this.currentSource = this.ctx.createBufferSource();
+        this.currentSource.buffer = this.currentBuffer;
+        this.currentSource.loop = this.loop;
+        this.currentSource.connect(this.musicGain);
+
+        const offset = this.isPaused ? this.pausedAt : 0;
+        this.currentSource.start(0, offset);
+        this.playbackStartTime = this.ctx.currentTime - offset;
+        this.isPlaying = true;
+        this.isPaused = false;
+    }
+
+    pause(): void {
+        if (!this.isPlaying || !this.currentSource) return;
+        
+        this.pausedAt = this.ctx.currentTime - this.playbackStartTime;
+        this.stop();
+        this.isPaused = true;
+    }
+
+    resume(): void {
+        if (this.isPaused) {
+            this.play();
+        }
+    }
+
+    stop(): void {
+        if (this.currentSource) {
+            try {
+                this.currentSource.stop();
+            } catch (e) {
+                // Source might already be stopped
+            }
+            this.currentSource.disconnect();
+            this.currentSource = null;
+        }
+        this.isPlaying = false;
+    }
+
+    setLoop(shouldLoop: boolean): void {
+        this.loop = shouldLoop;
+        if (this.currentSource) {
+            this.currentSource.loop = shouldLoop;
+        }
+    }
+
+    isMusicPlaying(): boolean {
+        return this.isPlaying;
+    }
+
+    isMusicPaused(): boolean {
+        return this.isPaused;
+    }
+}
+
 export default class SoundManager {
     private ctx: AudioContext;
     private masterGain: GainNode;
     private noiseBuffer: AudioBuffer | null = null;
     private pinkNoiseBuffer: AudioBuffer | null = null;
     private enabled: boolean = true;
+    musicManager: MusicManager;
 
     constructor() {
         // @ts-ignore
@@ -14,6 +124,29 @@ export default class SoundManager {
         this.masterGain.connect(this.ctx.destination);
 
         this.initNoiseBuffers();
+        
+        // Initialize MusicManager
+        this.musicManager = new MusicManager(this.ctx, this.masterGain);
+        
+        // Try to load placeholder music (will gracefully fail if not available)
+        this.loadPlaceholderMusic();
+    }
+
+    private async loadPlaceholderMusic(): Promise<void> {
+        // Placeholder: Try to load from common locations, but don't worry if it fails
+        const placeholderUrls = [
+            './assets/music/background.mp3',
+            './assets/music/theme.ogg',
+            './assets/audio/bgm.mp3'
+        ];
+        
+        for (const url of placeholderUrls) {
+            const success = await this.musicManager.load(url);
+            if (success) {
+                console.log(`MusicManager: Loaded background music from ${url}`);
+                break;
+            }
+        }
     }
 
     private initNoiseBuffers() {

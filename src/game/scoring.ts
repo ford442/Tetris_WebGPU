@@ -11,14 +11,92 @@ export interface ScoreEvent {
   isAllClear: boolean;
 }
 
+export interface HighScoreEntry {
+  score: number;
+  lines: number;
+  level: number;
+  date: string;
+}
+
+export class HighScoreManager {
+  private readonly STORAGE_KEY = 'tetris_highscores';
+  private readonly MAX_ENTRIES = 5;
+  private highScores: HighScoreEntry[] = [];
+
+  constructor() {
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+      if (stored) {
+        this.highScores = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Failed to load high scores from localStorage:', e);
+      this.highScores = [];
+    }
+  }
+
+  private saveToStorage(): void {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
+    } catch (e) {
+      console.warn('Failed to save high scores to localStorage:', e);
+    }
+  }
+
+  addScore(score: number, lines: number, level: number): boolean {
+    const entry: HighScoreEntry = {
+      score,
+      lines,
+      level,
+      date: new Date().toLocaleDateString()
+    };
+
+    // Check if this score qualifies for top scores
+    if (this.highScores.length < this.MAX_ENTRIES || score > this.highScores[this.highScores.length - 1].score) {
+      this.highScores.push(entry);
+      this.highScores.sort((a, b) => b.score - a.score);
+      this.highScores = this.highScores.slice(0, this.MAX_ENTRIES);
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  getHighScores(): HighScoreEntry[] {
+    return [...this.highScores];
+  }
+
+  getHighestScore(): HighScoreEntry | null {
+    return this.highScores.length > 0 ? this.highScores[0] : null;
+  }
+
+  clearScores(): void {
+    this.highScores = [];
+    this.saveToStorage();
+  }
+}
+
 export class ScoringSystem {
   score: number = 0;
   lines: number = 0;
   combo: number = -1; // -1 means no combo
   backToBack: boolean = false;
+  private highScoreManager: HighScoreManager;
+
+  constructor() {
+    this.highScoreManager = new HighScoreManager();
+  }
 
   get level(): number {
     return Math.floor(this.lines / 10) + 1;
+  }
+
+  getHighScoreManager(): HighScoreManager {
+    return this.highScoreManager;
   }
 
   // Pure logic to clear lines from a 2D array (for fallback/simulation)
@@ -144,5 +222,10 @@ export class ScoringSystem {
     this.lines = 0;
     this.combo = -1;
     this.backToBack = false;
+  }
+
+  // Save current score to high scores
+  saveHighScore(): boolean {
+    return this.highScoreManager.addScore(this.score, this.lines, this.level);
   }
 }

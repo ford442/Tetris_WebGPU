@@ -19,6 +19,7 @@ const uiContainer = document.getElementById('ui-container')!;
 uiContainer.innerHTML = `
   <div class="header">
       <h1>TETRIS</h1>
+      <div id="combo-display" class="combo-display">COMBO x0</div>
   </div>
 
   <div class="main-layout">
@@ -31,6 +32,10 @@ uiContainer.innerHTML = `
            <div class="panel-box score-box">
             <p class="panel-label">SCORE</p>
             <p id="score" class="panel-value">0</p>
+          </div>
+          <div class="panel-box high-score-box">
+            <p class="panel-label">HIGH SCORE</p>
+            <p id="high-score" class="panel-value">-</p>
           </div>
            <div class="panel-box">
             <p class="panel-label">LINES</p>
@@ -60,10 +65,40 @@ uiContainer.innerHTML = `
             <button id="pause-button">PAUSE</button>
             <button id="glitch-button">FX: OFF</button>
           </div>
+          
+          <div class="panel-box music-controls">
+            <p class="panel-label">MUSIC</p>
+            <div class="volume-slider">
+              <span>Vol:</span>
+              <input type="range" id="music-volume" min="0" max="100" value="50">
+            </div>
+            <button id="music-toggle">PLAY MUSIC</button>
+          </div>
       </div>
   </div>
 
   <div id="game-over">GAME OVER</div>
+  
+  <!-- Pause Menu Overlay -->
+  <div id="pause-menu" class="pause-menu" style="display: none;">
+    <div class="pause-menu-content">
+      <h2>PAUSED</h2>
+      <button id="resume-button" class="pause-btn">RESUME</button>
+      <button id="restart-button" class="pause-btn">RESTART</button>
+      <div class="pause-volume-controls">
+        <div class="volume-row">
+          <label>Music:</label>
+          <input type="range" id="pause-music-volume" min="0" max="100" value="50">
+        </div>
+        <div class="volume-row">
+          <label>SFX:</label>
+          <input type="range" id="pause-sfx-volume" min="0" max="100" value="35">
+        </div>
+      </div>
+      <p class="pause-hint">Press Enter or Escape to resume</p>
+    </div>
+  </div>
+  
   <div id="info1"></div>
   <div id="info2"></div>
 `;
@@ -94,6 +129,13 @@ uiContainer.innerHTML = `
 
   const controller = new Controller(game, view, view, soundManager);
 
+  // Initialize high score display
+  const highestScore = game.getHighScoreManager().getHighestScore();
+  const highScoreElement = document.getElementById('high-score');
+  if (highScoreElement && highestScore) {
+    highScoreElement.textContent = highestScore.score.toLocaleString();
+  }
+
   document.getElementById('pastel-theme')!.addEventListener('click', () => {
     document.body.className = 'pastel-theme';
     view.setTheme('pastel');
@@ -115,7 +157,7 @@ uiContainer.innerHTML = `
   });
 
   document.getElementById('pause-button')!.addEventListener('click', () => {
-      controller.pause();
+      controller.togglePause();
       (document.getElementById('pause-button') as HTMLButtonElement).blur();
   });
 
@@ -124,6 +166,54 @@ uiContainer.innerHTML = `
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
       btn.blur();
+  });
+
+  // Music volume control
+  const musicVolumeSlider = document.getElementById('music-volume') as HTMLInputElement;
+  const pauseMusicVolumeSlider = document.getElementById('pause-music-volume') as HTMLInputElement;
+  
+  musicVolumeSlider?.addEventListener('input', (e) => {
+    const volume = parseInt((e.target as HTMLInputElement).value) / 100;
+    soundManager.musicManager.setVolume(volume);
+    if (pauseMusicVolumeSlider) {
+      pauseMusicVolumeSlider.value = (volume * 100).toString();
+    }
+  });
+
+  pauseMusicVolumeSlider?.addEventListener('input', (e) => {
+    const volume = parseInt((e.target as HTMLInputElement).value) / 100;
+    soundManager.musicManager.setVolume(volume);
+    if (musicVolumeSlider) {
+      musicVolumeSlider.value = (volume * 100).toString();
+    }
+  });
+
+  // Music toggle
+  const musicToggleBtn = document.getElementById('music-toggle');
+  musicToggleBtn?.addEventListener('click', () => {
+    if (soundManager.musicManager.isMusicPlaying()) {
+      soundManager.musicManager.pause();
+      musicToggleBtn.textContent = 'PLAY MUSIC';
+    } else {
+      soundManager.musicManager.play();
+      musicToggleBtn.textContent = 'PAUSE MUSIC';
+    }
+  });
+
+  // SFX volume control (master gain)
+  const pauseSfxVolumeSlider = document.getElementById('pause-sfx-volume') as HTMLInputElement;
+  pauseSfxVolumeSlider?.addEventListener('input', (e) => {
+    // Note: This would need additional implementation in SoundManager to separate SFX from music
+    // For now, this is a placeholder for the UI
+  });
+
+  // Pause menu buttons
+  document.getElementById('resume-button')?.addEventListener('click', () => {
+    controller.resume();
+  });
+
+  document.getElementById('restart-button')?.addEventListener('click', () => {
+    controller.reset();
   });
 
   window.game = game;

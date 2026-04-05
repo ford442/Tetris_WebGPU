@@ -15,6 +15,7 @@ export default class Controller {
   viewWebGPU: View;
   soundManager: SoundManager;
   isPlaying: boolean;
+  isPaused: boolean = false;
   gameLoopID: number | null;
   intervalID: number | null; // For gravity
 
@@ -76,6 +77,7 @@ export default class Controller {
     this.viewWebGPU = viewWebGPU;
     this.soundManager = soundManager;
     this.isPlaying = false;
+    this.isPaused = false;
     this.gameLoopID = null;
     this.intervalID = null;
 
@@ -95,6 +97,7 @@ export default class Controller {
   play(): void {
     if (this.isPlaying) return;
     this.isPlaying = true;
+    this.isPaused = false;
 
     // Stop gravity timer - now handled in gameLoop
     this.stopTimer();
@@ -108,18 +111,79 @@ export default class Controller {
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
 
+    // Resume music if it was paused
+    if (this.soundManager.musicManager.isMusicPaused()) {
+      this.soundManager.musicManager.resume();
+    } else if (!this.soundManager.musicManager.isMusicPlaying()) {
+      // Try to start music if available
+      this.soundManager.musicManager.play();
+    }
+
+    this.hidePauseMenu();
     this.gameLoop();
   }
 
   pause(): void {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.isPaused) return;
+    this.isPaused = true;
     this.isPlaying = false;
+    
     if (this.gameLoopID) {
         cancelAnimationFrame(this.gameLoopID);
         this.gameLoopID = null;
     }
+    
+    // Pause music
+    this.soundManager.musicManager.pause();
+    this.soundManager.playPause();
+    
+    this.showPauseMenu();
     this.updateView();
-    this.view.renderPauseScreen();
+  }
+
+  resume(): void {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.isPlaying = true;
+
+    this.lastTime = performance.now();
+    
+    // Reset timers to prevent jumps
+    this.gravityTimer = 0;
+    this.actionTimers.left = 0;
+    this.actionTimers.right = 0;
+    this.actionTimers.down = 0;
+
+    // Resume music
+    this.soundManager.musicManager.resume();
+    this.soundManager.playResume();
+
+    this.hidePauseMenu();
+    this.gameLoop();
+  }
+
+  togglePause(): void {
+    if (this.game.gameOver) {
+      this.reset();
+    } else if (this.isPaused) {
+      this.resume();
+    } else {
+      this.pause();
+    }
+  }
+
+  private showPauseMenu(): void {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) {
+      pauseMenu.style.display = 'flex';
+    }
+  }
+
+  private hidePauseMenu(): void {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) {
+      pauseMenu.style.display = 'none';
+    }
   }
 
   startTimer(): void {
@@ -140,7 +204,9 @@ export default class Controller {
     if (state.isGameOver) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
-    } else if (!this.isPlaying) {
+      this.isPaused = false;
+      this.hidePauseMenu();
+    } else if (this.isPaused) {
       this.view.renderPauseScreen();
     } else {
       // Logic handled in gameLoop now
@@ -159,6 +225,13 @@ export default class Controller {
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
 
+    this.isPaused = false;
+    this.hidePauseMenu();
+    
+    // Restart music
+    this.soundManager.musicManager.stop();
+    this.soundManager.musicManager.play();
+
     this.play();
   }
 
@@ -167,19 +240,13 @@ export default class Controller {
 
     const code = event.code;
 
-    // Global keys (Enter)
-    if (code === 'Enter' || event.keyCode === 13) {
-        if (this.game.gameOver) {
-          this.reset();
-        } else if (this.isPlaying) {
-          this.pause();
-        } else {
-          this.play();
-        }
+    // Global keys (Enter, Escape for pause)
+    if (code === 'Enter' || code === 'Escape' || event.keyCode === 13 || event.keyCode === 27) {
+        this.togglePause();
         return;
     }
 
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.isPaused) return;
 
     // Map key to action
     const action = this.keyMap[code];
@@ -324,9 +391,8 @@ export default class Controller {
               {
                   const yBefore = this.game.activPiece?.y;
                   this.performHardDrop();
-                  if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
-                      this.bufferedAction = 'hardDrop';
-                      this.bufferedActionTime = performance.now();
+                  if (this.game.activPiece?.y !== yBefore) {
+                      // Successfully dropped
                   }
               }
               break;
@@ -380,12 +446,25 @@ export default class Controller {
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
+          // Save high score on game over
+          this.game.saveHighScore();
+          this.updateHighScoreDisplay();
       }
+  }
+
+  updateHighScoreDisplay(): void {
+    const highScoreElement = document.getElementById('high-score');
+    if (highScoreElement) {
+      const highestScore = this.game.getHighScoreManager().getHighestScore();
+      if (highestScore) {
+        highScoreElement.textContent = highestScore.score.toLocaleString();
+      }
+    }
   }
 
   gameLoop(): void {
     const animate = (time: number) => {
-      if (!this.isPlaying) {
+      if (!this.isPlaying || this.isPaused) {
           return;
       }
 
@@ -399,12 +478,6 @@ export default class Controller {
       this.handleInput(dt);
 
       // 2. Update Game Logic (Gravity, Locking)
-      // Gravity handling moved inside Game.update or managed here?
-      // Previously handled by interval.
-      // Game.update handles lock delay. Does it handle gravity?
-      // Game.update checks ground contact.
-      // We need to implement gravity here if interval is gone.
-
       const level = this.game.getState().level;
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
       // Tuned for better playability: 0.85 base makes it slightly faster
@@ -413,13 +486,7 @@ export default class Controller {
       // Allow faster than 60Hz (16ms) but clamp to 0.5ms to avoid browser freeze
       if (speedMs < 0.5) speedMs = 0.5;
 
-      // Accumulate gravity time?
-      // Simplest: use a gravity timer here.
-      // Or pass dt to Game.update and let it handle gravity?
-      // Game.update signature: update(dt). It handles lock timer.
-      // It does NOT handle gravity (movePieceDown).
-      // So we need a gravity accumulator.
-
+      // Accumulate gravity time
       if (!this.gravityTimer) this.gravityTimer = 0;
       this.gravityTimer += dt;
 
@@ -454,14 +521,24 @@ export default class Controller {
 
           this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
+          
+          // Update combo display
+          this.updateComboDisplay(combo);
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock();
+          // Reset combo display when piece locks without clearing
+          if (this.game.scoringSystem.combo < 0) {
+            this.updateComboDisplay(0);
+          }
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
           this.isPlaying = false;
           this.view.renderEndScreen(this.game.getState());
+          // Save high score on game over
+          this.game.saveHighScore();
+          this.updateHighScoreDisplay();
           return;
       }
 
@@ -478,6 +555,23 @@ export default class Controller {
     };
 
     this.gameLoopID = requestAnimationFrame(animate);
+  }
+
+  updateComboDisplay(combo: number): void {
+    const comboDisplay = document.getElementById('combo-display');
+    if (comboDisplay) {
+      if (combo > 1) {
+        comboDisplay.textContent = `COMBO x${combo}`;
+        comboDisplay.classList.add('active');
+        comboDisplay.classList.remove('combo-pulse');
+        // Trigger reflow to restart animation
+        void comboDisplay.offsetWidth;
+        comboDisplay.classList.add('combo-pulse');
+      } else {
+        comboDisplay.classList.remove('active');
+        comboDisplay.classList.remove('combo-pulse');
+      }
+    }
   }
 
   private processBufferedAction(currentTime: number): void {

@@ -1,7 +1,7 @@
 import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
-import { ScoringSystem, ScoreEvent } from './game/scoring.js';
+import { ScoringSystem, ScoreEvent, HighScoreManager, HighScoreEntry } from './game/scoring.js';
 import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
@@ -57,7 +57,7 @@ export default class Game {
   // Subsystems
   private pieceGenerator: PieceGenerator;
   private collisionDetector: CollisionDetector;
-  private scoringSystem: ScoringSystem;
+  scoringSystem: ScoringSystem;
   private projectedPlayfield: number[][] = [];
 
   // Bound methods to prevent per-frame garbage collection
@@ -138,6 +138,10 @@ export default class Game {
     return this.scoringSystem.level;
   }
 
+  get combo(): number {
+    return Math.max(0, this.scoringSystem.combo);
+  }
+
   // Helper for TypedArray access
   getCell(x: number, y: number): number {
       if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
@@ -156,6 +160,14 @@ export default class Game {
 
   createPiece(): Piece {
     return this.pieceGenerator.createPiece();
+  }
+
+  getHighScoreManager(): HighScoreManager {
+    return this.scoringSystem.getHighScoreManager();
+  }
+
+  saveHighScore(): boolean {
+    return this.scoringSystem.saveHighScore();
   }
 
   getState(): GameState {
