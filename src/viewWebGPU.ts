@@ -8,7 +8,7 @@ import {
   GridShader, 
   BackgroundShaders, 
   Shaders,
-  PremiumBlockShaders 
+  PremiumBlockShaders
 } from './webgpu/shaders.js';
 import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
@@ -32,6 +32,7 @@ import { lineClearAnimator } from './effects/lineClearAnimation.js';
 import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
 import { ChaosModeController } from './webgpu/chaosMode.js';
+import { BloomSystem, BloomParameters } from './webgpu/bloomSystem.js';
 import {
   PROCEDURAL_BLOCK_TEXTURE_SIZE,
   getTextureMipLevelCount,
@@ -117,6 +118,15 @@ export default class View {
   backgroundBindGroup!: GPUBindGroup;
   startTime: number;
 
+  // Frosted Glass Backboard (Ethereal Hardware Panel)
+  frostedGlassPipeline!: GPURenderPipeline;
+  frostedGlassVertexBuffer!: GPUBuffer;
+  frostedGlassUniformBuffer!: GPUBuffer;
+  frostedGlassBindGroup!: GPUBindGroup;
+  frostedGlassTexture!: GPUTexture;
+  frostedGlassTextureView!: GPUTextureView;
+  useFrostedGlass: boolean = true;
+
   // Post Processing
   postProcessPipeline!: GPURenderPipeline;
   postProcessBindGroup!: GPUBindGroup;
@@ -188,6 +198,10 @@ export default class View {
   // NEW: Agent 3 - Chaos Mode
   chaosMode!: ChaosModeController;
   useChaosMode: boolean = false;
+
+  // NEW: Multi-pass Bloom System
+  bloomSystem!: BloomSystem;
+  useMultiPassBloom: boolean = true; // Toggle between old and new bloom
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -300,6 +314,15 @@ export default class View {
     });
 
     this.recreateRenderTargets();
+
+    // Resize bloom system
+    if (this.bloomSystem) {
+      const dpr = window.devicePixelRatio || 1;
+      this.bloomSystem.resize(
+        Math.floor(this.width * dpr * this.renderScale),
+        Math.floor(this.height * dpr * this.renderScale)
+      );
+    }
   }
 
   // NEW: Recreate render targets with current scale
@@ -696,6 +719,10 @@ export default class View {
 
     this.backgroundUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.backgroundBindGroup = this.device.createBindGroup({ layout: this.backgroundPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.backgroundUniformBuffer } }] });
+    
+    // Initialize Frosted Glass Backboard
+    await this.initFrostedGlassBackboard();
+    
     const bgColors = this.currentTheme.backgroundColors;
     this._f32_3.set(bgColors[0]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
     this._f32_3.set(bgColors[1]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
@@ -792,6 +819,21 @@ export default class View {
         entries: [{ binding: 0, resource: { buffer: this.postProcessUniformBuffer } }, { binding: 1, resource: this.sampler }, { binding: 2, resource: this.offscreenTexture.createView() }]
     });
 
+    // Initialize multi-pass bloom system
+    this.bloomSystem = new BloomSystem(
+      this.device, 
+      this.canvasWebGPU.width, 
+      this.canvasWebGPU.height
+    );
+    // Set initial parameters
+    this.bloomSystem.setParameters({
+      threshold: 0.35,
+      intensity: this.bloomIntensity,
+      scatter: 0.7,
+      clamp: 65472,
+      knee: 0.1
+    });
+
     this.fragmentUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
@@ -801,7 +843,8 @@ export default class View {
     Matrix.mat4.identity(this.VIEWMATRIX);
     Matrix.mat4.lookAt(this.VIEWMATRIX, eyePosition, [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0], [0.0, 1.0, 0.0]);
     Matrix.mat4.identity(this.PROJMATRIX);
-    Matrix.mat4.perspective(this.PROJMATRIX, (35 * Math.PI) / 180, this.canvasWebGPU.width / this.canvasWebGPU.height, 1, 150);
+    // Increased FOV (42° vs 35°) for more dramatic depth on floating panel
+    Matrix.mat4.perspective(this.PROJMATRIX, (42 * Math.PI) / 180, this.canvasWebGPU.width / this.canvasWebGPU.height, 1, 150);
     Matrix.mat4.identity(this.vpMatrix);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
 
@@ -843,6 +886,87 @@ export default class View {
     return buffer;
   };
 
+  // Initialize Frosted Glass Backboard for Ethereal Hardware Panel effect
+  async initFrostedGlassBackboard() {
+    if (!this.device) return;
+    
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    const frostedShader = FrostedGlassShaders();
+    
+    // Create pipeline for frosted glass
+    this.frostedGlassPipeline = this.device.createRenderPipeline({
+      label: 'frosted glass pipeline', layout: 'auto',
+      vertex: { 
+        module: this.device.createShaderModule({ code: frostedShader.vertex }), 
+        entryPoint: 'main',
+        buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }]
+      },
+      fragment: { 
+        module: this.device.createShaderModule({ code: frostedShader.fragment }), 
+        entryPoint: 'main',
+        targets: [{ format: presentationFormat, blend: {
+          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        }}]
+      },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' }
+    });
+    
+    // Create full-screen quad for backboard (at z = -1.0 behind blocks)
+    const quadData = FullScreenQuadData();
+    this.frostedGlassVertexBuffer = this.CreateGPUBuffer(this.device, quadData.positions);
+    
+    // Uniform buffer for frosted glass
+    this.frostedGlassUniformBuffer = this.device.createBuffer({ 
+      size: 96, // mat4x4 + mat4x4 + vec4 + 2xf32 + padding
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST 
+    });
+    
+    // Create a texture to sample from (background texture)
+    this.frostedGlassTexture = this.device.createTexture({
+      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+      format: presentationFormat,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+    });
+    this.frostedGlassTextureView = this.frostedGlassTexture.createView();
+    
+    console.log('[FrostedGlass] Backboard initialized');
+  }
+  
+  // Update frosted glass uniforms and bind group
+  updateFrostedGlassUniforms() {
+    if (!this.device || !this.useFrostedGlass) return;
+    
+    // Create model matrix for backboard plane at z = -1.0
+    const modelMatrix = Matrix.mat4.create();
+    Matrix.mat4.identity(modelMatrix);
+    Matrix.mat4.translate(modelMatrix, modelMatrix, [0, 0, -1.0]);
+    Matrix.mat4.scale(modelMatrix, modelMatrix, [12.0, 24.0, 1.0]); // Cover playfield area
+    
+    // Write uniforms
+    const uniformData = new Float32Array(24); // 96 bytes / 4
+    uniformData.set(this.vpMatrix, 0); // viewProjectionMatrix at 0
+    uniformData.set(modelMatrix, 16); // modelMatrix at 16 (offset 64)
+    // tintColor at 32 (offset 128) - use theme border color
+    const tint = this.currentTheme.border || [0.5, 0.5, 0.5, 0.3];
+    uniformData.set(tint, 32);
+    uniformData[36] = 0.5; // frostAmount
+    uniformData[37] = 0.85; // opacity
+    
+    this.device.queue.writeBuffer(this.frostedGlassUniformBuffer, 0, uniformData);
+    
+    // Create/update bind group
+    this.frostedGlassBindGroup = this.device.createBindGroup({
+      layout: this.frostedGlassPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.frostedGlassUniformBuffer } },
+        { binding: 1, resource: this.sampler },
+        { binding: 2, resource: this.frostedGlassTextureView }
+      ]
+    });
+  }
+
   render = (dt: number) => {
     if (!this.device) return;
 
@@ -873,9 +997,9 @@ export default class View {
     lineClearAnimator.update(clampedDt);
     const time = (performance.now() - this.startTime) / 1000.0;
 
-    // Camera updates
+    // Camera updates - Ethereal Floating Panel View
     let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
-    let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25;
+    let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
     const shake = this.visualEffects.getShakeOffset();
 
     // Smooth Camera Shake Interpolation using fast exponential decay approximation
@@ -1009,7 +1133,7 @@ export default class View {
 
     // RENDER PASSES
     
-    // 1. Background
+    // 1. Background (Video or Shader)
     const renderVideo = this.visualEffects.isVideoPlaying;
     const clearColors = this.visualEffects.getClearColors();
     const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
@@ -1031,7 +1155,29 @@ export default class View {
         bgPassEncoder.end();
     }
 
-    // 2. Main scene
+    // 2. Frosted Glass Backboard (Ethereal Hardware Panel)
+    if (this.useFrostedGlass && this.frostedGlassPipeline) {
+        this.updateFrostedGlassUniforms();
+        const glassPassEncoder = commandEncoder.beginRenderPass({
+            colorAttachments: [{ 
+                view: this._offscreenTextureView, 
+                loadOp: 'load', 
+                storeOp: 'store' 
+            }],
+            depthStencilAttachment: { 
+                view: this._depthTextureView, 
+                depthLoadOp: 'load', 
+                depthStoreOp: 'store' 
+            }
+        });
+        glassPassEncoder.setPipeline(this.frostedGlassPipeline);
+        glassPassEncoder.setVertexBuffer(0, this.frostedGlassVertexBuffer);
+        glassPassEncoder.setBindGroup(0, this.frostedGlassBindGroup);
+        glassPassEncoder.draw(6);
+        glassPassEncoder.end();
+    }
+
+    // 3. Main scene (Blocks, Grid, Particles)
     this.renderPlayfild_WebGPU(this.state);
     const passEncoder = commandEncoder.beginRenderPass(this._mainPassDescriptor);
     
@@ -1067,17 +1213,49 @@ export default class View {
 
     passEncoder.end();
 
-    // 3. Post-process
-    const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-    const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-    ppColorAttachment0.view = textureViewScreen;
-    
-    const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
-    ppPassEncoder.setPipeline(this.postProcessPipeline);
-    ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
-    ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-    ppPassEncoder.draw(6);
-    ppPassEncoder.end();
+    // 4. Post-process with optional multi-pass bloom
+    if (this.useMultiPassBloom && this.bloomEnabled) {
+      // Use new multi-pass bloom system
+      // First, render to a temporary bloom input texture
+      const bloomInputTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        format: navigator.gpu.getPreferredCanvasFormat(),
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+      });
+      
+      // Render post-process without bloom to bloomInputTexture
+      const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+      ppColorAttachment0.view = bloomInputTexture.createView();
+      
+      const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
+      ppPassEncoder.setPipeline(this.postProcessPipeline);
+      ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
+      ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+      ppPassEncoder.draw(6);
+      ppPassEncoder.end();
+      
+      // Apply multi-pass bloom
+      const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
+      this.bloomSystem.render(
+        bloomInputTexture.createView(),
+        textureViewScreen,
+        commandEncoder
+      );
+      
+      bloomInputTexture.destroy();
+    } else {
+      // Use original simple bloom
+      const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
+      const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+      ppColorAttachment0.view = textureViewScreen;
+      
+      const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
+      ppPassEncoder.setPipeline(this.postProcessPipeline);
+      ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
+      ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+      ppPassEncoder.draw(6);
+      ppPassEncoder.end();
+    }
 
     this.device.queue.submit([commandEncoder.finish()]);
   };
@@ -1361,6 +1539,17 @@ export default class View {
     // Set material theme
     this.setMaterialTheme(materialTheme);
 
+    // Configure multi-pass bloom
+    if (this.bloomSystem) {
+      this.bloomSystem.setParameters({
+        threshold: 0.3,    // Slightly lower threshold for premium look
+        intensity: 1.2,    // Boosted intensity
+        scatter: 0.75,     // Good spread
+        clamp: 65472,
+        knee: 0.1
+      });
+    }
+
     console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
   }
 
@@ -1445,5 +1634,25 @@ export default class View {
   }
   setBloomIntensity(intensity: number) {
     this.bloomIntensity = Math.max(0, Math.min(2, intensity));
+    // Update multi-pass bloom system if available
+    if (this.bloomSystem) {
+      this.bloomSystem.setParameters({ intensity });
+    }
+  }
+
+  toggleMultiPassBloom() {
+    this.useMultiPassBloom = !this.useMultiPassBloom;
+    console.log(`[Bloom] Multi-pass bloom: ${this.useMultiPassBloom ? 'ON' : 'OFF'}`);
+    return this.useMultiPassBloom;
+  }
+
+  setBloomParameters(params: Partial<BloomParameters>) {
+    if (this.bloomSystem) {
+      this.bloomSystem.setParameters(params);
+    }
+    // Also update local bloomIntensity if provided
+    if (params.intensity !== undefined) {
+      this.bloomIntensity = params.intensity;
+    }
   }
 }

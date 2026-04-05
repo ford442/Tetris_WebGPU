@@ -12,4 +12,5 @@ export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
 export { Shaders } from './main.js';
 export { PremiumBlockShaders } from './premiumBlocks.js';
+export { FrostedGlassShaders } from './frostedGlass.js';
 export { Materials, MaterialThemes, getPieceMaterial } from '../materials.js';
