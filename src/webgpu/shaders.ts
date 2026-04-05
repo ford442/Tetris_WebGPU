@@ -16,5 +16,6 @@ export {
   GridShader, 
   BackgroundShaders, 
   Shaders,
-  PremiumBlockShaders 
+  PremiumBlockShaders,
+  FrostedGlassShaders
 } from './shaders/index.js';

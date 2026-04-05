@@ -9,7 +9,8 @@ import {
   GridShader, 
   BackgroundShaders, 
   Shaders,
-  PremiumBlockShaders
+  PremiumBlockShaders,
+  FrostedGlassShaders
 } from './webgpu/shaders.js';
 import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
