@@ -118,7 +118,7 @@ export const MaterialAwarePostProcessShaders = () => {
             
             // Scanlines
             let scanlineY = curvedUV.y * uniforms.screenHeight;
-            let scanline = sin(scanlineY * 3.14159) * 0.5 + 0.5;
+            var scanline = sin(scanlineY * 3.14159) * 0.5 + 0.5;
             scanline = pow(scanline, 1.5);
             scanline = 0.9 + scanline * 0.1;
             

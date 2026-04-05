@@ -154,6 +154,10 @@ export const Shaders = () => {
                 // Pre-compute dotNV for iridescence and fresnel
                 let dotNV = max(dot(N, V), 0.0);
 
+                // Subtle emissive: gentle breathing glow in the glass center only
+                // Define time early for iridescence calculation
+                let time = uniforms.time;
+
                 // ENHANCED: Iridescent specular for glass blocks
                 // Oil-slick rainbow effect on the glass surfaces
                 if (glassMask > 0.5) {
@@ -168,9 +172,6 @@ export const Shaders = () => {
 
                 // Add Glitch Mod
                 finalColor += glitchColorMod;
-
-                // Subtle emissive: gentle breathing glow in the glass center only
-                let time = uniforms.time;
                 let breath = sin(time * 1.5) * 0.03 + 0.03;
                 let distCenter = distance(vUV, vec2<f32>(0.5));
                 let centerGlow = clamp((0.45 - distCenter) / 0.35, 0.0, 1.0);
