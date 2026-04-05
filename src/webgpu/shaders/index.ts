@@ -4,6 +4,7 @@
  */
 
 export { PostProcessShaders } from './postProcess.js';
+export { EnhancedPostProcessShaders } from './enhancedPostProcess.js';
 export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
