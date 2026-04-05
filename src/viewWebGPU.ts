@@ -1267,6 +1267,15 @@ export default class View {
 
   // NEW: Update material uniforms in fragment buffer
   private _materialUniforms = new Float32Array(12);
+  
+  // NEW: Particle interaction uniforms
+  particleInteractionUniforms = {
+    particleInfluence: 1.0,
+    glassDistortion: 0.4,
+    goldSpecularBoost: 2.2,
+    cyberEmissivePulse: 0.0
+  };
+  
   updateMaterialUniforms() {
     if (!this.device || !this.currentMaterial) return;
 
@@ -1282,6 +1291,9 @@ export default class View {
     this._materialUniforms[5] = m.clearcoat;
     this._materialUniforms[6] = m.anisotropic;
     this._materialUniforms[7] = m.dispersion;
+    // NEW: Particle interaction uniforms (offsets 80, 84)
+    this._materialUniforms[8] = this.particleInteractionUniforms.particleInfluence;
+    this._materialUniforms[9] = 0; // particleMaterialType as u32 packed
 
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._materialUniforms);
   }
