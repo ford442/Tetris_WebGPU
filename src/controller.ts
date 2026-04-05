@@ -1,6 +1,7 @@
 import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
+import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 
 const DAS = 120; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
@@ -70,6 +71,7 @@ export default class Controller {
 
   private lastTime: number = 0;
   private lastLevel: number = 1;
+  private touchControls: TouchControls | null = null;
 
   constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
     this.game = game;
@@ -84,7 +86,47 @@ export default class Controller {
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
     document.addEventListener("keyup", this.handleKeyUp.bind(this));
 
+    // Initialize touch controls
+    addTouchControlStyles();
+    this.touchControls = new TouchControls(this.handleTouchAction.bind(this));
+
     this.play();
+  }
+
+  private handleTouchAction(action: TouchAction): void {
+    if (!this.isPlaying || this.isPaused) {
+      if (action === 'pause') {
+        this.togglePause();
+      }
+      return;
+    }
+
+    switch (action) {
+      case 'left':
+        this.executeAction('left');
+        break;
+      case 'right':
+        this.executeAction('right');
+        break;
+      case 'down':
+        this.executeAction('down');
+        break;
+      case 'rotateCW':
+        this.executeAction('rotateCW');
+        break;
+      case 'rotateCCW':
+        this.executeAction('rotateCCW');
+        break;
+      case 'hardDrop':
+        this.executeAction('hardDrop');
+        break;
+      case 'hold':
+        this.executeAction('hold');
+        break;
+      case 'pause':
+        this.togglePause();
+        break;
+    }
   }
 
   // Called by gravity timer
