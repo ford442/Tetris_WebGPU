@@ -151,6 +151,9 @@ export const Shaders = () => {
                 let specularStrength = mix(0.15, 0.5, metalMask);
                 var finalColor:vec3<f32> = baseColor * lightFactor + vec3<f32>${params.specularColor} * specular * specularStrength;
 
+                // Pre-compute dotNV for iridescence and fresnel
+                let dotNV = max(dot(N, V), 0.0);
+
                 // ENHANCED: Iridescent specular for glass blocks
                 // Oil-slick rainbow effect on the glass surfaces
                 if (glassMask > 0.5) {
@@ -184,7 +187,7 @@ export const Shaders = () => {
                 finalColor += rimColor * rimLight * 0.08;
 
                 // Simple fresnel (needed for ghost piece downstream)
-                let dotNV = max(dot(N, V), 0.0);
+                // dotNV already computed above for iridescence
                 let fresnelBase = 1.0 - dotNV;
                 let fresnelBase2 = fresnelBase * fresnelBase;
                 let fresnelTerm = fresnelBase2 * fresnelBase2;
