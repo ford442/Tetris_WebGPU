@@ -386,15 +386,9 @@ export default class Game {
   }
 
   dropPiece(): void {
-    let moved = false;
-    while (true) {
-      this.activPiece.y += 1;
-      if (this.hasCollision()) {
-        this.activPiece.y -= 1;
-        break;
-      }
-      moved = true;
-    }
+    const ghostY = this.getGhostY();
+    const moved = this.activPiece.y !== ghostY;
+    this.activPiece.y = ghostY;
     if (moved) this.isTSpin = false;
 
     this.lockPiece();
