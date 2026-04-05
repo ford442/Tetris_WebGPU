@@ -98,23 +98,6 @@ button:active {
     transform: scale(0.95);
 }
 
-#game-over {
-    display: none;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 4rem;
-    font-weight: bold;
-    color: #ff3333;
-    text-shadow: 0 0 20px black;
-    z-index: 100;
-    background: rgba(0,0,0,0.8);
-    padding: 40px;
-    border-radius: 10px;
-    border: 2px solid #ff3333;
-}
-
 canvas {
     display: block;
     margin: 0 auto;

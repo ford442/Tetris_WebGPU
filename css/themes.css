@@ -144,20 +144,4 @@ body.futuristic-theme {
   box-shadow: 0 0 15px var(--border-color);
 }
 
-#game-over {
-    display: none;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 4em;
-    font-weight: bold;
-    color: var(--h1-color);
-    text-align: center;
-    text-shadow: 0 0 30px rgba(0,0,0,0.8);
-    background: rgba(0,0,0,0.7);
-    padding: 40px;
-    border-radius: 20px;
-    border: 2px solid var(--border-color);
-    backdrop-filter: blur(10px);
-}
+
