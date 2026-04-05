@@ -76,66 +76,64 @@ export const BackgroundShaders = () => {
               uv -= normalize(uv - center) * warpStrength * dist * dist; // Quadratic warp for "tunnel" feel
           }
 
-          // NEON BRICKLAYER: Parallax Starfield
+          // OPTIMIZED: Dual-layer parallax starfield
           var stars = 0.0;
-          for (var i: i32 = 0; i < 3; i++) {
+          for (var i: i32 = 0; i < 2; i++) {
               let fi = f32(i);
-              let scale = 40.0 + fi * 20.0; // Different scales for depth
-              let speed = (0.2 + fi * 0.1) * (1.0 + level * 0.5 + warpSurge * 2.0); // Speed scales with level
+              // Near stars: dense, fast | Far stars: sparse, slow
+              let scale = select(25.0, 55.0, i > 0);
+              let speed = (0.25 + fi * 0.15) * (1.0 + level * 0.4 + warpSurge * 3.0);
 
-              // Shift UVs over time
-              let shift = vec2<f32>(0.0, -time * speed * 0.1);
+              // Parallax shift
+              let shift = vec2<f32>(0.0, -time * speed * 0.08);
               let starUV = uv * scale + shift;
 
-              // Random noise
-              let noise = fract(sin(dot(starUV, vec2<f32>(12.9898 + fi, 78.233 + fi))) * 43758.5453);
+              // Optimized hash-based stars
+              let hash = fract(sin(dot(starUV, vec2<f32>(12.9898 + fi * 3.4, 78.233 + fi * 5.7))) * 43758.5453);
 
-              // High threshold for sparse stars
-              let threshold = 0.98;
-              if (noise > threshold) {
-                  var brightness = (noise - threshold) / (1.0 - threshold);
-                  // Twinkle
-                  let twinkle = sin(time * 5.0 + noise * 100.0) * 0.5 + 0.5;
-
-                  // ENHANCED: Star Streaks at high warp
-                  if (warpSurge > 5.0) {
-                       brightness *= (1.0 + (warpSurge - 5.0) * 0.2); // Brighter
-                  }
-
-                  stars += brightness * twinkle * (0.5 + fi * 0.2);
+              // Adaptive threshold: far stars rarer
+              let threshold = select(0.985, 0.995, i > 0);
+              if (hash > threshold) {
+                  var brightness = (hash - threshold) / (1.0 - threshold);
+                  // Twinkle with varied frequency per layer
+                  let twinkle = sin(time * (4.0 + fi * 3.0) + hash * 50.0) * 0.5 + 0.5;
+                  // Warp boost
+                  brightness *= (1.0 + warpSurge * 0.3);
+                  stars += brightness * twinkle * (0.6 + fi * 0.3);
               }
           }
 
-          // --- Multi-layer perspective grid ---
+          // --- Optimized dual-layer perspective grid ---
           var grid = 0.0;
-          // Four layers of grids at different scales for depth
-          for (var layer: i32 = 0; layer < 4; layer++) {
+          // Two layers: near (fast, detailed) and far (slow, atmospheric)
+          for (var layer: i32 = 0; layer < 2; layer++) {
             let layer_f = f32(layer);
-            let scale = exp2(layer_f); // 1.0, 2.0, 4.0, 8.0
+            // Far layer uses golden ratio scale for organic feel
+            let scale = select(1.0, 2.618, layer > 0);
 
-            // NEON BRICKLAYER: WARP SPEED
-            // Speed increases significantly with level to simulate warp acceleration
-            // JUICE: Uncapped speed based on raw level (Boosted)
-            let warpSpeed = 1.0 + level * 2.0 + warpSurge * 8.0;
-            let speed = (0.1 + layer_f * 0.05) * warpSpeed;
+            // Speed scales with level + warp surge
+            let warpSpeed = 1.0 + level * 1.5 + warpSurge * 5.0;
+            let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
-            // Perspective offset for each layer
+            // Perspective drift
             let perspectiveOffset = vec2<f32>(
-              sin(time * speed) * (0.05 + layer_f * 0.02),
-              cos(time * speed * 0.8) * (0.05 + layer_f * 0.02)
+              sin(time * speed) * (0.03 + layer_f * 0.02),
+              cos(time * speed * 0.7) * (0.03 + layer_f * 0.02)
             );
 
-            // NEON BRICKLAYER: Grid Distortion from Warp Surge (Doubled intensity)
-            let surgeDistortion = sin(uv.y * 20.0 + time * 15.0) * warpSurge * 0.1;
+            // Surge distortion
+            let surgeDistortion = sin(uv.y * 15.0 + time * 12.0) * warpSurge * 0.08;
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
-            // Smooth grid lines that get thinner with distance, but thicker with warp surge
-            let lineWidth = (0.04 + warpSurge * 0.1) / scale;
+            // Adaptive line width: thinner at distance, thicker with surge
+            let lineWidth = (0.03 + warpSurge * 0.08) / sqrt(scale);
+            
+            // Smooth grid lines with antialiasing
             let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
             let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
 
-            // Combine X and Y lines, fade distant layers
-            let layerGrid = (1.0 - gridX * gridY) * (1.0 - layer_f * 0.2);
+            // Combine with distance fade (far layer is more subtle)
+            let layerGrid = (1.0 - gridX * gridY) * (0.8 - layer_f * 0.3);
             grid = max(grid, layerGrid);
           }
 
@@ -172,24 +170,31 @@ export const BackgroundShaders = () => {
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
-          // --- Multiple orbiting light sources ---
+          // --- Optimized dual orbital light system ---
           var lights = vec3<f32>(0.0);
-          for (var i: i32 = 0; i < 3; i++) {
+          // Main light (larger, softer) + Accent light (smaller, colored)
+          for (var i: i32 = 0; i < 2; i++) {
             let idx = f32(i);
-            let angle = time * (0.3 + idx * 0.2) + idx * 2.094; // 120° separation
-            let radius = 0.25 + idx * 0.1;
+            let angle = time * (0.25 + idx * 0.3) + idx * 3.14159;
+            let radius = 0.3 + idx * 0.15;
             let lightPos = vec2<f32>(
               0.5 + cos(angle) * radius,
-              0.5 + sin(angle) * radius
+              0.5 + sin(angle) * radius * 0.7 // Elliptical orbit
             );
 
-            // Quadratic falloff for realistic lighting
+            // Soft quadratic falloff
             let dist = length(uv - lightPos);
-            let intensity = 0.08 / (dist * dist + 0.01);
+            let intensity = 0.12 / (dist * dist + 0.015);
 
-            // Each light has a different color
-            let lightColor = mix(neonCyan, neonPurple, sin(time + idx) * 0.5 + 0.5);
-            lights += lightColor * intensity;
+            // Dynamic color mixing based on theme and time
+            let colorMix = sin(time * 0.7 + idx * 2.0) * 0.5 + 0.5;
+            let lightColor = mix(neonCyan, neonPurple, colorMix);
+            // Accent light gets theme color boost
+            if (i > 0) {
+                lightColor = mix(lightColor, neonBlue, 0.4);
+            }
+            
+            lights += lightColor * intensity * (1.0 - idx * 0.3);
           }
 
           // --- Global pulse effect ---

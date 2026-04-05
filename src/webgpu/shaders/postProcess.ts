@@ -136,38 +136,29 @@ export const PostProcessShaders = () => {
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, vertAberration)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap but juicy)
+            // Bloom-ish boost (optimized 5-tap tent filter)
             var color = vec3<f32>(r, g, b);
 
-            // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
-            // Sample 8 points for a smoother, wider halo
-            // JUICE: Wider spread (Increased base offset)
-            let offset = 0.008 * (1.0 + levelStress * 0.8);
-            let offset2 = offset * 2.2; // Even wider outer ring
-            var glow = vec3<f32>(0.0);
+            // OPTIMIZED: 5-tap tent filter (down from 8) with weighted sampling
+            // Center + 4 directional samples = better quality, fewer ALU ops
+            let spread = 0.012 * (1.0 + levelStress * 0.6);
+            var glow = color * 0.25; // Center weight
 
-            // Inner Ring
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, -offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, -offset)).rgb;
+            // 4 directional samples (cardinal directions for better cache coherence)
+            let dX = vec2<f32>(spread, 0.0);
+            let dY = vec2<f32>(0.0, spread);
+            glow += textureSample(myTexture, mySampler, finalUV + dX).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV - dX).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV + dY).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV - dY).rgb * 0.1875;
 
-            // Outer Ring (Diagonal)
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, -offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset2, 0.0)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset2, 0.0)).rgb;
-
-            glow *= 0.125; // Average of 8 samples
-
-            // Thresholding the glow
+            // Thresholding with smooth knee for better falloff
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
-            // ENHANCED: Even more aggressive bloom for that neon look
-            let bloomThreshold = 0.1; // Cleaner threshold
-            if (glowLum > bloomThreshold) {
-                 color += glow * 8.0; // Tuned intensity (less blinding)
-            }
+            let bloomThreshold = 0.08;
+            let knee = 0.05;
+            let contrib = max(glowLum - bloomThreshold + knee, 0.0);
+            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 6.0;
+            color += glow * bloomIntensity;
 
             // High-pass boost for the core pixels
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));

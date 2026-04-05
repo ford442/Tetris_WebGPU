@@ -24,6 +24,9 @@ export class ParticleSystem {
     public pendingUploads: Float32Array;
     public pendingUploadCount: number = 0;
     public pendingUploadIndices: Uint32Array;
+    
+    // Track last emission time for compute skip optimization
+    public lastEmitTime: number = 0;
 
     constructor() {
         // Pre-allocate buffer for a reasonable maximum number of emissions per frame
@@ -121,6 +124,9 @@ export class ParticleSystem {
     }
 
     public addParticle(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number[], life: number, scale: number) {
+        // Track emission time for compute skip optimization
+        this.lastEmitTime = performance.now() / 1000.0;
+        
         // GPU Layout: 16 floats (64 bytes)
         // 0-2: Pos
         // 3: pad

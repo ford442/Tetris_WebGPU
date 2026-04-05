@@ -8,3 +8,5 @@ export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
 export { Shaders } from './main.js';
+export { PremiumBlockShaders } from './premiumBlocks.js';
+export { Materials, MaterialThemes, getPieceMaterial } from '../materials.js';

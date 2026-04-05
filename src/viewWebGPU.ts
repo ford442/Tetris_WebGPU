@@ -1,5 +1,5 @@
 import * as Matrix from "gl-matrix";
-import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders } from './webgpu/shaders.js';
+import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, PremiumBlockShaders } from './webgpu/shaders.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
@@ -12,6 +12,7 @@ import {
   borderWorldY,
 } from './webgpu/renderMetrics.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
+import { getPieceMaterial, Materials } from './webgpu/materials.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import {
@@ -145,6 +146,11 @@ export default class View {
   private _camEye = new Float32Array(3);
   private _camTarget = new Float32Array([BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0]);
   private _camUp = new Float32Array([0.0, 1.0, 0.0]);
+
+  // Material properties for premium rendering
+  materialUniformBuffer!: GPUBuffer;
+  usePremiumMaterials: boolean = false;
+  currentMaterial: any = null;
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
@@ -762,7 +768,7 @@ export default class View {
             label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 80 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 96 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler }
             ],
@@ -848,11 +854,18 @@ export default class View {
     this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
 
     const commandEncoder = this.device.createCommandEncoder();
-    const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(this.particleComputePipeline);
-    computePass.setBindGroup(0, this.particleComputeBindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
-    computePass.end();
+    
+    // OPTIMIZED: Only dispatch compute if we have pending uploads or shockwave is active
+    // Particles need compute to age out, so we track last emission time
+    const timeSinceLastEmit = time - (this.particleSystem.lastEmitTime || 0);
+    const hasActiveParticles = this.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0;
+    if (hasActiveParticles) {
+        const computePass = commandEncoder.beginComputePass();
+        computePass.setPipeline(this.particleComputePipeline);
+        computePass.setBindGroup(0, this.particleComputeBindGroup);
+        computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
+        computePass.end();
+    }
 
     // Update render uniforms
     this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
@@ -978,11 +991,13 @@ export default class View {
       passEncoder.draw(this.numberOfVertices);
     }
 
-    // Particles
-    passEncoder.setPipeline(this.particlePipeline);
-    passEncoder.setBindGroup(0, this.particleRenderBindGroup);
-    passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
-    passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
+    // OPTIMIZED: Only render particles if potentially active (emitted recently or shockwave active)
+    if (hasActiveParticles) {
+        passEncoder.setPipeline(this.particlePipeline);
+        passEncoder.setBindGroup(0, this.particleRenderBindGroup);
+        passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
+        passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
+    }
 
     passEncoder.end();
 
@@ -1001,6 +1016,9 @@ export default class View {
     this.device.queue.submit([commandEncoder.finish()]);
   };
 
+  // Pre-allocated buffer for batched uniform updates (max 200 blocks * 64 floats per block)
+  private _uniformBatchBuffer = new Float32Array(200 * 64);
+
   async renderPlayfild_WebGPU(state: any) {
     if (!this.device) return;
     if (!this.blockTexture) {
@@ -1010,6 +1028,8 @@ export default class View {
     const { playfield, activePiece } = state;
     let arrayLength = 0;
     let blockIndex = 0;
+    let batchOffset = 0;
+    const batchData = this._uniformBatchBuffer;
 
     for (let row = 0; row < playfield.length; row++) {
       for (let colom = 0; colom < playfield[row].length; colom++) {
@@ -1045,7 +1065,6 @@ export default class View {
         }
 
         const uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
-        const offset_ARRAY = blockIndex * 256;
 
         Matrix.mat4.identity(this.MODELMATRIX);
         Matrix.mat4.identity(this.NORMALMATRIX);
@@ -1062,17 +1081,33 @@ export default class View {
              this._f32_3[2] = 0.0;
         }
         Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-        // NORMALMATRIX remains Identity since there is no rotation/scale
 
-        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 0, this.vpMatrix);
-        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 64, this.MODELMATRIX);
-        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 128, this.NORMALMATRIX);
-        this.device.queue.writeBuffer(this.vertexUniformBuffer, offset_ARRAY + 192, this._f32_4);
+        // OPTIMIZED: Batch uniform data into pre-allocated buffer
+        // Layout per block: vpMatrix(16) + modelMatrix(16) + normalMatrix(16) + color(4) = 52 floats
+        // Padded to 64 floats (256 bytes) for uniform alignment
+        batchData.set(this.vpMatrix as Float32Array, batchOffset);
+        batchData.set(this.MODELMATRIX as Float32Array, batchOffset + 16);
+        batchData.set(this.NORMALMATRIX as Float32Array, batchOffset + 32);
+        batchData.set(this._f32_4, batchOffset + 48);
+        // Clear padding
+        batchData[batchOffset + 52] = 0; batchData[batchOffset + 53] = 0;
+        batchData[batchOffset + 54] = 0; batchData[batchOffset + 55] = 0;
+        batchData[batchOffset + 56] = 0; batchData[batchOffset + 57] = 0;
+        batchData[batchOffset + 58] = 0; batchData[batchOffset + 59] = 0;
+        batchData[batchOffset + 60] = 0; batchData[batchOffset + 61] = 0;
+        batchData[batchOffset + 62] = 0; batchData[batchOffset + 63] = 0;
 
         this.uniformBindGroup_ARRAY[arrayLength++] = uniformBindGroup_next;
         blockIndex++;
+        batchOffset += 64;
       }
     }
+    
+    // OPTIMIZED: Single large buffer write instead of many small ones
+    if (batchOffset > 0) {
+      this.device.queue.writeBuffer(this.vertexUniformBuffer, 0, batchData.subarray(0, batchOffset));
+    }
+    
     this.uniformBindGroup_ARRAY.length = arrayLength;
   }
 
@@ -1100,7 +1135,7 @@ export default class View {
           label: "uniformBindGroup_next 635", layout: this.pipeline.getBindGroupLayout(0),
           entries: [
             { binding: 0, resource: { buffer: this.vertexUniformBuffer_border, offset: offset_ARRAY, size: 208 } },
-            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 80 } },
+            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 96 } },
             { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
             { binding: 3, resource: this.blockSampler }
           ],
@@ -1134,4 +1169,66 @@ export default class View {
     }
     return { result, description };
   };
+
+  // NEW: Set material-aware theme
+  setMaterialTheme(themeName: string, pieceType: number = 1) {
+    if (!this.device) return;
+
+    const theme = themes[themeName as keyof Themes];
+    if (!theme) {
+      console.warn(`[Theme] Unknown theme: ${themeName}`);
+      return;
+    }
+
+    this.currentTheme = theme;
+
+    // Check if this theme uses premium materials
+    const materialThemeName = theme.materialTheme || 'classic';
+    this.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber'].includes(materialThemeName);
+
+    // Get material for this piece type
+    this.currentMaterial = getPieceMaterial(materialThemeName, pieceType);
+
+    // Update fragment uniforms with material properties
+    this.updateMaterialUniforms();
+
+    // Update background colors
+    const bgColors = theme.backgroundColors;
+    if (bgColors && this.backgroundUniformBuffer) {
+      this._f32_3.set(bgColors[0]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
+      this._f32_3.set(bgColors[1]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
+      this._f32_3.set(bgColors[2]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
+    }
+
+    console.log(`[Theme] Switched to ${themeName} with material ${materialThemeName}`);
+  }
+
+  // NEW: Update material uniforms in fragment buffer
+  private _materialUniforms = new Float32Array(12);
+  updateMaterialUniforms() {
+    if (!this.device || !this.currentMaterial) return;
+
+    const m = this.currentMaterial;
+    // Layout matches FragmentUniforms in premiumBlocks.ts:
+    // metallic(48), roughness(52), transmission(56), ior(60),
+    // subsurface(64), clearcoat(68), anisotropic(72), dispersion(76)
+    this._materialUniforms[0] = m.metallic;
+    this._materialUniforms[1] = m.roughness;
+    this._materialUniforms[2] = m.transmission;
+    this._materialUniforms[3] = m.ior;
+    this._materialUniforms[4] = m.subsurface;
+    this._materialUniforms[5] = m.clearcoat;
+    this._materialUniforms[6] = m.anisotropic;
+    this._materialUniforms[7] = m.dispersion;
+
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._materialUniforms);
+  }
+
+  // NEW: Cycle through available themes
+  cycleTheme() {
+    const themeNames = Object.keys(themes);
+    const currentIndex = themeNames.indexOf(this.currentTheme.materialTheme || 'neon');
+    const nextIndex = (currentIndex + 1) % themeNames.length;
+    this.setMaterialTheme(themeNames[nextIndex]);
+  }
 }
