@@ -218,7 +218,7 @@ export const Shaders = () => {
                      let warnOrange = vec3<f32>(1.0, 0.5, 0.0);
                      let warnRed = vec3<f32>(1.0, 0.0, 0.15);
                      let warnHot = vec3<f32>(1.0, 0.3, 0.3);
-                     let warningColor = mix(warnOrange, warnRed, tension);
+                     var warningColor = mix(warnOrange, warnRed, tension);
                      warningColor = mix(warningColor, warnHot, sharpPulse * tension);
                      
                      // Apply with intensity that increases near lock
