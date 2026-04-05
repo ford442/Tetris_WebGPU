@@ -188,7 +188,7 @@ export const BackgroundShaders = () => {
 
             // Dynamic color mixing based on theme and time
             let colorMix = sin(time * 0.7 + idx * 2.0) * 0.5 + 0.5;
-            let lightColor = mix(neonCyan, neonPurple, colorMix);
+            var lightColor = mix(neonCyan, neonPurple, colorMix);
             // Accent light gets theme color boost
             if (i > 0) {
                 lightColor = mix(lightColor, neonBlue, 0.4);
