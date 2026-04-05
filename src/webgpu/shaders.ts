@@ -8,7 +8,10 @@ export {
   EnhancedPostProcessShaders, 
   MaterialAwarePostProcessShaders,
   PBRBlockShaders,
-  ParticleShaders, 
+  ParticleShaders 
+} from './shaders/index.js';
+
+export {
   GridShader, 
   BackgroundShaders, 
   Shaders,
