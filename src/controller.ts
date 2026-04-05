@@ -561,17 +561,74 @@ export default class Controller {
     const comboDisplay = document.getElementById('combo-display');
     if (comboDisplay) {
       if (combo > 1) {
+        const oldCombo = parseInt(comboDisplay.dataset.combo || '0');
         comboDisplay.textContent = `COMBO x${combo}`;
+        comboDisplay.dataset.combo = combo.toString();
         comboDisplay.classList.add('active');
+        
+        // Remove old combo level classes
+        comboDisplay.className = comboDisplay.className.replace(/combo-\d+/g, '');
+        
+        // Add appropriate combo level class
+        if (combo >= 20) {
+          comboDisplay.classList.add('combo-20');
+        } else if (combo >= 15) {
+          comboDisplay.classList.add('combo-15');
+        } else if (combo >= 10) {
+          comboDisplay.classList.add('combo-10');
+        } else if (combo >= 9) {
+          comboDisplay.classList.add('combo-9');
+        } else if (combo >= 8) {
+          comboDisplay.classList.add('combo-8');
+        } else if (combo >= 7) {
+          comboDisplay.classList.add('combo-7');
+        } else if (combo >= 6) {
+          comboDisplay.classList.add('combo-6');
+        } else if (combo >= 5) {
+          comboDisplay.classList.add('combo-5');
+        } else if (combo >= 4) {
+          comboDisplay.classList.add('combo-4');
+        } else if (combo >= 3) {
+          comboDisplay.classList.add('combo-3');
+        } else {
+          comboDisplay.classList.add('combo-2');
+        }
+        
+        // Trigger pulse animation
         comboDisplay.classList.remove('combo-pulse');
-        // Trigger reflow to restart animation
-        void comboDisplay.offsetWidth;
+        void comboDisplay.offsetWidth; // Trigger reflow
         comboDisplay.classList.add('combo-pulse');
+        
+        // Show milestone celebration for 5, 10, 15, 20, etc.
+        if (combo > oldCombo && combo % 5 === 0) {
+          this.showComboMilestone(combo);
+        }
       } else {
         comboDisplay.classList.remove('active');
         comboDisplay.classList.remove('combo-pulse');
+        comboDisplay.className = comboDisplay.className.replace(/combo-\d+/g, '');
+        comboDisplay.dataset.combo = '0';
       }
     }
+  }
+
+  showComboMilestone(combo: number): void {
+    // Check if milestone element exists, create if not
+    let milestoneEl = document.getElementById('combo-milestone');
+    if (!milestoneEl) {
+      milestoneEl = document.createElement('div');
+      milestoneEl.id = 'combo-milestone';
+      milestoneEl.className = 'combo-milestone';
+      document.body.appendChild(milestoneEl);
+    }
+    
+    milestoneEl.textContent = `${combo}x COMBO!`;
+    milestoneEl.classList.remove('show');
+    void milestoneEl.offsetWidth; // Trigger reflow
+    milestoneEl.classList.add('show');
+    
+    // Also show as floating text
+    this.view.showFloatingText(`${combo}x COMBO!`, 'INCREDIBLE!');
   }
 
   private processBufferedAction(currentTime: number): void {
