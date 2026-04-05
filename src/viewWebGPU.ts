@@ -161,6 +161,8 @@ export default class View {
   // NEW: Supersampling / Render Scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x)
   renderScale: number = 1.0;
   useEnhancedPostProcess: boolean = true;
+  bloomEnabled: boolean = true;
+  bloomIntensity: number = 1.0;
 
   // NEW: Reactive Systems
   reactiveVideoBackground!: ReactiveVideoBackground;
@@ -993,11 +995,11 @@ export default class View {
     this._f32_4[0] = this.useEnhancedPostProcess ? 1.0 : 0.0; // enableFXAA
     this._f32_4[1] = 1.0; // enableFilmGrain
     this._f32_4[2] = 1.0; // enableCRT
-    this._f32_4[3] = 1.0; // enableBloom
+    this._f32_4[3] = (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0; // enableBloom
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_4);
     
     // Bloom intensity + screen resolution (12 bytes at offset 64, but aligned to 16)
-    this._f32_4[0] = 1.0; // bloomIntensity
+    this._f32_4[0] = this.bloomIntensity; // bloomIntensity
     this._f32_4[1] = this.canvasWebGPU.width;
     this._f32_4[2] = this.canvasWebGPU.height;
     this._f32_4[3] = 0; // padding
@@ -1432,5 +1434,14 @@ export default class View {
   toggleFXAA(enabled: boolean) { this.useEnhancedPostProcess = enabled; }
   toggleFilmGrain(enabled: boolean) { /* Future: add granular control */ }
   toggleCRT(enabled: boolean) { /* Future: add granular control */ }
-  toggleBloom(enabled: boolean) { /* Future: add granular control */ }
+  toggleBloom(enabled?: boolean) { 
+    if (enabled !== undefined) {
+      this.bloomEnabled = enabled;
+    } else {
+      this.bloomEnabled = !this.bloomEnabled;
+    }
+  }
+  setBloomIntensity(intensity: number) {
+    this.bloomIntensity = Math.max(0, Math.min(2, intensity));
+  }
 }

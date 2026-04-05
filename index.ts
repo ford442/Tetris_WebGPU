@@ -65,6 +65,7 @@ uiContainer.innerHTML = `
             <button id="start-button">START</button>
             <button id="pause-button">PAUSE</button>
             <button id="glitch-button">FX: OFF</button>
+            <button id="bloom-button">BLOOM: ON</button>
           </div>
           
           <div class="panel-box music-controls">
@@ -219,6 +220,13 @@ uiContainer.innerHTML = `
       view.toggleGlitch();
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
+      btn.blur();
+  });
+
+  document.getElementById('bloom-button')!.addEventListener('click', (e) => {
+      view.toggleBloom();
+      const btn = e.target as HTMLButtonElement;
+      btn.textContent = view.bloomEnabled ? "BLOOM: ON" : "BLOOM: OFF";
       btn.blur();
   });
 
