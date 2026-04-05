@@ -8,6 +8,7 @@ export {
   EnhancedPostProcessShaders, 
   MaterialAwarePostProcessShaders,
   PBRBlockShaders,
+  UnderwaterBlockShaders,
   ParticleShaders 
 } from './shaders/index.js';
 

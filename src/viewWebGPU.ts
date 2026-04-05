@@ -4,6 +4,7 @@ import {
   EnhancedPostProcessShaders, 
   MaterialAwarePostProcessShaders,
   PBRBlockShaders,
+  UnderwaterBlockShaders,
   ParticleShaders, 
   GridShader, 
   BackgroundShaders, 
@@ -12,6 +13,7 @@ import {
 } from './webgpu/shaders.js';
 import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
+import { JellyfishParticleSystem } from './webgpu/jellyfishParticles.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
   BLOCK_WORLD_SIZE,
@@ -153,6 +155,7 @@ export default class View {
   
   // Subsystems
   particleSystem: ParticleSystem;
+  jellyfishSystem: JellyfishParticleSystem; // NEW: Bioluminescent jellyfish
   visualEffects: VisualEffects;
 
   // Themes
@@ -213,6 +216,7 @@ export default class View {
 
     // Initialize subsystems
     this.particleSystem = new ParticleSystem();
+    this.jellyfishSystem = new JellyfishParticleSystem(); // NEW: Jellyfish for underwater level
     this.visualEffects = new VisualEffects(element, width, height);
     
     // NEW: Initialize reactive systems
@@ -834,7 +838,8 @@ export default class View {
       knee: 0.1
     });
 
-    this.fragmentUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // Expanded to 144 bytes for underwater uniforms (was 96)
+    this.fragmentUniformBuffer = this.device.createBuffer({ size: 144, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     let lightPosition = this._f32_3;
@@ -870,7 +875,7 @@ export default class View {
             label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 96 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler }
             ],
@@ -1101,7 +1106,7 @@ export default class View {
     this._f32_1[0] = ghostUVW;
     this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, this._f32_1);
 
-    // Block uniforms
+    // Block uniforms - standard
     this._f32_1[0] = time;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._f32_1);
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
@@ -1110,6 +1115,39 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, this._f32_1);
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
+
+    // NEW: Underwater uniforms (offset 96-127 in fragment shader)
+    // Check if we're in bioluminescent level
+    const isUnderwaterLevel = this.reactiveVideoBackground?.isSeaCreatureLevel ?? false;
+    if (isUnderwaterLevel && this.reactiveVideoBackground) {
+      this._f32_1[0] = 1.0; // isUnderwater
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 96, this._f32_1);
+      this._f32_1[0] = 0.6; // causticIntensity
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 100, this._f32_1);
+      this._f32_1[0] = 0.8; // godRayStrength
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 104, this._f32_1);
+      this._f32_1[0] = 0.5; // bioluminescence
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 108, this._f32_1);
+      this._f32_1[0] = this.reactiveVideoBackground.seaCreatureIntensity; // creatureIntensity
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 112, this._f32_1);
+      this._f32_1[0] = this.reactiveVideoBackground.creatureSwimOffset; // creatureSwimOffset
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 116, this._f32_1);
+      this._f32_1[0] = 5.0; // waterDepth
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 120, this._f32_1);
+      
+      // Update chaos mode for underwater theme
+      this.chaosMode.setUnderwaterMode(true);
+      
+      // Update jellyfish system
+      this.jellyfishSystem.update(dt, time);
+    } else {
+      // Not underwater - zero out underwater uniforms
+      this._f32_1[0] = 0.0;
+      for (let offset = 96; offset <= 120; offset += 4) {
+        this.device.queue.writeBuffer(this.fragmentUniformBuffer, offset, this._f32_1);
+      }
+      this.chaosMode.setUnderwaterMode(false);
+    }
 
     // Post-process uniforms - using new unified system
     const ppUniforms = postProcessUniforms.pack({
@@ -1379,7 +1417,7 @@ export default class View {
           label: "uniformBindGroup_next 635", layout: this.pipeline.getBindGroupLayout(0),
           entries: [
             { binding: 0, resource: { buffer: this.vertexUniformBuffer_border, offset: offset_ARRAY, size: 208 } },
-            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 96 } },
+            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
             { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
             { binding: 3, resource: this.blockSampler }
           ],
@@ -1565,10 +1603,15 @@ export default class View {
         this.reactiveVideoBackground.onLineClear(lines, combo, isTSpin, isAllClear);
       }
     }
-    
+
     // Update reactive music
     if (this.useReactiveMusic && this.reactiveMusicSystem) {
       this.reactiveMusicSystem.onLineClear(lines, combo, lines === 4);
+    }
+
+    // NEW: Update jellyfish system for underwater level
+    if (this.reactiveVideoBackground?.isSeaCreatureLevel) {
+      this.jellyfishSystem.onLineClear(lines, combo);
     }
 
     // Chaos mode: trigger particle burst
@@ -1583,6 +1626,10 @@ export default class View {
     }
     if (this.useReactiveMusic && this.reactiveMusicSystem) {
       this.reactiveMusicSystem.onTSpin();
+    }
+    // NEW: Jellyfish react to T-spin
+    if (this.reactiveVideoBackground?.isSeaCreatureLevel) {
+      this.jellyfishSystem.onTSpin();
     }
   }
 

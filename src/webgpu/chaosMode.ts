@@ -1,53 +1,73 @@
 /**
  * Visual Chaos Mode System
- * Extreme cyberpunk overload effects
+ * Extreme effects with underwater theme support
  * Toggle with 'C' key or UI button
+ * 
+ * Underwater Chaos: Deep sea storm - turbulent caustics, bioluminescent surge
+ * Standard Chaos: Cyberpunk overload - glitch, extreme bloom, chromatic aberration
  */
 
 export interface ChaosModeState {
   enabled: boolean;
   intensity: number; // 0.0 - 1.0
   startTime: number;
+  isUnderwater: boolean; // NEW: Underwater theme mode
 }
 
 export class ChaosModeController {
   state: ChaosModeState = {
     enabled: false,
     intensity: 0.0,
-    startTime: 0
+    startTime: 0,
+    isUnderwater: false
   };
 
-  // Effect multipliers when chaos mode is active
-  readonly effectMultipliers = {
-    bloom: 3.0,           // Extreme bloom
-    shake: 2.5,           // Constant screen shake
-    aberration: 2.0,      // Heavy chromatic aberration
-    filmGrain: 3.0,       // 3x film grain
-    scanlines: 2.5,       // Stronger scanlines
-    videoReverse: 1.0,    // Reverse on every clear
-    videoSpeed: 2.0,      // Faster video ramps
-    glitch: 2.0,          // More glitch
-    pulse: 1.0            // Constant chromatic pulse
+  // Standard cyberpunk effect multipliers
+  readonly standardMultipliers = {
+    bloom: 3.0,
+    shake: 2.5,
+    aberration: 2.0,
+    filmGrain: 3.0,
+    scanlines: 2.5,
+    videoReverse: 1.0,
+    videoSpeed: 2.0,
+    glitch: 2.0,
+    pulse: 1.0,
+    colorShift: 1.0
   };
 
-  // Base values to restore when disabling
-  private baseValues: {
-    bloomIntensity: number;
-    enableShake: boolean;
-    aberrationStrength: number;
-    filmGrainAmount: number;
-    scanlineStrength: number;
-  } | null = null;
+  // NEW: Underwater deep sea storm multipliers
+  readonly underwaterMultipliers = {
+    bloom: 2.5,           // Slightly less bloom for clarity
+    shake: 1.5,           // Gentler sway like current
+    aberration: 3.0,      // Heavy water refraction
+    filmGrain: 1.5,       // Particle swirl instead of grain
+    scanlines: 0.5,       // Less scanlines, more caustics
+    videoReverse: 1.0,    // Turbulent current reverses
+    videoSpeed: 1.5,      // Rushing water
+    glitch: 0.5,          // Less glitch, more organic
+    pulse: 2.0,           // Strong bioluminescent pulse
+    colorShift: 1.5       // Cyan/magenta deep sea colors
+  };
 
   constructor() {
     this.setupKeyListener();
   }
 
+  // NEW: Set underwater mode
+  setUnderwaterMode(isUnderwater: boolean): void {
+    this.state.isUnderwater = isUnderwater;
+    if (this.state.enabled) {
+      console.log(isUnderwater ? 
+        '[CHAOS MODE] 🌊 Deep Sea Storm activated' : 
+        '[CHAOS MODE] 🔥 Cyber Overload activated'
+      );
+    }
+  }
+
   private setupKeyListener(): void {
     document.addEventListener('keydown', (e) => {
-      // Toggle chaos mode with 'C' key
       if (e.key === 'c' || e.key === 'C') {
-        // Don't trigger if typing in an input
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
           return;
         }
@@ -72,43 +92,69 @@ export class ChaosModeController {
     this.state.startTime = performance.now();
     this.state.intensity = 1.0;
     
-    console.log('[CHAOS MODE] ACTIVATED 🔥🔥🔥');
-    
-    // Visual feedback
-    this.showNotification('CHAOS MODE ACTIVATED');
+    // NEW: Underwater-themed notification
+    if (this.state.isUnderwater) {
+      console.log('[CHAOS MODE] 🌊 DEEP SEA STORM ACTIVATED');
+      this.showNotification('🌊 DEEP SEA STORM', true);
+    } else {
+      console.log('[CHAOS MODE] ACTIVATED 🔥🔥🔥');
+      this.showNotification('CHAOS MODE ACTIVATED', false);
+    }
   }
 
   private deactivate(): void {
     this.state.intensity = 0.0;
-    
     console.log('[CHAOS MODE] Deactivated');
-    
-    this.showNotification('Chaos Mode Off');
+    this.showNotification('Chaos Mode Off', this.state.isUnderwater);
   }
 
-  private showNotification(text: string): void {
+  private showNotification(text: string, isUnderwater: boolean): void {
     const notification = document.createElement('div');
     notification.textContent = text;
-    notification.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: 'Courier New', monospace;
-      font-size: 48px;
-      font-weight: bold;
-      color: #ff00ff;
-      text-shadow: 
-        0 0 10px #ff00ff,
-        0 0 20px #ff00ff,
-        0 0 40px #ff00ff,
-        0 0 80px #ff00ff;
-      pointer-events: none;
-      z-index: 9999;
-      animation: chaosPulse 0.5s ease-out;
-    `;
     
-    // Add animation keyframes if not present
+    // NEW: Underwater styling
+    if (isUnderwater) {
+      notification.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: 'Courier New', monospace;
+        font-size: 48px;
+        font-weight: bold;
+        color: #00ffff;
+        text-shadow: 
+          0 0 10px #00ffff,
+          0 0 30px #0088ff,
+          0 0 60px #0044ff,
+          0 10px 40px rgba(0, 100, 255, 0.5);
+        pointer-events: none;
+        z-index: 9999;
+        animation: underwaterPulse 1s ease-out;
+        letter-spacing: 4px;
+      `;
+    } else {
+      notification.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: 'Courier New', monospace;
+        font-size: 48px;
+        font-weight: bold;
+        color: #ff00ff;
+        text-shadow: 
+          0 0 10px #ff00ff,
+          0 0 20px #ff00ff,
+          0 0 40px #ff00ff,
+          0 0 80px #ff00ff;
+        pointer-events: none;
+        z-index: 9999;
+        animation: chaosPulse 0.5s ease-out;
+      `;
+    }
+    
+    // Add animations if not present
     if (!document.getElementById('chaos-animations')) {
       const style = document.createElement('style');
       style.id = 'chaos-animations';
@@ -118,6 +164,11 @@ export class ChaosModeController {
           20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
           100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
         }
+        @keyframes underwaterPulse {
+          0% { transform: translate(-50%, -50%) scale(0.5) translateY(20px); opacity: 0; }
+          30% { transform: translate(-50%, -50%) scale(1.1) translateY(-10px); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1) translateY(0); opacity: 0; }
+        }
       `;
       document.head.appendChild(style);
     }
@@ -126,28 +177,34 @@ export class ChaosModeController {
     
     setTimeout(() => {
       notification.remove();
-    }, 1000);
+    }, isUnderwater ? 1500 : 1000);
   }
 
-  // Get current chaos-adjusted values
+  // Get current multipliers based on mode
+  private getMultipliers() {
+    return this.state.isUnderwater ? 
+      this.underwaterMultipliers : 
+      this.standardMultipliers;
+  }
+
   getBloomMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.bloom : 1.0;
+    return this.state.enabled ? this.getMultipliers().bloom : 1.0;
   }
 
   getShakeMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.shake : 0.0;
+    return this.state.enabled ? this.getMultipliers().shake : 0.0;
   }
 
   getAberrationMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.aberration : 1.0;
+    return this.state.enabled ? this.getMultipliers().aberration : 1.0;
   }
 
   getFilmGrainMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.filmGrain : 1.0;
+    return this.state.enabled ? this.getMultipliers().filmGrain : 1.0;
   }
 
   getScanlineMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.scanlines : 1.0;
+    return this.state.enabled ? this.getMultipliers().scanlines : 1.0;
   }
 
   shouldReverseOnClear(): boolean {
@@ -155,36 +212,72 @@ export class ChaosModeController {
   }
 
   getVideoSpeedMultiplier(): number {
-    return this.state.enabled ? this.effectMultipliers.videoSpeed : 1.0;
+    return this.state.enabled ? this.getMultipliers().videoSpeed : 1.0;
   }
 
-  // Get chaos pulse value (0-1 oscillating)
+  // NEW: Get pulse multiplier (stronger underwater)
+  getPulseMultiplier(): number {
+    return this.state.enabled ? this.getMultipliers().pulse : 0.0;
+  }
+
+  // NEW: Get color shift for underwater bioluminescence
+  getColorShift(): { r: number; g: number; b: number } {
+    if (!this.state.enabled) return { r: 0, g: 0, b: 0 };
+    
+    const pulse = this.getChaosPulse();
+    if (this.state.isUnderwater) {
+      // Cyan/magenta bioluminescent shift
+      return {
+        r: pulse * 0.2,
+        g: 0.3 + pulse * 0.4,
+        b: 0.5 + pulse * 0.5
+      };
+    }
+    // Standard magenta shift
+    return {
+      r: pulse * 0.5,
+      g: 0,
+      b: pulse * 0.5
+    };
+  }
+
   getChaosPulse(): number {
     if (!this.state.enabled) return 0;
     const elapsed = (performance.now() - this.state.startTime) / 1000;
-    return (Math.sin(elapsed * 3) * 0.5 + 0.5) * this.state.intensity;
+    const speed = this.state.isUnderwater ? 2.0 : 3.0; // Slower pulse underwater
+    return (Math.sin(elapsed * speed) * 0.5 + 0.5) * this.state.intensity;
   }
 
-  // Get chaotic random value for glitch effects
   getChaosRandom(): number {
     if (!this.state.enabled) return 0;
     return Math.random() * this.state.intensity;
   }
 
-  // Update loop
   update(dt: number): void {
     if (!this.state.enabled) return;
-    
-    // Gradually ramp up intensity
     this.state.intensity = Math.min(1.0, this.state.intensity + dt * 0.5);
   }
 
-  // Create UI button for chaos mode
   createUIButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.textContent = 'CHAOS: OFF';
     btn.id = 'chaos-mode-btn';
-    btn.style.cssText = `
+    
+    // NEW: Underwater button styling
+    const underwaterStyles = `
+      background: linear-gradient(135deg, #001a2e 0%, #003d5c 100%);
+      border: 2px solid #00ffff;
+      color: #00ffff;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-shadow: 0 0 5px #00ffff;
+    `;
+    
+    const standardStyles = `
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       border: 2px solid #ff00ff;
       color: #ff00ff;
@@ -197,8 +290,11 @@ export class ChaosModeController {
       text-shadow: 0 0 5px #ff00ff;
     `;
     
+    btn.style.cssText = this.state.isUnderwater ? underwaterStyles : standardStyles;
+    
     btn.addEventListener('mouseenter', () => {
-      btn.style.boxShadow = '0 0 15px #ff00ff';
+      const glowColor = this.state.isUnderwater ? '#00ffff' : '#ff00ff';
+      btn.style.boxShadow = `0 0 15px ${glowColor}`;
     });
     
     btn.addEventListener('mouseleave', () => {
@@ -207,19 +303,28 @@ export class ChaosModeController {
     
     btn.addEventListener('click', () => {
       const enabled = this.toggle();
-      btn.textContent = enabled ? 'CHAOS: ON 🔥' : 'CHAOS: OFF';
-      btn.style.borderColor = enabled ? '#ff00ff' : '#444';
-      btn.style.color = enabled ? '#ff00ff' : '#888';
+      
+      // Update button styling based on mode
+      if (this.state.isUnderwater) {
+        btn.textContent = enabled ? '🌊 STORM ON' : '🌊 STORM: OFF';
+        btn.style.borderColor = enabled ? '#00ffff' : '#004466';
+        btn.style.color = enabled ? '#00ffff' : '#4488aa';
+      } else {
+        btn.textContent = enabled ? 'CHAOS: ON 🔥' : 'CHAOS: OFF';
+        btn.style.borderColor = enabled ? '#ff00ff' : '#444';
+        btn.style.color = enabled ? '#ff00ff' : '#888';
+      }
       
       if (enabled) {
-        // Pulsing animation when active
         const pulse = () => {
           if (!this.state.enabled) {
-            btn.style.textShadow = '0 0 5px #ff00ff';
+            btn.style.textShadow = this.state.isUnderwater ? 
+              '0 0 5px #00ffff' : '0 0 5px #ff00ff';
             return;
           }
           const intensity = this.getChaosPulse();
-          btn.style.textShadow = `0 0 ${5 + intensity * 20}px #ff00ff`;
+          const glowColor = this.state.isUnderwater ? '#00ffff' : '#ff00ff';
+          btn.style.textShadow = `0 0 ${5 + intensity * 20}px ${glowColor}`;
           requestAnimationFrame(pulse);
         };
         pulse();

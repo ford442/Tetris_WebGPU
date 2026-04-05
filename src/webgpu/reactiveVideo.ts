@@ -3,7 +3,7 @@
  * 6 new premium backgrounds with extended speed control, glitch overlay, and dynamic tinting
  */
 
-// NEW: Video background library with 6 premium themes
+// NEW: Video background library with 6 premium themes + bioluminescent cave
 export const VIDEO_BACKGROUNDS = {
   // Level 0-1: Cyber Liquid Metal - Flowing mercury with neon edge detection
   cyberLiquidMetal: {
@@ -12,7 +12,8 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_liquid_metal.mp4',
     fallbackSrc: './assets/video/bg1.mp4',
     style: 'flowing-mercury',
-    baseParams: { brightness: 1.1, contrast: 1.2, saturation: 0.8 }
+    baseParams: { brightness: 1.1, contrast: 1.2, saturation: 0.8 },
+    hasSeaCreature: false
   },
   
   // Level 2-3: Abstract Data Stream - Matrix-like falling data with color cycling
@@ -22,7 +23,8 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_data_stream.mp4',
     fallbackSrc: './assets/video/bg2.mp4',
     style: 'matrix-data',
-    baseParams: { brightness: 0.9, contrast: 1.1, saturation: 1.3 }
+    baseParams: { brightness: 0.9, contrast: 1.1, saturation: 1.3 },
+    hasSeaCreature: false
   },
   
   // Level 4-5: Neon Grid - Retro-futuristic perspective grid with pulsing lines
@@ -32,7 +34,8 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_neon_grid.mp4',
     fallbackSrc: './assets/video/bg3.mp4',
     style: 'retro-grid',
-    baseParams: { brightness: 1.0, contrast: 1.3, saturation: 1.5 }
+    baseParams: { brightness: 1.0, contrast: 1.3, saturation: 1.5 },
+    hasSeaCreature: false
   },
   
   // Level 6-7: Volumetric Fog - Deep atmospheric fog with light shafts
@@ -42,7 +45,8 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_volumetric_fog.mp4',
     fallbackSrc: './assets/video/bg4.mp4',
     style: 'atmospheric-fog',
-    baseParams: { brightness: 0.85, contrast: 1.0, saturation: 0.9 }
+    baseParams: { brightness: 0.85, contrast: 1.0, saturation: 0.9 },
+    hasSeaCreature: false
   },
   
   // Level 8-9: Glitch Field - Corrupted digital artifacts with chromatic splits
@@ -52,7 +56,8 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_glitch_field.mp4',
     fallbackSrc: './assets/video/bg5.mp4',
     style: 'digital-corruption',
-    baseParams: { brightness: 1.0, contrast: 1.4, saturation: 1.2 }
+    baseParams: { brightness: 1.0, contrast: 1.4, saturation: 1.2 },
+    hasSeaCreature: false
   },
   
   // Level 10+: Holographic Particles - 3D particle field with depth parallax
@@ -62,7 +67,32 @@ export const VIDEO_BACKGROUNDS = {
     src: './assets/video/bg_holo_particles.mp4',
     fallbackSrc: './assets/video/bg6.mp4',
     style: 'holographic-depth',
-    baseParams: { brightness: 1.2, contrast: 1.1, saturation: 1.4 }
+    baseParams: { brightness: 1.2, contrast: 1.1, saturation: 1.4 },
+    hasSeaCreature: false
+  },
+
+  // Level 7+: Bioluminescent Cave - Dreamy underwater cave with sea creature
+  // NEW: Dreamy underwater cave background with reactive sea creature
+  bioluminescentCave: {
+    id: 'bioluminescent_cave',
+    name: 'Bioluminescent Cave',
+    src: './assets/video/bg15.mp4',
+    fallbackSrc: './assets/video/bg4.mp4',
+    style: 'underwater-bioluminescent',
+    baseParams: { 
+      brightness: 0.95, 
+      contrast: 1.15, 
+      saturation: 1.4,
+      creaturePulse: 1.0,
+      causticIntensity: 0.6,
+      godRayStrength: 0.8
+    },
+    hasSeaCreature: true,
+    creatureParams: {
+      swimSpeed: 1.0,
+      pulseFrequency: 0.5,
+      reactionRadius: 0.3
+    }
   }
 };
 
@@ -119,6 +149,12 @@ export class ReactiveVideoBackground {
   
   // NEW: Track current background config
   currentBackground: VideoBackgroundKey | null = null;
+  
+  // NEW: Sea creature state for bioluminescent level
+  seaCreatureIntensity: number = 0;     // Current creature reactivity (0-1)
+  seaCreaturePulse: number = 0;         // Gentle pulse accumulator
+  isSeaCreatureLevel: boolean = false;  // Whether current level has creature
+  creatureSwimOffset: number = 0;       // Simulated creature position offset
 
   constructor(parentElement: HTMLElement, width: number, height: number) {
     this.parentElement = parentElement;
@@ -214,10 +250,10 @@ export class ReactiveVideoBackground {
     this.glitchOverlay.style.borderRadius = '8px';
   }
 
-  // NEW: Get background key for level
+  // NEW: Get background key for level - includes bioluminescent cave at level 7+
   private getBackgroundForLevel(level: number): VideoBackgroundKey {
-    if (level >= 10) return 'holographicParticles';
-    if (level >= 8) return 'glitchField';
+    // Level 7+ enters the bioluminescent dreamscape
+    if (level >= 7) return 'bioluminescentCave';
     if (level >= 6) return 'volumetricFog';
     if (level >= 4) return 'neonGrid';
     if (level >= 2) return 'abstractDataStream';
@@ -255,6 +291,12 @@ export class ReactiveVideoBackground {
     if (!newSrc || this.videoElement.src === newSrc) return;
     
     this.currentBackground = bgKey;
+    
+    // NEW: Set sea creature level flag
+    this.isSeaCreatureLevel = bgConfig.hasSeaCreature ?? false;
+    if (this.isSeaCreatureLevel) {
+      this.seaCreaturePulse = bgConfig.baseParams.creaturePulse ?? 1.0;
+    }
     
     if (instant) {
       this.videoElement.src = newSrc;
@@ -315,6 +357,14 @@ export class ReactiveVideoBackground {
     // NEW: Combo tint intensifies with higher combos
     this.comboTint = Math.min(1.0, combo * 0.15);
     
+    // NEW: Sea creature reactions for bioluminescent level
+    if (this.isSeaCreatureLevel) {
+      // Speed ramp - creature swims faster on clears
+      this.seaCreatureIntensity = Math.min(1.0, lines * 0.3 + combo * 0.1);
+      // Creature pulse on combo
+      this.seaCreaturePulse += combo * 0.2;
+    }
+    
     if (isTSpin || isAllClear) {
       // ENHANCED: Slower slow-motion (0.3x)
       this.triggerSlowMotion(0.3, 0.4);
@@ -340,6 +390,15 @@ export class ReactiveVideoBackground {
     this.hue = 180; // Cyan shift
     this.tSpinTint = true; // NEW: Enable T-spin tint
     this.glitchIntensity = 0.6;
+    
+    // NEW: Sea creature slow-motion + gentle reverse for bioluminescent level
+    if (this.isSeaCreatureLevel) {
+      this.triggerSlowMotion(0.15, 0.8); // Even slower for dreamy effect
+      // Gentle reverse after slow-mo
+      setTimeout(() => {
+        this.triggerReverse(0.4);
+      }, 400);
+    }
     
     setTimeout(() => { 
       this.hue = 0; 
@@ -496,6 +555,21 @@ export class ReactiveVideoBackground {
     this.invert *= 0.95;
     this.sepia *= 0.95;
     
+    // NEW: Sea creature gentle pulse and intensity decay for bioluminescent level
+    if (this.isSeaCreatureLevel) {
+      // Gentle breathing pulse
+      const time = performance.now() / 1000;
+      const breathing = Math.sin(time * 0.5) * 0.1 + 0.9;
+      this.seaCreaturePulse = breathing + this.seaCreatureIntensity * 0.3;
+      
+      // Decay creature intensity
+      this.seaCreatureIntensity *= 0.96;
+      if (this.seaCreatureIntensity < 0.01) this.seaCreatureIntensity = 0;
+      
+      // Simulate creature swim offset
+      this.creatureSwimOffset += 0.016 * (1 + this.seaCreatureIntensity);
+    }
+    
     // Apply filters
     this.applyFilters();
     
@@ -503,14 +577,14 @@ export class ReactiveVideoBackground {
   }
 
   // ENHANCED: Get video suggestions with level mapping
-  static getVideoSuggestions(): { id: string; name: string; style: string; levelRange: string }[] {
+  static getVideoSuggestions(): { id: string; name: string; style: string; levelRange: string; hasCreature?: boolean }[] {
     return [
       { id: 'cyber_liquid_metal', name: 'Cyber Liquid Metal', style: 'Flowing mercury with neon edge detection', levelRange: '0-1' },
       { id: 'abstract_data_stream', name: 'Abstract Data Stream', style: 'Matrix-like falling data with color cycling', levelRange: '2-3' },
       { id: 'neon_grid', name: 'Neon Grid', style: 'Retro-futuristic perspective grid with pulsing lines', levelRange: '4-5' },
-      { id: 'volumetric_fog', name: 'Volumetric Fog', style: 'Deep atmospheric fog with light shafts', levelRange: '6-7' },
-      { id: 'glitch_field', name: 'Glitch Field', style: 'Corrupted digital artifacts with chromatic splits', levelRange: '8-9' },
-      { id: 'holographic_particles', name: 'Holographic Particles', style: '3D particle field with depth parallax', levelRange: '10+' },
+      { id: 'volumetric_fog', name: 'Volumetric Fog', style: 'Deep atmospheric fog with light shafts', levelRange: '6' },
+      // NEW: Bioluminescent cave with reactive sea creature
+      { id: 'bioluminescent_cave', name: 'Bioluminescent Cave', style: 'Dreamy underwater cave with reactive sea creature', levelRange: '7+', hasCreature: true },
     ];
   }
 }

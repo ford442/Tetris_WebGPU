@@ -7,6 +7,7 @@ export { PostProcessShaders } from './postProcess.js';
 export { EnhancedPostProcessShaders } from './enhancedPostProcess.js';
 export { MaterialAwarePostProcessShaders } from './materialAwarePostProcess.js';
 export { PBRBlockShaders } from './pbrBlocks.js';
+export { UnderwaterBlockShaders } from './underwaterBlocks.js';
 export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
