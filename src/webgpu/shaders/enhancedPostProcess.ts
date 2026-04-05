@@ -124,7 +124,7 @@ export const EnhancedPostProcessShaders = () => {
             
             // RGB pixel separation (mask effect)
             let maskX = curvedUV.x * uniforms.screenResolution.x;
-            let mask = vec3<f32>(
+            var mask = vec3<f32>(
                 sin(maskX * 3.14159) * 0.5 + 0.5,
                 sin((maskX + 0.33) * 3.14159) * 0.5 + 0.5,
                 sin((maskX + 0.66) * 3.14159) * 0.5 + 0.5

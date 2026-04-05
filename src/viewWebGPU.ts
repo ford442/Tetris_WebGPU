@@ -925,7 +925,7 @@ export default class View {
     
     // Uniform buffer for frosted glass
     this.frostedGlassUniformBuffer = this.device.createBuffer({ 
-      size: 96, // mat4x4 + mat4x4 + vec4 + 2xf32 + padding
+      size: 160, // mat4x4(64) + mat4x4(64) + vec4(16) + 2xf32(8) = 152, rounded to 160
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST 
     });
     
@@ -951,7 +951,8 @@ export default class View {
     Matrix.mat4.scale(modelMatrix, modelMatrix, [12.0, 24.0, 1.0]); // Cover playfield area
     
     // Write uniforms
-    const uniformData = new Float32Array(24); // 96 bytes / 4
+    // Layout: mat4x4(64) + mat4x4(64) + vec4(16) + 2xf32(8) = 152 bytes, round up to 160 (40 floats)
+    const uniformData = new Float32Array(40);
     uniformData.set(this.vpMatrix, 0); // viewProjectionMatrix at 0
     uniformData.set(modelMatrix, 16); // modelMatrix at 16 (offset 64)
     // tintColor at 32 (offset 128) - use theme border color
