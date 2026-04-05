@@ -1,5 +1,5 @@
 import * as Matrix from "gl-matrix";
-import { PostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, PremiumBlockShaders } from './webgpu/shaders.js';
+import { PostProcessShaders, EnhancedPostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, PremiumBlockShaders } from './webgpu/shaders.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
@@ -15,6 +15,8 @@ import { themes, ThemeColors, Themes } from './webgpu/themes.js';
 import { getPieceMaterial, Materials } from './webgpu/materials.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
+import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
+import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
 import {
   PROCEDURAL_BLOCK_TEXTURE_SIZE,
   getTextureMipLevelCount,
@@ -152,6 +154,16 @@ export default class View {
   usePremiumMaterials: boolean = false;
   currentMaterial: any = null;
 
+  // NEW: Supersampling / Render Scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x)
+  renderScale: number = 1.0;
+  useEnhancedPostProcess: boolean = true;
+
+  // NEW: Reactive Systems
+  reactiveVideoBackground!: ReactiveVideoBackground;
+  reactiveMusicSystem!: ReactiveMusicSystem;
+  useReactiveVideo: boolean = true;
+  useReactiveMusic: boolean = true;
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -163,6 +175,10 @@ export default class View {
     // Initialize subsystems
     this.particleSystem = new ParticleSystem();
     this.visualEffects = new VisualEffects(element, width, height);
+    
+    // NEW: Initialize reactive systems
+    this.reactiveVideoBackground = new ReactiveVideoBackground(element, width, height);
+    // Music system initialized in preRender after audio context is ready
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -227,8 +243,15 @@ export default class View {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
-    this.canvasWebGPU.width = this.width * dpr;
-    this.canvasWebGPU.height = this.height * dpr;
+    // NEW: Apply render scale for supersampling
+    const scaledWidth = Math.floor(this.width * dpr * this.renderScale);
+    const scaledHeight = Math.floor(this.height * dpr * this.renderScale);
+
+    this.canvasWebGPU.width = scaledWidth;
+    this.canvasWebGPU.height = scaledHeight;
+    // CSS keeps it at screen size, internal resolution is higher
+    this.canvasWebGPU.style.width = `${this.width}px`;
+    this.canvasWebGPU.style.height = `${this.height}px`;
 
     this.playfildWidth = (this.width * 2) / 3;
     this.playfildHeight = this.height;
@@ -244,6 +267,14 @@ export default class View {
       format: presentationFormat,
       alphaMode: 'premultiplied',
     });
+
+    this.recreateRenderTargets();
+  }
+
+  // NEW: Recreate render targets with current scale
+  private recreateRenderTargets() {
+    if (!this.device) return;
+    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
     if (this.offscreenTexture) {
         this.offscreenTexture.destroy();
@@ -265,7 +296,7 @@ export default class View {
     });
     this._depthTextureView = this.depthTexture.createView();
 
-    // Update descriptors with new views - GC optimized pattern
+    // Update descriptors with new views
     if (this._backgroundPassDescriptor?.colorAttachments) {
         const colorAttachment = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
         colorAttachment.view = this._offscreenTextureView;
@@ -288,20 +319,13 @@ export default class View {
             ]
         });
     }
+  }
 
-    Matrix.mat4.identity(this.PROJMATRIX);
-    let fovy = (35 * Math.PI) / 180;
-    Matrix.mat4.perspective(
-      this.PROJMATRIX,
-      fovy,
-      this.canvasWebGPU.width / this.canvasWebGPU.height,
-      1,
-      150
-    );
-
-    this.vpMatrix = Matrix.mat4.create();
-    Matrix.mat4.identity(this.vpMatrix);
-    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
+  // NEW: Set render scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x supersampling)
+  setRenderScale(scale: number) {
+    this.renderScale = Math.max(0.5, Math.min(2.0, scale));
+    this.resize();
+    console.log(`[Render] Scale set to ${this.renderScale}x (${this.canvasWebGPU.width}x${this.canvasWebGPU.height})`);
   }
 
   toggleGlitch() {
@@ -697,7 +721,7 @@ export default class View {
     this.particleRenderBindGroup = this.device.createBindGroup({ layout: this.particlePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
     this.gridBindGroup = this.device.createBindGroup({ layout: this.gridPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
 
-    const ppShader = PostProcessShaders();
+    const ppShader = this.useEnhancedPostProcess ? EnhancedPostProcessShaders() : PostProcessShaders();
     this.postProcessPipeline = this.device.createRenderPipeline({
         label: 'post process pipeline', layout: 'auto',
         vertex: { module: this.device.createShaderModule({ code: ppShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
@@ -705,7 +729,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
@@ -928,18 +952,33 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
 
     // Post-process uniforms
+    // Post-process uniforms - base (56 bytes)
     this._f32_8[0] = time;
     this._f32_8[1] = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
     this._f32_8[2] = this.visualEffects.shockwaveCenter[0];
     this._f32_8[3] = this.visualEffects.shockwaveCenter[1];
     this._f32_8[4] = this.visualEffects.shockwaveTimer;
-    this._f32_8[5] = 0; this._f32_8[6] = 0; this._f32_8[7] = 0;
+    this._f32_8[5] = this.visualEffects.currentLevel;
+    this._f32_8[6] = this.visualEffects.warpSurge;
+    this._f32_8[7] = 0; // padding
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, this._f32_8);
+    
+    // Shockwave params (16 bytes at offset 32)
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
-    this._f32_1[0] = this.visualEffects.currentLevel;
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_1);
-    this._f32_1[0] = this.visualEffects.warpSurge;
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 52, this._f32_1);
+    
+    // Enhanced post-process settings (16 bytes at offset 48)
+    this._f32_4[0] = this.useEnhancedPostProcess ? 1.0 : 0.0; // enableFXAA
+    this._f32_4[1] = 1.0; // enableFilmGrain
+    this._f32_4[2] = 1.0; // enableCRT
+    this._f32_4[3] = 1.0; // enableBloom
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_4);
+    
+    // Bloom intensity + screen resolution (12 bytes at offset 64, but aligned to 16)
+    this._f32_4[0] = 1.0; // bloomIntensity
+    this._f32_4[1] = this.canvasWebGPU.width;
+    this._f32_4[2] = this.canvasWebGPU.height;
+    this._f32_4[3] = 0; // padding
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 64, this._f32_4);
 
     // RENDER PASSES
     
@@ -1231,4 +1270,107 @@ export default class View {
     const nextIndex = (currentIndex + 1) % themeNames.length;
     this.setMaterialTheme(themeNames[nextIndex]);
   }
+
+  // NEW: Premium Visuals Preset — One call to enable all visual upgrades
+  setPremiumVisualsPreset(options: {
+    renderScale?: number;
+    enhancedPostProcess?: boolean;
+    reactiveVideo?: boolean;
+    reactiveMusic?: boolean;
+    materialTheme?: string;
+  } = {}) {
+    const {
+      renderScale = 1.5,
+      enhancedPostProcess = true,
+      reactiveVideo = true,
+      reactiveMusic = true,
+      materialTheme = 'premium'
+    } = options;
+
+    // Set render scale for supersampling
+    this.setRenderScale(renderScale);
+
+    // Enable enhanced post-processing
+    this.useEnhancedPostProcess = enhancedPostProcess;
+    console.log(`[Premium] Enhanced post-processing ${enhancedPostProcess ? 'enabled' : 'disabled'}`);
+
+    // Enable reactive video
+    this.useReactiveVideo = reactiveVideo;
+    if (reactiveVideo && this.currentTheme.levelVideos) {
+      this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
+      this.reactiveVideoBackground.updateForLevel(this.visualEffects.currentLevel || 0, true);
+    }
+
+    // Enable reactive music (requires SoundManager integration)
+    this.useReactiveMusic = reactiveMusic;
+    console.log(`[Premium] Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
+
+    // Set material theme
+    this.setMaterialTheme(materialTheme);
+
+    console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials`);
+  }
+
+  // NEW: Reactive system event hooks
+  onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) {
+    // Update reactive video
+    if (this.useReactiveVideo) {
+      this.reactiveVideoBackground.onLineClear(lines, combo, isTSpin, isAllClear);
+    }
+    
+    // Update reactive music
+    if (this.useReactiveMusic && this.reactiveMusicSystem) {
+      this.reactiveMusicSystem.onLineClear(lines, combo, lines === 4);
+    }
+  }
+
+  onTSpinReactive() {
+    if (this.useReactiveVideo) {
+      this.reactiveVideoBackground.onTSpin();
+    }
+    if (this.useReactiveMusic && this.reactiveMusicSystem) {
+      this.reactiveMusicSystem.onTSpin();
+    }
+  }
+
+  onPerfectClearReactive() {
+    if (this.useReactiveVideo) {
+      this.reactiveVideoBackground.onPerfectClear();
+    }
+  }
+
+  onLevelUpReactive(level: number) {
+    // Update video for new level
+    if (this.useReactiveVideo && this.currentTheme.levelVideos) {
+      this.reactiveVideoBackground.updateForLevel(level);
+    }
+    
+    // Update music
+    if (this.useReactiveMusic && this.reactiveMusicSystem) {
+      this.reactiveMusicSystem.onLevelUp(level);
+    }
+  }
+
+  onGameOverReactive() {
+    if (this.useReactiveVideo) {
+      this.reactiveVideoBackground.onGameOver();
+    }
+    if (this.useReactiveMusic && this.reactiveMusicSystem) {
+      this.reactiveMusicSystem.onGameOver();
+    }
+  }
+
+  // NEW: Initialize reactive music system (call from SoundManager setup)
+  initReactiveMusic(audioContext: AudioContext, masterGain: GainNode) {
+    if (!this.useReactiveMusic) return;
+    
+    this.reactiveMusicSystem = new ReactiveMusicSystem(audioContext, masterGain);
+    console.log('[Music] Reactive music system initialized');
+  }
+
+  // NEW: Toggle individual effects
+  toggleFXAA(enabled: boolean) { this.useEnhancedPostProcess = enabled; }
+  toggleFilmGrain(enabled: boolean) { /* Future: add granular control */ }
+  toggleCRT(enabled: boolean) { /* Future: add granular control */ }
+  toggleBloom(enabled: boolean) { /* Future: add granular control */ }
 }
