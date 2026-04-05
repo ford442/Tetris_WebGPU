@@ -78,8 +78,6 @@ uiContainer.innerHTML = `
       </div>
   </div>
 
-  <div id="game-over">GAME OVER</div>
-  
   <!-- Pause Menu Overlay -->
   <div id="pause-menu" class="pause-menu" style="display: none;">
     <div class="pause-menu-content">
