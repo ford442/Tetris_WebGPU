@@ -5,6 +5,7 @@ import { ScoringSystem, ScoreEvent, HighScoreManager, HighScoreEntry } from './g
 import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
+import View from './viewWebGPU.js';
 
 export interface GameState {
   score: number;
@@ -105,6 +106,9 @@ export default class Game {
     lastDropDistance: 0,
     scoreEvent: null
   };
+
+  // NEW: View reference for reactive system hooks
+  view: View | null = null;
 
   constructor() {
     this.pieceGenerator = new PieceGenerator();
@@ -250,6 +254,14 @@ export default class Game {
             this._hardDropResult.linesCleared.push(linesScore[i]);
         }
         this._hardDropResult.tSpin = wasTSpin;
+        
+        // NEW: Trigger reactive systems
+        if (this.view) {
+            this.view.onLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+            if (wasTSpin) this.view.onTSpinReactive();
+            if (isAllClear) this.view.onPerfectClearReactive();
+            if (this.scoreEvent?.levelUp) this.view.onLevelUpReactive(this.level);
+        }
     } else {
         this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
         this.scoreEvent = null;
@@ -308,6 +320,14 @@ export default class Game {
                       this._updateResult.linesCleared.push(linesScore[i]);
                   }
                   this._updateResult.tSpin = wasTSpin;
+                  
+                  // NEW: Trigger reactive systems
+                  if (this.view) {
+                      this.view.onLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+                      if (wasTSpin) this.view.onTSpinReactive();
+                      if (isAllClear) this.view.onPerfectClearReactive();
+                      if (this.scoreEvent?.levelUp) this.view.onLevelUpReactive(this.level);
+                  }
               } else {
                   this.scoringSystem.resetCombo();
                   this.scoreEvent = null;
@@ -548,6 +568,10 @@ export default class Game {
 
     if (this.hasCollision()) {
         this.gameOver = true;
+        // NEW: Trigger reactive game over
+        if (this.view) {
+            this.view.onGameOverReactive();
+        }
     }
   }
 

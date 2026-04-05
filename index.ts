@@ -127,6 +127,25 @@ uiContainer.innerHTML = `
       holdPieceCtx
   );
 
+  // NEW: Wire view reference for reactive systems
+  game.view = view;
+
+  // NEW: Enable premium visuals preset
+  view.setPremiumVisualsPreset({
+    renderScale: 1.0,        // Start at native resolution
+    enhancedPostProcess: true,
+    reactiveVideo: true,
+    reactiveMusic: false     // Enable when ready to test audio
+  });
+
+  // NEW: Initialize reactive music when sound manager is ready
+  soundManager.onReady = () => {
+    if (soundManager.audioContext && soundManager.masterGain) {
+      view.initReactiveMusic(soundManager.audioContext, soundManager.masterGain);
+      view.useReactiveMusic = true;
+    }
+  };
+
   const controller = new Controller(game, view, view, soundManager);
 
   // Initialize high score display
