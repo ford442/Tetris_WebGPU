@@ -1,5 +1,16 @@
 import * as Matrix from "gl-matrix";
-import { PostProcessShaders, EnhancedPostProcessShaders, ParticleShaders, GridShader, BackgroundShaders, Shaders, PremiumBlockShaders } from './webgpu/shaders.js';
+import { 
+  PostProcessShaders, 
+  EnhancedPostProcessShaders, 
+  MaterialAwarePostProcessShaders,
+  PBRBlockShaders,
+  ParticleShaders, 
+  GridShader, 
+  BackgroundShaders, 
+  Shaders,
+  PremiumBlockShaders 
+} from './webgpu/shaders.js';
+import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
@@ -745,7 +756,7 @@ export default class View {
     this.particleRenderBindGroup = this.device.createBindGroup({ layout: this.particlePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
     this.gridBindGroup = this.device.createBindGroup({ layout: this.gridPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
 
-    const ppShader = this.useEnhancedPostProcess ? EnhancedPostProcessShaders() : PostProcessShaders();
+    const ppShader = this.useEnhancedPostProcess ? MaterialAwarePostProcessShaders() : PostProcessShaders();
     this.postProcessPipeline = this.device.createRenderPipeline({
         label: 'post process pipeline', layout: 'auto',
         vertex: { module: this.device.createShaderModule({ code: ppShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
@@ -753,7 +764,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: 144, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
@@ -976,34 +987,25 @@ export default class View {
     this._f32_1[0] = this.visualEffects.currentLevel;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
 
-    // Post-process uniforms
-    // Post-process uniforms - base (56 bytes)
-    this._f32_8[0] = time;
-    this._f32_8[1] = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
-    this._f32_8[2] = this.visualEffects.shockwaveCenter[0];
-    this._f32_8[3] = this.visualEffects.shockwaveCenter[1];
-    this._f32_8[4] = this.visualEffects.shockwaveTimer;
-    this._f32_8[5] = this.visualEffects.currentLevel;
-    this._f32_8[6] = this.visualEffects.warpSurge;
-    this._f32_8[7] = 0; // padding
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, this._f32_8);
-    
-    // Shockwave params (16 bytes at offset 32)
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 32, this.visualEffects.getShockwaveParams());
-    
-    // Enhanced post-process settings (16 bytes at offset 48)
-    this._f32_4[0] = this.useEnhancedPostProcess ? 1.0 : 0.0; // enableFXAA
-    this._f32_4[1] = 1.0; // enableFilmGrain
-    this._f32_4[2] = 1.0; // enableCRT
-    this._f32_4[3] = (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0; // enableBloom
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 48, this._f32_4);
-    
-    // Bloom intensity + screen resolution (12 bytes at offset 64, but aligned to 16)
-    this._f32_4[0] = this.bloomIntensity; // bloomIntensity
-    this._f32_4[1] = this.canvasWebGPU.width;
-    this._f32_4[2] = this.canvasWebGPU.height;
-    this._f32_4[3] = 0; // padding
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 64, this._f32_4);
+    // Post-process uniforms - using new unified system
+    const ppUniforms = postProcessUniforms.pack({
+      time,
+      useGlitch: Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
+      shockwaveCenter: this.visualEffects.shockwaveCenter as [number, number],
+      shockwaveTime: this.visualEffects.shockwaveTimer,
+      shockwaveParams: this.visualEffects.getShockwaveParams() as [number, number, number, number],
+      level: this.visualEffects.currentLevel,
+      warpSurge: this.visualEffects.warpSurge,
+      enableFXAA: this.useEnhancedPostProcess ? 1.0 : 0.0,
+      enableBloom: (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0,
+      enableFilmGrain: 1.0,
+      enableCRT: 0.0,
+      bloomIntensity: this.bloomIntensity,
+      bloomThreshold: 0.35,
+      materialAwareBloom: this.useEnhancedPostProcess ? 1.0 : 0.0,
+      screenResolution: [this.canvasWebGPU.width, this.canvasWebGPU.height]
+    });
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, ppUniforms);
 
     // RENDER PASSES
     
