@@ -19,6 +19,8 @@ import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
 import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
 import { lineClearAnimator } from './effects/lineClearAnimation.js';
 import { lineFlashEffect } from './effects/lineFlashEffect.js';
+import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
+import { ChaosModeController } from './webgpu/chaosMode.js';
 import {
   PROCEDURAL_BLOCK_TEXTURE_SIZE,
   getTextureMipLevelCount,
@@ -166,6 +168,14 @@ export default class View {
   useReactiveVideo: boolean = true;
   useReactiveMusic: boolean = true;
 
+  // NEW: Agent 2 - Particle-Material Interaction
+  particleMaterialInteraction!: ParticleMaterialInteraction;
+  useParticleInteraction: boolean = true;
+
+  // NEW: Agent 3 - Chaos Mode
+  chaosMode!: ChaosModeController;
+  useChaosMode: boolean = false;
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -181,6 +191,12 @@ export default class View {
     // NEW: Initialize reactive systems
     this.reactiveVideoBackground = new ReactiveVideoBackground(element, width, height);
     // Music system initialized in preRender after audio context is ready
+
+    // NEW: Initialize particle-material interaction
+    this.particleMaterialInteraction = new ParticleMaterialInteraction();
+
+    // NEW: Initialize chaos mode
+    this.chaosMode = new ChaosModeController();
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -1285,13 +1301,17 @@ export default class View {
     reactiveVideo?: boolean;
     reactiveMusic?: boolean;
     materialTheme?: string;
+    chaosMode?: boolean;
+    particleInteraction?: boolean;
   } = {}) {
     const {
       renderScale = 1.5,
       enhancedPostProcess = true,
       reactiveVideo = true,
       reactiveMusic = true,
-      materialTheme = 'premium'
+      materialTheme = 'premium',
+      chaosMode = false,
+      particleInteraction = true
     } = options;
 
     // Set render scale for supersampling
@@ -1312,22 +1332,43 @@ export default class View {
     this.useReactiveMusic = reactiveMusic;
     console.log(`[Premium] Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
 
+    // Enable particle-material interaction
+    this.useParticleInteraction = particleInteraction;
+    console.log(`[Premium] Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
+
+    // Enable chaos mode if requested
+    if (chaosMode) {
+      this.useChaosMode = true;
+      this.chaosMode.toggle();
+    }
+
     // Set material theme
     this.setMaterialTheme(materialTheme);
 
-    console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials`);
+    console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
   }
 
   // NEW: Reactive system event hooks
   onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) {
     // Update reactive video
     if (this.useReactiveVideo) {
-      this.reactiveVideoBackground.onLineClear(lines, combo, isTSpin, isAllClear);
+      // Chaos mode: reverse on every clear
+      if (this.useChaosMode && this.chaosMode.state.enabled) {
+        this.reactiveVideoBackground.triggerReverse(0.3);
+        this.reactiveVideoBackground.targetPlaybackRate = 2.5;
+      } else {
+        this.reactiveVideoBackground.onLineClear(lines, combo, isTSpin, isAllClear);
+      }
     }
     
     // Update reactive music
     if (this.useReactiveMusic && this.reactiveMusicSystem) {
       this.reactiveMusicSystem.onLineClear(lines, combo, lines === 4);
+    }
+
+    // Chaos mode: trigger particle burst
+    if (this.useChaosMode && this.chaosMode.state.enabled) {
+      this.chaosMode.getChaosPulse(); // Just to keep it active
     }
   }
 
