@@ -1,3 +1,5 @@
+import { ProceduralMusicGenerator } from './effects/musicGenerator.js';
+
 export class MusicManager {
     private ctx: AudioContext;
     private musicGain: GainNode;
@@ -9,20 +11,32 @@ export class MusicManager {
     private playbackStartTime: number = 0;
     private pausedAt: number = 0;
     private loop: boolean = true;
+    private proceduralGenerator: ProceduralMusicGenerator | null = null;
+    private useProcedural: boolean = false;
 
     constructor(audioContext: AudioContext, masterGain: GainNode) {
         this.ctx = audioContext;
         this.musicGain = this.ctx.createGain();
-        this.musicGain.gain.value = 0.5;
+        this.musicGain.gain.value = 0.3;
         this.musicGain.connect(masterGain);
     }
 
     setVolume(volume: number): void {
         this.musicGain.gain.value = Math.max(0, Math.min(1, volume));
+        if (this.proceduralGenerator) {
+            this.proceduralGenerator.setVolume(volume);
+        }
     }
 
     getVolume(): number {
         return this.musicGain.gain.value;
+    }
+
+    enableProcedural(): void {
+        if (!this.proceduralGenerator) {
+            this.proceduralGenerator = new ProceduralMusicGenerator(this.ctx, this.musicGain);
+        }
+        this.useProcedural = true;
     }
 
     async load(url: string): Promise<boolean> {
@@ -35,6 +49,7 @@ export class MusicManager {
             const arrayBuffer = await response.arrayBuffer();
             this.currentBuffer = await this.ctx.decodeAudioData(arrayBuffer);
             this.currentUrl = url;
+            this.useProcedural = false;
             return true;
         } catch (e) {
             console.warn(`MusicManager: Error loading audio from ${url}:`, e);
@@ -43,8 +58,20 @@ export class MusicManager {
     }
 
     play(): void {
+        if (this.useProcedural && this.proceduralGenerator) {
+            this.proceduralGenerator.play();
+            this.isPlaying = true;
+            return;
+        }
+
         if (!this.currentBuffer) {
-            console.warn('MusicManager: No audio buffer loaded');
+            // Fall back to procedural music if no file loaded
+            if (!this.proceduralGenerator) {
+                this.proceduralGenerator = new ProceduralMusicGenerator(this.ctx, this.musicGain);
+            }
+            this.useProcedural = true;
+            this.proceduralGenerator.play();
+            this.isPlaying = true;
             return;
         }
 
@@ -65,6 +92,13 @@ export class MusicManager {
     }
 
     pause(): void {
+        if (this.useProcedural && this.proceduralGenerator) {
+            this.proceduralGenerator.pause();
+            this.isPlaying = false;
+            this.isPaused = true;
+            return;
+        }
+
         if (!this.isPlaying || !this.currentSource) return;
         
         this.pausedAt = this.ctx.currentTime - this.playbackStartTime;
@@ -79,6 +113,10 @@ export class MusicManager {
     }
 
     stop(): void {
+        if (this.proceduralGenerator) {
+            this.proceduralGenerator.stop();
+        }
+
         if (this.currentSource) {
             try {
                 this.currentSource.stop();
@@ -99,6 +137,9 @@ export class MusicManager {
     }
 
     isMusicPlaying(): boolean {
+        if (this.useProcedural && this.proceduralGenerator) {
+            return this.proceduralGenerator.isMusicPlaying();
+        }
         return this.isPlaying;
     }
 
