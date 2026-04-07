@@ -207,6 +207,25 @@ export default class View {
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
 
+  // Pre-allocated object for post process parameters to avoid GC
+  private _postProcessParams = {
+    time: 0,
+    useGlitch: 0,
+    shockwaveCenter: [0, 0] as [number, number],
+    shockwaveTime: 0,
+    shockwaveParams: [0, 0, 0, 0] as [number, number, number, number],
+    level: 0,
+    warpSurge: 0,
+    enableFXAA: 0,
+    enableBloom: 0,
+    enableFilmGrain: 1.0,
+    enableCRT: 0.0,
+    bloomIntensity: 1.0,
+    bloomThreshold: 0.35,
+    materialAwareBloom: 0,
+    screenResolution: [0, 0] as [number, number]
+  };
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -1017,12 +1036,10 @@ export default class View {
     camX += this._shakeOffsetSmoothed.x;
     camY += this._shakeOffsetSmoothed.y;
 
-    const eyePosition = this._f32_3;
-    eyePosition[0] = camX; eyePosition[1] = camY; eyePosition[2] = 75.0;
     this._camEye[0] = camX; this._camEye[1] = camY; this._camEye[2] = 75.0;
     Matrix.mat4.lookAt(this.VIEWMATRIX, this._camEye, this._camTarget, this._camUp);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, eyePosition);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._camEye);
 
     // Particle upload
     if (this.particleSystem.pendingUploadCount > 0) {
@@ -1152,23 +1169,29 @@ export default class View {
     }
 
     // Post-process uniforms - using new unified system
-    const ppUniforms = postProcessUniforms.pack({
-      time,
-      useGlitch: Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity),
-      shockwaveCenter: this.visualEffects.shockwaveCenter as [number, number],
-      shockwaveTime: this.visualEffects.shockwaveTimer,
-      shockwaveParams: this.visualEffects.getShockwaveParams() as [number, number, number, number],
-      level: this.visualEffects.currentLevel,
-      warpSurge: this.visualEffects.warpSurge,
-      enableFXAA: this.useEnhancedPostProcess ? 1.0 : 0.0,
-      enableBloom: (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0,
-      enableFilmGrain: 1.0,
-      enableCRT: 0.0,
-      bloomIntensity: this.bloomIntensity,
-      bloomThreshold: 0.35,
-      materialAwareBloom: this.useEnhancedPostProcess ? 1.0 : 0.0,
-      screenResolution: [this.canvasWebGPU.width, this.canvasWebGPU.height]
-    });
+    this._postProcessParams.time = time;
+    this._postProcessParams.useGlitch = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
+    this._postProcessParams.shockwaveCenter[0] = this.visualEffects.shockwaveCenter[0];
+    this._postProcessParams.shockwaveCenter[1] = this.visualEffects.shockwaveCenter[1];
+    this._postProcessParams.shockwaveTime = this.visualEffects.shockwaveTimer;
+    const currentShockwaveParams = this.visualEffects.getShockwaveParams();
+    this._postProcessParams.shockwaveParams[0] = currentShockwaveParams[0];
+    this._postProcessParams.shockwaveParams[1] = currentShockwaveParams[1];
+    this._postProcessParams.shockwaveParams[2] = currentShockwaveParams[2];
+    this._postProcessParams.shockwaveParams[3] = currentShockwaveParams[3];
+    this._postProcessParams.level = this.visualEffects.currentLevel;
+    this._postProcessParams.warpSurge = this.visualEffects.warpSurge;
+    this._postProcessParams.enableFXAA = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    this._postProcessParams.enableBloom = (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0;
+    this._postProcessParams.enableFilmGrain = 1.0;
+    this._postProcessParams.enableCRT = 0.0;
+    this._postProcessParams.bloomIntensity = this.bloomIntensity;
+    this._postProcessParams.bloomThreshold = 0.35;
+    this._postProcessParams.materialAwareBloom = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
+    this._postProcessParams.screenResolution[1] = this.canvasWebGPU.height;
+
+    const ppUniforms = postProcessUniforms.pack(this._postProcessParams);
     this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, ppUniforms);
 
     // RENDER PASSES
