@@ -181,7 +181,7 @@ export const Shaders = () => {
                 let rimFalloff = 1.0 - max(dot(N, V), 0.0);
                 let rimFalloff2 = rimFalloff * rimFalloff;
                 let rimFalloff4 = rimFalloff2 * rimFalloff2;
-                let rimLight = rimFalloff4 * rimFalloff4 * 6.0; // Sharper, brighter rim
+                let rimLight = rimFalloff4 * (15.0 + f32(uniforms.level) * 1.0); // Sharper, brighter rim
                 
                 // Color the rim based on piece color for glass, white for metal
                 let rimColor = mix(vColor.rgb * 0.8, vec3<f32>(1.0), metalMask);
