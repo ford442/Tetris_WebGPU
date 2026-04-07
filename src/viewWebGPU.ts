@@ -885,12 +885,12 @@ export default class View {
     }
   }
 
-  CreateGPUBuffer = (device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) => {
+  CreateGPUBuffer(device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) {
     const buffer = device.createBuffer({ size: data.byteLength, usage: usageFlag, mappedAtCreation: true });
     new Float32Array(buffer.getMappedRange()).set(data);
     buffer.unmap();
     return buffer;
-  };
+  }
 
   // Initialize Frosted Glass Backboard for Ethereal Hardware Panel effect
   async initFrostedGlassBackboard() {
@@ -974,7 +974,7 @@ export default class View {
     });
   }
 
-  render = (dt: number) => {
+  render(dt: number) {
     if (!this.device) return;
 
     // Safety cap dt to prevent massive jumps on lag spikes
@@ -1444,7 +1444,7 @@ export default class View {
     }
   }
 
-  CheckWebGPU = () => {
+  CheckWebGPU() {
     let description = "Great, your current browser supports WebGPU!";
     let result = true;
     if (!navigator.gpu) {
@@ -1452,7 +1452,7 @@ export default class View {
       result = false;
     }
     return { result, description };
-  };
+  }
 
   // NEW: Set material-aware theme
   setMaterialTheme(themeName: string, pieceType: number = 1) {
