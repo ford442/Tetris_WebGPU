@@ -3,85 +3,84 @@
  * 6 new premium backgrounds with extended speed control, glitch overlay, and dynamic tinting
  */
 
-// NEW: Video background library with 6 premium themes + bioluminescent cave
+// Video background library - maps to available bg1/bg2/bg3.mp4 assets
 export const VIDEO_BACKGROUNDS = {
-  // Level 0-1: Cyber Liquid Metal - Flowing mercury with neon edge detection
+  // Level 0-1: Cyber Liquid Metal
   cyberLiquidMetal: {
     id: 'cyber_liquid_metal',
     name: 'Cyber Liquid Metal',
-    src: './assets/video/bg_liquid_metal.mp4',
-    fallbackSrc: './assets/video/bg1.mp4',
+    src: './assets/video/bg1.mp4',
+    fallbackSrc: '',
     style: 'flowing-mercury',
     baseParams: { brightness: 1.1, contrast: 1.2, saturation: 0.8 },
     hasSeaCreature: false
   },
-  
-  // Level 2-3: Abstract Data Stream - Matrix-like falling data with color cycling
+
+  // Level 2-3: Abstract Data Stream
   abstractDataStream: {
     id: 'abstract_data_stream',
     name: 'Abstract Data Stream',
-    src: './assets/video/bg_data_stream.mp4',
-    fallbackSrc: './assets/video/bg2.mp4',
+    src: './assets/video/bg2.mp4',
+    fallbackSrc: '',
     style: 'matrix-data',
     baseParams: { brightness: 0.9, contrast: 1.1, saturation: 1.3 },
     hasSeaCreature: false
   },
-  
-  // Level 4-5: Neon Grid - Retro-futuristic perspective grid with pulsing lines
+
+  // Level 4-5: Neon Grid
   neonGrid: {
     id: 'neon_grid',
     name: 'Neon Grid',
-    src: './assets/video/bg_neon_grid.mp4',
-    fallbackSrc: './assets/video/bg3.mp4',
+    src: './assets/video/bg3.mp4',
+    fallbackSrc: '',
     style: 'retro-grid',
     baseParams: { brightness: 1.0, contrast: 1.3, saturation: 1.5 },
     hasSeaCreature: false
   },
-  
-  // Level 6-7: Volumetric Fog - Deep atmospheric fog with light shafts
+
+  // Level 6-7: Volumetric Fog
   volumetricFog: {
     id: 'volumetric_fog',
     name: 'Volumetric Fog',
-    src: './assets/video/bg_volumetric_fog.mp4',
-    fallbackSrc: './assets/video/bg4.mp4',
+    src: './assets/video/bg1.mp4',
+    fallbackSrc: '',
     style: 'atmospheric-fog',
     baseParams: { brightness: 0.85, contrast: 1.0, saturation: 0.9 },
     hasSeaCreature: false
   },
-  
-  // Level 8-9: Glitch Field - Corrupted digital artifacts with chromatic splits
+
+  // Level 8-9: Glitch Field
   glitchField: {
     id: 'glitch_field',
     name: 'Glitch Field',
-    src: './assets/video/bg_glitch_field.mp4',
-    fallbackSrc: './assets/video/bg5.mp4',
+    src: './assets/video/bg2.mp4',
+    fallbackSrc: '',
     style: 'digital-corruption',
     baseParams: { brightness: 1.0, contrast: 1.4, saturation: 1.2 },
     hasSeaCreature: false
   },
-  
-  // Level 10+: Holographic Particles - 3D particle field with depth parallax
+
+  // Level 10+: Holographic Particles
   holographicParticles: {
     id: 'holographic_particles',
     name: 'Holographic Particles',
-    src: './assets/video/bg_holo_particles.mp4',
-    fallbackSrc: './assets/video/bg6.mp4',
+    src: './assets/video/bg3.mp4',
+    fallbackSrc: '',
     style: 'holographic-depth',
     baseParams: { brightness: 1.2, contrast: 1.1, saturation: 1.4 },
     hasSeaCreature: false
   },
 
-  // Level 7+: Bioluminescent Cave - Dreamy underwater cave with sea creature
-  // NEW: Dreamy underwater cave background with reactive sea creature
+  // Level 7+: Bioluminescent Cave
   bioluminescentCave: {
     id: 'bioluminescent_cave',
     name: 'Bioluminescent Cave',
-    src: './assets/video/bg15.mp4',
-    fallbackSrc: './assets/video/bg4.mp4',
+    src: './assets/video/bg3.mp4',
+    fallbackSrc: '',
     style: 'underwater-bioluminescent',
-    baseParams: { 
-      brightness: 0.95, 
-      contrast: 1.15, 
+    baseParams: {
+      brightness: 0.95,
+      contrast: 1.15,
       saturation: 1.4,
       creaturePulse: 1.0,
       causticIntensity: 0.6,

@@ -26,46 +26,19 @@ export interface Themes {
   chrome: ThemeColors;  // NEW
 }
 
-// Theme-specific video playlists for Ethereal Floating Hardware Panel aesthetic
+// Theme-specific video playlists - all use available bg1/bg2/bg3.mp4 assets
+const availableVideos = [
+  './assets/video/bg1.mp4',
+  './assets/video/bg2.mp4',
+  './assets/video/bg3.mp4'
+];
+
 export const ThemeVideos = {
-  // Space theme - cosmic nebulas, starfields, orbital views
-  Space: [
-    './assets/video/space_nebula.mp4',
-    './assets/video/space_orbit.mp4',
-    './assets/video/space_starfield.mp4',
-    './assets/video/space_warp.mp4'
-  ],
-  
-  // Underwater theme - deep ocean, caustics, bioluminescence
-  Underwater: [
-    './assets/video/ocean_deep.mp4',
-    './assets/video/ocean_caustics.mp4',
-    './assets/video/ocean_bioluminescence.mp4',
-    './assets/video/ocean_currents.mp4'
-  ],
-  
-  // Cyberpunk theme - neon cityscapes, digital grids, matrix rain
-  Cyberpunk: [
-    './assets/video/cyber_city.mp4',
-    './assets/video/cyber_grid.mp4',
-    './assets/video/cyber_matrix.mp4',
-    './assets/video/cyber_glitch.mp4'
-  ],
-  
-  // Ethereal theme - soft clouds, aurora, void
-  Ethereal: [
-    './assets/video/ethereal_clouds.mp4',
-    './assets/video/ethereal_aurora.mp4',
-    './assets/video/ethereal_void.mp4',
-    './assets/video/ethereal_mist.mp4'
-  ],
-  
-  // Default fallback videos
-  Default: [
-    './assets/video/bg1.mp4',
-    './assets/video/bg2.mp4',
-    './assets/video/bg3.mp4'
-  ]
+  Space: availableVideos,
+  Underwater: availableVideos,
+  Cyberpunk: availableVideos,
+  Ethereal: availableVideos,
+  Default: availableVideos
 };
 
 // Backward compatibility
