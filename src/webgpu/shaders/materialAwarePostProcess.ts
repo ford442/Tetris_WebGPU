@@ -42,31 +42,28 @@ export const MaterialAwarePostProcessShaders = () => {
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
 
         // FXAA 3.11 implementation (simplified for performance)
+        // Restructured to avoid non-uniform control flow with textureSample
         fn fxaa(uv: vec2<f32>, texColor: vec3<f32>) -> vec3<f32> {
             let texelSize = vec2<f32>(1.0) / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
-            
-            // Sample neighboring pixels
+
+            // Sample neighboring pixels (all sampling done unconditionally)
             let nw = textureSample(myTexture, mySampler, uv + vec2<f32>(-texelSize.x, -texelSize.y)).rgb;
             let ne = textureSample(myTexture, mySampler, uv + vec2<f32>( texelSize.x, -texelSize.y)).rgb;
             let sw = textureSample(myTexture, mySampler, uv + vec2<f32>(-texelSize.x,  texelSize.y)).rgb;
             let se = textureSample(myTexture, mySampler, uv + vec2<f32>( texelSize.x,  texelSize.y)).rgb;
-            
+
             // Convert to luminance
             let lumaM = dot(texColor, vec3<f32>(0.299, 0.587, 0.114));
             let lumaNW = dot(nw, vec3<f32>(0.299, 0.587, 0.114));
             let lumaNE = dot(ne, vec3<f32>(0.299, 0.587, 0.114));
             let lumaSW = dot(sw, vec3<f32>(0.299, 0.587, 0.114));
             let lumaSE = dot(se, vec3<f32>(0.299, 0.587, 0.114));
-            
+
             // Edge detection
             let lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
             let lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
             let lumaRange = lumaMax - lumaMin;
-            
-            if (lumaRange < max(0.0312, lumaMax * 0.125)) {
-                return texColor;
-            }
-            
+
             // Blend direction
             let dirX = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
             let dirY =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
@@ -76,8 +73,8 @@ export const MaterialAwarePostProcessShaders = () => {
                 min(uniforms.screenWidth, max(-uniforms.screenWidth, dirX * rcpDirMin)) * texelSize.x,
                 min(uniforms.screenHeight, max(-uniforms.screenHeight, dirY * rcpDirMin)) * texelSize.y
             ) * 0.5;
-            
-            // Sample along gradient
+
+            // Sample along gradient (unconditional - avoids non-uniform control flow)
             let rgbA = 0.5 * (
                 textureSample(myTexture, mySampler, uv + dir * (1.0 / 3.0 - 0.5)).rgb +
                 textureSample(myTexture, mySampler, uv + dir * (2.0 / 3.0 - 0.5)).rgb
@@ -87,11 +84,11 @@ export const MaterialAwarePostProcessShaders = () => {
                 textureSample(myTexture, mySampler, uv + dir * 0.5).rgb
             );
             let lumaB = dot(rgbB, vec3<f32>(0.299, 0.587, 0.114));
-            
-            if (lumaB < lumaMin || lumaB > lumaMax) {
-                return rgbA;
-            }
-            return rgbB;
+
+            // Select result without branching
+            let needsAA = lumaRange >= max(0.0312, lumaMax * 0.125);
+            let aaResult = select(rgbB, rgbA, lumaB < lumaMin || lumaB > lumaMax);
+            return select(texColor, aaResult, needsAA);
         }
 
         // Film grain
