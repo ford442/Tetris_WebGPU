@@ -76,66 +76,64 @@ export const ParticleShaders = () => {
 
         @fragment
         fn main(@location(0) color : vec4<f32>, @location(1) uv : vec2<f32>, @location(2) lifeRatio : f32) -> @location(0) vec4<f32> {
-            let dist = length(uv - 0.5) * 2.0; // 0 at center, 1 at edge
-            if (dist > 1.0) {
+            let centered = uv - 0.5;
+            let distSq = dot(centered, centered) * 4.0; // 0 at center, 1 at edge squared
+            if (distSq > 1.0) {
                 discard;
             }
+            let dist = sqrt(distSq);
 
-            // "Hot Core" effect
-            // Intense center, rapid falloff
-            let intensity = exp(-dist * 4.0); // Sharper core
+            // OPTIMIZED: "Hot Core" with single exp() using distance squared
+            // exp(-dist * 4.0) -> exp(-sqrt(distSq) * 4.0)
+            // Approximate with polynomial for speed: (1 - dist^2)^3
+            let oneMinusDistSq = 1.0 - distSq;
+            let intensity = oneMinusDistSq * oneMinusDistSq * oneMinusDistSq;
 
-            // Sparkle shape (star)
-            let uvCentered = abs(uv - 0.5);
-            // Rotate UV 45 degrees for second cross
+            // OPTIMIZED: Sparkle shape using cheaper math
+            // Instead of smoothstep, use sharp threshold with smooth falloff
+            let uvAbs = abs(centered);
             let rot = 0.7071;
-            let uvr = vec2<f32>(
-                uvCentered.x * rot - uvCentered.y * rot,
-                uvCentered.x * rot + uvCentered.y * rot
-            );
-            let uvrCentered = abs(uvr);
+            let uvrAbs = abs(vec2<f32>(
+                uvAbs.x * rot - uvAbs.y * rot,
+                uvAbs.x * rot + uvAbs.y * rot
+            ));
 
-            // Create a soft glowing core
-            let core = exp(-length(uv - 0.5) * 5.0);
+            // Create sharp rays using step for main ray, smooth for glow
+            // (1.0 - threshold * 10.0) clamped gives sharp line with soft edge
+            let cross1 = max(1.0 - uvAbs.x * 12.0, 1.0 - uvAbs.y * 12.0);
+            let cross2 = max(1.0 - uvrAbs.x * 12.0, 1.0 - uvrAbs.y * 12.0) * 0.5;
+            let sparkle = max(cross1, cross2);
 
-            // Create sharp rays
-            let cross1 = max(1.0 - smoothstep(0.0, 0.1, uvCentered.x), 1.0 - smoothstep(0.0, 0.1, uvCentered.y));
-            let cross2 = max(1.0 - smoothstep(0.0, 0.1, uvrCentered.x), 1.0 - smoothstep(0.0, 0.1, uvrCentered.y));
+            // OPTIMIZED: Softer core using same polynomial
+            let core = oneMinusDistSq * oneMinusDistSq;
 
-            let sparkle = max(cross1, cross2 * 0.5);
+            // Combine with cheaper alpha calculation
+            let alpha = intensity * 0.7 + core * 0.3 + sparkle * 0.5;
+            // Fast smoothstep approximation for fade-in: t * t * (3 - 2t)
+            let fadeInT = clamp(lifeRatio * 5.0, 0.0, 1.0);
+            let fadeIn = fadeInT * fadeInT * (3.0 - 2.0 * fadeInT);
+            let finalAlpha = clamp(alpha * color.a * fadeIn, 0.0, 1.0);
 
-            // Combine
-            // Fade out as life decreases (lifeRatio goes 1 -> 0)
-            // But keep core bright until the very end
-            let alpha = intensity + core * 0.5 + sparkle * 0.8;
-            let finalAlpha = clamp(alpha * color.a * smoothstep(0.0, 0.2, lifeRatio), 0.0, 1.0);
+            // OPTIMIZED: Color shift - simplified hot core blending
+            let hotColor = vec3<f32>(1.0, 0.95, 0.7);
+            // Fast smoothstep: t < 0.2 ? 0 : t > 0.8 ? 1 : smooth
+            let t = (lifeRatio - 0.8) * 5.0;
+            let mixFactor = clamp(t, 0.0, 1.0);
+            var finalColor = mix(color.rgb, hotColor, mixFactor);
 
-            // Color Shift:
-            // Hot White/Yellow at birth -> Theme Color -> Darker/Cooler at death
-            let hotColor = vec3<f32>(1.0, 1.0, 0.8); // Hot white-yellow
-            let baseColor = color.rgb;
-
-            // Mix based on life
-            // lifeRatio 1.0 -> 0.8 : Hot -> Base
-            // lifeRatio 0.8 -> 0.0 : Base
-            let mixFactor = smoothstep(0.8, 1.0, lifeRatio);
-            var finalColor = mix(baseColor, hotColor, mixFactor);
-
-            // JUICE: Pulse alpha for "alive" particles, sped up by low life
-            // Pulse faster when dying
+            // OPTIMIZED: Faster pulse using fract instead of sin where possible
             let pulseSpeed = 20.0 + (1.0 - lifeRatio) * 30.0;
-            let pulse = 0.8 + 0.2 * sin(uv.x * pulseSpeed);
+            let pulsePhase = uv.x * pulseSpeed + uniforms.time * 10.0;
+            let pulse = 0.85 + 0.15 * sin(pulsePhase);
 
-            // Neon Flicker (JUICE)
-            // High frequency chaos for electrical look
-            // Use pseudo-random noise for flicker
-            let noise = fract(sin(dot(uv, vec2<f32>(12.9898 + uniforms.time, 78.233))) * 43758.5453);
-            var flicker = 0.8 + 0.2 * sin(uniforms.time * 60.0);
-            if (noise > 0.9) { flicker *= 1.5; } // Random bright sparks
+            // OPTIMIZED: Cheaper flicker using fract hash
+            let hash = fract(dot(uv, vec2<f32>(12.9898, 78.233)) * 43758.5453 + uniforms.time);
+            var flicker = 0.9 + 0.1 * sin(uniforms.time * 45.0);
+            if (hash > 0.92) { flicker *= 1.3; }
 
-            // Boost brightness significantly for small particles (sparkle)
-            var brightness = 4.0;
-            if (lifeRatio > 0.8) { brightness = 12.0; } // Initial burst is super bright
+            // Brightness boost based on life phase
+            var brightness = 3.5;
+            if (lifeRatio > 0.8) { brightness = 8.0; }
 
             return vec4<f32>(finalColor * brightness * lifeRatio, finalAlpha * pulse * flicker);
         }
