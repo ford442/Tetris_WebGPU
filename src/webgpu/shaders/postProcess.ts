@@ -26,14 +26,11 @@ export const PostProcessShaders = () => {
             useGlitch: f32,
             shockwaveCenter: vec2<f32>,
             shockwaveTime: f32,
-            // Align to 16 bytes for next field if needed, but here we just flow
-            // offset 0: time(4), 4: useGlitch(4), 8: center(8) -> 16
-            // offset 16: shockwaveTime(4), pad(12) -> 32
-            // offset 32: shockwaveParams(16) -> 48
-            // offset 48: level(4)
+            currentLevel: f32,          // ← was missing
+            warpSurge: f32,             // ← was missing
+            useEnhancedPostProcess: f32,
+            padding: f32,               // explicit padding
             shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
-            level: f32,
-            warpSurge: f32, // Offset 52
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
         @binding(1) @group(0) var mySampler: sampler;
@@ -68,11 +65,13 @@ export const PostProcessShaders = () => {
                 let strength = params.y * 1.5; // e.g. 0.05
                 let diff = dist - radius;
 
+                // Pre-calculate direction vector once to eliminate redundant ALU operations
+                let dir = normalize(uv - center);
+
                 if (abs(diff) < width) {
                     // Cosine wave for smooth ripple
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * strength * (1.0 - time); // Fade out
-                    let dir = normalize(uv - center);
 
                     finalUV -= dir * distortion;
 
@@ -86,7 +85,6 @@ export const PostProcessShaders = () => {
                 if (echoDiff < width * 0.5) {
                     let angle = (echoDiff / (width * 0.5)) * 3.14159;
                     let distortion = cos(angle) * strength * 0.5 * (1.0 - time);
-                    let dir = normalize(uv - center);
                     finalUV -= dir * distortion;
                 }
 
@@ -96,7 +94,6 @@ export const PostProcessShaders = () => {
                 if (echoDiff2 < width * 0.5) {
                     let angle = (echoDiff2 / (width * 0.5)) * 3.14159;
                     let distortion = cos(angle) * strength * 0.25 * (1.0 - time);
-                    let dir = normalize(uv - center);
                     finalUV -= dir * distortion;
                 }
             }
@@ -136,43 +133,35 @@ export const PostProcessShaders = () => {
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, vertAberration)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
-            // Bloom-ish boost (cheap but juicy)
+            // Bloom-ish boost (optimized 5-tap tent filter)
             var color = vec3<f32>(r, g, b);
 
-            // NEON BRICKLAYER: Enhanced Glow (Tent Filter + Wide Spread)
-            // Sample 8 points for a smoother, wider halo
-            // JUICE: Wider spread (Increased base offset)
-            let offset = 0.008 * (1.0 + levelStress * 0.8);
-            let offset2 = offset * 2.2; // Even wider outer ring
-            var glow = vec3<f32>(0.0);
+            // OPTIMIZED: 5-tap tent filter (down from 8) with weighted sampling
+            // Center + 4 directional samples = better quality, fewer ALU ops
+            let spread = 0.012 * (1.0 + levelStress * 0.6);
+            var glow = color * 0.25; // Center weight
 
-            // Inner Ring
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset, -offset)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset, -offset)).rgb;
+            // 4 directional samples (cardinal directions for better cache coherence)
+            let dX = vec2<f32>(spread, 0.0);
+            let dY = vec2<f32>(0.0, spread);
+            glow += textureSample(myTexture, mySampler, finalUV + dX).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV - dX).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV + dY).rgb * 0.1875;
+            glow += textureSample(myTexture, mySampler, finalUV - dY).rgb * 0.1875;
 
-            // Outer Ring (Diagonal)
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(0.0, -offset2)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(offset2, 0.0)).rgb;
-            glow += textureSample(myTexture, mySampler, finalUV + vec2<f32>(-offset2, 0.0)).rgb;
-
-            glow *= 0.125; // Average of 8 samples
-
-            // Thresholding the glow
+            // Tuned bloom that preserves texture detail
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            // JUICE: Lower threshold (0.1) to catch more mid-tones, Higher Intensity (5.5)
-            // ENHANCED: Even more aggressive bloom for that neon look
-            let bloomThreshold = 0.1; // Cleaner threshold
-            if (glowLum > bloomThreshold) {
-                 color += glow * 8.0; // Tuned intensity (less blinding)
-            }
+            let bloomThreshold = 0.35;   // higher = protects glass texture
+            let knee = 0.12;
+            let contrib = max(glowLum - bloomThreshold + knee, 0.0);
+            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 3.2;  // lowered from 6.0
 
-            // High-pass boost for the core pixels
+            color += glow * bloomIntensity;
+
+            // Optional softer secondary boost
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-            if (luminance > 0.6) {
-                 color += color * 0.4;
+            if (luminance > 0.78) {
+                color += color * 0.18;
             }
 
             // Vignette darken (pulsing with beat)

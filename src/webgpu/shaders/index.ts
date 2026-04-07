@@ -4,7 +4,14 @@
  */
 
 export { PostProcessShaders } from './postProcess.js';
+export { EnhancedPostProcessShaders } from './enhancedPostProcess.js';
+export { MaterialAwarePostProcessShaders } from './materialAwarePostProcess.js';
+export { PBRBlockShaders } from './pbrBlocks.js';
+export { UnderwaterBlockShaders } from './underwaterBlocks.js';
 export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
 export { Shaders } from './main.js';
+export { PremiumBlockShaders } from './premiumBlocks.js';
+export { FrostedGlassShaders } from './frostedGlass.js';
+export { Materials, MaterialThemes, getPieceMaterial } from '../materials.js';

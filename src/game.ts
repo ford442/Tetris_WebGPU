@@ -1,10 +1,11 @@
 import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
-import { ScoringSystem, ScoreEvent } from './game/scoring.js';
+import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
 import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
+import type View from './viewWebGPU.js';
 
 export interface GameState {
   score: number;
@@ -22,6 +23,7 @@ export interface GameState {
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
+  isTSpinReady: boolean;
 }
 
 export default class Game {
@@ -57,7 +59,7 @@ export default class Game {
   // Subsystems
   private pieceGenerator: PieceGenerator;
   private collisionDetector: CollisionDetector;
-  private scoringSystem: ScoringSystem;
+  scoringSystem: ScoringSystem;
   private projectedPlayfield: number[][] = [];
 
   // Bound methods to prevent per-frame garbage collection
@@ -75,11 +77,14 @@ export default class Game {
 
   // Pre-allocated temporary piece for rotation checks to avoid GC
   private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
+  private _tempBlocks: number[][] = [];
 
   // Pre-allocated corners for T-Spin checks to avoid GC
   private _tSpinCorners: { x: number, y: number }[] = [
       { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
   ];
+
+  private _linesClearedCache: number[] = [];
 
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
@@ -100,8 +105,12 @@ export default class Game {
     effectCounter: 0,
     lastDropPos: null,
     lastDropDistance: 0,
-    scoreEvent: null
+    scoreEvent: null,
+    isTSpinReady: false
   };
+
+  // NEW: View reference for reactive system hooks
+  view: View | null = null;
 
   constructor() {
     this.pieceGenerator = new PieceGenerator();
@@ -135,6 +144,10 @@ export default class Game {
     return this.scoringSystem.level;
   }
 
+  get combo(): number {
+    return Math.max(0, this.scoringSystem.combo);
+  }
+
   // Helper for TypedArray access
   getCell(x: number, y: number): number {
       if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
@@ -153,6 +166,28 @@ export default class Game {
 
   createPiece(): Piece {
     return this.pieceGenerator.createPiece();
+  }
+
+  getHighScoreManager(): HighScoreManager {
+    return this.scoringSystem.getHighScoreManager();
+  }
+
+  saveHighScore(): boolean {
+    return this.scoringSystem.saveHighScore();
+  }
+
+  // Set view reference for reactive events
+  // ==================== REACTIVE EVENT HOOKS ====================
+  private triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
+    this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin, isAllClear);
+  }
+
+  private triggerLevelUpReactive(newLevel: number): void {
+    this.view?.onLevelUpReactive?.(newLevel);
+  }
+
+  private triggerTSpinReactive(type: 'normal' | 'mini'): void {
+    this.view?.onTSpinReactive?.(type);
   }
 
   getState(): GameState {
@@ -181,6 +216,7 @@ export default class Game {
     this._gameStateCache.lastDropPos = this.lastDropPos;
     this._gameStateCache.lastDropDistance = this.lastDropDistance;
     this._gameStateCache.scoreEvent = this.scoreEvent;
+    this._gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
 
     return this._gameStateCache;
   }
@@ -230,8 +266,15 @@ export default class Game {
     if (linesScore.length > 0) {
         const isAllClear = this.isPlayfieldEmpty();
         this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-        this._hardDropResult.linesCleared = linesScore;
+        this._hardDropResult.linesCleared.length = 0;
+        for (let i = 0; i < linesScore.length; i++) {
+            this._hardDropResult.linesCleared.push(linesScore[i]);
+        }
         this._hardDropResult.tSpin = wasTSpin;
+        // Trigger reactive event for line clear
+        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+        if (wasTSpin) this.triggerTSpinReactive('normal');
+        if (isAllClear) this.view?.onPerfectClearReactive?.();
     } else {
         this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
         this.scoreEvent = null;
@@ -284,9 +327,20 @@ export default class Game {
               const linesScore = this.clearLine();
               if (linesScore.length > 0) {
                   const isAllClear = this.isPlayfieldEmpty();
+                  const previousLevel = this.level;
                   this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-                  this._updateResult.linesCleared = linesScore;
+                  this._updateResult.linesCleared.length = 0;
+                  for (let i = 0; i < linesScore.length; i++) {
+                      this._updateResult.linesCleared.push(linesScore[i]);
+                  }
                   this._updateResult.tSpin = wasTSpin;
+                  // Trigger reactive event for line clear
+                  this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+                  if (wasTSpin) this.view?.onTSpinReactive?.();
+                  // Check for level up and trigger reactive event
+                  if (this.level > previousLevel) {
+                      this.triggerLevelUpReactive(this.level);
+                  }
               } else {
                   this.scoringSystem.resetCombo();
                   this.scoreEvent = null;
@@ -332,15 +386,9 @@ export default class Game {
   }
 
   dropPiece(): void {
-    let moved = false;
-    while (true) {
-      this.activPiece.y += 1;
-      if (this.hasCollision()) {
-        this.activPiece.y -= 1;
-        break;
-      }
-      moved = true;
-    }
+    const ghostY = this.getGhostY();
+    const moved = this.activPiece.y !== ghostY;
+    this.activPiece.y = ghostY;
     if (moved) this.isTSpin = false;
 
     this.lockPiece();
@@ -413,14 +461,19 @@ export default class Game {
     this._tempPiece.type = this.activPiece.type;
     // getBounds isn't strictly needed for the temp piece if hasCollisionPiece uses fallback
     // or WASM uses exact blocks array. We copy the exact blocks anyway.
-    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn);
+    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn, this._tempBlocks);
     this._tempPiece.rotation = nextRotation;
 
     if (!this.hasCollisionPiece(this._tempPiece)) {
-      this.activPiece.blocks = this._tempPiece.blocks;
+      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+      this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
+      // Trigger T-Spin reactive if detected
+      if (this.isTSpin && this.activPiece.type === 'T') {
+        this.triggerTSpinReactive('normal');
+      }
       return;
     }
 
@@ -436,10 +489,15 @@ export default class Game {
             // Apply successful kick
             this.activPiece.x = this._tempPiece.x;
             this.activPiece.y = this._tempPiece.y;
-            this.activPiece.blocks = this._tempPiece.blocks;
+            // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+            this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             this.checkTSpin(); // Check T-Spin after kick
+            // Trigger T-Spin reactive if detected
+            if (this.isTSpin && this.activPiece.type === 'T') {
+              this.triggerTSpinReactive('normal');
+            }
             return;
         }
     }
@@ -525,6 +583,10 @@ export default class Game {
 
     if (this.hasCollision()) {
         this.gameOver = true;
+        // NEW: Trigger reactive game over
+        if (this.view) {
+            this.view.onGameOverReactive();
+        }
     }
   }
 
@@ -534,6 +596,7 @@ export default class Game {
       this.playfieldWidth,
       this.playfieldHeight,
       this.boundGetCell,
+      this._linesClearedCache
     );
     if (linesCleared.length > 0) {
       this.collisionDetector.updatePlayfield(this.playfield);

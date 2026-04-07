@@ -1,6 +1,7 @@
 import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
+import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 
 const DAS = 120; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
 const ARR = 10;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
@@ -15,6 +16,7 @@ export default class Controller {
   viewWebGPU: View;
   soundManager: SoundManager;
   isPlaying: boolean;
+  isPaused: boolean = false;
   gameLoopID: number | null;
   intervalID: number | null; // For gravity
 
@@ -69,6 +71,7 @@ export default class Controller {
 
   private lastTime: number = 0;
   private lastLevel: number = 1;
+  private touchControls: TouchControls | null = null;
 
   constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
     this.game = game;
@@ -76,13 +79,54 @@ export default class Controller {
     this.viewWebGPU = viewWebGPU;
     this.soundManager = soundManager;
     this.isPlaying = false;
+    this.isPaused = false;
     this.gameLoopID = null;
     this.intervalID = null;
 
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
     document.addEventListener("keyup", this.handleKeyUp.bind(this));
 
+    // Initialize touch controls
+    addTouchControlStyles();
+    this.touchControls = new TouchControls(this.handleTouchAction.bind(this));
+
     this.play();
+  }
+
+  private handleTouchAction(action: TouchAction): void {
+    if (!this.isPlaying || this.isPaused) {
+      if (action === 'pause') {
+        this.togglePause();
+      }
+      return;
+    }
+
+    switch (action) {
+      case 'left':
+        this.executeAction('left');
+        break;
+      case 'right':
+        this.executeAction('right');
+        break;
+      case 'down':
+        this.executeAction('down');
+        break;
+      case 'rotateCW':
+        this.executeAction('rotateCW');
+        break;
+      case 'rotateCCW':
+        this.executeAction('rotateCCW');
+        break;
+      case 'hardDrop':
+        this.executeAction('hardDrop');
+        break;
+      case 'hold':
+        this.executeAction('hold');
+        break;
+      case 'pause':
+        this.togglePause();
+        break;
+    }
   }
 
   // Called by gravity timer
@@ -95,6 +139,7 @@ export default class Controller {
   play(): void {
     if (this.isPlaying) return;
     this.isPlaying = true;
+    this.isPaused = false;
 
     // Stop gravity timer - now handled in gameLoop
     this.stopTimer();
@@ -108,18 +153,89 @@ export default class Controller {
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
 
+    // Resume music if it was paused
+    if (this.soundManager.musicManager.isMusicPaused()) {
+      this.soundManager.musicManager.resume();
+    } else if (!this.soundManager.musicManager.isMusicPlaying()) {
+      // Try to start music if available
+      this.soundManager.musicManager.play();
+    }
+
+    this.hidePauseMenu();
     this.gameLoop();
   }
 
   pause(): void {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.isPaused) return;
+    this.isPaused = true;
     this.isPlaying = false;
+    
     if (this.gameLoopID) {
         cancelAnimationFrame(this.gameLoopID);
         this.gameLoopID = null;
     }
+    
+    // Pause music
+    this.soundManager.musicManager.pause();
+    this.soundManager.playPause();
+    
+    this.showPauseMenu();
     this.updateView();
-    this.view.renderPauseScreen();
+  }
+
+  resume(): void {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.isPlaying = true;
+
+    this.lastTime = performance.now();
+    
+    // Reset timers to prevent jumps
+    this.gravityTimer = 0;
+    this.actionTimers.left = 0;
+    this.actionTimers.right = 0;
+    this.actionTimers.down = 0;
+
+    // Resume music
+    this.soundManager.musicManager.resume();
+    this.soundManager.playResume();
+
+    this.hidePauseMenu();
+    this.gameLoop();
+  }
+
+  togglePause(): void {
+    if (this.game.gameOver) {
+      this.reset();
+    } else if (this.isPaused) {
+      this.resume();
+    } else {
+      this.pause();
+    }
+  }
+
+  private showPauseMenu(): void {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) {
+      // Update pause menu stats
+      const state = this.game.getState();
+      const pauseScore = document.getElementById('pause-score');
+      const pauseLevel = document.getElementById('pause-level');
+      const pauseLines = document.getElementById('pause-lines');
+      
+      if (pauseScore) pauseScore.textContent = state.score.toLocaleString();
+      if (pauseLevel) pauseLevel.textContent = state.level.toString();
+      if (pauseLines) pauseLines.textContent = state.lines.toString();
+      
+      pauseMenu.style.display = 'flex';
+    }
+  }
+
+  private hidePauseMenu(): void {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) {
+      pauseMenu.style.display = 'none';
+    }
   }
 
   startTimer(): void {
@@ -140,7 +256,9 @@ export default class Controller {
     if (state.isGameOver) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
-    } else if (!this.isPlaying) {
+      this.isPaused = false;
+      this.hidePauseMenu();
+    } else if (this.isPaused) {
       this.view.renderPauseScreen();
     } else {
       // Logic handled in gameLoop now
@@ -159,6 +277,13 @@ export default class Controller {
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
 
+    this.isPaused = false;
+    this.hidePauseMenu();
+    
+    // Restart music
+    this.soundManager.musicManager.stop();
+    this.soundManager.musicManager.play();
+
     this.play();
   }
 
@@ -167,19 +292,13 @@ export default class Controller {
 
     const code = event.code;
 
-    // Global keys (Enter)
-    if (code === 'Enter' || event.keyCode === 13) {
-        if (this.game.gameOver) {
-          this.reset();
-        } else if (this.isPlaying) {
-          this.pause();
-        } else {
-          this.play();
-        }
+    // Global keys (Enter, Escape for pause)
+    if (code === 'Enter' || code === 'Escape' || event.keyCode === 13 || event.keyCode === 27) {
+        this.togglePause();
         return;
     }
 
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.isPaused) return;
 
     // Map key to action
     const action = this.keyMap[code];
@@ -324,9 +443,8 @@ export default class Controller {
               {
                   const yBefore = this.game.activPiece?.y;
                   this.performHardDrop();
-                  if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
-                      this.bufferedAction = 'hardDrop';
-                      this.bufferedActionTime = performance.now();
+                  if (this.game.activPiece?.y !== yBefore) {
+                      // Successfully dropped
                   }
               }
               break;
@@ -376,16 +494,29 @@ export default class Controller {
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          this.viewWebGPU.onLock(result.tSpin);
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
+          // Save high score on game over
+          this.game.saveHighScore();
+          this.updateHighScoreDisplay();
       }
+  }
+
+  updateHighScoreDisplay(): void {
+    const highScoreElement = document.getElementById('high-score');
+    if (highScoreElement) {
+      const highestScore = this.game.getHighScoreManager().getHighestScore();
+      if (highestScore) {
+        highScoreElement.textContent = highestScore.score.toLocaleString();
+      }
+    }
   }
 
   gameLoop(): void {
     const animate = (time: number) => {
-      if (!this.isPlaying) {
+      if (!this.isPlaying || this.isPaused) {
           return;
       }
 
@@ -399,12 +530,6 @@ export default class Controller {
       this.handleInput(dt);
 
       // 2. Update Game Logic (Gravity, Locking)
-      // Gravity handling moved inside Game.update or managed here?
-      // Previously handled by interval.
-      // Game.update handles lock delay. Does it handle gravity?
-      // Game.update checks ground contact.
-      // We need to implement gravity here if interval is gone.
-
       const level = this.game.getState().level;
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
       // Tuned for better playability: 0.85 base makes it slightly faster
@@ -413,13 +538,7 @@ export default class Controller {
       // Allow faster than 60Hz (16ms) but clamp to 0.5ms to avoid browser freeze
       if (speedMs < 0.5) speedMs = 0.5;
 
-      // Accumulate gravity time?
-      // Simplest: use a gravity timer here.
-      // Or pass dt to Game.update and let it handle gravity?
-      // Game.update signature: update(dt). It handles lock timer.
-      // It does NOT handle gravity (movePieceDown).
-      // So we need a gravity accumulator.
-
+      // Accumulate gravity time
       if (!this.gravityTimer) this.gravityTimer = 0;
       this.gravityTimer += dt;
 
@@ -454,14 +573,24 @@ export default class Controller {
 
           this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
+          
+          // Update combo display
+          this.updateComboDisplay(combo);
       } else if (result.locked) {
           this.soundManager.playLock();
-          this.viewWebGPU.onLock();
+          this.viewWebGPU.onLock(result.tSpin);
+          // Reset combo display when piece locks without clearing
+          if (this.game.scoringSystem.combo < 0) {
+            this.updateComboDisplay(0);
+          }
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
           this.isPlaying = false;
           this.view.renderEndScreen(this.game.getState());
+          // Save high score on game over
+          this.game.saveHighScore();
+          this.updateHighScoreDisplay();
           return;
       }
 
@@ -478,6 +607,80 @@ export default class Controller {
     };
 
     this.gameLoopID = requestAnimationFrame(animate);
+  }
+
+  updateComboDisplay(combo: number): void {
+    const comboDisplay = document.getElementById('combo-display');
+    if (comboDisplay) {
+      if (combo > 1) {
+        const oldCombo = parseInt(comboDisplay.dataset.combo || '0');
+        comboDisplay.textContent = `COMBO x${combo}`;
+        comboDisplay.dataset.combo = combo.toString();
+        comboDisplay.classList.add('active');
+        
+        // Remove old combo level classes
+        comboDisplay.className = comboDisplay.className.replace(/combo-\d+/g, '');
+        
+        // Add appropriate combo level class
+        if (combo >= 20) {
+          comboDisplay.classList.add('combo-20');
+        } else if (combo >= 15) {
+          comboDisplay.classList.add('combo-15');
+        } else if (combo >= 10) {
+          comboDisplay.classList.add('combo-10');
+        } else if (combo >= 9) {
+          comboDisplay.classList.add('combo-9');
+        } else if (combo >= 8) {
+          comboDisplay.classList.add('combo-8');
+        } else if (combo >= 7) {
+          comboDisplay.classList.add('combo-7');
+        } else if (combo >= 6) {
+          comboDisplay.classList.add('combo-6');
+        } else if (combo >= 5) {
+          comboDisplay.classList.add('combo-5');
+        } else if (combo >= 4) {
+          comboDisplay.classList.add('combo-4');
+        } else if (combo >= 3) {
+          comboDisplay.classList.add('combo-3');
+        } else {
+          comboDisplay.classList.add('combo-2');
+        }
+        
+        // Trigger pulse animation
+        comboDisplay.classList.remove('combo-pulse');
+        void comboDisplay.offsetWidth; // Trigger reflow
+        comboDisplay.classList.add('combo-pulse');
+        
+        // Show milestone celebration for 5, 10, 15, 20, etc.
+        if (combo > oldCombo && combo % 5 === 0) {
+          this.showComboMilestone(combo);
+        }
+      } else {
+        comboDisplay.classList.remove('active');
+        comboDisplay.classList.remove('combo-pulse');
+        comboDisplay.className = comboDisplay.className.replace(/combo-\d+/g, '');
+        comboDisplay.dataset.combo = '0';
+      }
+    }
+  }
+
+  showComboMilestone(combo: number): void {
+    // Check if milestone element exists, create if not
+    let milestoneEl = document.getElementById('combo-milestone');
+    if (!milestoneEl) {
+      milestoneEl = document.createElement('div');
+      milestoneEl.id = 'combo-milestone';
+      milestoneEl.className = 'combo-milestone';
+      document.body.appendChild(milestoneEl);
+    }
+    
+    milestoneEl.textContent = `${combo}x COMBO!`;
+    milestoneEl.classList.remove('show');
+    void milestoneEl.offsetWidth; // Trigger reflow
+    milestoneEl.classList.add('show');
+    
+    // Also show as floating text
+    this.view.showFloatingText(`${combo}x COMBO!`, 'INCREDIBLE!');
   }
 
   private processBufferedAction(currentTime: number): void {

@@ -9,6 +9,76 @@ export interface ScoreEvent {
   combo: number;
   backToBack: boolean;
   isAllClear: boolean;
+  levelUp?: boolean;
+}
+
+export interface HighScoreEntry {
+  score: number;
+  lines: number;
+  level: number;
+  date: string;
+}
+
+export class HighScoreManager {
+  private readonly STORAGE_KEY = 'tetris_highscores';
+  private readonly MAX_ENTRIES = 5;
+  private highScores: HighScoreEntry[] = [];
+
+  constructor() {
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+      if (stored) {
+        this.highScores = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Failed to load high scores from localStorage:', e);
+      this.highScores = [];
+    }
+  }
+
+  private saveToStorage(): void {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
+    } catch (e) {
+      console.warn('Failed to save high scores to localStorage:', e);
+    }
+  }
+
+  addScore(score: number, lines: number, level: number): boolean {
+    const entry: HighScoreEntry = {
+      score,
+      lines,
+      level,
+      date: new Date().toLocaleDateString()
+    };
+
+    // Check if this score qualifies for top scores
+    if (this.highScores.length < this.MAX_ENTRIES || score > this.highScores[this.highScores.length - 1].score) {
+      this.highScores.push(entry);
+      this.highScores.sort((a, b) => b.score - a.score);
+      this.highScores = this.highScores.slice(0, this.MAX_ENTRIES);
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  getHighScores(): HighScoreEntry[] {
+    return [...this.highScores];
+  }
+
+  getHighestScore(): HighScoreEntry | null {
+    return this.highScores.length > 0 ? this.highScores[0] : null;
+  }
+
+  clearScores(): void {
+    this.highScores = [];
+    this.saveToStorage();
+  }
 }
 
 export class ScoringSystem {
@@ -16,9 +86,18 @@ export class ScoringSystem {
   lines: number = 0;
   combo: number = -1; // -1 means no combo
   backToBack: boolean = false;
+  private highScoreManager: HighScoreManager;
+
+  constructor() {
+    this.highScoreManager = new HighScoreManager();
+  }
 
   get level(): number {
     return Math.floor(this.lines / 10) + 1;
+  }
+
+  getHighScoreManager(): HighScoreManager {
+    return this.highScoreManager;
   }
 
   // Pure logic to clear lines from a 2D array (for fallback/simulation)
@@ -57,19 +136,18 @@ export class ScoringSystem {
   // Updates score based on action and returns a ScoreEvent for visuals
   updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
     if (linesCleared === 0) {
-      this.combo = -1; // Reset combo on no clear (drop without clear)
-      // Actually standard Tetris only resets combo when you lock a piece and DON'T clear lines.
-      // This method is called ONLY when lines are cleared in Game.ts currently?
-      // No, Game.ts calls updateScore even if linesCleared > 0.
-      // Wait, Game.ts: if (linesScore.length > 0) this.scoringSystem.updateScore(...)
-      // So this is only called on clears.
-      // I need a way to reset combo.
-      // I'll add a `resetCombo()` method and call it from Game.ts when a piece locks without clearing.
+      this.combo = -1;
       return null;
     }
 
+    // Check level before adding lines
+    const previousLevel = this.level;
+
     this.lines += linesCleared;
     this.combo++;
+
+    // Check if level increased
+    const levelUp = this.level > previousLevel;
 
     let baseScore = 0;
     let text = "";
@@ -91,7 +169,7 @@ export class ScoringSystem {
     // T-Spin Scoring
     if (tSpin) {
         switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break; // T-Spin No Line (not handled by current logic as lines > 0)
+            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
             case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
             case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
             case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
@@ -130,8 +208,9 @@ export class ScoringSystem {
         points: Math.floor(points),
         text: text,
         combo: this.combo,
-        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0, // Return true only if B2B was applied
-        isAllClear: isAllClear
+        backToBack: this.backToBack && isDifficult && b2bMultiplier > 1.0,
+        isAllClear: isAllClear,
+        levelUp: levelUp
     };
   }
 
@@ -144,5 +223,10 @@ export class ScoringSystem {
     this.lines = 0;
     this.combo = -1;
     this.backToBack = false;
+  }
+
+  // Save current score to high scores
+  saveHighScore(): boolean {
+    return this.highScoreManager.addScore(this.score, this.lines, this.level);
   }
 }
