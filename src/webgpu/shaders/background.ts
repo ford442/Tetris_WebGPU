@@ -125,12 +125,12 @@ export const BackgroundShaders = () => {
             let surgeDistortion = sin(uv.y * 15.0 + time * 12.0) * warpSurge * 0.08;
             let gridUV = (uv - 0.5 + vec2<f32>(surgeDistortion, 0.0)) * scale + perspectiveOffset;
 
-            // Adaptive line width: thinner at distance, thicker with surge
-            let lineWidth = (0.03 + warpSurge * 0.08) / sqrt(scale);
-            
-            // Smooth grid lines with antialiasing
-            let gridX = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.x) - 0.5));
-            let gridY = smoothstep(0.5 - lineWidth, 0.5, abs(fract(gridUV.y) - 0.5));
+            // Smooth grid lines that get thinner with distance, but thicker with warp surge
+            let lineWidth = (0.04 + warpSurge * 0.1) / scale;
+            let valX = abs(fract(gridUV.x) - 0.5);
+            let valY = abs(fract(gridUV.y) - 0.5);
+            let gridX = clamp((valX - (0.5 - lineWidth)) / lineWidth, 0.0, 1.0);
+            let gridY = clamp((valY - (0.5 - lineWidth)) / lineWidth, 0.0, 1.0);
 
             // Combine with distance fade (far layer is more subtle)
             let layerGrid = (1.0 - gridX * gridY) * (0.8 - layer_f * 0.3);
@@ -242,7 +242,7 @@ export const BackgroundShaders = () => {
 
               if (distToBeam < beamWidth) {
                   // Soft edge for the beam
-                  let beamEdge = smoothstep(beamWidth, 0.0, distToBeam);
+                  let beamEdge = clamp((distToBeam - beamWidth) / -beamWidth, 0.0, 1.0);
 
                   // Vertical scan effect within the beam
                   let beamScan = sin(uv.y * 50.0 - time * 20.0) * 0.1 + 0.9;

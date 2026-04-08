@@ -235,6 +235,25 @@ export default class View {
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
 
+  // Pre-allocated object for post process parameters to avoid GC
+  private _postProcessParams = {
+    time: 0,
+    useGlitch: 0,
+    shockwaveCenter: [0, 0] as [number, number],
+    shockwaveTime: 0,
+    shockwaveParams: [0, 0, 0, 0] as [number, number, number, number],
+    level: 0,
+    warpSurge: 0,
+    enableFXAA: 0,
+    enableBloom: 0,
+    enableFilmGrain: 1.0,
+    enableCRT: 0.0,
+    bloomIntensity: 1.0,
+    bloomThreshold: 0.35,
+    materialAwareBloom: 0,
+    screenResolution: [0, 0] as [number, number]
+  };
+
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
     this.element = element;
     this.width = width;
@@ -705,12 +724,12 @@ export default class View {
     }
   }
 
-  CreateGPUBuffer = (device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) => {
+  CreateGPUBuffer(device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) {
     const buffer = device.createBuffer({ size: data.byteLength, usage: usageFlag, mappedAtCreation: true });
     new Float32Array(buffer.getMappedRange()).set(data);
     buffer.unmap();
     return buffer;
-  };
+  }
 
   // Frosted glass backboard (delegated to viewFrostedGlass.ts)
   async initFrostedGlassBackboard() {
@@ -732,7 +751,7 @@ export default class View {
     );
   }
 
-  render = (dt: number) => {
+  render(dt: number) {
     if (!this.device) return;
 
     // Safety cap dt to prevent massive jumps on lag spikes
@@ -775,12 +794,10 @@ export default class View {
     camX += this._shakeOffsetSmoothed.x;
     camY += this._shakeOffsetSmoothed.y;
 
-    const eyePosition = this._f32_3;
-    eyePosition[0] = camX; eyePosition[1] = camY; eyePosition[2] = 75.0;
     this._camEye[0] = camX; this._camEye[1] = camY; this._camEye[2] = 75.0;
     Matrix.mat4.lookAt(this.VIEWMATRIX, this._camEye, this._camTarget, this._camUp);
     Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, eyePosition);
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._camEye);
 
     // Particle upload
     if (this.particleSystem.pendingUploadCount > 0) {
@@ -795,6 +812,147 @@ export default class View {
 
     // Write all per-frame uniform buffers (delegated to viewUniforms.ts)
     const { hasActiveParticles, commandEncoder } = updateFrameUniforms(this, dt, time);
+    // Compute uniforms
+    const swParams = this.visualEffects.getShockwaveParams();
+    const swCenter = this.visualEffects.shockwaveCenter;
+    const swTimer = this.visualEffects.shockwaveTimer;
+    this._f32_12[0] = dt; this._f32_12[1] = time; this._f32_12[2] = swTimer; this._f32_12[3] = 0.0;
+    this._f32_12[4] = swCenter[0]; this._f32_12[5] = swCenter[1]; this._f32_12[6] = 0.0; this._f32_12[7] = 0.0;
+    this._f32_12[8] = swParams[0]; this._f32_12[9] = swParams[1]; this._f32_12[10] = swParams[2]; this._f32_12[11] = swParams[3];
+    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
+
+    const commandEncoder = this.device.createCommandEncoder();
+    
+    // OPTIMIZED: Only dispatch compute if we have pending uploads or shockwave is active
+    // Particles need compute to age out, so we track last emission time
+    const timeSinceLastEmit = time - (this.particleSystem.lastEmitTime || 0);
+    const hasActiveParticles = this.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0;
+    if (hasActiveParticles) {
+        const computePass = commandEncoder.beginComputePass();
+        computePass.setPipeline(this.particleComputePipeline);
+        computePass.setBindGroup(0, this.particleComputeBindGroup);
+        computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
+        computePass.end();
+    }
+
+    // Update render uniforms
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, this._f32_1);
+
+    // Ghost piece
+    let ghostX = -100.0, ghostWidth = 0.0, ghostUVX = -1.0, ghostUVW = 0.0;
+    if (this.state?.activePiece) {
+        const widthInBlocks = this.state.activePiece.blocks[0].length;
+        const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
+        ghostX = gridCenterX * BLOCK_WORLD_SIZE;
+        ghostWidth = widthInBlocks * BLOCK_WORLD_SIZE;
+        const camZ = 75.0;
+        const fov = (35 * Math.PI) / 180;
+        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+        const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
+        ghostUVX = 0.5 + (ghostX - BOARD_WORLD_CENTER_X) / visibleWidth;
+        ghostUVW = ghostWidth / visibleWidth;
+    }
+    
+    let lockPercent = 0.0;
+    if (this.state?.lockTimer !== undefined && this.state?.lockDelayTime) {
+        lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
+    }
+
+    this._f32_1[0] = ghostX;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, this._f32_1);
+    this._f32_1[0] = ghostWidth;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 72, this._f32_1);
+    this._f32_1[0] = this.visualEffects.warpSurge;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 76, this._f32_1);
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.particleUniformBuffer, 80, this._f32_1);
+
+    // Background uniforms
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, this._f32_1);
+    this._f32_1[0] = this.visualEffects.currentLevel;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, this._f32_1);
+    this._f32_2[0] = this.canvasWebGPU.width; this._f32_2[1] = this.canvasWebGPU.height;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, this._f32_2);
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, this._f32_1);
+    this._f32_1[0] = this.visualEffects.warpSurge;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, this._f32_1);
+    this._f32_1[0] = ghostUVX;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, this._f32_1);
+    this._f32_1[0] = ghostUVW;
+    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, this._f32_1);
+
+    // Block uniforms - standard
+    this._f32_1[0] = time;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._f32_1);
+    this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
+    this._f32_1[0] = lockPercent;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, this._f32_1);
+    this._f32_1[0] = this.visualEffects.currentLevel;
+    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
+
+    // NEW: Underwater uniforms (offset 96-127 in fragment shader)
+    // Check if we're in bioluminescent level
+    const isUnderwaterLevel = this.reactiveVideoBackground?.isSeaCreatureLevel ?? false;
+    if (isUnderwaterLevel && this.reactiveVideoBackground) {
+      this._f32_1[0] = 1.0; // isUnderwater
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 96, this._f32_1);
+      this._f32_1[0] = 0.6; // causticIntensity
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 100, this._f32_1);
+      this._f32_1[0] = 0.8; // godRayStrength
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 104, this._f32_1);
+      this._f32_1[0] = 0.5; // bioluminescence
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 108, this._f32_1);
+      this._f32_1[0] = this.reactiveVideoBackground.seaCreatureIntensity; // creatureIntensity
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 112, this._f32_1);
+      this._f32_1[0] = this.reactiveVideoBackground.creatureSwimOffset; // creatureSwimOffset
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 116, this._f32_1);
+      this._f32_1[0] = 5.0; // waterDepth
+      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 120, this._f32_1);
+      
+      // Update chaos mode for underwater theme
+      this.chaosMode.setUnderwaterMode(true);
+      
+      // Update jellyfish system
+      this.jellyfishSystem.update(dt, time);
+    } else {
+      // Not underwater - zero out underwater uniforms
+      this._f32_1[0] = 0.0;
+      for (let offset = 96; offset <= 120; offset += 4) {
+        this.device.queue.writeBuffer(this.fragmentUniformBuffer, offset, this._f32_1);
+      }
+      this.chaosMode.setUnderwaterMode(false);
+    }
+
+    // Post-process uniforms - using new unified system
+    this._postProcessParams.time = time;
+    this._postProcessParams.useGlitch = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
+    this._postProcessParams.shockwaveCenter[0] = this.visualEffects.shockwaveCenter[0];
+    this._postProcessParams.shockwaveCenter[1] = this.visualEffects.shockwaveCenter[1];
+    this._postProcessParams.shockwaveTime = this.visualEffects.shockwaveTimer;
+    const currentShockwaveParams = this.visualEffects.getShockwaveParams();
+    this._postProcessParams.shockwaveParams[0] = currentShockwaveParams[0];
+    this._postProcessParams.shockwaveParams[1] = currentShockwaveParams[1];
+    this._postProcessParams.shockwaveParams[2] = currentShockwaveParams[2];
+    this._postProcessParams.shockwaveParams[3] = currentShockwaveParams[3];
+    this._postProcessParams.level = this.visualEffects.currentLevel;
+    this._postProcessParams.warpSurge = this.visualEffects.warpSurge;
+    this._postProcessParams.enableFXAA = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    this._postProcessParams.enableBloom = (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0;
+    this._postProcessParams.enableFilmGrain = 1.0;
+    this._postProcessParams.enableCRT = 0.0;
+    this._postProcessParams.bloomIntensity = this.bloomIntensity;
+    this._postProcessParams.bloomThreshold = 0.35;
+    this._postProcessParams.materialAwareBloom = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
+    this._postProcessParams.screenResolution[1] = this.canvasWebGPU.height;
+
+    const ppUniforms = postProcessUniforms.pack(this._postProcessParams);
+    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, ppUniforms);
 
     // RENDER PASSES
     
@@ -952,7 +1110,7 @@ export default class View {
     this.uniformBindGroup_ARRAY_border = result.bindGroups;
   }
 
-  CheckWebGPU = () => {
+  CheckWebGPU() {
     let description = "Great, your current browser supports WebGPU!";
     let result = true;
     if (!navigator.gpu) {
@@ -960,7 +1118,7 @@ export default class View {
       result = false;
     }
     return { result, description };
-  };
+  }
 
   // Material uniforms buffer (used by viewMaterials.ts)
   _materialUniforms = new Float32Array(12);
