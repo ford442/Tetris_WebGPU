@@ -42,7 +42,10 @@ export default class Controller {
   bufferedActionTime: number = 0;
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
-  readonly BUFFER_WINDOW: number = 120; // ms - Snappier jump buffer
+  // Split buffer windows for better input precision:
+  // Movement is forgiving (120ms) but rotation is tighter (60ms) to prevent double-rotations
+  readonly MOVE_BUFFER_WINDOW: number = 120; // ms - Snappier jump buffer
+  readonly ROTATE_BUFFER_WINDOW: number = 60; // ms - Tighter rotation buffer
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
@@ -685,7 +688,7 @@ export default class Controller {
 
   private processBufferedAction(currentTime: number): void {
       if (this.bufferedMoveAction) {
-          if (currentTime - this.bufferedMoveActionTime > this.BUFFER_WINDOW) {
+          if (currentTime - this.bufferedMoveActionTime > this.MOVE_BUFFER_WINDOW) {
               this.bufferedMoveAction = null;
           } else {
               let moveSuccess = false;
@@ -707,8 +710,12 @@ export default class Controller {
 
       if (!this.bufferedAction) return;
 
+      // Determine correct buffer window for the buffered action
+      const isRotate = this.bufferedAction === 'rotateCW' || this.bufferedAction === 'rotateCCW';
+      const bufferWindow = isRotate ? this.ROTATE_BUFFER_WINDOW : this.MOVE_BUFFER_WINDOW;
+
       // Clear buffer if it's too old
-      if (currentTime - this.bufferedActionTime > this.BUFFER_WINDOW) {
+      if (currentTime - this.bufferedActionTime > bufferWindow) {
           this.bufferedAction = null;
           return;
       }

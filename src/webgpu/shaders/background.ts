@@ -56,7 +56,8 @@ export const BackgroundShaders = () => {
           // Warps the UVs towards the center as level increases
           if (levelFactor > 0.0 || warpSurge > 0.0) {
               let center = vec2<f32>(0.5, 0.5);
-              let dist = distance(uv, center);
+              var centered = uv - center;
+
               // JUICE: Increased warp strength for higher levels
               // Stronger wobble at high levels
               let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
@@ -66,14 +67,19 @@ export const BackgroundShaders = () => {
                   let angle = warpSurge * 0.1 * sin(time * 5.0);
                   let c = cos(angle);
                   let s = sin(angle);
-                  let centered = uv - center;
-                  uv = center + vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
+                  // Apply rotation to the centered vector
+                  centered = vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
+                  uv = center + centered;
               }
 
               // Smoothed and clamped warp strength to prevent nausea
               // BOOSTED: Increased max warp
               let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.4, 0.4);
-              uv -= normalize(uv - center) * warpStrength * dist * dist; // Quadratic warp for "tunnel" feel
+
+              // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
+              // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
+              let dist = length(centered);
+              uv -= centered * (warpStrength * dist); // Quadratic warp for "tunnel" feel
           }
 
           // OPTIMIZED: Dual-layer parallax starfield
