@@ -305,8 +305,8 @@ export const Shaders = () => {
 
                 // Simple PBR mix (solid blocks only)
                 // Re-read texture for base color
-                baseColor = textureSample(blockTexture, blockSampler, atlasUV);
-                let pbrColor = mix(baseColor.rgb, baseColor.rgb * materialUniforms.metallic, materialUniforms.metallic);
+                baseColor = textureSample(blockTexture, blockSampler, atlasUV).rgb;
+                let pbrColor = mix(baseColor, baseColor * materialUniforms.metallic, materialUniforms.metallic);
                 pbrColor = mix(pbrColor, vec3<f32>(1.0), materialUniforms.transmission * 0.4); // glass highlight
                
                 // Blend PBR with existing lighting

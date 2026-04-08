@@ -175,8 +175,6 @@ export default class SoundManager {
         // Initialize MusicManager
         this.musicManager = new MusicManager(this.ctx, this.masterGain);
         
-        // Try to load placeholder music (will gracefully fail if not available)
-        this.loadPlaceholderMusic();
     }
 
     setSfxVolume(volume: number): void {
@@ -187,22 +185,6 @@ export default class SoundManager {
         return this.sfxGain.gain.value;
     }
 
-    private async loadPlaceholderMusic(): Promise<void> {
-        // Placeholder: Try to load from common locations, but don't worry if it fails
-        const placeholderUrls = [
-            './assets/music/background.mp3',
-            './assets/music/theme.ogg',
-            './assets/audio/bgm.mp3'
-        ];
-        
-        for (const url of placeholderUrls) {
-            const success = await this.musicManager.load(url);
-            if (success) {
-                console.log(`MusicManager: Loaded background music from ${url}`);
-                break;
-            }
-        }
-    }
 
     private initNoiseBuffers() {
         if (!this.ctx) return;
