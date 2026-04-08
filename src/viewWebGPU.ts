@@ -1,18 +1,16 @@
 import * as Matrix from "gl-matrix";
-import { 
-  PostProcessShaders, 
-  EnhancedPostProcessShaders, 
+import {
+  PostProcessShaders,
+  EnhancedPostProcessShaders,
   MaterialAwarePostProcessShaders,
   PBRBlockShaders,
   UnderwaterBlockShaders,
-  ParticleShaders, 
-  GridShader, 
-  BackgroundShaders, 
+  ParticleShaders,
+  GridShader,
+  BackgroundShaders,
   Shaders,
   PremiumBlockShaders,
-  FrostedGlassShaders
 } from './webgpu/shaders.js';
-import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import { ParticleComputeShader } from './webgpu/compute.js';
 import { JellyfishParticleSystem } from './webgpu/jellyfishParticles.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
@@ -20,13 +18,8 @@ import {
   BLOCK_WORLD_SIZE,
   BOARD_WORLD_CENTER_X,
   BOARD_WORLD_CENTER_Y,
-  boardWorldX,
-  boardWorldY,
-  borderWorldX,
-  borderWorldY,
 } from './webgpu/renderMetrics.js';
 import { themes, ThemeColors, Themes } from './webgpu/themes.js';
-import { getPieceMaterial, Materials } from './webgpu/materials.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
@@ -37,11 +30,46 @@ import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteractio
 import { ChaosModeController } from './webgpu/chaosMode.js';
 import { BloomSystem, BloomParameters } from './webgpu/bloomSystem.js';
 import {
-  PROCEDURAL_BLOCK_TEXTURE_SIZE,
-  getTextureMipLevelCount,
-  paintProceduralBlockTexture,
+  setPremiumVisualsPreset as setPremiumPresetImpl,
+  onLineClearReactive as onLineClearReactiveImpl,
+  onTSpinReactive as onTSpinReactiveImpl,
+  onPerfectClearReactive as onPerfectClearReactiveImpl,
+  onLevelUpReactive as onLevelUpReactiveImpl,
+  onGameOverReactive as onGameOverReactiveImpl,
+  initReactiveMusic as initReactiveMusicImpl,
+  toggleFXAA as toggleFXAAImpl,
+  toggleFilmGrain as toggleFilmGrainImpl,
+  toggleCRT as toggleCRTImpl,
+  toggleBloom as toggleBloomImpl,
+  setBloomIntensity as setBloomIntensityImpl,
+  toggleMultiPassBloom as toggleMultiPassBloomImpl,
+  setBloomParameters as setBloomParametersImpl,
+} from './webgpu/viewPremium.js';
+import {
   resolveBlockTextureUrl,
+  getTextureMipLevelCount,
 } from './webgpu/blockTexture.js';
+import {
+  initFrostedGlassBackboard as initFrostedGlassImpl,
+  updateFrostedGlassUniforms as updateFrostedGlassUniformsImpl,
+} from './webgpu/viewFrostedGlass.js';
+import {
+  renderPlayfieldBlocks,
+  renderPlayfieldBorder,
+} from './webgpu/viewPlayfield.js';
+import {
+  setMaterialTheme as setMaterialThemeImpl,
+  updateMaterialUniforms as updateMaterialUniformsImpl,
+  cycleTheme as cycleThemeImpl,
+  renderPiece as renderPieceImpl,
+} from './webgpu/viewMaterials.js';
+import { updateFrameUniforms } from './webgpu/viewUniforms.js';
+import {
+  generateMipmaps as generateMipmapsUtil,
+  createSolidFallbackTexture,
+  createProceduralFallbackTexture,
+  recreateRenderTargets as recreateRenderTargetsImpl,
+} from './webgpu/viewTextures.js';
 import {
   onHardDrop as handleHardDrop,
   onHold as handleHold,
@@ -349,55 +377,7 @@ export default class View {
     }
   }
 
-  // NEW: Recreate render targets with current scale
-  private recreateRenderTargets() {
-    if (!this.device) return;
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-
-    if (this.offscreenTexture) {
-        this.offscreenTexture.destroy();
-    }
-    this.offscreenTexture = this.device.createTexture({
-        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    });
-    this._offscreenTextureView = this.offscreenTexture.createView();
-
-    if (this.depthTexture) {
-        this.depthTexture.destroy();
-    }
-    this.depthTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: "depth24plus",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-    this._depthTextureView = this.depthTexture.createView();
-
-    // Update descriptors with new views
-    if (this._backgroundPassDescriptor?.colorAttachments) {
-        const colorAttachment = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-        colorAttachment.view = this._offscreenTextureView;
-    }
-    if (this._mainPassDescriptor?.colorAttachments) {
-        const colorAttachment = (this._mainPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-        colorAttachment.view = this._offscreenTextureView;
-    }
-    if (this._mainPassDescriptor?.depthStencilAttachment) {
-        this._mainPassDescriptor.depthStencilAttachment.view = this._depthTextureView;
-    }
-
-    if (this.postProcessPipeline) {
-        this.postProcessBindGroup = this.device.createBindGroup({
-            layout: this.postProcessPipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
-                { binding: 1, resource: this.sampler },
-                { binding: 2, resource: this.offscreenTexture.createView() }
-            ]
-        });
-    }
-  }
+  private recreateRenderTargets() { recreateRenderTargetsImpl(this); }
 
   // NEW: Set render scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x supersampling)
   setRenderScale(scale: number) {
@@ -429,76 +409,7 @@ export default class View {
   }
 
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    const gridSize = blockSize;
-
-    ctx.beginPath();
-    for (let x = 0; x <= ctx.canvas.width; x += gridSize) {
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, ctx.canvas.height);
-    }
-    for (let y = 0; y <= ctx.canvas.height; y += gridSize) {
-        ctx.moveTo(0, y);
-        ctx.lineTo(ctx.canvas.width, y);
-    }
-    ctx.stroke();
-
-    if (!piece) return;
-
-    const { blocks } = piece;
-    const themeColors = Object.values(this.currentTheme);
-
-    const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
-    const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
-
-    blocks.forEach((row: number[], y: number) => {
-      row.forEach((value: number, x: number) => {
-        if (value > 0) {
-          const color = themeColors[value] as number[];
-          const px = offsetX + x * blockSize;
-          const py = offsetY + y * blockSize;
-
-          const r = Math.floor(color[0] * 255);
-          const g = Math.floor(color[1] * 255);
-          const b = Math.floor(color[2] * 255);
-          const cssColor = `rgb(${r}, ${g}, ${b})`;
-          const brightColor = `rgb(${Math.min(r + 50, 255)}, ${Math.min(g + 50, 255)}, ${Math.min(b + 50, 255)})`;
-
-          ctx.save();
-          ctx.shadowColor = cssColor;
-          ctx.shadowBlur = 30;
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
-          ctx.fillRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
-
-          ctx.shadowColor = cssColor;
-          ctx.shadowBlur = 15;
-          ctx.strokeStyle = brightColor;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
-
-          ctx.shadowColor = 'white';
-          ctx.shadowBlur = 5;
-          ctx.fillStyle = `rgba(255, 255, 255, 0.4)`;
-          ctx.fillRect(px + 4, py + 4, blockSize - 8, blockSize - 8);
-
-          ctx.restore();
-
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          ctx.beginPath();
-          ctx.moveTo(px + 2, py + blockSize - 2);
-          ctx.lineTo(px + 2, py + 2);
-          ctx.lineTo(px + blockSize - 2, py + 2);
-          ctx.lineTo(px + blockSize - 6, py + 6);
-          ctx.lineTo(px + 6, py + 6);
-          ctx.lineTo(px + 6, py + blockSize - 6);
-          ctx.closePath();
-          ctx.fill();
-        }
-      });
-    });
+    renderPieceImpl(ctx, piece, this.currentTheme, blockSize);
   }
 
   showFloatingText(text: string, subText: string = "") {
@@ -528,106 +439,15 @@ export default class View {
   onMove(x: number, y: number) { handleMove(this, x, y); }
 
   generateMipmaps(texture: GPUTexture, width: number, height: number, mipLevelCount: number) {
-    const blitShader = `
-      @group(0) @binding(0) var srcTexture: texture_2d<f32>;
-      @group(0) @binding(1) var srcSampler: sampler;
-      struct VertexOutput {
-        @builtin(position) position: vec4<f32>,
-        @location(0) uv: vec2<f32>,
-      };
-      @vertex
-      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-        var pos = array<vec2<f32>, 6>(
-          vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
-          vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0)
-        );
-        var uv = array<vec2<f32>, 6>(
-          vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0),
-          vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(1.0, 0.0)
-        );
-        var output: VertexOutput;
-        output.position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
-        output.uv = uv[vertexIndex];
-        return output;
-      }
-      @fragment
-      fn fragmentMain(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-        return textureSample(srcTexture, srcSampler, uv);
-      }
-    `;
-
-    const shaderModule = this.device.createShaderModule({ code: blitShader });
-    const pipeline = this.device.createRenderPipeline({
-      layout: 'auto',
-      vertex: { module: shaderModule, entryPoint: 'vertexMain' },
-      fragment: { module: shaderModule, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
-    });
-
-    const sampler = this.device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
-    const commandEncoder = this.device.createCommandEncoder();
-
-    for (let i = 1; i < mipLevelCount; i++) {
-      const srcView = texture.createView({ baseMipLevel: i - 1, mipLevelCount: 1 });
-      const dstView = texture.createView({ baseMipLevel: i, mipLevelCount: 1 });
-      const bindGroup = this.device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [{ binding: 0, resource: srcView }, { binding: 1, resource: sampler }],
-      });
-      const passEncoder = commandEncoder.beginRenderPass({
-        colorAttachments: [{ view: dstView, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }],
-      });
-      passEncoder.setPipeline(pipeline);
-      passEncoder.setBindGroup(0, bindGroup);
-      passEncoder.draw(6, 1, 0, 0);
-      passEncoder.end();
-    }
-    this.device.queue.submit([commandEncoder.finish()]);
+    generateMipmapsUtil(this.device, texture, width, height, mipLevelCount);
   }
 
   private createSolidFallbackTexture(): GPUTexture {
-    const texture = this.device.createTexture({
-      size: [1, 1, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture },
-      new Uint8Array([255, 255, 255, 255]),
-      { bytesPerRow: 4 },
-      [1, 1, 1]
-    );
-    return texture;
+    return createSolidFallbackTexture(this.device);
   }
 
   private createProceduralFallbackTexture(): GPUTexture {
-    const size = PROCEDURAL_BLOCK_TEXTURE_SIZE;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Unable to create procedural fallback texture context');
-    }
-
-    paintProceduralBlockTexture(ctx, size);
-
-    const mipLevelCount = getTextureMipLevelCount(size, size);
-    const texture = this.device.createTexture({
-      size: [size, size, 1],
-      format: 'rgba8unorm',
-      mipLevelCount,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-
-    this.device.queue.copyExternalImageToTexture(
-      { source: canvas },
-      { texture },
-      [size, size]
-    );
-    this.generateMipmaps(texture, size, size, mipLevelCount);
-
-    return texture;
+    return createProceduralFallbackTexture(this.device);
   }
 
   async preRender() {
@@ -911,86 +731,24 @@ export default class View {
     return buffer;
   }
 
-  // Initialize Frosted Glass Backboard for Ethereal Hardware Panel effect
+  // Frosted glass backboard (delegated to viewFrostedGlass.ts)
   async initFrostedGlassBackboard() {
     if (!this.device) return;
-    
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    const frostedShader = FrostedGlassShaders();
-    
-    // Create pipeline for frosted glass
-    this.frostedGlassPipeline = this.device.createRenderPipeline({
-      label: 'frosted glass pipeline', layout: 'auto',
-      vertex: { 
-        module: this.device.createShaderModule({ code: frostedShader.vertex }), 
-        entryPoint: 'main',
-        buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }]
-      },
-      fragment: { 
-        module: this.device.createShaderModule({ code: frostedShader.fragment }), 
-        entryPoint: 'main',
-        targets: [{ format: presentationFormat, blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        }}]
-      },
-      primitive: { topology: 'triangle-list' },
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' }
-    });
-    
-    // Create full-screen quad for backboard (at z = -1.0 behind blocks)
-    const quadData = FullScreenQuadData();
-    this.frostedGlassVertexBuffer = this.CreateGPUBuffer(this.device, quadData.positions);
-    
-    // Uniform buffer for frosted glass
-    this.frostedGlassUniformBuffer = this.device.createBuffer({ 
-      size: 160, // mat4x4(64) + mat4x4(64) + vec4(16) + 2xf32(8) = 152, rounded to 160
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST 
-    });
-    
-    // Create a texture to sample from (background texture)
-    this.frostedGlassTexture = this.device.createTexture({
-      size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-      format: presentationFormat,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-    });
-    this.frostedGlassTextureView = this.frostedGlassTexture.createView();
-    
-    console.log('[FrostedGlass] Backboard initialized');
+    const res = await initFrostedGlassImpl(this.device, this.canvasWebGPU, this.CreateGPUBuffer);
+    this.frostedGlassPipeline = res.frostedGlassPipeline;
+    this.frostedGlassVertexBuffer = res.frostedGlassVertexBuffer;
+    this.frostedGlassUniformBuffer = res.frostedGlassUniformBuffer;
+    this.frostedGlassTexture = res.frostedGlassTexture;
+    this.frostedGlassTextureView = res.frostedGlassTextureView;
   }
-  
-  // Update frosted glass uniforms and bind group
+
   updateFrostedGlassUniforms() {
     if (!this.device || !this.useFrostedGlass) return;
-    
-    // Create model matrix for backboard plane at z = -1.0
-    const modelMatrix = Matrix.mat4.create();
-    Matrix.mat4.identity(modelMatrix);
-    Matrix.mat4.translate(modelMatrix, modelMatrix, [0, 0, -1.0]);
-    Matrix.mat4.scale(modelMatrix, modelMatrix, [12.0, 24.0, 1.0]); // Cover playfield area
-    
-    // Write uniforms
-    // Layout: mat4x4(64) + mat4x4(64) + vec4(16) + 2xf32(8) = 152 bytes, round up to 160 (40 floats)
-    const uniformData = new Float32Array(40);
-    uniformData.set(this.vpMatrix, 0); // viewProjectionMatrix at 0
-    uniformData.set(modelMatrix, 16); // modelMatrix at 16 (offset 64)
-    // tintColor at 32 (offset 128) - use theme border color
-    const tint = this.currentTheme.border || [0.5, 0.5, 0.5, 0.3];
-    uniformData.set(tint, 32);
-    uniformData[36] = 0.5; // frostAmount
-    uniformData[37] = 0.85; // opacity
-    
-    this.device.queue.writeBuffer(this.frostedGlassUniformBuffer, 0, uniformData);
-    
-    // Create/update bind group
-    this.frostedGlassBindGroup = this.device.createBindGroup({
-      layout: this.frostedGlassPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.frostedGlassUniformBuffer } },
-        { binding: 1, resource: this.sampler },
-        { binding: 2, resource: this.frostedGlassTextureView }
-      ]
-    });
+    this.frostedGlassBindGroup = updateFrostedGlassUniformsImpl(
+      this.device, this.frostedGlassPipeline, this.frostedGlassUniformBuffer,
+      this.sampler, this.frostedGlassTextureView,
+      this.vpMatrix as Float32Array, this.currentTheme.border
+    );
   }
 
   render(dt: number) {
@@ -1052,6 +810,8 @@ export default class View {
         this.particleSystem.clearPending();
     }
 
+    // Write all per-frame uniform buffers (delegated to viewUniforms.ts)
+    const { hasActiveParticles, commandEncoder } = updateFrameUniforms(this, dt, time);
     // Compute uniforms
     const swParams = this.visualEffects.getShockwaveParams();
     const swCenter = this.visualEffects.shockwaveCenter;
@@ -1326,145 +1086,28 @@ export default class View {
   // Pre-allocated buffer for batched uniform updates (max 200 blocks * 64 floats per block)
   private _uniformBatchBuffer = new Float32Array(200 * 64);
 
+  // Playfield rendering (delegated to viewPlayfield.ts)
   async renderPlayfild_WebGPU(state: any) {
-    if (!this.device) return;
-    if (!this.blockTexture) {
-      console.warn('[Render] blockTexture not initialized');
-      return;
-    }
-    const { playfield, activePiece } = state;
-    let arrayLength = 0;
-    let blockIndex = 0;
-    let batchOffset = 0;
-    const batchData = this._uniformBatchBuffer;
-
-    for (let row = 0; row < playfield.length; row++) {
-      for (let colom = 0; colom < playfield[row].length; colom++) {
-        if (!playfield[row][colom]) continue;
-        if (blockIndex >= this.uniformBindGroup_CACHE.length) break;
-
-        let value = playfield[row][colom];
-        let colorBlockindex = Math.abs(value);
-        let alpha = value < 0 ? 0.3 : 0.9;
-        let color = this.currentTheme[colorBlockindex] || this.currentTheme[0];
-
-        this._f32_4[0] = color[0]; this._f32_4[1] = color[1]; this._f32_4[2] = color[2]; this._f32_4[3] = alpha;
-
-        let isSolidActivePieceBlock = false;
-
-        // Visual Active Piece Interpolation
-        if (activePiece) {
-             const relX = colom - activePiece.x;
-             const relY = row - activePiece.y;
-             if (relY >= 0 && relY < activePiece.blocks.length && relX >= 0 && relX < activePiece.blocks[0].length) {
-                  if (activePiece.blocks[relY][relX] !== 0 && value > 0) {
-                      isSolidActivePieceBlock = true;
-
-                      // Rotation flash
-                      if (this.visualEffects.rotationFlashTimer > 0) {
-                          const flash = this.visualEffects.rotationFlashTimer * 3.0;
-                          this._f32_4[0] = Math.min(color[0] + flash, 1.0);
-                          this._f32_4[1] = Math.min(color[1] + flash, 1.0);
-                          this._f32_4[2] = Math.min(color[2] + flash, 1.0);
-                      }
-                  }
-             }
-        }
-
-        const uniformBindGroup_next = this.uniformBindGroup_CACHE[blockIndex];
-
-        Matrix.mat4.identity(this.MODELMATRIX);
-        Matrix.mat4.identity(this.NORMALMATRIX);
-
-        if (isSolidActivePieceBlock) {
-             const relX = colom - activePiece.x;
-             const relY = row - activePiece.y;
-             this._f32_3[0] = boardWorldX(this.visualX + relX);
-             this._f32_3[1] = boardWorldY(this.visualY + relY);
-             this._f32_3[2] = 0.0;
-        } else {
-             this._f32_3[0] = boardWorldX(colom);
-             this._f32_3[1] = boardWorldY(row);
-             this._f32_3[2] = 0.0;
-        }
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-
-        // OPTIMIZED: Batch uniform data into pre-allocated buffer
-        // Layout per block: vpMatrix(16) + modelMatrix(16) + normalMatrix(16) + color(4) = 52 floats
-        // Padded to 64 floats (256 bytes) for uniform alignment
-        batchData.set(this.vpMatrix as Float32Array, batchOffset);
-        batchData.set(this.MODELMATRIX as Float32Array, batchOffset + 16);
-        batchData.set(this.NORMALMATRIX as Float32Array, batchOffset + 32);
-        batchData.set(this._f32_4, batchOffset + 48);
-        // Clear padding
-        batchData[batchOffset + 52] = 0; batchData[batchOffset + 53] = 0;
-        batchData[batchOffset + 54] = 0; batchData[batchOffset + 55] = 0;
-        batchData[batchOffset + 56] = 0; batchData[batchOffset + 57] = 0;
-        batchData[batchOffset + 58] = 0; batchData[batchOffset + 59] = 0;
-        batchData[batchOffset + 60] = 0; batchData[batchOffset + 61] = 0;
-        batchData[batchOffset + 62] = 0; batchData[batchOffset + 63] = 0;
-
-        this.uniformBindGroup_ARRAY[arrayLength++] = uniformBindGroup_next;
-        blockIndex++;
-        batchOffset += 64;
-      }
-    }
-    
-    // OPTIMIZED: Single large buffer write instead of many small ones
-    if (batchOffset > 0) {
-      this.device.queue.writeBuffer(this.vertexUniformBuffer, 0, batchData.subarray(0, batchOffset));
-    }
-    
-    this.uniformBindGroup_ARRAY.length = arrayLength;
+    if (!this.device || !this.blockTexture) return;
+    renderPlayfieldBlocks(
+      this.device, state, this.currentTheme, this.visualEffects,
+      this.visualX, this.visualY, this.vpMatrix as Float32Array,
+      this.uniformBindGroup_CACHE, this.uniformBindGroup_ARRAY,
+      this.vertexUniformBuffer, this._uniformBatchBuffer,
+      this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
+    );
   }
 
   async renderPlayfild_Border_WebGPU() {
     if (!this.device) return;
-    
-    const state_Border = {
-      playfield: [
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        ...Array(20).fill([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-      ],
-    };
-
-    const vertexUniformSizeBuffer = 200 * 256;
-    this.vertexUniformBuffer_border = this.device.createBuffer({ size: vertexUniformSizeBuffer, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.uniformBindGroup_ARRAY_border = [];
-    let offset_ARRAY = 0;
-
-    for (let row = 0; row < state_Border.playfield.length; row++) {
-      for (let colom = 0; colom < state_Border.playfield[row].length; colom++) {
-        if (!state_Border.playfield[row][colom]) continue;
-
-        const uniformBindGroup_next = this.device.createBindGroup({
-          label: "uniformBindGroup_next 635", layout: this.pipeline.getBindGroupLayout(0),
-          entries: [
-            { binding: 0, resource: { buffer: this.vertexUniformBuffer_border, offset: offset_ARRAY, size: 208 } },
-            { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
-            { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
-            { binding: 3, resource: this.blockSampler }
-          ],
-        });
-
-        Matrix.mat4.identity(this.MODELMATRIX);
-        Matrix.mat4.identity(this.NORMALMATRIX);
-        this._f32_3[0] = borderWorldX(colom); this._f32_3[1] = borderWorldY(row); this._f32_3[2] = 0.0;
-        Matrix.mat4.translate(this.MODELMATRIX, this.MODELMATRIX, this._f32_3);
-        // NORMALMATRIX remains Identity since there is no rotation/scale
-
-        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 0, this.vpMatrix);
-        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 64, this.MODELMATRIX);
-        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 128, this.NORMALMATRIX);
-        this._f32_4.set(this.currentTheme.border);
-        this._f32_4[3] = 1.0;
-        this.device.queue.writeBuffer(this.vertexUniformBuffer_border, offset_ARRAY + 192, this._f32_4);
-
-        this.uniformBindGroup_ARRAY_border.push(uniformBindGroup_next);
-        offset_ARRAY += 256;
-      }
-    }
+    const result = renderPlayfieldBorder(
+      this.device, this.pipeline, this.fragmentUniformBuffer,
+      this.blockTexture, this.blockSampler,
+      this.vpMatrix as Float32Array, this.currentTheme,
+      this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
+    );
+    this.vertexUniformBuffer_border = result.vertexUniformBuffer;
+    this.uniformBindGroup_ARRAY_border = result.bindGroups;
   }
 
   CheckWebGPU() {
@@ -1477,254 +1120,35 @@ export default class View {
     return { result, description };
   }
 
-  // NEW: Set material-aware theme
-  setMaterialTheme(themeName: string, pieceType: number = 1) {
-    if (!this.device) return;
+  // Material uniforms buffer (used by viewMaterials.ts)
+  _materialUniforms = new Float32Array(12);
 
-    const theme = themes[themeName as keyof Themes];
-    if (!theme) {
-      console.warn(`[Theme] Unknown theme: ${themeName}`);
-      return;
-    }
-
-    this.currentTheme = theme;
-
-    // Check if this theme uses premium materials
-    const materialThemeName = theme.materialTheme || 'classic';
-    this.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber'].includes(materialThemeName);
-
-    // Get material for this piece type
-    this.currentMaterial = getPieceMaterial(materialThemeName, pieceType);
-
-    // Update fragment uniforms with material properties
-    this.updateMaterialUniforms();
-
-    // Update background colors
-    const bgColors = theme.backgroundColors;
-    if (bgColors && this.backgroundUniformBuffer) {
-      this._f32_3.set(bgColors[0]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
-      this._f32_3.set(bgColors[1]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
-      this._f32_3.set(bgColors[2]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
-    }
-
-    console.log(`[Theme] Switched to ${themeName} with material ${materialThemeName}`);
-  }
-
-  // NEW: Update material uniforms in fragment buffer
-  private _materialUniforms = new Float32Array(12);
-  
-  // NEW: Particle interaction uniforms
+  // Particle interaction uniforms
   particleInteractionUniforms = {
     particleInfluence: 1.0,
     glassDistortion: 0.4,
     goldSpecularBoost: 2.2,
     cyberEmissivePulse: 0.0
   };
-  
-  updateMaterialUniforms() {
-    if (!this.device || !this.currentMaterial) return;
 
-    const m = this.currentMaterial;
-    // Layout matches FragmentUniforms in premiumBlocks.ts:
-    // metallic(48), roughness(52), transmission(56), ior(60),
-    // subsurface(64), clearcoat(68), anisotropic(72), dispersion(76)
-    this._materialUniforms[0] = m.metallic;
-    this._materialUniforms[1] = m.roughness;
-    this._materialUniforms[2] = m.transmission;
-    this._materialUniforms[3] = m.ior;
-    this._materialUniforms[4] = m.subsurface;
-    this._materialUniforms[5] = m.clearcoat;
-    this._materialUniforms[6] = m.anisotropic;
-    this._materialUniforms[7] = m.dispersion;
-    // NEW: Particle interaction uniforms (offsets 80, 84)
-    this._materialUniforms[8] = this.particleInteractionUniforms.particleInfluence;
-    this._materialUniforms[9] = 0; // particleMaterialType as u32 packed
+  // Material/theme management (delegated to viewMaterials.ts)
+  setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as any, themeName, pieceType); }
+  updateMaterialUniforms() { updateMaterialUniformsImpl(this as any); }
+  cycleTheme() { cycleThemeImpl(this as any); }
 
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._materialUniforms);
-  }
-
-  // NEW: Cycle through available themes
-  cycleTheme() {
-    const themeNames = Object.keys(themes);
-    const currentIndex = themeNames.indexOf(this.currentTheme.materialTheme || 'neon');
-    const nextIndex = (currentIndex + 1) % themeNames.length;
-    this.setMaterialTheme(themeNames[nextIndex]);
-  }
-
-  // NEW: Premium Visuals Preset — One call to enable all visual upgrades
-  setPremiumVisualsPreset(options: {
-    renderScale?: number;
-    enhancedPostProcess?: boolean;
-    reactiveVideo?: boolean;
-    reactiveMusic?: boolean;
-    materialTheme?: string;
-    chaosMode?: boolean;
-    particleInteraction?: boolean;
-  } = {}) {
-    const {
-      renderScale = 1.5,
-      enhancedPostProcess = true,
-      reactiveVideo = true,
-      reactiveMusic = true,
-      materialTheme = 'premium',
-      chaosMode = false,
-      particleInteraction = true
-    } = options;
-
-    // Set render scale for supersampling
-    this.setRenderScale(renderScale);
-
-    // Enable enhanced post-processing
-    this.useEnhancedPostProcess = enhancedPostProcess;
-    console.log(`[Premium] Enhanced post-processing ${enhancedPostProcess ? 'enabled' : 'disabled'}`);
-
-    // Enable reactive video
-    this.useReactiveVideo = reactiveVideo;
-    if (reactiveVideo && this.currentTheme.levelVideos) {
-      this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
-      this.reactiveVideoBackground.updateForLevel(this.visualEffects.currentLevel || 0, true);
-    }
-
-    // Enable reactive music (requires SoundManager integration)
-    this.useReactiveMusic = reactiveMusic;
-    console.log(`[Premium] Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
-
-    // Enable particle-material interaction
-    this.useParticleInteraction = particleInteraction;
-    console.log(`[Premium] Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
-
-    // Enable chaos mode if requested
-    if (chaosMode) {
-      this.useChaosMode = true;
-      this.chaosMode.toggle();
-    }
-
-    // Set material theme
-    this.setMaterialTheme(materialTheme);
-
-    // Configure multi-pass bloom
-    if (this.bloomSystem) {
-      this.bloomSystem.setParameters({
-        threshold: 0.3,    // Slightly lower threshold for premium look
-        intensity: 1.2,    // Boosted intensity
-        scatter: 0.75,     // Good spread
-        clamp: 65472,
-        knee: 0.1
-      });
-    }
-
-    console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
-  }
-
-  // NEW: Reactive system event hooks
-  onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) {
-    // Update reactive video
-    if (this.useReactiveVideo) {
-      // Chaos mode: reverse on every clear
-      if (this.useChaosMode && this.chaosMode.state.enabled) {
-        this.reactiveVideoBackground.triggerReverse(0.3);
-        this.reactiveVideoBackground.targetPlaybackRate = 2.5;
-      } else {
-        this.reactiveVideoBackground.onLineClear(lines, combo, isTSpin, isAllClear);
-      }
-    }
-
-    // Update reactive music
-    if (this.useReactiveMusic && this.reactiveMusicSystem) {
-      this.reactiveMusicSystem.onLineClear(lines, combo, lines === 4);
-    }
-
-    // NEW: Update jellyfish system for underwater level
-    if (this.reactiveVideoBackground?.isSeaCreatureLevel) {
-      this.jellyfishSystem.onLineClear(lines, combo);
-    }
-
-    // Chaos mode: trigger particle burst
-    if (this.useChaosMode && this.chaosMode.state.enabled) {
-      this.chaosMode.getChaosPulse(); // Just to keep it active
-    }
-  }
-
-  onTSpinReactive() {
-    if (this.useReactiveVideo) {
-      this.reactiveVideoBackground.onTSpin();
-    }
-    if (this.useReactiveMusic && this.reactiveMusicSystem) {
-      this.reactiveMusicSystem.onTSpin();
-    }
-    // NEW: Jellyfish react to T-spin
-    if (this.reactiveVideoBackground?.isSeaCreatureLevel) {
-      this.jellyfishSystem.onTSpin();
-    }
-  }
-
-  onPerfectClearReactive() {
-    if (this.useReactiveVideo) {
-      this.reactiveVideoBackground.onPerfectClear();
-    }
-  }
-
-  onLevelUpReactive(level: number) {
-    // Update video for new level
-    if (this.useReactiveVideo && this.currentTheme.levelVideos) {
-      this.reactiveVideoBackground.updateForLevel(level);
-    }
-    
-    // Update music
-    if (this.useReactiveMusic && this.reactiveMusicSystem) {
-      this.reactiveMusicSystem.onLevelUp(level);
-    }
-  }
-
-  onGameOverReactive() {
-    if (this.useReactiveVideo) {
-      this.reactiveVideoBackground.onGameOver();
-    }
-    if (this.useReactiveMusic && this.reactiveMusicSystem) {
-      this.reactiveMusicSystem.onGameOver();
-    }
-  }
-
-  // NEW: Initialize reactive music system (call from SoundManager setup)
-  initReactiveMusic(audioContext: AudioContext, masterGain: GainNode) {
-    if (!this.useReactiveMusic) return;
-    
-    this.reactiveMusicSystem = new ReactiveMusicSystem(audioContext, masterGain);
-    console.log('[Music] Reactive music system initialized');
-  }
-
-  // NEW: Toggle individual effects
-  toggleFXAA(enabled: boolean) { this.useEnhancedPostProcess = enabled; }
-  toggleFilmGrain(enabled: boolean) { /* Future: add granular control */ }
-  toggleCRT(enabled: boolean) { /* Future: add granular control */ }
-  toggleBloom(enabled?: boolean) { 
-    if (enabled !== undefined) {
-      this.bloomEnabled = enabled;
-    } else {
-      this.bloomEnabled = !this.bloomEnabled;
-    }
-  }
-  setBloomIntensity(intensity: number) {
-    this.bloomIntensity = Math.max(0, Math.min(2, intensity));
-    // Update multi-pass bloom system if available
-    if (this.bloomSystem) {
-      this.bloomSystem.setParameters({ intensity });
-    }
-  }
-
-  toggleMultiPassBloom() {
-    this.useMultiPassBloom = !this.useMultiPassBloom;
-    console.log(`[Bloom] Multi-pass bloom: ${this.useMultiPassBloom ? 'ON' : 'OFF'}`);
-    return this.useMultiPassBloom;
-  }
-
-  setBloomParameters(params: Partial<BloomParameters>) {
-    if (this.bloomSystem) {
-      this.bloomSystem.setParameters(params);
-    }
-    // Also update local bloomIntensity if provided
-    if (params.intensity !== undefined) {
-      this.bloomIntensity = params.intensity;
-    }
-  }
+  // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
+  setPremiumVisualsPreset(options: any = {}) { setPremiumPresetImpl(this as any, options); }
+  onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) { onLineClearReactiveImpl(this as any, lines, combo, isTSpin, isAllClear); }
+  onTSpinReactive() { onTSpinReactiveImpl(this as any); }
+  onPerfectClearReactive() { onPerfectClearReactiveImpl(this as any); }
+  onLevelUpReactive(level: number) { onLevelUpReactiveImpl(this as any, level); }
+  onGameOverReactive() { onGameOverReactiveImpl(this as any); }
+  initReactiveMusic(audioContext: AudioContext, masterGain: GainNode) { initReactiveMusicImpl(this as any, audioContext, masterGain); }
+  toggleFXAA(enabled: boolean) { toggleFXAAImpl(this as any, enabled); }
+  toggleFilmGrain(enabled: boolean) { toggleFilmGrainImpl(this as any, enabled); }
+  toggleCRT(enabled: boolean) { toggleCRTImpl(this as any, enabled); }
+  toggleBloom(enabled?: boolean) { toggleBloomImpl(this as any, enabled); }
+  setBloomIntensity(intensity: number) { setBloomIntensityImpl(this as any, intensity); }
+  toggleMultiPassBloom() { return toggleMultiPassBloomImpl(this as any); }
+  setBloomParameters(params: Partial<BloomParameters>) { setBloomParametersImpl(this as any, params); }
 }
