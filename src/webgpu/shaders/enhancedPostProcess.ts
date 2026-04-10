@@ -218,7 +218,7 @@ export const EnhancedPostProcessShaders = () => {
             // Chromatic Aberration
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
-            let vignetteAberration = pow(distFromCenter, 4.0) * 0.06;
+            let d2 = distFromCenter * distFromCenter; let vignetteAberration = d2 * d2 * 0.06;
             let levelAberration = levelStress * 0.005 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.03;
             let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
