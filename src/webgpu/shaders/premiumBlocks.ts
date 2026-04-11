@@ -32,12 +32,18 @@ fn geometrySmith(NdotV: f32, NdotL: f32, roughness: f32) -> f32 {
 
 // Schlick Fresnel approximation
 fn fresnelSchlick(cosTheta: f32, F0: vec3<f32>) -> vec3<f32> {
-    return F0 + (vec3<f32>(1.0) - F0) * pow(1.0 - cosTheta, 5.0);
+    let f = 1.0 - cosTheta;
+    let f2 = f * f;
+    let f5 = f2 * f2 * f;
+    return F0 + (vec3<f32>(1.0) - F0) * f5;
 }
 
 // Fresnel with color tint for metals
 fn fresnelSchlickTint(cosTheta: f32, F0: vec3<f32>, tint: vec3<f32>) -> vec3<f32> {
-    return F0 + (tint - F0) * pow(1.0 - cosTheta, 5.0);
+    let f = 1.0 - cosTheta;
+    let f2 = f * f;
+    let f5 = f2 * f2 * f;
+    return F0 + (tint - F0) * f5;
 }
 
 // Anisotropic specular (for brushed metals)
@@ -72,7 +78,8 @@ fn proceduralEnvReflect(R: vec3<f32>, time: f32) -> vec3<f32> {
     var env = mix(vec3<f32>(0.1, 0.15, 0.3), vec3<f32>(0.4, 0.5, 0.7), up);
     
     // Horizon glow
-    env += vec3<f32>(0.3, 0.4, 0.5) * pow(horizon, 4.0);
+    let h2 = horizon * horizon;
+    env += vec3<f32>(0.3, 0.4, 0.5) * (h2 * h2);
     
     // Subtle animated lights
     let light1 = sin(R.x * 3.0 + time * 0.5) * sin(R.y * 2.0) * 0.5 + 0.5;
@@ -107,7 +114,8 @@ fn refractDispersion(I: vec3<f32>, N: vec3<f32>, ior: f32, dispersion: f32) -> v
 // Subsurface scattering approximation
 fn subsurfaceScattering(NdotL: f32, subsurface: f32, color: vec3<f32>) -> vec3<f32> {
     // Wrap lighting for subsurface
-    let wrap = pow(NdotL * 0.5 + 0.5, 2.0);
+    let w = NdotL * 0.5 + 0.5;
+    let wrap = w * w;
     let scatter = color * wrap * subsurface;
     return scatter;
 }
@@ -158,7 +166,12 @@ fn particleSpecularFlash(
     // Calculate intense specular highlight
     let H = normalize(L + V);
     let specAngle = max(dot(N, H), 0.0);
-    let specular = pow(specAngle, 64.0) * intensity * 3.0;
+    let s2 = specAngle * specAngle;
+    let s4 = s2 * s2;
+    let s8 = s4 * s4;
+    let s16 = s8 * s8;
+    let s32 = s16 * s16;
+    let specular = (s32 * s32) * intensity * 3.0;
     
     // Add bloom-like glow
     let glow = flashColor * intensity * 0.8;
@@ -370,7 +383,8 @@ export const PremiumBlockShaders = () => {
             var transmissionAlpha = 1.0;
             if (transmission > 0.0) {
                 // Fresnel-based opacity
-                let fresnel = pow(1.0 - NdotV, 3.0);
+                let f = 1.0 - NdotV;
+                let fresnel = f * f * f;
                 transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
                 
                 // Procedural refraction color shift
@@ -379,7 +393,7 @@ export const PremiumBlockShaders = () => {
                 
                 // Chromatic dispersion at edges
                 if (dispersion > 0.0) {
-                    let edgeFactor = pow(1.0 - NdotV, 2.0);
+                    let edgeFactor = f * f;
                     refractionColor += vec3<f32>(
                         sin(time * 2.0) * 0.1,
                         cos(time * 1.5) * 0.1,
@@ -400,7 +414,11 @@ export const PremiumBlockShaders = () => {
             var facetSpec = 0.0;
             if (dispersion > 0.05) {
                 facetSpec = facetedShading(N, V, 0.15);
-                facetSpec = pow(facetSpec, 30.0);
+                let f2 = facetSpec * facetSpec;
+                let f4 = f2 * f2;
+                let f8 = f4 * f4;
+                let f16 = f8 * f8;
+                facetSpec = f16 * f8 * f4 * f2;
             }
             
             // COMPOSITION
@@ -453,7 +471,8 @@ export const PremiumBlockShaders = () => {
                 
                 var ghostCol = vColor.rgb * 4.0 * wire;
                 ghostCol += vColor.rgb * scan * 2.0;
-                ghostCol += vec3<f32>(0.5, 0.8, 1.0) * pow(1.0 - NdotV, 3.0) * 2.0;
+                let f = 1.0 - NdotV;
+                ghostCol += vec3<f32>(0.5, 0.8, 1.0) * (f * f * f) * 2.0;
                 
                 return vec4<f32>(ghostCol, 0.4 + scan * 0.3);
             }
@@ -467,7 +486,9 @@ export const PremiumBlockShaders = () => {
             
             // HDR tone mapping (simple Reinhard)
             finalColor = finalColor / (finalColor + vec3<f32>(1.0));
-            finalColor = pow(finalColor, vec3<f32>(1.0 / 2.2)); // Gamma correction
+
+            // Fast gamma correction approximation (sqrt) instead of pow(c, 1/2.2)
+            finalColor = sqrt(finalColor);
             
             return vec4<f32>(finalColor, vColor.w);
         }

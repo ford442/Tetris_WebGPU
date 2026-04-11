@@ -821,13 +821,11 @@ export default class View {
     this._f32_12[8] = swParams[0]; this._f32_12[9] = swParams[1]; this._f32_12[10] = swParams[2]; this._f32_12[11] = swParams[3];
     this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
 
-    const commandEncoder = this.device.createCommandEncoder();
+    const result = updateFrameUniforms(this, dt, time);
+    const commandEncoder = result.commandEncoder;
     
-    // OPTIMIZED: Only dispatch compute if we have pending uploads or shockwave is active
-    // Particles need compute to age out, so we track last emission time
-    const timeSinceLastEmit = time - (this.particleSystem.lastEmitTime || 0);
-    const hasActiveParticles = this.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0;
-    if (hasActiveParticles) {
+    // Check if particles are active from the update result
+    if (result.hasActiveParticles) {
         const computePass = commandEncoder.beginComputePass();
         computePass.setPipeline(this.particleComputePipeline);
         computePass.setBindGroup(0, this.particleComputeBindGroup);
