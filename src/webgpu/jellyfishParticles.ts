@@ -46,10 +46,14 @@ export class JellyfishParticleSystem {
         [1.0, 0.8, 0.4, 0.8], // Gold
     ];
 
+    // Pre-allocated array to prevent per-frame garbage collection
+    private _particleData: Float32Array;
+
     constructor() {
         const maxPerFrame = 10;
         this.pendingUploads = new Float32Array(maxPerFrame * 16);
         this.pendingUploadIndices = new Uint32Array(maxPerFrame);
+        this._particleData = new Float32Array(this.maxJellyfish * 16);
     }
 
     private rand(min: number, max: number): number {
@@ -196,38 +200,36 @@ export class JellyfishParticleSystem {
      */
     getParticleData(): Float32Array {
         // 16 floats per particle (64 bytes)
-        const data = new Float32Array(this.jellyfish.length * 16);
-        
         for (let i = 0; i < this.jellyfish.length; i++) {
             const j = this.jellyfish[i];
             const offset = i * 16;
             
             // Position
-            data[offset + 0] = j.position[0];
-            data[offset + 1] = j.position[1];
-            data[offset + 2] = j.position[2];
-            data[offset + 3] = 0;
+            this._particleData[offset + 0] = j.position[0];
+            this._particleData[offset + 1] = j.position[1];
+            this._particleData[offset + 2] = j.position[2];
+            this._particleData[offset + 3] = 0;
             
             // Velocity + pulse phase packed
-            data[offset + 4] = j.velocity[0];
-            data[offset + 5] = j.velocity[1];
-            data[offset + 6] = j.velocity[2];
-            data[offset + 7] = j.pulsePhase;
+            this._particleData[offset + 4] = j.velocity[0];
+            this._particleData[offset + 5] = j.velocity[1];
+            this._particleData[offset + 6] = j.velocity[2];
+            this._particleData[offset + 7] = j.pulsePhase;
             
             // Color
-            data[offset + 8] = j.color[0];
-            data[offset + 9] = j.color[1];
-            data[offset + 10] = j.color[2];
-            data[offset + 11] = j.color[3];
+            this._particleData[offset + 8] = j.color[0];
+            this._particleData[offset + 9] = j.color[1];
+            this._particleData[offset + 10] = j.color[2];
+            this._particleData[offset + 11] = j.color[3];
             
             // Scale, life, and extras
-            data[offset + 12] = j.scale;
-            data[offset + 13] = j.life;
-            data[offset + 14] = this.pulseIntensity; // Shader can use this
-            data[offset + 15] = 0;
+            this._particleData[offset + 12] = j.scale;
+            this._particleData[offset + 13] = j.life;
+            this._particleData[offset + 14] = this.pulseIntensity; // Shader can use this
+            this._particleData[offset + 15] = 0;
         }
         
-        return data;
+        return this._particleData.subarray(0, this.jellyfish.length * 16);
     }
 
     private addToUploadBuffer(jellyfish: JellyfishParticle): void {

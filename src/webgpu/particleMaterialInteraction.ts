@@ -137,7 +137,10 @@ export class ParticleMaterialInteraction {
   // Update all interactions (decay over time)
   update(dt: number): void {
     for (const [key, interaction] of this.activeInteractions) {
-      interaction.intensity *= Math.pow(interaction.decay, dt * 60);
+      // Fast algebraic approximation for decay: 1.0 / (1.0 + dt * factor)
+      // We convert the decay multiplier (e.g. 0.9) to a factor.
+      let factor = (1.0 / interaction.decay) - 1.0;
+      interaction.intensity *= 1.0 / (1.0 + dt * 60 * factor);
       
       if (interaction.intensity < 0.01) {
         this.activeInteractions.delete(key);
@@ -211,7 +214,12 @@ fn applySpecularFlash(
   // Calculate specular highlight
   let halfDir = normalize(lightDir + viewDir);
   let specAngle = max(dot(normal, halfDir), 0.0);
-  let specular = pow(specAngle, 32.0) * intensity * 2.0;
+  let s2 = specAngle * specAngle;
+  let s4 = s2 * s2;
+  let s8 = s4 * s4;
+  let s16 = s8 * s8;
+  let s32 = s16 * s16;
+  let specular = s32 * intensity * 2.0;
   
   // Add bloom-like glow
   let glow = flashColor * intensity * 0.5;

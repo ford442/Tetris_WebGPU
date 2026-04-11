@@ -45,7 +45,10 @@ fn geometrySmith(NdotV: f32, NdotL: f32, roughness: f32) -> f32 {
 }
 
 fn fresnelSchlick(cosTheta: f32, F0: vec3f) -> vec3f {
-    return F0 + (vec3f(1.0) - F0) * pow(1.0 - cosTheta, 5.0);
+    let f = 1.0 - cosTheta;
+    let f2 = f * f;
+    let f5 = f2 * f2 * f;
+    return F0 + (vec3f(1.0) - F0) * f5;
 }
 
 fn anisotropicSpecular(V: vec3f, L: vec3f, N: vec3f, roughness: f32, aniso: f32) -> f32 {
@@ -66,7 +69,8 @@ fn proceduralEnvReflect(R: vec3f, time: f32) -> vec3f {
     let up = R.y * 0.5 + 0.5;
     let horizon = 1.0 - abs(R.y);
     var env = mix(vec3f(0.1, 0.15, 0.3), vec3f(0.4, 0.5, 0.7), up);
-    env += vec3f(0.3, 0.4, 0.5) * pow(horizon, 4.0);
+    let h2 = horizon * horizon;
+    env += vec3f(0.3, 0.4, 0.5) * h2 * h2;
     let light1 = sin(R.x * 3.0 + time * 0.5) * sin(R.y * 2.0) * 0.5 + 0.5;
     let light2 = sin(R.z * 4.0 - time * 0.3) * sin(R.x * 3.0) * 0.5 + 0.5;
     env += vec3f(0.2, 0.15, 0.1) * light1 * light1;
@@ -75,8 +79,9 @@ fn proceduralEnvReflect(R: vec3f, time: f32) -> vec3f {
 }
 
 fn subsurfaceScattering(NdotL: f32, subsurface: f32, color: vec3f) -> vec3f {
-    let wrap = pow(NdotL * 0.5 + 0.5, 2.0);
-    return color * wrap * subsurface;
+    let wrap = NdotL * 0.5 + 0.5;
+    let wrap2 = wrap * wrap;
+    return color * wrap2 * subsurface;
 }
 `;
 
@@ -236,7 +241,13 @@ export const PBRBlockShaders = () => {
                 finalColor = baseColor * lightFactor;
 
                 // Add specular highlight based on texture
-                let specular = pow(NdotH, 128.0) * metalMask * 0.5;
+                let s2 = NdotH * NdotH;
+                let s4 = s2 * s2;
+                let s8 = s4 * s4;
+                let s16 = s8 * s8;
+                let s32 = s16 * s16;
+                let s64 = s32 * s32;
+                let specular = s64 * s64 * metalMask * 0.5;
                 finalColor += vec3f(specular);
 
             } else {
@@ -275,14 +286,15 @@ export const PBRBlockShaders = () => {
 
                 // Glass transmission
                 if (transmission > 0.0 && glassMask > 0.1) {
-                    let fresnel = pow(1.0 - NdotV, 3.0);
+                    let f = 1.0 - NdotV;
+                    let fresnel = f * f * f;
                     let transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
                     let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
                     let refractionColor = proceduralEnvReflect(refractDir, time);
 
                     // Add subtle chromatic dispersion at edges
                     if (fUniforms.dispersion > 0.0) {
-                        let edgeFactor = pow(1.0 - NdotV, 2.0);
+                        let edgeFactor = f * f;
                         let rainbow = vec3f(
                             sin(time * 2.0) * 0.1 + 0.9,
                             sin(time * 2.0 + 2.09) * 0.1 + 0.9,
@@ -332,8 +344,9 @@ export const PBRBlockShaders = () => {
                 let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
                 let wire = smoothstep(0.9, 0.98, max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0);
 
-                let ghostColor = vColor.rgb * 3.0 * (wire + scan * 0.5);
-                ghostColor += vec3f(0.4, 0.7, 1.0) * pow(1.0 - NdotV, 3.0) * 1.5;
+                var ghostColor = vColor.rgb * 3.0 * (wire + scan * 0.5);
+                let f = 1.0 - NdotV;
+                ghostColor += vec3f(0.4, 0.7, 1.0) * (f * f * f) * 1.5;
 
                 return vec4f(ghostColor, 0.35 + scan * 0.2);
             }

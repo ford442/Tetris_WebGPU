@@ -37,7 +37,10 @@ fn geometrySmith(NdotV: f32, NdotL: f32, roughness: f32) -> f32 {
 }
 
 fn fresnelSchlick(cosTheta: f32, F0: vec3f) -> vec3f {
-    return F0 + (vec3f(1.0) - F0) * pow(1.0 - cosTheta, 5.0);
+    let f = 1.0 - cosTheta;
+    let f2 = f * f;
+    let f5 = f2 * f2 * f;
+    return F0 + (vec3f(1.0) - F0) * f5;
 }
 
 // ============================================================================
@@ -52,7 +55,8 @@ fn causticPattern(uv: vec2f, time: f32) -> f32 {
     let wave3 = sin((uv.x + uv.y) * scale * 0.5 + time * 0.8);
     
     let interference = (wave1 + wave2 + wave3) / 3.0;
-    return pow(interference * 0.5 + 0.5, 3.0); // Sharpen the caustics
+    let i = interference * 0.5 + 0.5;
+    return i * i * i; // Sharpen the caustics
 }
 
 // God ray volumetric light shafts
@@ -64,7 +68,8 @@ fn godRays(worldPos: vec3f, time: f32, intensity: f32) -> vec3f {
     // Add some noise variation
     let noise = fract(sin(dot(worldPos.xz, vec2f(12.9898, 78.233))) * 43758.5453);
     
-    let rayIntensity = pow(shaft * 0.5 + 0.5, 2.0) * intensity;
+    let s = shaft * 0.5 + 0.5;
+    let rayIntensity = (s * s) * intensity;
     let rayColor = vec3f(0.4, 0.8, 1.0); // Cyan-tinted underwater light
     
     return rayColor * rayIntensity * (0.8 + noise * 0.4);
@@ -73,7 +78,8 @@ fn godRays(worldPos: vec3f, time: f32, intensity: f32) -> vec3f {
 // Bioluminescent glow from surfaces
 fn bioluminescentGlow(normal: vec3f, viewDir: vec3f, baseColor: vec3f, intensity: f32) -> vec3f {
     let NdotV = max(dot(normal, viewDir), 0.0);
-    let fresnel = pow(1.0 - NdotV, 3.0);
+    let f = 1.0 - NdotV;
+    let fresnel = f * f * f;
     
     // Cyan/blue bioluminescence
     let glowColor = vec3f(0.2, 0.9, 1.0);
@@ -110,7 +116,8 @@ fn creatureRefraction(
 // Subsurface scattering for underwater materials
 fn underwaterSubsurface(NdotL: f32, depth: f32, color: vec3f) -> vec3f {
     // Light wraps around more underwater due to scattering
-    let wrap = pow(NdotL * 0.5 + 0.5, 2.0);
+    let w = NdotL * 0.5 + 0.5;
+    let wrap = w * w;
     let absorption = exp(-depth * 0.1); // Blue light penetrates deeper
     
     return color * wrap * absorption * vec3f(0.8, 0.9, 1.0);
@@ -360,7 +367,8 @@ export const UnderwaterBlockShaders = () => {
                 
                 // Glass transmission with underwater refraction
                 if (transmission > 0.0 && glassMask > 0.1) {
-                    let fresnel = pow(1.0 - NdotV, 3.0);
+                    let f = 1.0 - NdotV;
+                    let fresnel = f * f * f;
                     let transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
                     
                     // Underwater refraction with caustics
@@ -416,8 +424,9 @@ export const UnderwaterBlockShaders = () => {
                 let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
                 let wire = smoothstep(0.9, 0.98, max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0);
                 
-                let ghostColor = vColor.rgb * 3.0 * (wire + scan * 0.5);
-                ghostColor += vec3f(0.4, 0.7, 1.0) * pow(1.0 - NdotV, 3.0) * 1.5;
+                var ghostColor = vColor.rgb * 3.0 * (wire + scan * 0.5);
+                let f = 1.0 - NdotV;
+                ghostColor += vec3f(0.4, 0.7, 1.0) * (f * f * f) * 1.5;
                 
                 // Underwater ghost has bioluminescence
                 if (fUniforms.isUnderwater > 0.5) {

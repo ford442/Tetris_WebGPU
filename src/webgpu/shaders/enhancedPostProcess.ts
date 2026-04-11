@@ -116,7 +116,7 @@ export const EnhancedPostProcessShaders = () => {
             // Scanlines
             let scanlineY = curvedUV.y * uniforms.screenResolution.y;
             var scanline = sin(scanlineY * 3.14159) * 0.5 + 0.5;
-            scanline = pow(scanline, 1.5);
+            scanline = scanline * sqrt(scanline); // pow(scanline, 1.5)
             scanline = 0.9 + scanline * 0.1;
             
             // RGB pixel separation (mask effect)
@@ -218,7 +218,8 @@ export const EnhancedPostProcessShaders = () => {
             // Chromatic Aberration
             let distFromCenter = distance(uv, vec2<f32>(0.5));
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
-            let vignetteAberration = pow(distFromCenter, 4.0) * 0.06;
+            let d2 = distFromCenter * distFromCenter;
+            let vignetteAberration = (d2 * d2) * 0.06;
             let levelAberration = levelStress * 0.005 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.03;
             let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
@@ -278,7 +279,7 @@ export const EnhancedPostProcessShaders = () => {
 
             // HDR tone mapping
             color = color / (color + vec3<f32>(1.0));
-            color = pow(color, vec3<f32>(1.0 / 2.2));
+            color = sqrt(color); // Fast gamma approx
 
             if (!inBounds) {
                 return vec4<f32>(0.0, 0.0, 0.0, 1.0);
