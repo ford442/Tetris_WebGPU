@@ -811,7 +811,7 @@ export default class View {
     }
 
     // Write all per-frame uniform buffers (delegated to viewUniforms.ts)
-    const { hasActiveParticles, commandEncoder } = updateFrameUniforms(this, dt, time);
+    updateFrameUniforms(this, dt, time);
     // Compute uniforms
     const swParams = this.visualEffects.getShockwaveParams();
     const swCenter = this.visualEffects.shockwaveCenter;
