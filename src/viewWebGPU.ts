@@ -811,6 +811,16 @@ export default class View {
     }
 
     // Write all per-frame uniform buffers (delegated to viewUniforms.ts)
+    updateFrameUniforms(this, dt, time);
+    // Compute uniforms
+    const swParams = this.visualEffects.getShockwaveParams();
+    const swCenter = this.visualEffects.shockwaveCenter;
+    const swTimer = this.visualEffects.shockwaveTimer;
+    this._f32_12[0] = dt; this._f32_12[1] = time; this._f32_12[2] = swTimer; this._f32_12[3] = 0.0;
+    this._f32_12[4] = swCenter[0]; this._f32_12[5] = swCenter[1]; this._f32_12[6] = 0.0; this._f32_12[7] = 0.0;
+    this._f32_12[8] = swParams[0]; this._f32_12[9] = swParams[1]; this._f32_12[10] = swParams[2]; this._f32_12[11] = swParams[3];
+    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
+
     const result = updateFrameUniforms(this, dt, time);
     const commandEncoder = result.commandEncoder;
     
