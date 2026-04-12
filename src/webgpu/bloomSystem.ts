@@ -1,3 +1,9 @@
+interface BloomSystem {
+  _thresholdData?: Float32Array;
+  _blurData?: Float32Array;
+  _upsampleData?: Float32Array;
+  _compositeData?: Float32Array;
+}
 /**
  * BloomSystem - Professional Multi-Pass Bloom Effect for WebGPU
  *
@@ -370,13 +376,14 @@ export class BloomSystem {
    */
   private updateUniforms(): void {
     // Threshold uniforms: threshold, knee, intensity, scatter
-    const thresholdData = new Float32Array([
+    if(!this._thresholdData) this._thresholdData = new Float32Array(4);
+    this._thresholdData.set([
       this.params.threshold,
       this.params.knee,
       this.params.intensity,
       this.params.scatter
     ]);
-    this.device.queue.writeBuffer(this.thresholdUniformBuffer, 0, thresholdData);
+    this.device.queue.writeBuffer(this.thresholdUniformBuffer, 0, this._thresholdData);
     
     // Blur uniforms: texelSize (vec2), mipLevel (f32), padding (f32)
     const mipSizes = [
@@ -386,34 +393,37 @@ export class BloomSystem {
     ];
     
     for (let i = 0; i < BLOOM_MIP_LEVELS; i++) {
-      const blurData = new Float32Array([
+      if(!this._blurData) this._blurData = new Float32Array(4);
+      this._blurData.set([
         1.0 / mipSizes[i].w,
         1.0 / mipSizes[i].h,
         i,
         0.0  // padding
       ]);
-      this.device.queue.writeBuffer(this.blurUniformBuffers[i], 0, blurData);
+      this.device.queue.writeBuffer(this.blurUniformBuffers[i], 0, this._blurData);
     }
     
     // Upsample uniforms: scatter, intensity, clamp, mipLevel
     for (let i = 0; i < BLOOM_MIP_LEVELS; i++) {
-      const upsampleData = new Float32Array([
+      if(!this._upsampleData) this._upsampleData = new Float32Array(4);
+      this._upsampleData.set([
         this.params.scatter,
         this.params.intensity,
         this.params.clamp,
         i
       ]);
-      this.device.queue.writeBuffer(this.upsampleUniformBuffers[i], 0, upsampleData);
+      this.device.queue.writeBuffer(this.upsampleUniformBuffers[i], 0, this._upsampleData);
     }
     
     // Composite uniforms: intensity, clamp, padding x2
-    const compositeData = new Float32Array([
+    if(!this._compositeData) this._compositeData = new Float32Array(4);
+    this._compositeData.set([
       this.params.intensity,
       this.params.clamp,
       0.0,
       0.0
     ]);
-    this.device.queue.writeBuffer(this.compositeUniformBuffer, 0, compositeData);
+    this.device.queue.writeBuffer(this.compositeUniformBuffer, 0, this._compositeData);
   }
   
   /**

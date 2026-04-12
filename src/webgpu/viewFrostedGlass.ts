@@ -76,6 +76,8 @@ export async function initFrostedGlassBackboard(
 /**
  * Update frosted glass uniforms and bind group.
  */
+let _frostedGlassUniformData: Float32Array;
+
 export function updateFrostedGlassUniforms(
   device: GPUDevice,
   pipeline: GPURenderPipeline,
@@ -90,7 +92,8 @@ export function updateFrostedGlassUniforms(
   Matrix.mat4.translate(modelMatrix, modelMatrix, [0, 0, -1.0]);
   Matrix.mat4.scale(modelMatrix, modelMatrix, [12.0, 24.0, 1.0]);
 
-  const uniformData = new Float32Array(40);
+  if (!_frostedGlassUniformData) _frostedGlassUniformData = new Float32Array(40);
+  const uniformData = _frostedGlassUniformData;
   uniformData.set(vpMatrix, 0);
   uniformData.set(modelMatrix as Float32Array, 16);
   const tint = borderColor || [0.5, 0.5, 0.5, 0.3];
