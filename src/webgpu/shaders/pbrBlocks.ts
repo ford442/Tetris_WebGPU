@@ -243,8 +243,9 @@ export const PBRBlockShaders = () => {
                 finalColor = mix(finalColor, warnColor, tension * pulse * pulse * 0.3);
             }
 
-            // Ghost piece
-            if (vColor.w < 0.4) {
+            // Ghost piece - use pre-sampled texture (textureSample called outside conditional for uniform control flow)
+            let isGhost = vColor.w < 0.4;
+            if (isGhost) {
                 let scanY = fract(vUV.y * 50.0 - time * 15.0);
                 let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
                 let wire = smoothstep(0.9, 0.98, max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0);

@@ -310,8 +310,8 @@ export const Shaders = () => {
                 }
 
                 // Simple PBR mix (solid blocks only)
-                // Re-read texture for base color
-                baseColor = textureSample(blockTexture, blockSampler, texUV).rgb;
+                // Use already-sampled texture color (textureSample moved outside conditional for uniform control flow)
+                baseColor = texColor.rgb;
                 var pbrColor = mix(baseColor, baseColor * materialUniforms.metallic, materialUniforms.metallic);
                 pbrColor = mix(pbrColor, vec3<f32>(1.0), materialUniforms.transmission * 0.4); // glass highlight
                

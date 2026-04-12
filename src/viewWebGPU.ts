@@ -65,6 +65,7 @@ import {
   renderPiece as renderPieceImpl,
 } from './webgpu/viewMaterials.js';
 import { updateFrameUniforms } from './webgpu/viewUniforms.js';
+import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import {
   generateMipmaps as generateMipmapsUtil,
   createSolidFallbackTexture,
