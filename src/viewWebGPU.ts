@@ -465,8 +465,8 @@ export default class View {
     this.ctxWebGPU.configure({ device: this.device, format: presentationFormat, alphaMode: 'premultiplied' });
 
     this.blockSampler = this.device.createSampler({
-      magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear',
-      addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: 16,
+      magFilter: 'nearest', minFilter: 'nearest', mipmapFilter: 'nearest',
+      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
     });
 
     try {
