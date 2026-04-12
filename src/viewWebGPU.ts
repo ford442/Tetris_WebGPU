@@ -367,7 +367,7 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    this.recreateRenderTargets();
+    this.recreateRenderTargets(); // Fire and forget - async is handled internally
 
     // Resize bloom system
     if (this.bloomSystem) {
@@ -379,7 +379,7 @@ export default class View {
     }
   }
 
-  private recreateRenderTargets() { recreateRenderTargetsImpl(this); }
+  private recreateRenderTargets() { recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
 
   // NEW: Set render scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x supersampling)
   setRenderScale(scale: number) {
