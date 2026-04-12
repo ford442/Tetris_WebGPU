@@ -132,10 +132,14 @@ export function createProceduralFallbackTexture(device: GPUDevice): GPUTexture {
  * all render pass descriptors and bind groups to reference the new views.
  * `view` is cast as `any` to avoid a circular import.
  */
-export function recreateRenderTargets(view: any) {
+export async function recreateRenderTargets(view: any) {
   const device: GPUDevice = view.device;
   if (!device) return;
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+  // Wait for GPU to finish all pending work before destroying old textures
+  // This prevents "destroyed texture used in submit" errors
+  await device.queue.onSubmittedWorkDone();
 
   if (view.offscreenTexture) view.offscreenTexture.destroy();
   view.offscreenTexture = device.createTexture({
