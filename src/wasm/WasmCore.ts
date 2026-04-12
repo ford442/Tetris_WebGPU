@@ -1,5 +1,7 @@
 // src/wasm/WasmCore.ts
 
+import { wasmLogger } from '../utils/logger.js';
+
 export class WasmCore {
   private static instance: WasmCore;
   private wasmMemory!: WebAssembly.Memory;
@@ -18,7 +20,7 @@ export class WasmCore {
     const imports = {
       env: {
         abort: (_msg: number, _file: number, line: number, column: number) => {
-          console.error(`WASM Abort at ${line}:${column}`);
+          wasmLogger.error(`Abort at ${line}:${column}`);
         },
         seed: () => Math.random() // For random generator if moved to WASM
       }
@@ -41,7 +43,7 @@ export class WasmCore {
             try {
                 const res = await fetch(url);
                 if (!res.ok) {
-                    console.warn(`WASM fetch ${url} failed: ${res.status}`);
+                    wasmLogger.warn(`Fetch ${url} failed: ${res.status}`);
                     continue;
                 }
                 const ab = await res.arrayBuffer();
@@ -51,10 +53,10 @@ export class WasmCore {
                     fetchedUrl = url;
                     break;
                 } else {
-                    console.warn(`WASM fetch ${url} returned non-wasm content (magic: ${Array.from(magic).map(b => b.toString(16)).join(' ')})`);
+                    wasmLogger.warn(`Fetch ${url} returned non-wasm content (magic: ${Array.from(magic).map(b => b.toString(16)).join(' ')})`);
                 }
             } catch (e) {
-                console.warn(`WASM fetch ${url} failed:`, e);
+                wasmLogger.warn(`Fetch ${url} failed:`, e);
             }
         }
 
@@ -75,10 +77,10 @@ export class WasmCore {
         // Create the view on the memory we created
         this.instance.playfieldView = new Int8Array(this.instance.wasmMemory.buffer, 0, 200);
 
-        console.log(`WASM Physics Core Initialized (memory=${this.instance.wasmMemory.buffer.byteLength} bytes) from`, fetchedUrl);
+        wasmLogger.info(`Physics Core Initialized (memory=${this.instance.wasmMemory.buffer.byteLength} bytes) from`, fetchedUrl);
     } catch (e) {
         // Log detailed diagnostics and continue so the application can use the JS fallback
-        console.warn("WASM Init Failed (Using JS Fallback):", e);
+        wasmLogger.warn("Init Failed (Using JS Fallback):", e);
         // Swallow the error intentionally - Game.ts will fallback to JS memory if needed
     }
   }

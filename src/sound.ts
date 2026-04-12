@@ -1,4 +1,5 @@
 import { ProceduralMusicGenerator } from './effects/musicGenerator.js';
+import { audioLogger } from './utils/logger.js';
 
 export class MusicManager {
     private ctx: AudioContext;
@@ -43,7 +44,7 @@ export class MusicManager {
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                console.warn(`MusicManager: Failed to load audio from ${url}`);
+                audioLogger.warn(`Failed to load audio from ${url}`);
                 return false;
             }
             const arrayBuffer = await response.arrayBuffer();
@@ -52,7 +53,7 @@ export class MusicManager {
             this.useProcedural = false;
             return true;
         } catch (e) {
-            console.warn(`MusicManager: Error loading audio from ${url}:`, e);
+            audioLogger.warn(`Error loading audio from ${url}:`, e);
             return false;
         }
     }

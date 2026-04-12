@@ -3,6 +3,8 @@
  * Handles line clearing logic and score calculation
  */
 
+import { gameLogger } from '../utils/logger.js';
+
 export interface ScoreEvent {
   points: number;
   text: string; // e.g., "TETRIS", "COMBO x3"
@@ -35,7 +37,7 @@ export class HighScoreManager {
         this.highScores = JSON.parse(stored);
       }
     } catch (e) {
-      console.warn('Failed to load high scores from localStorage:', e);
+      gameLogger.warn('Failed to load high scores from localStorage:', e);
       this.highScores = [];
     }
   }
@@ -44,7 +46,7 @@ export class HighScoreManager {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
     } catch (e) {
-      console.warn('Failed to save high scores to localStorage:', e);
+      gameLogger.warn('Failed to save high scores to localStorage:', e);
     }
   }
 
@@ -202,7 +204,7 @@ export class ScoringSystem {
     }
 
     this.score += Math.floor(points);
-    console.log(`Score: ${this.score} (${text})`);
+    gameLogger.debug(`Score: ${this.score} (${text})`);
 
     return {
         points: Math.floor(points),

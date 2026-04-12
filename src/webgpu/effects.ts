@@ -3,6 +3,8 @@
  * Manages visual effects like shake, flash, shockwave, and video backgrounds
  */
 
+import { videoLogger, renderLogger, audioLogger } from '../utils/logger.js';
+
 export class VisualEffects {
     // Visual effect timers
     flashTimer: number = 0;
@@ -59,7 +61,7 @@ export class VisualEffects {
 
         // Fallback detection for primary
         this.videoElement.addEventListener('error', () => {
-            console.warn('Video background failed to load. Falling back to shader.');
+            videoLogger.warn('Failed to load, falling back to shader');
             this.isVideoPlaying = false;
             this.videoElement.style.display = 'none';
         });
@@ -141,10 +143,10 @@ export class VisualEffects {
         
         // Start playing standby video
         this.standbyVideoElement.play().catch(e => {
-            console.log("Standby video autoplay failed", e);
+            videoLogger.debug("Standby autoplay failed", e);
         });
         
-        console.log('[Video] Starting crossfade to:', this.pendingVideoSrc);
+        videoLogger.info('Starting crossfade to:', this.pendingVideoSrc);
     }
 
     completeCrossfade(): void {
@@ -171,7 +173,7 @@ export class VisualEffects {
         this.crossfadeProgress = 0;
         this.isVideoPlaying = true;
         
-        console.log('[Video] Crossfade complete, now playing:', this.currentVideoSrc);
+        videoLogger.info('Crossfade complete, now playing:', this.currentVideoSrc);
     }
 
     updateEffects(dt: number): void {
@@ -264,7 +266,7 @@ export class VisualEffects {
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
-        // console.log("Shockwave triggered", center, strength);
+        
         this.shockwaveCenter = center;
         this.shockwaveParams = [width, strength, aberration, speed];
         // Start effect at 0.01 to avoid 0.0 check failure
@@ -315,12 +317,12 @@ export class VisualEffects {
 
     setReactiveVideoEnabled(enabled: boolean): void {
         this.reactiveVideoEnabled = enabled;
-        console.log('[VisualEffects] Reactive video:', enabled ? 'enabled' : 'disabled');
+        renderLogger.info('Reactive video:', enabled ? 'enabled' : 'disabled');
     }
 
     setReactiveMusicEnabled(enabled: boolean): void {
         this.reactiveMusicEnabled = enabled;
-        console.log('[VisualEffects] Reactive music:', enabled ? 'enabled' : 'disabled');
+        renderLogger.info('Reactive music:', enabled ? 'enabled' : 'disabled');
     }
 
     triggerReactiveVideo(eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', intensity: number, data?: any): void {
@@ -375,19 +377,19 @@ export class VisualEffects {
         switch (eventType) {
             case 'lineClear':
                 // Music would: pitch shift up, add filter sweep
-                console.log('[ReactiveMusic] Line clear - intensity:', intensity.toFixed(2));
+                audioLogger.debug('Line clear - intensity:', intensity.toFixed(2));
                 break;
             case 'levelUp':
                 // Music would: transition to next section, add layer
-                console.log('[ReactiveMusic] Level up - new section');
+                audioLogger.debug('Level up - new section');
                 break;
             case 'tSpin':
                 // Music would: accent hit, stutter effect
-                console.log('[ReactiveMusic] T-Spin - accent');
+                audioLogger.debug('T-Spin - accent');
                 break;
             case 'gameOver':
                 // Music would: slow down, fade out
-                console.log('[ReactiveMusic] Game over - fade');
+                audioLogger.debug('Game over - fade');
                 break;
         }
     }

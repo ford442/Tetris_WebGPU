@@ -185,13 +185,13 @@ export class ReactiveVideoBackground {
     video.style.opacity = '0';
     
     video.addEventListener('error', () => {
-      console.warn('[VideoBG] Failed to load video, using fallback');
+      videoLogger.warn('Failed to load video, using fallback');
       // Try fallback if available
       const currentSrc = video.src;
       const bgKey = this.getBackgroundForLevel(this.currentLevel);
       const bgConfig = VIDEO_BACKGROUNDS[bgKey];
       if (bgConfig && bgConfig.fallbackSrc && currentSrc === bgConfig.src) {
-        console.log('[VideoBG] Attempting fallback...');
+        videoLogger.info('Attempting fallback...');
         video.src = bgConfig.fallbackSrc;
         video.play().catch(() => {});
       } else {

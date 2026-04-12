@@ -5,6 +5,7 @@ import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
 import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
+import { gameLogger, wasmLogger } from './utils/logger.js';
 import type View from './viewWebGPU.js';
 
 export interface GameState {
@@ -118,11 +119,11 @@ export default class Game {
     try {
         this.playfield = WasmCore.get().playfieldView;
         if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
-            console.error("WASM Memory View mismatch");
+            wasmLogger.error("Memory View mismatch");
             this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight); // Fallback
         }
     } catch (e) {
-        console.warn("WASM not loaded, using fallback memory");
+        wasmLogger.warn("Not loaded, using fallback memory");
         this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
     }
     // ------------------------

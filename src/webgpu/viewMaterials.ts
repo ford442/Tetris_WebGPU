@@ -31,7 +31,7 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
 
   const theme = themes[themeName as keyof Themes];
   if (!theme) {
-    console.warn(`[Theme] Unknown theme: ${themeName}`);
+    renderLogger.warn(`Unknown theme: ${themeName}`);
     return;
   }
 
@@ -51,7 +51,7 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
     view._f32_3.set(bgColors[2]); view.device.queue.writeBuffer(view.backgroundUniformBuffer, 48, view._f32_3);
   }
 
-  console.log(`[Theme] Switched to ${themeName} with material ${materialThemeName}`);
+  renderLogger.info(`Switched to ${themeName} with material ${materialThemeName}`);
 }
 
 /**

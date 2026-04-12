@@ -1,10 +1,10 @@
 /**
- * PBR Block Shader with Texture Atlas Support
+ * PBR Block Shader with Configurable Texture Sampling
  *
  * Features:
  * - Full PBR material model (metallic, roughness, transmission, etc.)
- * - Texture atlas sampling from block.png
- * - Material-aware lighting that preserves gold frame + frosted glass detail
+ * - Configurable texture sampling supporting single textures, atlases, or subregions
+ * - Material-aware lighting that preserves metal frame + glass detail
  * - Per-piece material variation support
  * - Integration with particle-material interaction system
  *
@@ -16,13 +16,8 @@
  * 4: Cyber (emissive, neon edges)
  * 5: Gem (subsurface scattering, faceted)
  */
-import {
-    BLOCK_TEXTURE_ATLAS_COLUMNS,
-    BLOCK_TEXTURE_ATLAS_ROWS,
-    BLOCK_TEXTURE_TILE_COLUMN,
-    BLOCK_TEXTURE_TILE_ROW,
-    BLOCK_TEXTURE_TILE_INSET,
-} from '../renderMetrics.js';
+
+import { getSimpleTextureSamplingWGSL } from '../textureSampling.js';
 
 // PBR Functions shared with premiumBlocks.ts
 export const PBRFunctions = `
@@ -79,6 +74,9 @@ fn subsurfaceScattering(NdotL: f32, subsurface: f32, color: vec3f) -> vec3f {
 export const PBRBlockShaders = () => {
     const vertex = `...`; // (unchanged — your original vertex shader)
 
+    // Get configurable texture sampling code
+    const textureSamplingCode = getSimpleTextureSamplingWGSL();
+
     const fragment = `
         // =========================================================================
         // FRAGMENT UNIFORMS - 128 bytes, aligned for WebGPU
@@ -110,13 +108,11 @@ export const PBRBlockShaders = () => {
         @binding(3) @group(0) var blockSampler : sampler;
 
         ${PBRFunctions}
-
-        fn extractMaterialMask(texColor: vec3f) -> vec2f {
-            let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-            let metalMask = clamp((goldSignal - 0.8) / 0.4, 0.0, 1.0);
-            let glassMask = 1.0 - metalMask;
-            return vec2f(metalMask, glassMask);
-        }
+        
+        // ============================================================================
+        // CONFIGURABLE TEXTURE SAMPLING
+        // ============================================================================
+        ${textureSamplingCode}
 
         fn acesToneMapping(color: vec3f) -> vec3f {
             let a = 2.51; let b = 0.03; let c = 2.43; let d = 0.59; let e = 0.14;
@@ -139,19 +135,19 @@ export const PBRBlockShaders = () => {
             let NdotV = max(dot(N, V), 0.0);
             let NdotH = max(dot(N, H), 0.0);
 
-            // Atlas sampling
-            var texUV = vec2f(vUV.x, 1.0 - vUV.y);
+            // Apply configurable texture sampling
+            var texUV = transformUVForSampling(vUV);
+            
+            // Glitch effect
             if (fUniforms.useGlitch > 0.0) {
                 let glitchOffset = fUniforms.useGlitch * 0.03 * sin(texUV.y * 40.0 + time * 15.0);
                 texUV.x += glitchOffset;
             }
 
-            let atlasTiles = vec2f(${BLOCK_TEXTURE_ATLAS_COLUMNS}.0, ${BLOCK_TEXTURE_ATLAS_ROWS}.0);
-            let atlasTile = vec2f(${BLOCK_TEXTURE_TILE_COLUMN}.0, ${BLOCK_TEXTURE_TILE_ROW}.0);
-            let atlasInset = vec2f(${BLOCK_TEXTURE_TILE_INSET}, ${BLOCK_TEXTURE_TILE_INSET});
-            let atlasUV = (clamp(texUV, vec2f(0.0), vec2f(1.0)) * (vec2f(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
-
-            let texColor = textureSample(blockTexture, blockSampler, atlasUV);
+            // Sample texture with UVs
+            let texColor = textureSample(blockTexture, blockSampler, texUV);
+            
+            // Extract material masks using configurable method
             let masks = extractMaterialMask(texColor.rgb);
             let metalMask = masks.x;
             let glassMask = masks.y;
@@ -235,7 +231,7 @@ export const PBRBlockShaders = () => {
 
             // Rim lighting
             let rimPower = (1.0 - NdotV) * (1.0 - NdotV);
-            let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * metallic);
+            let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
             finalColor += rimColor * rimPower * 0.1;
 
             // Lock tension effect

@@ -58,9 +58,9 @@ export class ChaosModeController {
   setUnderwaterMode(isUnderwater: boolean): void {
     this.state.isUnderwater = isUnderwater;
     if (this.state.enabled) {
-      console.log(isUnderwater ? 
-        '[CHAOS MODE] 🌊 Deep Sea Storm activated' : 
-        '[CHAOS MODE] 🔥 Cyber Overload activated'
+      renderLogger.info(isUnderwater ? 
+        '🌊 Deep Sea Storm activated' : 
+        '🔥 Cyber Overload activated'
       );
     }
   }
@@ -94,17 +94,17 @@ export class ChaosModeController {
     
     // NEW: Underwater-themed notification
     if (this.state.isUnderwater) {
-      console.log('[CHAOS MODE] 🌊 DEEP SEA STORM ACTIVATED');
+      renderLogger.info('🌊 DEEP SEA STORM ACTIVATED');
       this.showNotification('🌊 DEEP SEA STORM', true);
     } else {
-      console.log('[CHAOS MODE] ACTIVATED 🔥🔥🔥');
+      renderLogger.info('ACTIVATED 🔥🔥🔥');
       this.showNotification('CHAOS MODE ACTIVATED', false);
     }
   }
 
   private deactivate(): void {
     this.state.intensity = 0.0;
-    console.log('[CHAOS MODE] Deactivated');
+    renderLogger.info('Deactivated');
     this.showNotification('Chaos Mode Off', this.state.isUnderwater);
   }
 

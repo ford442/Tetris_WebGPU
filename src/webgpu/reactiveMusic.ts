@@ -152,7 +152,7 @@ export class ReactiveMusicSystem {
       this.baseMusicBuffer = await this.ctx.decodeAudioData(arrayBuffer);
       return true;
     } catch (e) {
-      console.warn('[Music] Failed to load base music:', e);
+      audioLogger.warn('Failed to load base music:', e);
       return false;
     }
   }

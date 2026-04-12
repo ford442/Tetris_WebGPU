@@ -6,16 +6,10 @@
  * - Caustic refraction patterns
  * - Glass refraction when sea creature swims past
  * - Gold/chrome catching underwater light shafts
- * - Texture atlas integration with block.png
+ * - Configurable texture sampling supporting different image sources
  */
 
-import {
-    BLOCK_TEXTURE_ATLAS_COLUMNS,
-    BLOCK_TEXTURE_ATLAS_ROWS,
-    BLOCK_TEXTURE_TILE_COLUMN,
-    BLOCK_TEXTURE_TILE_ROW,
-    BLOCK_TEXTURE_TILE_INSET,
-} from '../renderMetrics.js';
+import { getSimpleTextureSamplingWGSL } from '../textureSampling.js';
 
 // PBR Functions with underwater enhancements
 export const UnderwaterPBRFunctions = `
@@ -162,6 +156,9 @@ export const UnderwaterBlockShaders = () => {
         }
     `;
 
+    // Get configurable texture sampling code
+    const textureSamplingCode = getSimpleTextureSamplingWGSL();
+
     const fragment = `
         // =========================================================================
         // FRAGMENT UNIFORMS - Enhanced for underwater effects
@@ -210,22 +207,27 @@ export const UnderwaterBlockShaders = () => {
         @binding(3) @group(0) var blockSampler : sampler;
 
         ${UnderwaterPBRFunctions}
+        
+        // ============================================================================
+        // CONFIGURABLE TEXTURE SAMPLING
+        // ============================================================================
+        ${textureSamplingCode}
 
         // Extract material mask from texture
-        fn extractMaterialMask(texColor: vec3f) -> vec4f {
-            // Gold metal: high R+G, lower B
-            let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-            let metalMask = clamp((goldSignal - 0.8) / 0.4, 0.0, 1.0);
+        fn extractUnderwaterMaterialMask(texColor: vec3f) -> vec4f {
+            // Use the configurable extraction as base
+            let masks = extractMaterialMask(texColor);
+            let metalMask = masks.x;
+            let glassMask = masks.y;
             
             // Chrome: balanced high RGB
             let chromeSignal = (texColor.r + texColor.g + texColor.b) / 3.0;
             let chromeMask = smoothstep(0.7, 0.9, chromeSignal) * (1.0 - metalMask);
             
-            // Glass: subtle variations, not too bright
-            let glassSignal = 1.0 - abs(texColor.r - texColor.g) - abs(texColor.g - texColor.b);
-            let glassMask = smoothstep(0.3, 0.6, glassSignal) * (1.0 - metalMask) * (1.0 - chromeMask);
+            // Rebalance glass
+            let finalGlassMask = glassMask * (1.0 - chromeMask);
             
-            return vec4f(metalMask, chromeMask, glassMask, 0.0);
+            return vec4f(metalMask, chromeMask, finalGlassMask, 0.0);
         }
 
         // ACES tone mapping
@@ -255,8 +257,8 @@ export const UnderwaterBlockShaders = () => {
             let NdotV = max(dot(N, V), 0.0);
             let NdotH = max(dot(N, H), 0.0);
             
-            // NEW: Apply creature refraction to UVs for glass
-            var texUV = vec2f(vUV.x, 1.0 - vUV.y);
+            // Apply configurable texture sampling
+            var texUV = transformUVForSampling(vUV);
             
             // Creature refraction on glass blocks
             if (fUniforms.isUnderwater > 0.5 && fUniforms.creatureIntensity > 0.01) {
@@ -268,15 +270,11 @@ export const UnderwaterBlockShaders = () => {
                 );
             }
             
-            // Atlas sampling
-            let atlasTiles = vec2f(${BLOCK_TEXTURE_ATLAS_COLUMNS}.0, ${BLOCK_TEXTURE_ATLAS_ROWS}.0);
-            let atlasTile = vec2f(${BLOCK_TEXTURE_TILE_COLUMN}.0, ${BLOCK_TEXTURE_TILE_ROW}.0);
-            let atlasInset = vec2f(${BLOCK_TEXTURE_TILE_INSET}, ${BLOCK_TEXTURE_TILE_INSET});
-            let atlasUV = (clamp(texUV, vec2f(0.0), vec2f(1.0)) * (vec2f(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
-            let texColor = textureSample(blockTexture, blockSampler, atlasUV);
+            // Sample texture
+            let texColor = textureSample(blockTexture, blockSampler, texUV);
             
             // Get material masks
-            let masks = extractMaterialMask(texColor.rgb);
+            let masks = extractUnderwaterMaterialMask(texColor.rgb);
             let metalMask = masks.x;
             let chromeMask = masks.y;
             let glassMask = masks.z;
@@ -404,7 +402,7 @@ export const UnderwaterBlockShaders = () => {
             // Rim lighting
             let rimPower = 1.0 - NdotV;
             rimPower = rimPower * rimPower;
-            let rimColor = mix(vColor.rgb, vec3f(1.0), anyMetal * metallic);
+            let rimColor = mix(vColor.rgb, vec3f(1.0), anyMetal * fUniforms.metallic);
             finalColor += rimColor * rimPower * 0.1;
             
             // Lock tension

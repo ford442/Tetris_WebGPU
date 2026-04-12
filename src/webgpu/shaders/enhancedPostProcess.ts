@@ -235,10 +235,9 @@ export const EnhancedPostProcessShaders = () => {
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, 0.0)).b;
             var color = vec3<f32>(r, g, b);
 
-            // FXAA
-            if (uniforms.enableFXAA > 0.5) {
-                color = fxaa(finalUV, color);
-            }
+            // FXAA - always call to maintain uniform control flow
+            let fxaaResult = fxaa(finalUV, color);
+            color = select(color, fxaaResult, uniforms.enableFXAA > 0.5);
 
             // Enhanced Bloom
             if (uniforms.enableBloom > 0.5) {

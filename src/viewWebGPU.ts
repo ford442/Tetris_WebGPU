@@ -49,6 +49,7 @@ import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
 } from './webgpu/blockTexture.js';
+import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
 import {
   initFrostedGlassBackboard as initFrostedGlassImpl,
   updateFrostedGlassUniforms as updateFrostedGlassUniformsImpl,
@@ -383,7 +384,7 @@ export default class View {
   setRenderScale(scale: number) {
     this.renderScale = Math.max(0.5, Math.min(2.0, scale));
     this.resize();
-    console.log(`[Render] Scale set to ${this.renderScale}x (${this.canvasWebGPU.width}x${this.canvasWebGPU.height})`);
+    renderLogger.info(`Scale set to ${this.renderScale}x (${this.canvasWebGPU.width}x${this.canvasWebGPU.height})`);
   }
 
   toggleGlitch() {
@@ -469,7 +470,7 @@ export default class View {
 
     try {
         const textureUrl = resolveBlockTextureUrl(import.meta.url);
-        console.log('[Texture] Loading from:', textureUrl);
+        textureLogger.info('Loading from:', textureUrl);
         const textureLoadTimeoutMs = 10000;
 
         const img = new Image();
@@ -511,14 +512,14 @@ export default class View {
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         this.generateMipmaps(this.blockTexture, imageBitmap.width, imageBitmap.height, mipLevelCount);
-        console.log('[Texture] Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'mips:', mipLevelCount);
+        textureLogger.info('Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'mips:', mipLevelCount);
     } catch (e) {
-        console.error('[Texture] Failed to load block texture:', e);
+        textureLogger.error('Failed to load block texture:', e);
         try {
           this.blockTexture = this.createProceduralFallbackTexture();
-          console.warn('[Texture] Using procedural fallback texture');
+          textureLogger.warn('Using procedural fallback texture');
         } catch (fallbackError) {
-          console.error('[Texture] Procedural fallback failed, using solid texture:', fallbackError);
+          textureLogger.error('Procedural fallback failed, using solid texture:', fallbackError);
           this.blockTexture = this.createSolidFallbackTexture();
         }
     }
@@ -533,8 +534,8 @@ export default class View {
     const vertexModule = this.device.createShaderModule({ code: shader.vertex });
     const fragmentModule = this.device.createShaderModule({ code: shader.fragment });
     
-    vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) console.log('[Shader] Vertex:', info.messages); });
-    fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) console.log('[Shader] Fragment:', info.messages); });
+    vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Vertex:', info.messages); });
+    fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Fragment:', info.messages); });
     
     this.pipeline = this.device.createRenderPipeline({
       label: 'main pipeline', layout: "auto",

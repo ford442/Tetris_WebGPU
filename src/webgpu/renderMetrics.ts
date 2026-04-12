@@ -1,3 +1,5 @@
+import { getBlockTextureConfig } from './blockTexture.js';
+
 export const BOARD_COLUMNS = 10;
 export const BOARD_ROWS = 20;
 export const BLOCK_WORLD_SIZE = 2.2;
@@ -8,6 +10,34 @@ export const BOARD_WORLD_CENTER_X =
 export const BOARD_WORLD_CENTER_Y =
   -((BOARD_ROWS - 1) * BLOCK_WORLD_SIZE) / 2;
 
+// ============================================================================
+// TEXTURE ATLAS CONSTANTS - Dynamic based on BlockTextureConfig
+// 
+// These constants are maintained for backward compatibility but now
+// derive their values from the configurable BlockTextureConfig.
+// 
+// For new code, prefer using getBlockTextureConfig() directly or
+// the textureSampling utilities which provide runtime-configurable
+// shader code.
+// ============================================================================
+
+/**
+ * Get the current atlas configuration based on BlockTextureConfig
+ * This allows runtime changes to texture layout
+ */
+export function getAtlasConfig() {
+  const config = getBlockTextureConfig();
+  return {
+    columns: config.atlasColumns ?? 4,
+    rows: config.atlasRows ?? 3,
+    tileColumn: config.atlasTileColumn ?? 1,
+    tileRow: config.atlasTileRow ?? 1,
+    tileInset: config.atlasTileInset ?? 0.03,
+  };
+}
+
+// Legacy constants - kept for backward compatibility
+// These will use the default config values
 export const BLOCK_TEXTURE_ATLAS_COLUMNS = 4;
 export const BLOCK_TEXTURE_ATLAS_ROWS = 3;
 export const BLOCK_TEXTURE_TILE_COLUMN = 1;

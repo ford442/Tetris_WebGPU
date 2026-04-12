@@ -6,6 +6,7 @@
 import * as Matrix from 'gl-matrix';
 import { FrostedGlassShaders } from './shaders.js';
 import { FullScreenQuadData } from './geometry.js';
+import { renderLogger } from '../utils/logger.js';
 
 export interface FrostedGlassResources {
   frostedGlassPipeline: GPURenderPipeline;
@@ -61,7 +62,7 @@ export async function initFrostedGlassBackboard(
   });
   const frostedGlassTextureView = frostedGlassTexture.createView();
 
-  console.log('[FrostedGlass] Backboard initialized');
+  renderLogger.info('Backboard initialized');
 
   return {
     frostedGlassPipeline,
