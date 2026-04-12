@@ -5,6 +5,7 @@
 
 import { themes, Themes } from './themes.js';
 import { getPieceMaterial } from './materials.js';
+import { renderLogger } from '../utils/logger.js';
 
 export interface MaterialViewLike {
   device: GPUDevice;
