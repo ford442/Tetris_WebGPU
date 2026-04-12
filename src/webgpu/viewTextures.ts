@@ -78,6 +78,8 @@ export function generateMipmaps(
 /**
  * Create a solid white 1x1 fallback texture.
  */
+let _solidFallbackData: Uint8Array;
+
 export function createSolidFallbackTexture(device: GPUDevice): GPUTexture {
   const texture = device.createTexture({
     size: [1, 1, 1],
@@ -86,7 +88,7 @@ export function createSolidFallbackTexture(device: GPUDevice): GPUTexture {
   });
   device.queue.writeTexture(
     { texture },
-    new Uint8Array([255, 255, 255, 255]),
+    _solidFallbackData || (_solidFallbackData = new Uint8Array([255, 255, 255, 255])),
     { bytesPerRow: 4 },
     [1, 1, 1]
   );
