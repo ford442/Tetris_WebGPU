@@ -116,8 +116,9 @@ export const CubeData = () => {
   return { positions, normals, uvs };
 };
 
+let _fullScreenQuadData: Float32Array;
 export const FullScreenQuadData = () => {
-    const positions = new Float32Array([
+    if (!_fullScreenQuadData) _fullScreenQuadData = new Float32Array([
         -1.0, -1.0, 0.0,
          1.0, -1.0, 0.0,
         -1.0,  1.0, 0.0,
@@ -125,14 +126,16 @@ export const FullScreenQuadData = () => {
          1.0, -1.0, 0.0,
          1.0,  1.0, 0.0,
     ]);
-    return { positions };
+    return { positions: _fullScreenQuadData };
 };
 
+let _gridDataPositions: Float32Array;
 export const GridData = () => {
     // 9 vertical lines * 2 points * 3 components = 54
     // 19 horizontal lines * 2 points * 3 components = 114
     // Total = 168
-    const positions = new Float32Array(168);
+    if (!_gridDataPositions) _gridDataPositions = new Float32Array(168);
+    const positions = _gridDataPositions;
     let index = 0;
 
     const yTop = 1.1;

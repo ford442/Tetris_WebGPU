@@ -44,7 +44,7 @@ export default class Controller {
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
   // Movement is forgiving (120ms) but rotation is tighter (60ms) to prevent double-rotations
-  readonly MOVE_BUFFER_WINDOW: number = 80; // ms - Snappier jump buffer
+  readonly MOVE_BUFFER_WINDOW: number = 120; // ms - Forgiving movement
   readonly ROTATE_BUFFER_WINDOW: number = 60; // ms - Tighter rotation buffer
 
   // Mapping from physical key codes to logical actions
