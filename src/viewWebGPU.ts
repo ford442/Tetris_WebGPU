@@ -703,14 +703,7 @@ export default class View {
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
 
-    this.renderPlayfild_Border_WebGPU();
-
-    this.vertexUniformBuffer = this.device.createBuffer({
-      size: this.state.playfield.length * 10 * 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    // Create material uniform buffer for PBR (binding 4)
+    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfild_Border_WebGPU
     this.materialUniformBuffer = this.device.createBuffer({
       size: 16, // 4 floats: metallic, roughness, transmission, padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -718,6 +711,13 @@ export default class View {
     // Initialize with default material values
     const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
     this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
+
+    this.renderPlayfild_Border_WebGPU();
+
+    this.vertexUniformBuffer = this.device.createBuffer({
+      size: this.state.playfield.length * 10 * 256,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
 
     const maxBlocks = 200;
     this.uniformBindGroup_CACHE = [];
