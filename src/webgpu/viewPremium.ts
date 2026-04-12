@@ -7,6 +7,7 @@
 
 import type { BloomParameters } from './bloomSystem.js';
 import { ReactiveMusicSystem } from './reactiveMusic.js';
+import { renderLogger, audioLogger } from '../utils/logger.js';
 
 /** The subset of View that these helpers need. */
 export interface ViewLike {
@@ -62,7 +63,7 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
   view.setRenderScale(renderScale);
 
   view.useEnhancedPostProcess = enhancedPostProcess;
-  console.log(`[Premium] Enhanced post-processing ${enhancedPostProcess ? 'enabled' : 'disabled'}`);
+  renderLogger.info(`Enhanced post-processing ${enhancedPostProcess ? 'enabled' : 'disabled'}`);
 
   view.useReactiveVideo = reactiveVideo;
   if (reactiveVideo && view.currentTheme.levelVideos) {
@@ -71,10 +72,10 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
   }
 
   view.useReactiveMusic = reactiveMusic;
-  console.log(`[Premium] Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
+  renderLogger.info(`Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
 
   view.useParticleInteraction = particleInteraction;
-  console.log(`[Premium] Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
+  renderLogger.info(`Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
 
   if (chaosMode) {
     view.useChaosMode = true;
@@ -93,7 +94,7 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     });
   }
 
-  console.log(`[Premium] Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
+  renderLogger.info(`Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
 }
 
 export function onLineClearReactive(view: ViewLike, lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) {
@@ -158,7 +159,7 @@ export function onGameOverReactive(view: ViewLike) {
 export function initReactiveMusic(view: ViewLike, audioContext: AudioContext, masterGain: GainNode) {
   if (!view.useReactiveMusic) return;
   view.reactiveMusicSystem = new ReactiveMusicSystem(audioContext, masterGain);
-  console.log('[Music] Reactive music system initialized');
+  audioLogger.info('Reactive music system initialized');
 }
 
 export function toggleFXAA(view: ViewLike, enabled: boolean) { view.useEnhancedPostProcess = enabled; }
@@ -182,7 +183,7 @@ export function setBloomIntensity(view: ViewLike, intensity: number) {
 
 export function toggleMultiPassBloom(view: ViewLike): boolean {
   view.useMultiPassBloom = !view.useMultiPassBloom;
-  console.log(`[Bloom] Multi-pass bloom: ${view.useMultiPassBloom ? 'ON' : 'OFF'}`);
+  renderLogger.info(`Multi-pass bloom: ${view.useMultiPassBloom ? 'ON' : 'OFF'}`);
   return view.useMultiPassBloom;
 }
 

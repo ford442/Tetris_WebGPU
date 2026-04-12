@@ -18,8 +18,137 @@ export interface BlockTexturePainter {
   strokeRect(x: number, y: number, width: number, height: number): void;
 }
 
-export function resolveBlockTextureUrl(moduleUrl: string): string {
-  return './block.png';
+export function resolveBlockTextureUrl(_moduleUrl?: string): string {
+  return currentTextureConfig.url;
+}
+
+// ============================================================================
+// BLOCK TEXTURE SAMPLING CONFIGURATION
+// ============================================================================
+
+/**
+ * Sampling mode for block textures
+ * - 'single': Use entire texture as one block (default for simple textures)
+ * - 'atlas': Sample from a grid atlas (default for block.png)
+ * - 'subregion': Sample from a specific subregion within the texture
+ */
+export type BlockTextureSamplingMode = 'single' | 'atlas' | 'subregion';
+
+/**
+ * Configuration for how to sample block textures
+ * This enables support for different image sources with varying layouts
+ */
+export interface BlockTextureConfig {
+  /** URL or path to the texture image */
+  url: string;
+  
+  /** Sampling mode - how to interpret the texture */
+  samplingMode: BlockTextureSamplingMode;
+  
+  // Atlas mode configuration
+  /** Number of columns in the texture atlas (for 'atlas' mode) */
+  atlasColumns?: number;
+  /** Number of rows in the texture atlas (for 'atlas' mode) */
+  atlasRows?: number;
+  /** Which column to sample from (0-based, for 'atlas' mode) */
+  atlasTileColumn?: number;
+  /** Which row to sample from (0-based, for 'atlas' mode) */
+  atlasTileRow?: number;
+  /** Inset to avoid bleeding at tile edges (0.0 - 0.5) */
+  atlasTileInset?: number;
+  
+  // Subregion mode configuration (normalized 0.0 - 1.0 coordinates)
+  /** Left coordinate of subregion (for 'subregion' mode) */
+  subregionX?: number;
+  /** Top coordinate of subregion (for 'subregion' mode) */
+  subregionY?: number;
+  /** Width of subregion (for 'subregion' mode) */
+  subregionWidth?: number;
+  /** Height of subregion (for 'subregion' mode) */
+  subregionHeight?: number;
+  
+  // Material detection configuration
+  /** Method to use for detecting metal vs glass regions */
+  materialDetectionMode?: 'luminance' | 'color_signal' | 'alpha' | 'none';
+  /** Threshold for metal detection (material-specific) */
+  metalThresholdLow?: number;
+  /** Threshold for metal detection (material-specific) */
+  metalThresholdHigh?: number;
+  
+  // Fallback behavior
+  /** Whether to use procedural texture if loading fails */
+  useProceduralFallback?: boolean;
+}
+
+/** Default configuration for block.png (4x3 atlas with gold/silver tile) */
+export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
+  url: './block.png',
+  samplingMode: 'atlas',
+  atlasColumns: 4,
+  atlasRows: 3,
+  atlasTileColumn: 1,
+  atlasTileRow: 1,
+  atlasTileInset: 0.03,
+  materialDetectionMode: 'color_signal',
+  metalThresholdLow: 0.95,
+  metalThresholdHigh: 1.45,
+  useProceduralFallback: true,
+};
+
+/** Configuration for single-tile textures (e.g., a single 256x256 block image) */
+export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
+  url: './block.png',
+  samplingMode: 'single',
+  materialDetectionMode: 'luminance',
+  metalThresholdLow: 0.45,
+  metalThresholdHigh: 0.55,
+  useProceduralFallback: true,
+};
+
+/** Current active texture configuration (can be changed at runtime) */
+let currentTextureConfig: BlockTextureConfig = { ...DEFAULT_BLOCK_TEXTURE_CONFIG };
+
+/**
+ * Set the active texture configuration
+ * Call this before view.preRender() to use a different texture source
+ */
+export function setBlockTextureConfig(config: Partial<BlockTextureConfig>): void {
+  currentTextureConfig = { ...currentTextureConfig, ...config };
+}
+
+/**
+ * Get the current texture configuration
+ */
+export function getBlockTextureConfig(): BlockTextureConfig {
+  return currentTextureConfig;
+}
+
+/**
+ * Reset to default configuration
+ */
+export function resetBlockTextureConfig(): void {
+  currentTextureConfig = { ...DEFAULT_BLOCK_TEXTURE_CONFIG };
+}
+
+/**
+ * Generate atlas sampling parameters for WGSL shaders
+ * Returns shader-compatible string values for the current config
+ */
+export function getAtlasSamplingParams(): {
+  columns: number;
+  rows: number;
+  tileColumn: number;
+  tileRow: number;
+  inset: number;
+} {
+  const config = currentTextureConfig;
+  return {
+    columns: config.atlasColumns ?? 1,
+    rows: config.atlasRows ?? 1,
+    tileColumn: config.atlasTileColumn ?? 0,
+    tileRow: config.atlasTileRow ?? 0,
+    inset: config.atlasTileInset ?? 0.0,
+  };
 }
 
 export function getTextureMipLevelCount(width: number, height: number): number {

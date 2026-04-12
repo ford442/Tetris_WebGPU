@@ -3,22 +3,18 @@
  * Primary 3D tetromino block renderer with texture atlas sampling, lighting,
  * ghost piece, and lock-percent effects.
  * 
- * Merge conflicts resolved (favoring polished "main" branch updates):
- * - Lock tension pulse: earlier start (0.25), smoothstep, dual-frequency heartbeat,
- *   progressive warning colors (orange → red → hot), scanline + edge effects.
- * - Ghost piece hologram: multi-band smoothstep scanlines, breathing alpha,
- *   finer grid, refined glitch/tension reactivity, landing beam, and sparkles.
+ * Features:
+ * - Configurable texture sampling (single, atlas, subregion modes)
+ * - Material detection (metal vs glass) with configurable thresholds
+ * - PBR material support with metallic/roughness/transmission
+ * - Lock tension pulse effects
+ * - Ghost piece hologram rendering
  * 
- * All other sections (material split, iridescence, rim lighting, etc.) kept intact
- * with original performance-friendly chained multiplies where possible.
+ * The texture sampling is now fully configurable via BlockTextureConfig,
+ * allowing different image sources without shader modifications.
  */
-import {
-    BLOCK_TEXTURE_ATLAS_COLUMNS,
-    BLOCK_TEXTURE_ATLAS_ROWS,
-    BLOCK_TEXTURE_TILE_COLUMN,
-    BLOCK_TEXTURE_TILE_ROW,
-    BLOCK_TEXTURE_TILE_INSET,
-} from '../renderMetrics.js';
+
+import { getSimpleTextureSamplingWGSL } from '../textureSampling.js';
 
 export const Shaders = () => {
     let params: any = {};
@@ -58,6 +54,9 @@ export const Shaders = () => {
                 return output;
             }`;
 
+    // Get configurable texture sampling code
+    const textureSamplingCode = getSimpleTextureSamplingWGSL();
+
     const fragment = `
             struct Uniforms {
                 lightPosition : vec4<f32>,
@@ -79,6 +78,12 @@ export const Shaders = () => {
                 padding: f32
             };
             @binding(4) @group(0) var<uniform> materialUniforms : MaterialUniforms;
+            
+            // ============================================================================
+            // CONFIGURABLE TEXTURE SAMPLING
+            // ============================================================================
+            ${textureSamplingCode}
+            
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) -> @location(0) vec4<f32> {
                 // Read the new material uniforms
@@ -103,32 +108,33 @@ export const Shaders = () => {
                 let s64 = s32 * s32;
                 let s128 = s64 * s64;
                 var specular:f32 = s128 * s128; // 256.0
+                
                 // --- TEXTURE SAMPLING ---
-                // Flip Y for correct image orientation
-                var texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                // Glitch Offset
+                // Apply glitch offset to UVs before sampling
+                var sampleUV = vUV;
                 var glitchColorMod = vec3<f32>(0.0);
                 if (uniforms.useGlitch > 0.0) {
                      let glitchStrength = uniforms.useGlitch;
-                     let glitchOffset = glitchStrength * 0.05 * sin(texUV.y * 50.0 + uniforms.time * 20.0);
-                     texUV.x += glitchOffset;
+                     // Get base UV for glitch calculation
+                     var glitchUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                     let glitchOffset = glitchStrength * 0.05 * sin(glitchUV.y * 50.0 + uniforms.time * 20.0);
+                     sampleUV.x = sampleUV.x + glitchOffset;
                      // RGB Split (Chromatic Aberration) on the block texture
-                     let noise = fract(sin(dot(texUV, vec2<f32>(12.9898, 78.233)) + uniforms.time) * 43758.5453);
+                     let noise = fract(sin(dot(glitchUV, vec2<f32>(12.9898, 78.233)) + uniforms.time) * 43758.5453);
                      if (noise > 0.9) {
                          glitchColorMod = vec3<f32>(1.0) * glitchStrength;
                      }
                 }
-                let atlasTiles = vec2<f32>(${BLOCK_TEXTURE_ATLAS_COLUMNS}.0, ${BLOCK_TEXTURE_ATLAS_ROWS}.0);
-                let atlasTile = vec2<f32>(${BLOCK_TEXTURE_TILE_COLUMN}.0, ${BLOCK_TEXTURE_TILE_ROW}.0);
-                let atlasInset = vec2<f32>(${BLOCK_TEXTURE_TILE_INSET}, ${BLOCK_TEXTURE_TILE_INSET});
-                let atlasUV = (clamp(texUV, vec2<f32>(0.0), vec2<f32>(1.0)) * (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
-                let texColor = textureSample(blockTexture, blockSampler, atlasUV);
-                // The source texture is mostly warm gold metal plus cool frosted glass.
-                // Bias toward red/green and suppress blue so the gold frame reads as metal,
-                // then threshold that signal to split the material treatment.
-                let goldSignal = texColor.r + texColor.g - texColor.b * 0.75;
-                let metalMask = clamp((goldSignal - 0.95) / 0.5, 0.0, 1.0);
-                let glassMask = 1.0 - metalMask;
+                
+                // Use configurable texture sampling
+                let texUV = transformUVForSampling(sampleUV);
+                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                
+                // Use configurable material mask extraction
+                let masks = extractMaterialMask(texColor.rgb);
+                let metalMask = masks.x;
+                let glassMask = masks.y;
+                
                 // Gold: very light warm push (8%) -- the texture is already gold
                 let goldColor = mix(texColor.rgb, vec3<f32>(1.0, 0.84, 0.36), 0.08);
                 // Glass: subtle theme-color tint (12%) so piece identity is visible
@@ -136,7 +142,7 @@ export const Shaders = () => {
                 var baseColor = mix(glassColor, goldColor, metalMask);
                 // Glass slightly translucent, gold opaque
                 let materialAlpha = mix(0.82, 0.98, metalMask);
-                // Tech pattern overlay removed to let the raw texture show through
+                
                 // --- Composition ---
                 // so total light factor stays in [0.3, 1.0] and never blows out the texture.
                 let lightFactor = 0.25 + diffuse * 0.65; // max = 0.9, leaves room for specular
@@ -305,7 +311,7 @@ export const Shaders = () => {
 
                 // Simple PBR mix (solid blocks only)
                 // Re-read texture for base color
-                baseColor = textureSample(blockTexture, blockSampler, atlasUV).rgb;
+                baseColor = textureSample(blockTexture, blockSampler, texUV).rgb;
                 let pbrColor = mix(baseColor, baseColor * materialUniforms.metallic, materialUniforms.metallic);
                 pbrColor = mix(pbrColor, vec3<f32>(1.0), materialUniforms.transmission * 0.4); // glass highlight
                
@@ -318,3 +324,5 @@ export const Shaders = () => {
 
     return { vertex, fragment };
 };
+
+export default Shaders;
