@@ -710,6 +710,15 @@ export default class View {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
+    // Create material uniform buffer for PBR (binding 4)
+    this.materialUniformBuffer = this.device.createBuffer({
+      size: 16, // 4 floats: metallic, roughness, transmission, padding
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    // Initialize with default material values
+    const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
+    this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
+
     const maxBlocks = 200;
     this.uniformBindGroup_CACHE = [];
     for (let i = 0; i < maxBlocks; i++) {
@@ -719,7 +728,8 @@ export default class View {
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
                 { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
-                { binding: 3, resource: this.blockSampler }
+                { binding: 3, resource: this.blockSampler },
+                { binding: 4, resource: { buffer: this.materialUniformBuffer, offset: 0, size: 16 } }
             ],
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
@@ -1027,7 +1037,7 @@ export default class View {
     }
 
     // OPTIMIZED: Only render particles if potentially active (emitted recently or shockwave active)
-    if (hasActiveParticles) {
+    if (result.hasActiveParticles) {
         passEncoder.setPipeline(this.particlePipeline);
         passEncoder.setBindGroup(0, this.particleRenderBindGroup);
         passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
@@ -1102,7 +1112,7 @@ export default class View {
     if (!this.device) return;
     const result = renderPlayfieldBorder(
       this.device, this.pipeline, this.fragmentUniformBuffer,
-      this.blockTexture, this.blockSampler,
+      this.blockTexture, this.blockSampler, this.materialUniformBuffer,
       this.vpMatrix as Float32Array, this.currentTheme,
       this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
     );
