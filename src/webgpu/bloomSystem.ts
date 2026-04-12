@@ -278,7 +278,7 @@ export class BloomSystem {
       fragment: {
         module: this.device.createShaderModule({ code: CompositeShader }),
         entryPoint: 'fsMain',
-        targets: [{ format: 'rgba8unorm' }]  // Output to screen format
+        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]  // Output to screen format
       },
       primitive: { topology: 'triangle-list' }
     });

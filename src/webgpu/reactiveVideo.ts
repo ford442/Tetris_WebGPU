@@ -3,6 +3,8 @@
  * 6 new premium backgrounds with extended speed control, glitch overlay, and dynamic tinting
  */
 
+import { videoLogger } from '../utils/logger.js';
+
 // Video background library - maps to available bg1/bg2/bg3.mp4 assets
 export const VIDEO_BACKGROUNDS = {
   // Level 0-1: Cyber Liquid Metal
