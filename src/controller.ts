@@ -45,7 +45,7 @@ export default class Controller {
   // Split buffer windows for better input precision:
   // Movement is forgiving (120ms) but rotation is tighter (60ms) to prevent double-rotations
   readonly MOVE_BUFFER_WINDOW: number = 120; // ms - Forgiving movement
-  readonly ROTATE_BUFFER_WINDOW: number = 60; // ms - Tighter rotation buffer
+  readonly JUMP_BUFFER_WINDOW: number = 100; // ms - Generous buffer for jump-like actions
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
@@ -712,7 +712,7 @@ export default class Controller {
 
       // Determine correct buffer window for the buffered action
       const isRotate = this.bufferedAction === 'rotateCW' || this.bufferedAction === 'rotateCCW';
-      const bufferWindow = isRotate ? this.ROTATE_BUFFER_WINDOW : this.MOVE_BUFFER_WINDOW;
+      const bufferWindow = (isRotate || this.bufferedAction === 'hold') ? this.JUMP_BUFFER_WINDOW : this.MOVE_BUFFER_WINDOW;
 
       // Clear buffer if it's too old
       if (currentTime - this.bufferedActionTime > bufferWindow) {
