@@ -828,8 +828,6 @@ export default class View {
         this.particleSystem.clearPending();
     }
 
-    // Write all per-frame uniform buffers (delegated to viewUniforms.ts)
-    updateFrameUniforms(this, dt, time);
     // Compute uniforms
     const swParams = this.visualEffects.getShockwaveParams();
     const swCenter = this.visualEffects.shockwaveCenter;
@@ -958,12 +956,15 @@ export default class View {
     this._postProcessParams.level = this.visualEffects.currentLevel;
     this._postProcessParams.warpSurge = this.visualEffects.warpSurge;
     this._postProcessParams.enableFXAA = this.useEnhancedPostProcess ? 1.0 : 0.0;
-    this._postProcessParams.enableBloom = (this.useEnhancedPostProcess && this.bloomEnabled) ? 1.0 : 0.0;
+    // When multi-pass bloom is active it handles bloom exclusively — disable the
+    // in-shader 13-tap bloom to avoid double-blooming that washes out the board.
+    const inShaderBloom = this.useEnhancedPostProcess && this.bloomEnabled && !this.useMultiPassBloom;
+    this._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
     this._postProcessParams.enableFilmGrain = 1.0;
     this._postProcessParams.enableCRT = 0.0;
     this._postProcessParams.bloomIntensity = this.bloomIntensity;
     this._postProcessParams.bloomThreshold = 0.35;
-    this._postProcessParams.materialAwareBloom = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    this._postProcessParams.materialAwareBloom = (this.useEnhancedPostProcess && !this.useMultiPassBloom) ? 1.0 : 0.0;
     this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
     this._postProcessParams.screenResolution[1] = this.canvasWebGPU.height;
 
