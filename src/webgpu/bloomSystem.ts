@@ -712,15 +712,19 @@ export class BloomSystem {
   }
   
   /**
-   * Resize textures when viewport changes
+   * Resize textures when viewport changes.
+   * Awaits GPU completion before destroying old textures to avoid
+   * "destroyed texture used in submit" validation errors.
    */
-  resize(width: number, height: number): void {
+  async resize(width: number, height: number): Promise<void> {
     this.width = width;
     this.height = height;
-    
+
+    await this.device.queue.onSubmittedWorkDone();
+
     // Recreate textures with new size
     this.createTextures();
-    
+
     // Update uniform buffers with new texel sizes
     this.updateUniforms();
   }
