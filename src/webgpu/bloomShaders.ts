@@ -9,22 +9,25 @@
  * - Final composite blend
  */
 
-// Pre-computed Gaussian weights for 9-tap kernel (sigma = 2.0)
-// These weights are normalized so they sum to 1.0
-export const GAUSSIAN_WEIGHTS_9 = [
-  0.051505,
-  0.093853,
-  0.139965,
-  0.171355,
-  0.086644,
-  0.171355,
-  0.139965,
-  0.093853,
-  0.051505
+// MODIFIED: Changed from 9-tap to 5-tap kernel for sharper block rendering
+// Previous 9-tap kernel with sigma=2.0 spread blur over 8 texels, causing blurry blocks
+// New 5-tap kernel with sigma=1.0 spreads over only 4 texels for 50% tighter blur
+// Center weight increased from 8.7% to 40.3% for more defined bloom
+export const GAUSSIAN_WEIGHTS_5 = [
+  0.054489,
+  0.244201,
+  0.402620,
+  0.244201,
+  0.054489
 ];
+// Weights sum to 1.000000 (properly normalized)
 
-// Offsets for 9-tap kernel (in texel units, centered around 0)
-export const GAUSSIAN_OFFSETS_9 = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+// Offsets for 5-tap kernel (in texel units, centered around 0)
+export const GAUSSIAN_OFFSETS_5 = [-2, -1, 0, 1, 2];
+
+// DEPRECATED: Old 9-tap weights kept for reference (not used)
+// export const GAUSSIAN_WEIGHTS_9 = [0.051505, 0.093853, 0.139965, 0.171355, 0.086644, 0.171355, 0.139965, 0.093853, 0.051505];
+// export const GAUSSIAN_OFFSETS_9 = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
 
 /**
  * Luminance Threshold Shader
@@ -215,17 +218,18 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = input.uv;
   let texelSizeX = params.texelSize.x;
 
-  // 9-tap Gaussian blur weights (pre-computed, sigma=2.0)
-  let weights = array<f32, 9>(
-    0.051505, 0.093853, 0.139965, 0.171355,
-    0.086644, 0.171355, 0.139965, 0.093853, 0.051505
+  // MODIFIED: 5-tap Gaussian blur with sigma=1.0 for sharper results
+  // Reduced from 9-tap to minimize blur spread (4 texels vs 8 texels)
+  // This fixes the blurry block rendering issue while maintaining pleasant bloom
+  let weights = array<f32, 5>(
+    0.054489, 0.244201, 0.402620, 0.244201, 0.054489
   );
 
-  let offsets = array<i32, 9>(-4, -3, -2, -1, 0, 1, 2, 3, 4);
+  let offsets = array<i32, 5>(-2, -1, 0, 1, 2);
 
   var result = vec3<f32>(0.0);
 
-  for (var i = 0; i < 9; i = i + 1) {
+  for (var i = 0; i < 5; i = i + 1) {
     let offsetUV = uv + vec2<f32>(f32(offsets[i]) * texelSizeX, 0.0);
     result += textureSample(srcTexture, srcSampler, offsetUV).rgb * weights[i];
   }
@@ -276,17 +280,18 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = input.uv;
   let texelSizeY = params.texelSize.y;
 
-  // 9-tap Gaussian blur weights (pre-computed, sigma=2.0)
-  let weights = array<f32, 9>(
-    0.051505, 0.093853, 0.139965, 0.171355,
-    0.086644, 0.171355, 0.139965, 0.093853, 0.051505
+  // MODIFIED: 5-tap Gaussian blur with sigma=1.0 for sharper results
+  // Reduced from 9-tap to minimize blur spread (4 texels vs 8 texels)
+  // This fixes the blurry block rendering issue while maintaining pleasant bloom
+  let weights = array<f32, 5>(
+    0.054489, 0.244201, 0.402620, 0.244201, 0.054489
   );
 
-  let offsets = array<i32, 9>(-4, -3, -2, -1, 0, 1, 2, 3, 4);
+  let offsets = array<i32, 5>(-2, -1, 0, 1, 2);
 
   var result = vec3<f32>(0.0);
 
-  for (var i = 0; i < 9; i = i + 1) {
+  for (var i = 0; i < 5; i = i + 1) {
     let offsetUV = uv + vec2<f32>(0.0, f32(offsets[i]) * texelSizeY);
     result += textureSample(srcTexture, srcSampler, offsetUV).rgb * weights[i];
   }
