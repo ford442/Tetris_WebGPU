@@ -467,7 +467,21 @@ export default class Game {
 
     if (!this.hasCollisionPiece(this._tempPiece)) {
       // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-      this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
+
+      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+      for (let i = 0; i < this._tempPiece.blocks.length; i++) {
+        if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
+            this.activPiece.blocks[i] = new Array(this._tempPiece.blocks[i].length).fill(0);
+        }
+        for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
+            this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];
+        }
+      }
+      // Trim excess rows if any (should not happen for tetrominoes)
+      if (this.activPiece.blocks.length > this._tempPiece.blocks.length) {
+          this.activPiece.blocks.length = this._tempPiece.blocks.length;
+      }
+
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
@@ -491,7 +505,21 @@ export default class Game {
             this.activPiece.x = this._tempPiece.x;
             this.activPiece.y = this._tempPiece.y;
             // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-            this.activPiece.blocks = this._tempPiece.blocks.map(row => [...row]);
+
+      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
+      for (let i = 0; i < this._tempPiece.blocks.length; i++) {
+        if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
+            this.activPiece.blocks[i] = new Array(this._tempPiece.blocks[i].length).fill(0);
+        }
+        for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
+            this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];
+        }
+      }
+      // Trim excess rows if any (should not happen for tetrominoes)
+      if (this.activPiece.blocks.length > this._tempPiece.blocks.length) {
+          this.activPiece.blocks.length = this._tempPiece.blocks.length;
+      }
+
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             this.checkTSpin(); // Check T-Spin after kick

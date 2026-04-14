@@ -158,12 +158,22 @@ export class ParticleMaterialInteraction {
     return this.activeInteractions.size > 0;
   }
 
+  private _activeInteractionsArray: { key: string; interaction: MaterialInteraction }[] = [];
+
   // Get all active interactions for shader upload
   getActiveInteractionsArray(): { key: string; interaction: MaterialInteraction }[] {
-    return Array.from(this.activeInteractions.entries()).map(([key, interaction]) => ({
-      key,
-      interaction
-    }));
+    let index = 0;
+    for (const [key, interaction] of this.activeInteractions) {
+      if (index < this._activeInteractionsArray.length) {
+        this._activeInteractionsArray[index].key = key;
+        this._activeInteractionsArray[index].interaction = interaction;
+      } else {
+        this._activeInteractionsArray.push({ key, interaction });
+      }
+      index++;
+    }
+    this._activeInteractionsArray.length = index;
+    return this._activeInteractionsArray;
   }
 
   // Clear all interactions
