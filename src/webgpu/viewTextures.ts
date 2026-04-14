@@ -181,4 +181,12 @@ export async function recreateRenderTargets(view: any) {
       ],
     });
   }
+
+  // Recreate the persistent bloom input texture to match new canvas size
+  if (view._bloomInputTexture) view._bloomInputTexture.destroy();
+  view._bloomInputTexture = device.createTexture({
+    size: [view.canvasWebGPU.width, view.canvasWebGPU.height, 1],
+    format: presentationFormat,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
 }
