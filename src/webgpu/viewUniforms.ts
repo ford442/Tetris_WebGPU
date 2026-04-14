@@ -145,12 +145,13 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     level: view.visualEffects.currentLevel,
     warpSurge: view.visualEffects.warpSurge,
     enableFXAA: view.useEnhancedPostProcess ? 1.0 : 0.0,
-    enableBloom: (view.useEnhancedPostProcess && view.bloomEnabled) ? 1.0 : 0.0,
+    // Disable in-shader bloom when multi-pass bloom handles it (avoids double-bloom washout)
+    enableBloom: (view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom) ? 1.0 : 0.0,
     enableFilmGrain: 1.0,
     enableCRT: 0.0,
     bloomIntensity: view.bloomIntensity,
     bloomThreshold: 0.35,
-    materialAwareBloom: view.useEnhancedPostProcess ? 1.0 : 0.0,
+    materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,
     screenResolution: [view.canvasWebGPU.width, view.canvasWebGPU.height],
   });
   device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
