@@ -25,8 +25,20 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 }
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
-  // Enhanced flash based on number of lines
-  const flashIntensity = Math.min(0.5 + lines.length * 0.25, 1.5);
+  // BALANCED FLASH INTENSITY - Prevents blinding while maintaining satisfying feedback
+  //
+  // DESIGN RATIONALE:
+  // - Previous max of 1.5 was too bright when combined with bloom post-processing
+  // - New max of 0.85 provides ~43% reduction in peak intensity
+  // - Scaling: 0.15 per line gives meaningful differentiation between 1-4 line clears
+  // - 4-line Tetris still feels special at 0.85 vs 1-line at 0.4 (2.1x multiplier)
+  //
+  // INTENSITY BREAKDOWN:
+  // - 1 line:  0.25 + 0.15 = 0.40  (subtle but noticeable)
+  // - 2 lines: 0.25 + 0.30 = 0.55  (clearly stronger)
+  // - 3 lines: 0.25 + 0.45 = 0.70  (very satisfying)
+  // - 4 lines: 0.25 + 0.60 = 0.85  (Tetris! - capped, impressive but not blinding)
+  const flashIntensity = Math.min(0.25 + lines.length * 0.15, 0.85);
   view.visualEffects.triggerFlash(flashIntensity);
   
   // Warp surge based on line count

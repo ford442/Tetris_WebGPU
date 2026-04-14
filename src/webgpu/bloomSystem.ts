@@ -41,10 +41,23 @@ export interface BloomParameters {
 }
 
 const DEFAULT_BLOOM_PARAMS: BloomParameters = {
-  threshold: 0.35,
-  intensity: 1.0,
-  scatter: 0.7,
+  // MODIFIED: Raised from 0.35 to 0.75 - only top 25% brightest pixels bloom
+  // Normal Tetris blocks have moderate brightness (~0.4-0.6), won't trigger bloom
+  // Only special effects, line clears, and very bright elements will glow
+  threshold: 0.75,
+
+  // MODIFIED: Reduced from 1.0 to 0.4 - 60% reduction in glow strength
+  // Prevents washout while maintaining pleasant accent glow
+  intensity: 0.4,
+
+  // MODIFIED: Reduced from 0.7 to 0.55 - 21% tighter blur radius
+  // Works optimally with 5-tap Gaussian kernel for sharp block edges
+  scatter: 0.55,
+
+  // Unchanged: Max bloom brightness prevents extreme HDR overflow
   clamp: 65472,
+
+  // Unchanged: Smooth knee for gradual threshold falloff
   knee: 0.1
 };
 
