@@ -166,6 +166,7 @@ export default class View {
   postProcessUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
   depthTexture!: GPUTexture;
+  _bloomInputTexture: GPUTexture | null = null;
   sampler!: GPUSampler;
 
   // Render pass caching - GC optimized (lazy init pattern)
@@ -369,13 +370,13 @@ export default class View {
 
     this.recreateRenderTargets(); // Fire and forget - async is handled internally
 
-    // Resize bloom system
+    // Resize bloom system (async - GPU syncs before destroying old textures)
     if (this.bloomSystem) {
       const dpr = window.devicePixelRatio || 1;
       this.bloomSystem.resize(
         Math.floor(this.width * dpr * this.renderScale),
         Math.floor(this.height * dpr * this.renderScale)
-      );
+      ).catch(() => {});
     }
   }
 
@@ -646,6 +647,11 @@ export default class View {
     });
     this._offscreenTextureView = this.offscreenTexture.createView();
     this.depthTexture = this.device.createTexture({ size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT });
+    this._bloomInputTexture = this.device.createTexture({
+        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
+        format: presentationFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
     this._depthTextureView = this.depthTexture.createView();
 
     // Initialize Pass Descriptors once - GC optimized
@@ -1047,35 +1053,26 @@ export default class View {
     passEncoder.end();
 
     // 4. Post-process with optional multi-pass bloom
-    if (this.useMultiPassBloom && this.bloomEnabled) {
+    if (this.useMultiPassBloom && this.bloomEnabled && this._bloomInputTexture) {
       // Use new multi-pass bloom system
-      // First, render to a temporary bloom input texture
-      const bloomInputTexture = this.device.createTexture({
-        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: navigator.gpu.getPreferredCanvasFormat(),
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-      });
-      
-      // Render post-process without bloom to bloomInputTexture
+      // Render post-process without bloom to the persistent _bloomInputTexture
       const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-      ppColorAttachment0.view = bloomInputTexture.createView();
-      
+      ppColorAttachment0.view = this._bloomInputTexture.createView();
+
       const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
       ppPassEncoder.setPipeline(this.postProcessPipeline);
       ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
       ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
       ppPassEncoder.draw(6);
       ppPassEncoder.end();
-      
+
       // Apply multi-pass bloom
       const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
       this.bloomSystem.render(
-        bloomInputTexture.createView(),
+        this._bloomInputTexture.createView(),
         textureViewScreen,
         commandEncoder
       );
-      
-      bloomInputTexture.destroy();
     } else {
       // Use original simple bloom
       const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
