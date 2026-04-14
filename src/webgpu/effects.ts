@@ -285,9 +285,27 @@ export class VisualEffects {
         let clearR = 0.0, clearG = 0.0, clearB = 0.0;
 
         if (this.flashTimer > 0) {
-            clearR = this.flashTimer * 0.5;
-            clearG = this.flashTimer * 0.5;
-            clearB = this.flashTimer * 0.2;
+            // BALANCED RGB MULTIPLIERS - Reduced to prevent blinding flash with bloom
+            //
+            // DESIGN RATIONALE:
+            // - Previous multipliers (0.5, 0.5, 0.2) created max RGB of (0.75, 0.75, 0.3)
+            //   which was extremely bright when bloom added on top
+            // - New multipliers (0.25, 0.22, 0.08) create max RGB of (0.21, 0.19, 0.07)
+            //   which is ~74% reduction in brightness
+            //
+            // COLOR BALANCE:
+            // - Red at 0.25 provides warm, energetic flash (primary intensity)
+            // - Green at 0.22 keeps it slightly warmer than pure white
+            // - Blue at 0.08 is minimal - prevents harsh white, adds warmth
+            // - Result: Warm golden-white flash instead of harsh pure white
+            //
+            // BLOOM COMPATIBILITY:
+            // - These lower base values allow bloom to enhance without overwhelming
+            // - Flash remains visible and satisfying without washing out the screen
+            // - Player can still see the board during the flash effect
+            clearR = this.flashTimer * 0.25;  // Max 0.21 at peak flash (was 0.75!)
+            clearG = this.flashTimer * 0.22;  // Max 0.19 at peak flash (was 0.75!)
+            clearB = this.flashTimer * 0.08;  // Max 0.07 at peak flash (was 0.30!)
         } else if (this.lockTimer > 0) {
             clearB = this.lockTimer * 0.2;
         }
