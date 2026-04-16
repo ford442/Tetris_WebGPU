@@ -3,3 +3,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 *.log
+*.mp4
+design/
+verification/
