@@ -63,7 +63,7 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
 
   // 2. Drag (Air Resistance)
   // JUICE: Exponential drag for "poppy" movement
-  let drag = 1.0 / (1.0 + 2.0 * dt); // Damping factor (Fast Algebraic Approximation)
+  let drag = 1.0 / (1.0 + 2.0 * dt); // Damping factor (fast algebraic approximation)
   p.velocity *= drag;
 
   // 3. Turbulence / Curl Noise
