@@ -112,7 +112,7 @@ fn underwaterSubsurface(NdotL: f32, depth: f32, color: vec3f) -> vec3f {
     // Light wraps around more underwater due to scattering
     let w = NdotL * 0.5 + 0.5;
     let wrap = w * w;
-    let absorption = exp(-depth * 0.1); // Blue light penetrates deeper
+    let absorption = 1.0 / (1.0 + depth * 0.1); // Blue light penetrates deeper (fast algebraic approximation)
     
     return color * wrap * absorption * vec3f(0.8, 0.9, 1.0);
 }
