@@ -200,7 +200,9 @@ export const PBRBlockShaders = () => {
                     let f1 = 1.0 - NdotV; let fresnel = f1 * f1 * f1;
                     let transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
                     let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
-                    let refractionColor = proceduralEnvReflect(refractDir, time);
+                    let refractionColorBase = proceduralEnvReflect(refractDir, time);
+                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.4); // Subtle piece color tint
+                    let refractionColor = refractionColorBase * glassTint;
 
                     if (fUniforms.dispersion > 0.0) {
                         let ef = 1.0 - NdotV; let edgeFactor = ef * ef;
