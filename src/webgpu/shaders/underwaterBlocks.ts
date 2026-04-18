@@ -367,7 +367,7 @@ export const UnderwaterBlockShaders = () => {
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f = 1.0 - NdotV;
                     let fresnel = f * f * f;
-                    let transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
+                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.5), 1.0, fresnel);
                     
                     // Underwater refraction with caustics
                     var refractDir = refract(-V, N, 1.0 / fUniforms.ior);

@@ -21,7 +21,7 @@ export const CubeData = () => {
 
   // Keep the face UVs normalized because the shader now samples
   // a single tile from the texture atlas for each block face.
-  const textureScale = 1.0;
+  const textureScale = 0.85; // Zoom in to avoid blurry tile edges
 
   const pushVertex = (x: number, y: number, z: number, uAxis: string, vAxis: string, uDir: number, vDir: number) => {
     // 1. Clamp to inner box
