@@ -198,10 +198,12 @@ export const PBRBlockShaders = () => {
                 // Glass transmission
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f1 = 1.0 - NdotV; let fresnel = f1 * f1 * f1;
-                    let transmissionAlpha = mix(1.0 - transmission, 1.0, fresnel);
+                    // Lower the minimum transmission opacity and preserve more of the base texture color
+                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.5), 1.0, fresnel);
                     let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
                     let refractionColorBase = proceduralEnvReflect(refractDir, time);
-                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.4); // Subtle piece color tint
+                    // Less overpowering glass tint
+                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.2);
                     let refractionColor = refractionColorBase * glassTint;
 
                     if (fUniforms.dispersion > 0.0) {
