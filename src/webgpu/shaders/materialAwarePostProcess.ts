@@ -253,10 +253,10 @@ export const MaterialAwarePostProcessShaders = () => {
             }
 
             // Chromatic Aberration
-            let distFromCenter = distance(uv, vec2<f32>(0.5));
+            let centeredFromCenter = uv - vec2<f32>(0.5);
+            let distFromCenterSq = dot(centeredFromCenter, centeredFromCenter);
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
-            let d2 = distFromCenter * distFromCenter;
-            let vignetteAberration = (d2 * d2) * 0.04;
+            let vignetteAberration = (distFromCenterSq * distFromCenterSq) * 0.04;
             let levelAberration = levelStress * 0.003 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.02;
             let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
@@ -301,7 +301,10 @@ export const MaterialAwarePostProcessShaders = () => {
             // Vignette
             let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
             let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
-            let vignette = 1.0 - clamp((distFromCenter - 0.5) / (vignetteSize - 0.5), 0.0, 1.0);
+            let vignetteInnerRadiusSq = 0.25; // 0.25 = 0.5^2 (inner vignette radius squared)
+            let vignetteEpsilon = 0.0001;
+            let vignetteOuterSq = max(vignetteSize * vignetteSize, vignetteInnerRadiusSq + vignetteEpsilon);
+            let vignette = 1.0 - clamp((distFromCenterSq - vignetteInnerRadiusSq) / (vignetteOuterSq - vignetteInnerRadiusSq), 0.0, 1.0);
             color *= vignette;
 
             // Warp Surge Flash

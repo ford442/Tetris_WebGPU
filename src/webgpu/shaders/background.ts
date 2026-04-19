@@ -189,8 +189,9 @@ export const BackgroundShaders = () => {
             );
 
             // Soft quadratic falloff
-            let dist = length(uv - lightPos);
-            let intensity = 0.12 / (dist * dist + 0.015);
+            let lightDiff = uv - lightPos;
+            let distSq = dot(lightDiff, lightDiff);
+            let intensity = 0.12 / (distSq + 0.015);
 
             // Dynamic color mixing based on theme and time
             let colorMix = sin(time * 0.7 + idx * 2.0) * 0.5 + 0.5;

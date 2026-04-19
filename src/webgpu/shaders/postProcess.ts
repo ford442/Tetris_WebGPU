@@ -99,12 +99,12 @@ export const PostProcessShaders = () => {
             }
 
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
-            let distFromCenter = distance(uv, vec2<f32>(0.5));
+            let centeredFromCenter = uv - vec2<f32>(0.5);
+            let distFromCenterSq = dot(centeredFromCenter, centeredFromCenter);
             // Subtle permanent aberration at edges for arcade feel
             // JUICE: Stronger lens distortion at edges for arcade CRT feel
             // ENHANCED: Increased base aberration
-            let dist2 = distFromCenter * distFromCenter;
-            let vignetteAberration = dist2 * dist2 * 0.08; // Sharper curve, more intense at far corners
+            let vignetteAberration = distFromCenterSq * distFromCenterSq * 0.08; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
             // Level 10+ = max stress
@@ -167,7 +167,10 @@ export const PostProcessShaders = () => {
             // Vignette darken (pulsing with beat)
             let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
             let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
-            let vignette = 1.0 - clamp((distFromCenter - 0.5) / (vignetteSize - 0.5), 0.0, 1.0);
+            let vignetteInnerRadiusSq = 0.25; // 0.25 = 0.5^2 (inner vignette radius squared)
+            let vignetteEpsilon = 0.0001;
+            let vignetteOuterSq = max(vignetteSize * vignetteSize, vignetteInnerRadiusSq + vignetteEpsilon);
+            let vignette = 1.0 - clamp((distFromCenterSq - vignetteInnerRadiusSq) / (vignetteOuterSq - vignetteInnerRadiusSq), 0.0, 1.0);
             color *= vignette;
 
             // NEON BRICKLAYER: Warp Surge Flash
@@ -191,4 +194,3 @@ export const PostProcessShaders = () => {
 
     return { vertex, fragment };
 };
-
