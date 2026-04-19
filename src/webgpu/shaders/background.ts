@@ -99,14 +99,13 @@ export const BackgroundShaders = () => {
 
               // Adaptive threshold: far stars rarer
               let threshold = select(0.985, 0.995, i > 0);
-              if (hash > threshold) {
-                  var brightness = (hash - threshold) / (1.0 - threshold);
-                  // Twinkle with varied frequency per layer
-                  let twinkle = sin(time * (4.0 + fi * 3.0) + hash * 50.0) * 0.5 + 0.5;
-                  // Warp boost
-                  brightness *= (1.0 + warpSurge * 0.3);
-                  stars += brightness * twinkle * (0.6 + fi * 0.3);
-              }
+              // Branchless stars
+              let isStar = step(threshold, hash);
+              let brightness = (hash - threshold) / (1.0 - threshold);
+              // Twinkle with varied frequency per layer
+              let twinkle = sin(time * (4.0 + fi * 3.0) + hash * 50.0) * 0.5 + 0.5;
+              let boostedBrightness = brightness * (1.0 + warpSurge * 0.3);
+              stars += isStar * boostedBrightness * twinkle * (0.6 + fi * 0.3);
           }
 
           // --- Optimized dual-layer perspective grid ---
@@ -160,19 +159,14 @@ export const BackgroundShaders = () => {
           // Level 0-5: Blue/Cyan -> Purple
           // Level 5-10: Purple -> Red/Orange
 
-          if (level > 5.0) {
-               // High Level: Shift to Red/Orange
-               let highLevelFactor = min((level - 5.0) * 0.2, 1.0);
-               neonCyan = mix(neonCyan, dangerColor, highLevelFactor);
-               neonBlue = mix(neonBlue, vec3<f32>(0.3, 0.0, 0.0), highLevelFactor); // Dark Red
-               neonPurple = mix(neonPurple, warningColor, highLevelFactor * 0.7);
-          } else {
-               // Low Level: Shift to Purple
-               let lowLevelFactor = min(level * 0.2, 1.0);
-               // ENHANCED: More vibrant shift
-               neonCyan = mix(neonCyan, vec3<f32>(0.0, 0.8, 1.0), lowLevelFactor); // Brighter cyan
-               neonBlue = mix(neonBlue, vec3<f32>(0.4, 0.0, 1.0), lowLevelFactor); // Brighter purple/blue
-          }
+          // Branchless level color shifting
+          let isHighLevel = step(5.0, level);
+          let highLevelFactor = min(max(level - 5.0, 0.0) * 0.2, 1.0) * isHighLevel;
+          let lowLevelFactor = min(level * 0.2, 1.0) * (1.0 - isHighLevel);
+
+          neonCyan = mix(neonCyan, mix(vec3<f32>(0.0, 0.8, 1.0), dangerColor, isHighLevel), mix(lowLevelFactor, highLevelFactor, isHighLevel));
+          neonBlue = mix(neonBlue, mix(vec3<f32>(0.4, 0.0, 1.0), vec3<f32>(0.3, 0.0, 0.0), isHighLevel), mix(lowLevelFactor, highLevelFactor, isHighLevel));
+          neonPurple = mix(neonPurple, mix(neonPurple, warningColor, highLevelFactor * 0.7), isHighLevel);
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 
@@ -189,16 +183,16 @@ export const BackgroundShaders = () => {
             );
 
             // Soft quadratic falloff
-            let dist = length(uv - lightPos);
-            let intensity = 0.12 / (dist * dist + 0.015);
+            let diff = uv - lightPos;
+            let distSq = dot(diff, diff);
+            let intensity = 0.12 / (distSq + 0.015);
 
             // Dynamic color mixing based on theme and time
             let colorMix = sin(time * 0.7 + idx * 2.0) * 0.5 + 0.5;
             var lightColor = mix(neonCyan, neonPurple, colorMix);
             // Accent light gets theme color boost
-            if (i > 0) {
-                lightColor = mix(lightColor, neonBlue, 0.4);
-            }
+            let isAccent = step(0.5, f32(i));
+            lightColor = mix(lightColor, mix(lightColor, neonBlue, 0.4), isAccent);
             
             lights += lightColor * intensity * (1.0 - idx * 0.3);
           }
@@ -223,7 +217,9 @@ export const BackgroundShaders = () => {
           }
 
           // --- Vignette effect to focus on center ---
-          let vignette = 1.0 - clamp((length(uv - 0.5) - 0.4) / 0.8, 0.0, 1.0);
+          let centeredUV = uv - 0.5;
+          let distSq = dot(centeredUV, centeredUV);
+          let vignette = 1.0 - clamp((sqrt(distSq) - 0.4) / 0.8, 0.0, 1.0);
           finalColor *= vignette;
 
           // --- Subtle film grain for texture ---
@@ -262,9 +258,8 @@ export const BackgroundShaders = () => {
                   // Combine
                   var beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
                   // Mix with warning color if lockPercent is high
-                  if (lockPercent > 0.5) {
-                      beamColor = mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0);
-                  }
+                  let isWarning = step(0.5, lockPercent);
+                  beamColor = mix(beamColor, mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0), isWarning);
 
                   // BOOSTED Intensity
                   let beamIntensity = 0.25 * beamEdge * beamScan * beamPulse * beamFade;

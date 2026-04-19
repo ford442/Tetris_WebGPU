@@ -99,11 +99,13 @@ export const PostProcessShaders = () => {
             }
 
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
-            let distFromCenter = distance(uv, vec2<f32>(0.5));
+            let centeredFromCenter = uv - vec2<f32>(0.5);
+            let distFromCenterSq = dot(centeredFromCenter, centeredFromCenter);
+            let distFromCenter = sqrt(distFromCenterSq);
             // Subtle permanent aberration at edges for arcade feel
             // JUICE: Stronger lens distortion at edges for arcade CRT feel
             // ENHANCED: Increased base aberration
-            let dist2 = distFromCenter * distFromCenter;
+            let dist2 = distFromCenterSq;
             let vignetteAberration = dist2 * dist2 * 0.08; // Sharper curve, more intense at far corners
 
             // Level based aberration: Starts calm, gets glitchy at high levels
