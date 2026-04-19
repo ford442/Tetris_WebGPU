@@ -303,7 +303,10 @@ export const MaterialAwarePostProcessShaders = () => {
             // Vignette
             let beat = sin(uniforms.time * 8.0) * 0.5 + 0.5;
             let vignetteSize = 1.5 - (beat * 0.05 * levelStress);
-            let vignette = 1.0 - clamp((distFromCenter - 0.5) / (vignetteSize - 0.5), 0.0, 1.0);
+            let vignetteInnerRadiusSq = 0.25; // 0.25 = 0.5^2 (inner vignette radius squared)
+            let vignetteEpsilon = 0.0001;
+            let vignetteOuterSq = max(vignetteSize * vignetteSize, vignetteInnerRadiusSq + vignetteEpsilon);
+            let vignette = 1.0 - clamp((distFromCenterSq - vignetteInnerRadiusSq) / (vignetteOuterSq - vignetteInnerRadiusSq), 0.0, 1.0);
             color *= vignette;
 
             // Warp Surge Flash
