@@ -255,8 +255,10 @@ export const MaterialAwarePostProcessShaders = () => {
             // Chromatic Aberration
             let centeredFromCenter = uv - vec2<f32>(0.5);
             let distFromCenterSq = dot(centeredFromCenter, centeredFromCenter);
+            let distFromCenter = sqrt(distFromCenterSq);
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
-            let vignetteAberration = (distFromCenterSq * distFromCenterSq) * 0.04;
+            let d2 = distFromCenterSq;
+            let vignetteAberration = (d2 * d2) * 0.04;
             let levelAberration = levelStress * 0.003 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.02;
             let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
