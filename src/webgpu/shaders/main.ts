@@ -135,13 +135,15 @@ export const Shaders = () => {
                 let metalMask = masks.x;
                 let glassMask = masks.y;
                 
-                // Gold: very light warm push (8%) -- the texture is already gold
-                let goldColor = mix(texColor.rgb, vec3<f32>(1.0, 0.84, 0.36), 0.08);
-                // Glass: subtle theme-color tint (12%) so piece identity is visible
-                let glassColor = mix(texColor.rgb, texColor.rgb * 0.88 + vColor.rgb * 0.12, 0.25);
+                // Enhance material separation:
+                // Gold: slightly more pronounced metallic push (12%) to accentuate the frame
+                let goldColor = mix(texColor.rgb, vec3<f32>(1.0, 0.88, 0.40), 0.12);
+                // Glass: subtle theme-color tint (15%) so piece identity is visible, darkened slightly for contrast
+                let glassColor = mix(texColor.rgb * 0.9, vColor.rgb, 0.15);
                 var baseColor = mix(glassColor, goldColor, metalMask);
-                // Glass slightly translucent, gold opaque
-                let materialAlpha = mix(0.82, 0.98, metalMask);
+
+                // Better transparency mapping: Glass slightly translucent, gold opaque
+                let materialAlpha = mix(0.75, 1.0, metalMask);
                 
                 // --- Composition ---
                 // so total light factor stays in [0.3, 1.0] and never blows out the texture.
