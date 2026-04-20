@@ -90,8 +90,8 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   atlasTileRow: 1,
   atlasTileInset: 0.03,
   materialDetectionMode: 'color_signal',
-  metalThresholdLow: 0.95,
-  metalThresholdHigh: 1.45,
+  metalThresholdLow: 0.8,
+  metalThresholdHigh: 1.2,
   useProceduralFallback: true,
 };
 
