@@ -54,33 +54,36 @@ export const BackgroundShaders = () => {
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
-          if (levelFactor > 0.0 || warpSurge > 0.0) {
-              let center = vec2<f32>(0.5, 0.5);
-              var centered = uv - center;
+          let doWarp = step(0.001, levelFactor + warpSurge);
+          let center = vec2<f32>(0.5, 0.5);
+          var centered = uv - center;
 
-              // JUICE: Increased warp strength for higher levels
-              // Stronger wobble at high levels
-              let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
+          // JUICE: Increased warp strength for higher levels
+          // Stronger wobble at high levels
+          let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
 
-              // BOOSTED: Add rotation to the tunnel for more disorientation/speed feel
-              if (warpSurge > 0.0) {
-                  let angle = warpSurge * 0.1 * sin(time * 5.0);
-                  let c = cos(angle);
-                  let s = sin(angle);
-                  // Apply rotation to the centered vector
-                  centered = vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
-                  uv = center + centered;
-              }
+          // BOOSTED: Add rotation to the tunnel for more disorientation/speed feel
+          let angle = warpSurge * 0.1 * sin(time * 5.0);
+          let c = cos(angle);
+          let s = sin(angle);
+          let rotatedCentered = vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
 
-              // Smoothed and clamped warp strength to prevent nausea
-              // BOOSTED: Increased max warp
-              let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.4, 0.4);
+          let doRotate = step(0.001, warpSurge);
+          centered = mix(centered, rotatedCentered, doRotate);
+          let rotatedUV = center + centered;
+          var nextUV = mix(uv, rotatedUV, doRotate);
 
-              // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
-              // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
-              let dist = length(centered);
-              uv -= centered * (warpStrength * dist); // Quadratic warp for "tunnel" feel
-          }
+          // Smoothed and clamped warp strength to prevent nausea
+          // BOOSTED: Increased max warp
+          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.4, 0.4);
+
+          // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
+          // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
+          // Used dot(centered, centered) for squared distance to avoid sqrt if warp only cares about magnitude approx,
+          // but we will use length() as it's intended to be linear to distance.
+          let dist = length(centered);
+          nextUV -= centered * (warpStrength * dist); // Quadratic warp for "tunnel" feel
+          uv = mix(uv, nextUV, doWarp);
 
           // OPTIMIZED: Dual-layer parallax starfield
           var stars = 0.0;
@@ -183,8 +186,8 @@ export const BackgroundShaders = () => {
             );
 
             // Soft quadratic falloff
-            let diff = uv - lightPos;
-            let distSq = dot(diff, diff);
+             let lightDiff = uv - lightPos;
+             let distSq = dot(lightDiff, lightDiff);
             let intensity = 0.12 / (distSq + 0.015);
 
             // Dynamic color mixing based on theme and time
@@ -210,11 +213,10 @@ export const BackgroundShaders = () => {
 
           // --- Lock Tension (Pulse Red) ---
           // Pulse gets faster and more intense as lockPercent approaches 1.0
-          if (lockPercent > 0.0) {
-             let tensionPulse = sin(time * (10.0 + lockPercent * 20.0)) * 0.5 + 0.5;
-             let redFlash = vec3<f32>(1.0, 0.0, 0.0) * lockPercent * tensionPulse * 0.3;
-             finalColor += redFlash;
-          }
+           let tensionPulse = sin(time * (10.0 + lockPercent * 20.0)) * 0.5 + 0.5;
+           let redFlash = vec3<f32>(1.0, 0.0, 0.0) * lockPercent * tensionPulse * 0.3;
+           let showFlash = step(0.001, lockPercent);
+           finalColor += redFlash * showFlash;
 
           // --- Vignette effect to focus on center ---
           let centeredUV = uv - 0.5;
@@ -237,35 +239,23 @@ export const BackgroundShaders = () => {
           let ghostX = uniforms.ghostX;
           let ghostW = uniforms.ghostWidth;
 
-          if (ghostW > 0.0) {
-              // Calculate distance to beam center
-              let distToBeam = abs(uv.x - ghostX);
-              let beamWidth = ghostW * 0.6; // Slightly wider than the piece
+          // Branchless ghost beam logic
+          let distToBeam = abs(uv.x - ghostX);
+          let beamWidth = max(ghostW * 0.6, 0.001); // Avoid division by zero
 
-              if (distToBeam < beamWidth) {
-                  // Soft edge for the beam
-                  let beamEdge = clamp((distToBeam - beamWidth) / -beamWidth, 0.0, 1.0);
+          let inBeam = step(distToBeam, beamWidth) * step(0.001, ghostW);
+          let beamEdge = clamp((distToBeam - beamWidth) / -beamWidth, 0.0, 1.0);
 
-                  // Vertical scan effect within the beam
-                  let beamScan = sin(uv.y * 50.0 - time * 20.0) * 0.1 + 0.9;
+          let beamScan = sin(uv.y * 50.0 - time * 20.0) * 0.1 + 0.9;
+          let beamPulse = sin(time * 5.0) * 0.1 + 0.9;
+          let beamFade = clamp(uv.y / 0.8, 0.0, 1.0);
 
-                  // Pulse with tension/time
-                  let beamPulse = sin(time * 5.0) * 0.1 + 0.9;
+          var beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
+          let isWarning = step(0.5, lockPercent);
+          beamColor = mix(beamColor, mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0), isWarning);
 
-                  // Intensity fades at the top
-                  let beamFade = clamp(uv.y / 0.8, 0.0, 1.0);
-
-                  // Combine
-                  var beamColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
-                  // Mix with warning color if lockPercent is high
-                  let isWarning = step(0.5, lockPercent);
-                  beamColor = mix(beamColor, mix(beamColor, vec3<f32>(1.0, 0.0, 0.2), (lockPercent - 0.5) * 2.0), isWarning);
-
-                  // BOOSTED Intensity
-                  let beamIntensity = 0.25 * beamEdge * beamScan * beamPulse * beamFade;
-                  finalColor += beamColor * beamIntensity;
-              }
-          }
+          let beamIntensity = 0.25 * beamEdge * beamScan * beamPulse * beamFade * inBeam;
+          finalColor += beamColor * beamIntensity;
 
           return vec4<f32>(finalColor, 1.0);
         }

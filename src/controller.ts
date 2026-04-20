@@ -3,8 +3,8 @@ import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 
-const DAS = 110; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
-const ARR = 8;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
+const DAS = 100; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
+const ARR = 5;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
 const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
 
 // Logical actions
@@ -43,9 +43,9 @@ export default class Controller {
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
-  // Movement is forgiving (120ms) but rotation is tighter (60ms) to prevent double-rotations
-  readonly MOVE_BUFFER_WINDOW: number = 120; // ms - Forgiving movement
-  readonly JUMP_BUFFER_WINDOW: number = 100; // ms - Generous buffer for jump-like actions
+  // Movement is forgiving (100ms) but rotation is tighter (80ms) to prevent double-rotations
+  readonly MOVE_BUFFER_WINDOW: number = 100; // ms - Forgiving movement
+  readonly JUMP_BUFFER_WINDOW: number = 80; // ms - Generous buffer for jump-like actions
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {

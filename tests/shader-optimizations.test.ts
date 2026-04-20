@@ -48,6 +48,6 @@ describe('shader optimization updates', () => {
 
   it('uses reduced glass tint mixing to preserve color clarity', () => {
     const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('let glassTint = mix(vec3f(1.0), vColor.rgb, 0.1);');
+    expect(fragment).toContain('let glassTint = mix(vec3f(1.0), vColor.rgb, 0.05);');
   });
 });
