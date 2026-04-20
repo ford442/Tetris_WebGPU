@@ -203,7 +203,7 @@ export const PBRBlockShaders = () => {
                     let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
                     let refractionColorBase = proceduralEnvReflect(refractDir, time);
                     // Less overpowering glass tint
-                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.1);
+                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.05);
                     let refractionColor = refractionColorBase * glassTint;
 
                     if (fUniforms.dispersion > 0.0) {
