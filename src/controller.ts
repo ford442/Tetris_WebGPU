@@ -43,9 +43,9 @@ export default class Controller {
   bufferedMoveAction: Action | null = null;
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
-  // Movement is forgiving (120ms) but rotation is tighter (60ms) to prevent double-rotations
-  readonly MOVE_BUFFER_WINDOW: number = 120; // ms - Forgiving movement
-  readonly JUMP_BUFFER_WINDOW: number = 100; // ms - Generous buffer for jump-like actions
+  // Movement is forgiving (80ms) but rotation is tighter (60ms) to prevent double-rotations
+  readonly MOVE_BUFFER_WINDOW: number = 80; // ms - Snappier movement
+  readonly JUMP_BUFFER_WINDOW: number = 80; // ms - Snappier buffer for jump-like actions
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {

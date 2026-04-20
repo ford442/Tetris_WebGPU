@@ -14,6 +14,7 @@ export class ReactiveMusicSystem {
   private ctx: AudioContext;
   private masterGain: GainNode;
   private isPlaying: boolean = false;
+  private pitchModCache: Float32Array = new Float32Array(60); // Support -24 to 35 intervals
   
   // Base music (MP3/FLAC)
   private baseMusicSource: AudioBufferSourceNode | null = null;
@@ -49,6 +50,9 @@ export class ReactiveMusicSystem {
   constructor(audioContext: AudioContext, masterGain: GainNode) {
     this.ctx = audioContext;
     this.masterGain = masterGain;
+    for (let i = 0; i < 60; i++) {
+        this.pitchModCache[i] = Math.pow(1.059463, i - 24);
+    }
     
     // Setup compressor for punchy sound
     this.compressor = this.ctx.createDynamicsCompressor();
@@ -228,7 +232,8 @@ export class ReactiveMusicSystem {
 
   onLevelUp(level: number): void {
     // Key change
-    this.rootNote = 130.81 * Math.pow(1.059463, (level % 12));
+    const modIndex = (level % 12) + 24;
+    this.rootNote = 130.81 * this.pitchModCache[modIndex];
     this.updateOscillatorFrequencies();
     
     // Intensity boost
@@ -268,7 +273,8 @@ export class ReactiveMusicSystem {
     const speed = isEpic ? 0.04 : 0.08;
     
     intervals.forEach((interval, i) => {
-      const freq = this.rootNote * Math.pow(1.059463, interval);
+      const cacheIndex = Math.max(0, Math.min(interval + 24, 59));
+      const freq = this.rootNote * this.pitchModCache[cacheIndex];
       const time = now + i * speed;
       
       // Lead
