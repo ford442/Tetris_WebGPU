@@ -38,4 +38,8 @@ This document summarizes the changes applied to the Tetris WebGPU codebase to en
 
 **3. Playability & Game Feel:**
    - Refined input latency and responsiveness closer to top-level competitive standards: Delayed Auto Shift (DAS) was reduced from `110ms` to `100ms`, and Auto Repeat Rate (ARR) was tightened from `8ms` to `5ms`. This shaves vital milliseconds for top players.
-   - Tightened the game's input buffer windows (`JUMP_BUFFER_WINDOW` reduced from 100ms to 80ms, `MOVE_BUFFER_WINDOW` reduced from 120ms to 100ms) to ensure precise tracking without accidental double-activations during high-speed play.
+   - Tightened the game's input buffer windows (`JUMP_BUFFER_WINDOW` reduced from 80ms to 60ms, `MOVE_BUFFER_WINDOW` reduced from 100ms to 80ms) to ensure precise tracking without accidental double-activations and maximize input snappiness during high-speed play.
+
+**4. Additional Optimizations from this week's iteration:**
+   - Further reduced ALU usage in the main shader by replacing `distance()` calculation with a cheaper `length()` vector operation.
+   - Widened block texture mapping (`textureScale` from 0.95 to 0.98 in `src/webgpu/geometry.ts`) to reveal sharper marble and inner-tile detail while maintaining edge safety for texture atlases.
