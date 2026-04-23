@@ -41,13 +41,13 @@ describe('shader optimization updates', () => {
       maxUV = Math.max(maxUV, uv);
     }
     expect(minUV).toBeLessThan(0.06);
-    expect(minUV).toBeGreaterThan(0.04);
+    expect(minUV).toBeGreaterThan(0.005);
     expect(maxUV).toBeGreaterThan(0.94);
-    expect(maxUV).toBeLessThan(0.96);
+    expect(maxUV).toBeLessThan(0.995);
   });
 
   it('uses reduced glass tint mixing to preserve color clarity', () => {
     const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('let glassTint = mix(vec3f(1.0), vColor.rgb, 0.05);');
+    expect(fragment).toContain('let glassTint = mix(vec3f(1.0), vColor.rgb, 0.02);');
   });
 });

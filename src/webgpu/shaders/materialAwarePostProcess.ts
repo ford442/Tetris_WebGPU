@@ -225,13 +225,13 @@ export const MaterialAwarePostProcessShaders = () => {
 
             var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
-                let dist = distance(uv, center);
+                let dir = normalize(uv - center);
+                let dist = length(uv - center);
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
                 let width = params.x;
                 let strength = params.y;
                 let diff = dist - radius;
-                let dir = normalize(uv - center);
 
                 if (abs(diff) < width) {
                     let angle = (diff / width) * 3.14159;

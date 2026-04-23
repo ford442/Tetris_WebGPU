@@ -122,7 +122,7 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
         case MATERIAL_MODE_COLOR_SIGNAL: {
             // Color signal: gold metal has high R+G, lower B
             let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-            metalMask = clamp((goldSignal - METAL_THRESHOLD_LOW) / (METAL_THRESHOLD_HIGH - METAL_THRESHOLD_LOW), 0.0, 1.0);
+            metalMask = smoothstep(METAL_THRESHOLD_LOW, METAL_THRESHOLD_HIGH, goldSignal);
         }
         case MATERIAL_MODE_ALPHA: {
             // Alpha-based: would need alpha channel input
@@ -201,7 +201,7 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
 
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
     let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-    let metalMask = clamp((goldSignal - ${config.metalThresholdLow ?? 0.8}) / ${(config.metalThresholdHigh ?? 1.2) - (config.metalThresholdLow ?? 0.8)}, 0.0, 1.0);
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.8}, ${config.metalThresholdHigh ?? 1.2}, goldSignal);
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
 `;
