@@ -155,9 +155,7 @@ describe('texture sampling WGSL generation', () => {
       });
       const code = getSimpleTextureSamplingWGSL();
       // Should include the threshold values in the mask extraction
-      expect(code).toContain('goldSignal - 0.8'); // low threshold
-      // Note: high threshold affects the divisor (1.2 - 0.8 = 0.4, but may have floating point representation)
-      expect(code).toMatch(/\/\s*0\.3?9+/); // matches / 0.4 or / 0.399...
+      expect(code).toContain('smoothstep(0.8, 1.2, goldSignal)'); // low threshold
     });
   });
 });

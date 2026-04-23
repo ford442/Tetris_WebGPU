@@ -318,7 +318,7 @@ export default class Game {
       if (onGround) {
           // dt is in milliseconds
           this.lockTimer += dt;
-          if (this.lockTimer > this.lockDelayTime) {
+          if (this.lockTimer > this.lockDelayTime + 33) {
               this.effectCounter++; // Increment visual counter for locking (gravity)
               this.lockPiece();
               this._updateResult.locked = true;
