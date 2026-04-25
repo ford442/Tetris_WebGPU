@@ -43,3 +43,9 @@ This document summarizes the changes applied to the Tetris WebGPU codebase to en
 **4. Additional Optimizations from this week's iteration:**
    - Further reduced ALU usage in the main shader by replacing `distance()` calculation with a cheaper `length()` vector operation.
    - Widened block texture mapping (`textureScale` from 0.95 to 0.98 in `src/webgpu/geometry.ts`) to reveal sharper marble and inner-tile detail while maintaining edge safety for texture atlases.
+
+**5. Additional Block Rendering Improvements:**
+   - Widened block texture mapping (`textureScale` from 0.98 to 0.99 in `src/webgpu/geometry.ts`) to reveal even sharper marble and inner-tile detail while still safely avoiding edge bleeding from texture atlases.
+
+**6. Shader ALU Optimization (Continued):**
+   - Further reduced ALU usage in `src/webgpu/shaders/postProcess.ts` by replacing `distance(uv, center)` with `length(uv - center)`, which is typically faster and completely removes the last unoptimized `distance` function call from the shaders.
