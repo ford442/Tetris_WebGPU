@@ -57,7 +57,7 @@ export const PostProcessShaders = () => {
             // Shockwave Logic
             var shockwaveAberration = 0.0;
             if (time > 0.0 && time < 1.0) {
-                let dist = distance(uv, center);
+                let dist = length(uv - center);
                 // NEON BRICKLAYER: Use speed from params.w
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
