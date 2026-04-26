@@ -308,7 +308,9 @@ export function renderMainScreen(view: any, state: any): void {
     
     // Trigger enhanced level up effects
     view.visualEffects.triggerLevelUp(state.level);
-    view.visualEffects.updateVideoForLevel(view.visualEffects.currentLevel, view.currentTheme.levelVideos);
+    if (view.useReactiveVideo && view.reactiveVideoBackground) {
+      view.reactiveVideoBackground.updateForLevel(state.level);
+    }
     
     // Show floating text with level color
     showFloatingText(view, `LEVEL ${state.level}!`, "WARP SPEED");

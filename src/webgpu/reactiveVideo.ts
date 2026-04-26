@@ -151,6 +151,9 @@ export class ReactiveVideoBackground {
   // NEW: Track current background config
   currentBackground: VideoBackgroundKey | null = null;
   
+  // Video playback state
+  isVideoPlaying: boolean = false;
+  
   // NEW: Sea creature state for bioluminescent level
   seaCreatureIntensity: number = 0;     // Current creature reactivity (0-1)
   seaCreaturePulse: number = 0;         // Gentle pulse accumulator
@@ -202,6 +205,7 @@ export class ReactiveVideoBackground {
 
     video.addEventListener('error', () => {
       videoLogger.warn('Failed to load video, using fallback');
+      this.isVideoPlaying = false;
       // Try fallback if available
       const currentSrc = video.src;
       const bgKey = this.getBackgroundForLevel(this.currentLevel);
@@ -217,6 +221,19 @@ export class ReactiveVideoBackground {
     
     video.addEventListener('playing', () => {
       video.style.opacity = '1';
+      this.isVideoPlaying = true;
+    });
+    
+    video.addEventListener('pause', () => {
+      if (this.videoElement.paused && this.secondaryVideo.paused) {
+        this.isVideoPlaying = false;
+      }
+    });
+    
+    video.addEventListener('ended', () => {
+      if (this.videoElement.paused && this.secondaryVideo.paused) {
+        this.isVideoPlaying = false;
+      }
     });
     
     return video;
@@ -341,6 +358,7 @@ export class ReactiveVideoBackground {
           // Swap videos
           this.videoElement.src = newSrc;
           this.videoElement.load();
+          this.videoElement.play().catch(() => {});
           this.secondaryVideo.style.opacity = '0';
           this.videoElement.style.opacity = '1';
           this.isCrossfading = false;

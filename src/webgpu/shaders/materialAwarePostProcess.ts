@@ -269,10 +269,12 @@ export const MaterialAwarePostProcessShaders = () => {
             finalUV.x += tear;
 
             // Sample with chromatic aberration
+            let baseSample = textureSample(myTexture, mySampler, finalUV);
             var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, 0.0)).r;
-            var g = textureSample(myTexture, mySampler, finalUV).g;
+            var g = baseSample.g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, 0.0)).b;
             var color = vec3<f32>(r, g, b);
+            let sampledAlpha = baseSample.a;
 
             // FXAA
             if (uniforms.enableFXAA > 0.5) {
@@ -324,10 +326,10 @@ export const MaterialAwarePostProcessShaders = () => {
             color = sqrt(color); // Fast gamma approx
 
             if (!inBounds) {
-                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
             }
 
-            return vec4<f32>(color, 1.0);
+            return vec4<f32>(color, sampledAlpha);
         }
     `;
 

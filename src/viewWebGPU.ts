@@ -397,7 +397,10 @@ export default class View {
     this.currentTheme = this.themes[themeName];
     this.visualEffects.currentLevel = 0;
 
-    this.visualEffects.updateVideoForLevel(0, this.currentTheme.levelVideos);
+    if (this.useReactiveVideo && this.reactiveVideoBackground && this.currentTheme.levelVideos) {
+        this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
+        this.reactiveVideoBackground.updateForLevel(0, true);
+    }
 
     if (this.device) {
         this.renderPlayfild_Border_WebGPU();
@@ -974,7 +977,7 @@ export default class View {
     // RENDER PASSES
     
     // 1. Background (Video or Shader)
-    const renderVideo = this.visualEffects.isVideoPlaying;
+    const renderVideo = this.reactiveVideoBackground?.isVideoPlaying ?? false;
     const clearColors = this.visualEffects.getClearColors();
     const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
     const clearValue = colorAttachment0.clearValue as GPUColorDict;
