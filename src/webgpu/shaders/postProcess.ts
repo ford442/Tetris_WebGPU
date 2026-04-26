@@ -3,6 +3,8 @@
  * Lens distortion, shockwave, bloom, chromatic aberration, glitch, scanlines.
  */
 
+import { PostProcessUniformsWGSL } from '../postProcessUniforms.js';
+
 export const PostProcessShaders = () => {
     const vertex = `
         struct VertexOutput {
@@ -21,18 +23,8 @@ export const PostProcessShaders = () => {
     `;
 
     const fragment = `
-        struct Uniforms {
-            time: f32,
-            useGlitch: f32,
-            shockwaveCenter: vec2<f32>,
-            shockwaveTime: f32,
-            currentLevel: f32,          // ← was missing
-            warpSurge: f32,             // ← was missing
-            useEnhancedPostProcess: f32,
-            padding: f32,               // explicit padding
-            shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+        ${PostProcessUniformsWGSL}
+        @binding(0) @group(0) var<uniform> uniforms : PostProcessUniforms;
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
 

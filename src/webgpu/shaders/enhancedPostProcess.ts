@@ -3,6 +3,8 @@
  * FXAA Antialiasing + Film Grain + CRT Effects + Supersampling + Enhanced Bloom
  */
 
+import { PostProcessUniformsWGSL } from '../postProcessUniforms.js';
+
 export const EnhancedPostProcessShaders = () => {
     const vertex = `
         struct VertexOutput {
@@ -21,30 +23,15 @@ export const EnhancedPostProcessShaders = () => {
     `;
 
     const fragment = `
-        struct Uniforms {
-            time: f32,
-            useGlitch: f32,
-            shockwaveCenter: vec2<f32>,
-            shockwaveTime: f32,
-            shockwaveParams: vec4<f32>, // x: width, y: strength, z: aberration, w: speed
-            level: f32,
-            warpSurge: f32,
-            // NEW: Post-process settings
-            enableFXAA: f32,
-            enableFilmGrain: f32,
-            enableCRT: f32,
-            enableBloom: f32,
-            bloomIntensity: f32,
-            screenResolution: vec2<f32>,
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+        ${PostProcessUniformsWGSL}
+        @binding(0) @group(0) var<uniform> uniforms : PostProcessUniforms;
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
 
         // FXAA 3.11 implementation (simplified)
         // Restructured to avoid non-uniform control flow with textureSample
         fn fxaa(uv: vec2<f32>, texColor: vec3<f32>) -> vec3<f32> {
-            let texelSize = 1.0 / uniforms.screenResolution;
+            let texelSize = 1.0 / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
 
             // Sample neighboring pixels (all sampling done unconditionally)
             let nw = textureSample(myTexture, mySampler, uv + vec2<f32>(-texelSize.x, -texelSize.y)).rgb;
@@ -70,8 +57,8 @@ export const EnhancedPostProcessShaders = () => {
             let dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.25 * (1.0 / 8.0), 1.0 / 128.0);
             let rcpDirMin = 1.0 / (min(abs(dirX), abs(dirY)) + dirReduce);
             let dir = vec2<f32>(
-                min(uniforms.screenResolution.x, max(-uniforms.screenResolution.x, dirX * rcpDirMin)) * texelSize.x,
-                min(uniforms.screenResolution.y, max(-uniforms.screenResolution.y, dirY * rcpDirMin)) * texelSize.y
+                min(uniforms.screenWidth, max(-uniforms.screenWidth, dirX * rcpDirMin)) * texelSize.x,
+                min(uniforms.screenHeight, max(-uniforms.screenHeight, dirY * rcpDirMin)) * texelSize.y
             ) * 0.5;
 
             // Sample along gradient (unconditional - avoids non-uniform control flow)
@@ -114,13 +101,13 @@ export const EnhancedPostProcessShaders = () => {
             }
             
             // Scanlines
-            let scanlineY = curvedUV.y * uniforms.screenResolution.y;
+            let scanlineY = curvedUV.y * uniforms.screenHeight;
             var scanline = sin(scanlineY * 3.14159) * 0.5 + 0.5;
             scanline = scanline * sqrt(scanline); // pow(scanline, 1.5)
             scanline = 0.9 + scanline * 0.1;
             
             // RGB pixel separation (mask effect)
-            let maskX = curvedUV.x * uniforms.screenResolution.x;
+            let maskX = curvedUV.x * uniforms.screenWidth;
             var mask = vec3<f32>(
                 sin(maskX * 3.14159) * 0.5 + 0.5,
                 sin((maskX + 0.33) * 3.14159) * 0.5 + 0.5,
@@ -136,7 +123,7 @@ export const EnhancedPostProcessShaders = () => {
 
         // Enhanced bloom with threshold
         fn enhancedBloom(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
-            let texelSize = 1.0 / uniforms.screenResolution;
+            let texelSize = 1.0 / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
             let spread = 0.008 * uniforms.bloomIntensity;
             
             var bloom = vec3<f32>(0.0);

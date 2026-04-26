@@ -32,7 +32,7 @@ export class HighScoreManager {
 
   private loadFromStorage(): void {
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
+      const stored = typeof window !== "undefined" && window.localStorage ? window.localStorage.getItem(this.STORAGE_KEY) : null;
       if (stored) {
         this.highScores = JSON.parse(stored);
       }
@@ -44,7 +44,7 @@ export class HighScoreManager {
 
   private saveToStorage(): void {
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
+      if (typeof window !== "undefined" && window.localStorage) window.localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
     } catch (e) {
       gameLogger.warn('Failed to save high scores to localStorage:', e);
     }
