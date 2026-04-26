@@ -86,9 +86,9 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
 
   if (view.bloomSystem) {
     view.bloomSystem.setParameters({
-      threshold: 0.3,
-      intensity: 1.2,
-      scatter: 0.75,
+      threshold: 0.72,  // Only the brightest ~28% of pixels bloom — blocks stay clean
+      intensity: 0.35,  // ~70% reduction vs the previous 1.2 — pleasant accent, not washout
+      scatter: 0.52,    // Tighter, sharper bloom
       clamp: 65472,
       knee: 0.1
     });

@@ -180,12 +180,26 @@ export class ReactiveVideoBackground {
     video.autoplay = true;
     video.loop = true;
     video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = 'anonymous';
     video.style.position = 'absolute';
     video.style.zIndex = '-1';
     video.style.objectFit = 'cover';
     video.style.transition = 'filter 0.1s ease-out';
     video.style.opacity = '0';
     
+    // Attempt play on canplaythrough to satisfy autoplay policies
+    video.addEventListener('canplaythrough', () => {
+      video.play().catch(() => {
+        // If autoplay is still blocked, retry on first user gesture
+        const playOnInteraction = () => {
+          video.play().catch(() => {});
+        };
+        document.addEventListener('click', playOnInteraction, { once: true });
+        document.addEventListener('keydown', playOnInteraction, { once: true });
+      });
+    });
+
     video.addEventListener('error', () => {
       videoLogger.warn('Failed to load video, using fallback');
       // Try fallback if available
@@ -195,7 +209,7 @@ export class ReactiveVideoBackground {
       if (bgConfig && bgConfig.fallbackSrc && currentSrc === bgConfig.src) {
         videoLogger.info('Attempting fallback...');
         video.src = bgConfig.fallbackSrc;
-        video.play().catch(() => {});
+        video.load();
       } else {
         video.style.display = 'none';
       }
@@ -301,7 +315,7 @@ export class ReactiveVideoBackground {
     
     if (instant) {
       this.videoElement.src = newSrc;
-      this.videoElement.play().catch(() => {});
+      this.videoElement.load();
     } else {
       this.startCrossfade(newSrc);
     }
@@ -315,7 +329,7 @@ export class ReactiveVideoBackground {
     
     // Load new video in secondary
     this.secondaryVideo.src = newSrc;
-    this.secondaryVideo.play().catch(() => {});
+    this.secondaryVideo.load();
     
     // Start crossfade when secondary is ready
     this.secondaryVideo.onplaying = () => {
@@ -326,7 +340,7 @@ export class ReactiveVideoBackground {
           clearInterval(fadeInterval);
           // Swap videos
           this.videoElement.src = newSrc;
-          this.videoElement.play().catch(() => {});
+          this.videoElement.load();
           this.secondaryVideo.style.opacity = '0';
           this.videoElement.style.opacity = '1';
           this.isCrossfading = false;

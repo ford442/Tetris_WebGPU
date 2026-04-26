@@ -415,11 +415,14 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   // Sample bloom (already upsampled to full res)
   let bloom = textureSample(bloomTexture, bloomSampler, uv).rgb;
 
-  // Additive blend: original + bloom * intensity
-  var result = original + bloom * params.intensity;
+  // Screen-blend instead of pure additive: result = a + b*(1-a).
+  // When original approaches 1.0, bloom contribution approaches 0,
+  // keeping the result in [0,1] and preventing white-out clipping.
+  var result = original + bloom * params.intensity * (1.0 - original);
 
-  // Clamp to prevent overflow
-  result = min(result, vec3<f32>(params.clamp));
+  // Reinhard tone mapping: maps [0,∞) → [0,1) asymptotically,
+  // preserving relative brightness ratios without harsh clipping.
+  result = result / (result + vec3<f32>(1.0));
 
   return vec4<f32>(result, 1.0);
 }
