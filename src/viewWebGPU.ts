@@ -677,11 +677,11 @@ export default class View {
       this.canvasWebGPU.width, 
       this.canvasWebGPU.height
     );
-    // Set initial parameters
+    // Set initial parameters — conservative values to prevent block washout
     this.bloomSystem.setParameters({
-      threshold: 0.35,
+      threshold: 0.72,
       intensity: this.bloomIntensity,
-      scatter: 0.7,
+      scatter: 0.52,
       clamp: 65472,
       knee: 0.1
     });
@@ -963,7 +963,7 @@ export default class View {
     this._postProcessParams.enableFilmGrain = 1.0;
     this._postProcessParams.enableCRT = 0.0;
     this._postProcessParams.bloomIntensity = this.bloomIntensity;
-    this._postProcessParams.bloomThreshold = 0.35;
+    this._postProcessParams.bloomThreshold = 0.72;
     this._postProcessParams.materialAwareBloom = (this.useEnhancedPostProcess && !this.useMultiPassBloom) ? 1.0 : 0.0;
     this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
     this._postProcessParams.screenResolution[1] = this.canvasWebGPU.height;
