@@ -236,7 +236,7 @@ export const PBRBlockShaders = () => {
             // Rim lighting
             let rimPower = (1.0 - NdotV) * (1.0 - NdotV);
             let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
-            finalColor += rimColor * rimPower * 0.1;
+            finalColor += rimColor * rimPower * 0.3;
 
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;
@@ -258,6 +258,10 @@ export const PBRBlockShaders = () => {
                 let ghostColorFinal = ghostColor + vec3f(0.4, 0.7, 1.0) * (g1 * g1 * g1) * 1.5;
                 return vec4f(ghostColorFinal, 0.35 + scan * 0.2);
             }
+
+            // Subtle emissive pulse
+            let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
+            finalColor += baseColor * emissivePulse * 0.15;
 
             finalColor = acesToneMapping(finalColor);
             let materialAlpha = mix(0.85, 0.98, metalMask);
