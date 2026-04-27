@@ -3,7 +3,7 @@ import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 
-const DAS = 100; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
+const DAS = 80; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
 const ARR = 5;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
 const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
 

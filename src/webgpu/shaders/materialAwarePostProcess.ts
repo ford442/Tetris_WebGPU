@@ -258,7 +258,7 @@ export const MaterialAwarePostProcessShaders = () => {
             let distFromCenter = sqrt(distFromCenterSq);
             let levelStress = clamp(level / 12.0, 0.0, 1.0);
             let d2 = distFromCenterSq;
-            let vignetteAberration = (d2 * d2) * 0.04;
+            let vignetteAberration = (d2 * d2) * 0.08;
             let levelAberration = levelStress * 0.003 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.02;
             let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
