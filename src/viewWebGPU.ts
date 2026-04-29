@@ -622,7 +622,7 @@ export default class View {
             ]
         }]},
         fragment: { module: this.device.createShaderModule({ code: particleShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
-            color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
             alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
         }}]},
         primitive: { topology: 'triangle-list' },
@@ -807,8 +807,8 @@ export default class View {
     let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
     const shake = this.visualEffects.getShakeOffset();
 
-    // Smooth Camera Shake Interpolation using fast exponential decay approximation
-    const shakeDecay = 1.0 / (1.0 + clampedDt * 10.0);
+    // Smooth Camera Shake Interpolation using exponential decay
+    const shakeDecay = Math.exp(-clampedDt * 10.0);
     this._shakeOffsetSmoothed.x = shake.x + (this._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
     this._shakeOffsetSmoothed.y = shake.y + (this._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
 

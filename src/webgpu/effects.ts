@@ -51,10 +51,10 @@ export class VisualEffects {
         if (this.lockTimer > 0) this.lockTimer -= dt;
         if (this.lockTimer < 0) this.lockTimer = 0;
 
-        // Exponential decay for smooth game feel (fast algebraic approximation)
-        const decay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity *= decay;
-        this.aberrationIntensity *= decay;
+        // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
+        const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
+        this.shakeIntensity *= Math.exp(-dt * 10.0);
+        this.aberrationIntensity *= aberrationDecay;
 
         // Warp surge decay
         this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
