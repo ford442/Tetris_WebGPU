@@ -4,7 +4,7 @@ import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 
 const DAS = 80; // Delayed Auto Shift (ms) - Slightly faster for improved responsiveness
-const ARR = 5;  // Auto Repeat Rate (ms) - Very fast but controllable, snappier movement
+const ARR = 0;  // Auto Repeat Rate (ms) - Instant piece movement when holding left or right
 const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
 
 // Logical actions
@@ -784,23 +784,39 @@ export default class Controller {
       if (moveLeft) {
           this.actionTimers.left += dt;
           if (this.actionTimers.left > DAS) {
-              while (this.actionTimers.left > DAS + ARR) {
+              if (ARR === 0) {
                   this.game.movePieceLeft();
                   this.soundManager.playMove();
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
-                  this.actionTimers.left -= ARR;
+                  this.actionTimers.left = DAS;
+              } else {
+                  while (this.actionTimers.left > DAS + ARR) {
+                      this.game.movePieceLeft();
+                      this.soundManager.playMove();
+                      // NEON BRICKLAYER: DAS Trail
+                      this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
+                      this.actionTimers.left -= ARR;
+                  }
               }
           }
       } else if (moveRight) {
           this.actionTimers.right += dt;
           if (this.actionTimers.right > DAS) {
-              while (this.actionTimers.right > DAS + ARR) {
+              if (ARR === 0) {
                   this.game.movePieceRight();
                   this.soundManager.playMove();
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
-                  this.actionTimers.right -= ARR;
+                  this.actionTimers.right = DAS;
+              } else {
+                  while (this.actionTimers.right > DAS + ARR) {
+                      this.game.movePieceRight();
+                      this.soundManager.playMove();
+                      // NEON BRICKLAYER: DAS Trail
+                      this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
+                      this.actionTimers.right -= ARR;
+                  }
               }
           }
       }
