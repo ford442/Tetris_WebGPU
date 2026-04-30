@@ -207,14 +207,14 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  const strength = 1.2 + Math.min(distance * 0.12, 1.0);
-  const width = 0.6 + Math.min(distance * 0.06, 0.8);
+  const strength = 0.8 + Math.min(distance * 0.12, 0.7);
+  const width = 0.6 + Math.min(distance * 0.06, 0.4);
   const aberration = 0.2 + Math.min(distance * 0.03, 0.5);
-  const speed = 4.0 + Math.min(distance * 0.3, 3.0);
+  const speed = 5.0 + Math.min(distance * 0.4, 4.0);
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
-  view.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.1, 1.0);
-  view.visualEffects.triggerShake(6.0 + distance * 0.4, 0.4);
+  view.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.15, 1.5);
+  view.visualEffects.triggerShake(8.0 + distance * 0.5, 0.5);
 }
 
 export function onHardDrop(view: any, x: number, y: number, distance: number, colorIdx: number = 0): void {
