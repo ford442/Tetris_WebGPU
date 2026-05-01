@@ -199,7 +199,7 @@ export const PBRBlockShaders = () => {
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f1 = 1.0 - NdotV; let fresnel = f1 * f1 * f1;
                     // Lower the minimum transmission opacity and preserve more of the base texture color
-                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.5), 1.0, fresnel);
+                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.8), 1.0, fresnel);
                     let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
                     let refractionColorBase = proceduralEnvReflect(refractDir, time);
                     // Less overpowering glass tint
@@ -238,7 +238,7 @@ export const PBRBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
-            finalColor += rimColor * rimPower4 * 0.8;
+            finalColor += rimColor * rimPower4 * 0.15;
 
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;

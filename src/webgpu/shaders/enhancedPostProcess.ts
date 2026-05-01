@@ -81,7 +81,7 @@ export const EnhancedPostProcessShaders = () => {
         // Film grain
         fn filmGrain(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
             let time = uniforms.time;
-            let grain = fract(sin(dot(uv * time, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+            let grain = fract(sin(uv.x * 12.9898 + uv.y * 78.233 + time) * 43758.5453);
             let grainAmount = 0.03;
             let grainSize = 1.5;
             let noise = (grain - 0.5) * grainAmount;

@@ -207,8 +207,8 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  const strength = 0.8 + Math.min(distance * 0.12, 0.7);
-  const width = 0.6 + Math.min(distance * 0.06, 0.4);
+  const strength = 1.5 + Math.min(distance * 0.12, 0.7);
+  const width = 0.8 + Math.min(distance * 0.06, 0.4);
   const aberration = 0.2 + Math.min(distance * 0.03, 0.5);
   const speed = 5.0 + Math.min(distance * 0.4, 4.0);
 
