@@ -471,7 +471,8 @@ export default class Game {
       // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
       for (let i = 0; i < this._tempPiece.blocks.length; i++) {
         if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
-            this.activPiece.blocks[i] = new Array(this._tempPiece.blocks[i].length).fill(0);
+            if (!this.activPiece.blocks[i]) this.activPiece.blocks[i] = [];
+            this.activPiece.blocks[i].length = this._tempPiece.blocks[i].length;
         }
         for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
             this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];
@@ -509,7 +510,8 @@ export default class Game {
       // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
       for (let i = 0; i < this._tempPiece.blocks.length; i++) {
         if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
-            this.activPiece.blocks[i] = new Array(this._tempPiece.blocks[i].length).fill(0);
+            if (!this.activPiece.blocks[i]) this.activPiece.blocks[i] = [];
+            this.activPiece.blocks[i].length = this._tempPiece.blocks[i].length;
         }
         for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
             this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];

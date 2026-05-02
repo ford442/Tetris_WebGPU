@@ -367,7 +367,7 @@ export const UnderwaterBlockShaders = () => {
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f = 1.0 - NdotV;
                     let fresnel = f * f * f;
-                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.5), 1.0, fresnel);
+                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.8), 1.0, fresnel);
                     
                     // Underwater refraction with caustics
                     var refractDir = refract(-V, N, 1.0 / fUniforms.ior);
@@ -377,7 +377,8 @@ export const UnderwaterBlockShaders = () => {
                         refractDir.x += swimDistort;
                     }
                     
-                    let refractionColor = vec3f(0.1, 0.3, 0.5); // Underwater tint
+                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.02);
+                    var refractionColor = vec3f(0.1, 0.3, 0.5) * glassTint; // Underwater tint
                     refractionColor += causticAdd * 0.3 * glassMask;
                     
                     finalColor = mix(refractionColor, finalColor, transmissionAlpha);
