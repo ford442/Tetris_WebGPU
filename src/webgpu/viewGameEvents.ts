@@ -207,9 +207,9 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  const strength = 1.5 + Math.min(distance * 0.12, 0.7);
-  const width = 0.8 + Math.min(distance * 0.06, 0.4);
-  const aberration = 0.2 + Math.min(distance * 0.03, 0.5);
+  const strength = 2.5 + Math.min(distance * 0.2, 1.0);
+  const width = 1.2 + Math.min(distance * 0.1, 0.6);
+  const aberration = 0.4 + Math.min(distance * 0.06, 0.8);
   const speed = 5.0 + Math.min(distance * 0.4, 4.0);
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
@@ -224,7 +224,7 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   const themeColors = view.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
   const trailColor = [...themeColors, 0.8];
 
-  for (let i = 0; i < distance * 2; i++) {
+  for (let i = 0; i < distance * 4; i++) {
     const r = startRow + i * 0.5;
     const worldY = r * -2.2;
     view.particleSystem.emitParticles(worldX, worldY, 0.0, 12, trailColor);
@@ -233,8 +233,8 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   const impactY = y * -2.2;
   const burstColor = [...themeColors, 1.0];
   view.visualEffects.triggerFlash(0.1);
-  for (let i = 0; i < 150; i++) {
-    const angle = (i / 150) * Math.PI * 2;
+  for (let i = 0; i < 300; i++) {
+    const angle = (i / 300) * Math.PI * 2;
     const speed = 20.0 + Math.random() * 10.0;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }

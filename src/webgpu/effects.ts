@@ -53,7 +53,7 @@ export class VisualEffects {
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
         const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity *= Math.exp(-dt * 10.0);
+        this.shakeIntensity *= Math.exp(-dt * 15.0);
         this.aberrationIntensity *= aberrationDecay;
 
         // Warp surge decay
