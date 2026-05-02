@@ -274,7 +274,7 @@ export class ReactiveVideoBackground {
     video.playsInline = true;
     video.crossOrigin = 'anonymous';
     video.style.position = 'absolute';
-    video.style.zIndex = '-1';
+    video.style.zIndex = '1';
     video.style.objectFit = 'cover';
     video.style.transition = 'filter 0.1s ease-out';
     video.style.opacity = '0';
@@ -331,7 +331,7 @@ export class ReactiveVideoBackground {
   private createGlitchOverlay(): HTMLDivElement {
     const overlay = document.createElement('div');
     overlay.style.position = 'absolute';
-    overlay.style.zIndex = '-1';
+    overlay.style.zIndex = '1';
     overlay.style.pointerEvents = 'none';
     overlay.style.opacity = '0';
     overlay.style.background = `

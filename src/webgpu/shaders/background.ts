@@ -257,7 +257,9 @@ export const BackgroundShaders = () => {
           let beamIntensity = 0.25 * beamEdge * beamScan * beamPulse * beamFade * inBeam;
           finalColor += beamColor * beamIntensity;
 
-          return vec4<f32>(finalColor, 1.0);
+          // NEON BRICKLAYER: Ensure the background has some transparency
+          // to allow the video background to show through.
+          return vec4<f32>(finalColor, 0.5);
         }
     `;
 

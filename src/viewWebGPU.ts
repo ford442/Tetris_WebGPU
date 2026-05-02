@@ -285,6 +285,7 @@ export default class View {
     this.canvasWebGPU.style.position = 'absolute';
     this.canvasWebGPU.style.top = '0';
     this.canvasWebGPU.style.left = '0';
+    this.canvasWebGPU.style.zIndex = '2';
     this.canvasWebGPU.style.pointerEvents = 'none';
     this.canvasWebGPU.width = this.width;
     this.canvasWebGPU.height = this.height;
