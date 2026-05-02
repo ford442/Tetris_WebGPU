@@ -137,7 +137,7 @@ export const Shaders = () => {
                 
                 // Enhance material separation:
                 // Gold: slightly more pronounced metallic push (12%) to accentuate the frame
-                let goldColor = mix(texColor.rgb, vec3<f32>(1.0, 0.88, 0.40), 0.12);
+                let goldColor = mix(texColor.rgb * vColor.rgb, vec3<f32>(1.0, 0.88, 0.40), 0.12);
                 // Glass: subtle theme-color tint (15%) so piece identity is visible, darkened slightly for contrast
                 let glassColor = mix(texColor.rgb * 0.9, vColor.rgb, 0.15);
                 var baseColor = mix(glassColor, goldColor, metalMask);
@@ -313,12 +313,11 @@ export const Shaders = () => {
 
                 // Simple PBR mix (solid blocks only)
                 // Use already-sampled texture color (textureSample moved outside conditional for uniform control flow)
-                baseColor = texColor.rgb;
-                var pbrColor = mix(baseColor, baseColor * materialUniforms.metallic, materialUniforms.metallic);
+                var pbrColor = mix(finalColor, finalColor * materialUniforms.metallic, materialUniforms.metallic * 0.5);
                 pbrColor = mix(pbrColor, vec3<f32>(1.0), materialUniforms.transmission * 0.4); // glass highlight
                
-                // Blend PBR with existing lighting
-                finalColor = mix(finalColor, pbrColor, 0.3);
+                // Final result with full material influence
+                finalColor = pbrColor;
                 // Combine material alpha with block type alpha (solid=0.85, ghost=0.3)
                 let finalAlpha = materialAlpha * vColor.w;
                 return vec4<f32>(clamp(finalColor, vec3<f32>(0.0), vec3<f32>(1.0)), finalAlpha);

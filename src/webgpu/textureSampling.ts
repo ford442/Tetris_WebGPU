@@ -201,7 +201,7 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
 
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
     let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.8}, ${config.metalThresholdHigh ?? 1.2}, goldSignal);
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.75}, ${config.metalThresholdHigh ?? 1.15}, goldSignal);
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
 `;
