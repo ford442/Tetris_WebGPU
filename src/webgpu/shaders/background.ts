@@ -155,8 +155,8 @@ export const BackgroundShaders = () => {
           var neonBlue = uniforms.color3;
 
           // Manual mix for level influence (mix towards red/orange) (ENHANCED)
-          let dangerColor = vec3<f32>(1.0, 0.0, 0.2); // Cyberpunk Red
-          let warningColor = vec3<f32>(1.0, 0.5, 0.0); // Orange
+          let dangerColor = vec3<f32>(1.0, 0.0, 0.0); // Pure chaotic Red
+          let warningColor = vec3<f32>(1.0, 0.2, 0.0); // Aggressive Red-Orange
 
           // Shift aggressively with level
           // Level 0-5: Blue/Cyan -> Purple
