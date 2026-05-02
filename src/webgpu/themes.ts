@@ -26,11 +26,23 @@ export interface Themes {
   chrome: ThemeColors;  // NEW
 }
 
-// Theme-specific video playlists - all use available bg1/bg2/bg3.mp4 assets
+// Theme-specific video playlists - full bg1–bg15 sequence
 const availableVideos = [
   './assets/video/bg1.mp4',
   './assets/video/bg2.mp4',
-  './assets/video/bg3.mp4'
+  './assets/video/bg3.mp4',
+  './assets/video/bg4.mp4',
+  './assets/video/bg5.mp4',
+  './assets/video/bg6.mp4',
+  './assets/video/bg7.mp4',
+  './assets/video/bg8.mp4',
+  './assets/video/bg9.mp4',
+  './assets/video/bg10.mp4',
+  './assets/video/bg11.mp4',
+  './assets/video/bg12.mp4',
+  './assets/video/bg13.mp4',
+  './assets/video/bg14.mp4',
+  './assets/video/bg15.mp4',
 ];
 
 export const ThemeVideos = {

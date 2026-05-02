@@ -13,6 +13,7 @@ export interface MaterialViewLike {
   usePremiumMaterials: boolean;
   currentMaterial: any;
   fragmentUniformBuffer: GPUBuffer;
+  materialUniformBuffer: GPUBuffer;
   backgroundUniformBuffer: GPUBuffer;
   _f32_3: Float32Array;
   _materialUniforms: Float32Array;
@@ -73,7 +74,7 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[8] = view.particleInteractionUniforms.particleInfluence;
   view._materialUniforms[9] = 0;
 
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._materialUniforms);
+  view.device.queue.writeBuffer(view.materialUniformBuffer, 0, view._materialUniforms.subarray(0, 4));
 }
 
 /**
