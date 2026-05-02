@@ -59,6 +59,8 @@ uiContainer.innerHTML = `
             <button id="pastel-theme">Pastel</button>
             <button id="neon-theme">Neon</button>
             <button id="futuristic-theme">Future</button>
+            <button id="gold-theme">Gold</button>
+            <button id="glass-theme">Glass</button>
           </div>
 
           <div class="control-buttons panel-box">
@@ -204,6 +206,16 @@ uiContainer.innerHTML = `
   document.getElementById('futuristic-theme')!.addEventListener('click', () => {
     document.body.className = 'futuristic-theme';
     view.setTheme('future'); // Assuming we add 'future' to View
+  });
+
+  document.getElementById('gold-theme')!.addEventListener('click', () => {
+    document.body.className = 'gold-theme';
+    view.setTheme('gold');
+  });
+
+  document.getElementById('glass-theme')!.addEventListener('click', () => {
+    document.body.className = 'glass-theme';
+    view.setTheme('glass');
   });
 
   document.getElementById('start-button')!.addEventListener('click', () => {

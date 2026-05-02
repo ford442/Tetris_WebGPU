@@ -5,7 +5,7 @@
 
 import { videoLogger } from '../utils/logger.js';
 
-// Video background library - maps to available bg1/bg2/bg3.mp4 assets
+// Video background library - maps bg1.mp4–bg15.mp4 across 15 level tiers
 export const VIDEO_BACKGROUNDS = {
   // Level 0-1: Cyber Liquid Metal
   cyberLiquidMetal: {
@@ -23,7 +23,7 @@ export const VIDEO_BACKGROUNDS = {
     id: 'abstract_data_stream',
     name: 'Abstract Data Stream',
     src: './assets/video/bg2.mp4',
-    fallbackSrc: '',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'matrix-data',
     baseParams: { brightness: 0.9, contrast: 1.1, saturation: 1.3 },
     hasSeaCreature: false
@@ -34,51 +34,139 @@ export const VIDEO_BACKGROUNDS = {
     id: 'neon_grid',
     name: 'Neon Grid',
     src: './assets/video/bg3.mp4',
-    fallbackSrc: '',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'retro-grid',
     baseParams: { brightness: 1.0, contrast: 1.3, saturation: 1.5 },
     hasSeaCreature: false
   },
 
-  // Level 6-7: Volumetric Fog
+  // Level 6: Volumetric Fog
   volumetricFog: {
     id: 'volumetric_fog',
     name: 'Volumetric Fog',
-    src: './assets/video/bg1.mp4',
-    fallbackSrc: '',
+    src: './assets/video/bg4.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'atmospheric-fog',
     baseParams: { brightness: 0.85, contrast: 1.0, saturation: 0.9 },
     hasSeaCreature: false
   },
 
-  // Level 8-9: Glitch Field
+  // Level 7: Plasma Storm
+  plasmaStorm: {
+    id: 'plasma_storm',
+    name: 'Plasma Storm',
+    src: './assets/video/bg5.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'plasma-energy',
+    baseParams: { brightness: 1.1, contrast: 1.3, saturation: 1.4 },
+    hasSeaCreature: false
+  },
+
+  // Level 8: Crystal Void
+  crystalVoid: {
+    id: 'crystal_void',
+    name: 'Crystal Void',
+    src: './assets/video/bg6.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'crystal-space',
+    baseParams: { brightness: 1.0, contrast: 1.2, saturation: 1.1 },
+    hasSeaCreature: false
+  },
+
+  // Level 9: Glitch Field
   glitchField: {
     id: 'glitch_field',
     name: 'Glitch Field',
-    src: './assets/video/bg2.mp4',
-    fallbackSrc: '',
+    src: './assets/video/bg7.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'digital-corruption',
     baseParams: { brightness: 1.0, contrast: 1.4, saturation: 1.2 },
     hasSeaCreature: false
   },
 
-  // Level 10+: Holographic Particles
+  // Level 10: Solar Flare
+  solarFlare: {
+    id: 'solar_flare',
+    name: 'Solar Flare',
+    src: './assets/video/bg8.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'solar-energy',
+    baseParams: { brightness: 1.2, contrast: 1.3, saturation: 1.4 },
+    hasSeaCreature: false
+  },
+
+  // Level 11: Nebula Drift
+  nebulaDrift: {
+    id: 'nebula_drift',
+    name: 'Nebula Drift',
+    src: './assets/video/bg9.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'cosmic-nebula',
+    baseParams: { brightness: 1.0, contrast: 1.1, saturation: 1.5 },
+    hasSeaCreature: false
+  },
+
+  // Level 12: Quantum Foam
+  quantumFoam: {
+    id: 'quantum_foam',
+    name: 'Quantum Foam',
+    src: './assets/video/bg10.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'quantum-field',
+    baseParams: { brightness: 0.95, contrast: 1.2, saturation: 1.3 },
+    hasSeaCreature: false
+  },
+
+  // Level 13: Void Fracture
+  voidFracture: {
+    id: 'void_fracture',
+    name: 'Void Fracture',
+    src: './assets/video/bg11.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'void-rift',
+    baseParams: { brightness: 0.9, contrast: 1.4, saturation: 1.1 },
+    hasSeaCreature: false
+  },
+
+  // Level 14: Aurora Surge
+  auroraSurge: {
+    id: 'aurora_surge',
+    name: 'Aurora Surge',
+    src: './assets/video/bg12.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'aurora-borealis',
+    baseParams: { brightness: 1.1, contrast: 1.2, saturation: 1.6 },
+    hasSeaCreature: false
+  },
+
+  // Level 15: Holographic Particles
   holographicParticles: {
     id: 'holographic_particles',
     name: 'Holographic Particles',
-    src: './assets/video/bg3.mp4',
-    fallbackSrc: '',
+    src: './assets/video/bg13.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'holographic-depth',
     baseParams: { brightness: 1.2, contrast: 1.1, saturation: 1.4 },
     hasSeaCreature: false
   },
 
-  // Level 7+: Bioluminescent Cave
+  // Level 16: Cosmic Rift
+  cosmicRift: {
+    id: 'cosmic_rift',
+    name: 'Cosmic Rift',
+    src: './assets/video/bg14.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
+    style: 'cosmic-rift',
+    baseParams: { brightness: 1.0, contrast: 1.3, saturation: 1.2 },
+    hasSeaCreature: false
+  },
+
+  // Level 17+: Bioluminescent Cave
   bioluminescentCave: {
     id: 'bioluminescent_cave',
     name: 'Bioluminescent Cave',
-    src: './assets/video/bg3.mp4',
-    fallbackSrc: '',
+    src: './assets/video/bg15.mp4',
+    fallbackSrc: './assets/video/bg1.mp4',
     style: 'underwater-bioluminescent',
     baseParams: {
       brightness: 0.95,
@@ -282,10 +370,19 @@ export class ReactiveVideoBackground {
     this.glitchOverlay.style.borderRadius = '8px';
   }
 
-  // NEW: Get background key for level - includes bioluminescent cave at level 7+
+  // NEW: Get background key for level - maps all 15 bg videos across level tiers
   private getBackgroundForLevel(level: number): VideoBackgroundKey {
-    // Level 7+ enters the bioluminescent dreamscape
-    if (level >= 7) return 'bioluminescentCave';
+    if (level >= 17) return 'bioluminescentCave';
+    if (level >= 16) return 'cosmicRift';
+    if (level >= 15) return 'holographicParticles';
+    if (level >= 14) return 'auroraSurge';
+    if (level >= 13) return 'voidFracture';
+    if (level >= 12) return 'quantumFoam';
+    if (level >= 11) return 'nebulaDrift';
+    if (level >= 10) return 'solarFlare';
+    if (level >= 9) return 'glitchField';
+    if (level >= 8) return 'crystalVoid';
+    if (level >= 7) return 'plasmaStorm';
     if (level >= 6) return 'volumetricFog';
     if (level >= 4) return 'neonGrid';
     if (level >= 2) return 'abstractDataStream';
@@ -320,7 +417,9 @@ export class ReactiveVideoBackground {
     
     const newSrc = bgConfig.src;
     
-    if (!newSrc || this.videoElement.src === newSrc) return;
+    // Normalise relative src to absolute URL before comparing with the browser-expanded videoElement.src
+    const resolvedNew = new URL(newSrc, location.href).href;
+    if (!newSrc || this.videoElement.src === resolvedNew) return;
     
     this.currentBackground = bgKey;
     
