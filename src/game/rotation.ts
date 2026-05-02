@@ -43,7 +43,8 @@ export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, target
     // Ensure inner arrays match length
     for (let i = 0; i < length; i++) {
       if (temp[i].length !== length) {
-        temp[i] = new Array(length).fill(0);
+        temp[i].length = length;
+        for(let j=0; j<length; j++) temp[i][j] = 0;
       }
     }
   }

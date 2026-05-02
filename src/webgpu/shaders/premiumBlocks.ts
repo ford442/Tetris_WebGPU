@@ -385,11 +385,13 @@ export const PremiumBlockShaders = () => {
                 // Fresnel-based opacity
                 let f = 1.0 - NdotV;
                 let fresnel = f * f * f;
-                transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.5), 1.0, fresnel);
+                transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.8), 1.0, fresnel);
                 
                 // Procedural refraction color shift
                 let refractDir = refract(-V, N, 1.0 / ior);
-                refractionColor = proceduralEnvReflect(refractDir, time);
+                let refractionColorBase = proceduralEnvReflect(refractDir, time);
+                let glassTint = mix(vec3<f32>(1.0), vColor.rgb, 0.02);
+                refractionColor = refractionColorBase * glassTint;
                 
                 // Chromatic dispersion at edges
                 if (dispersion > 0.0) {
