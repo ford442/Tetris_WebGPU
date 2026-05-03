@@ -295,13 +295,22 @@ export class ReactiveVideoBackground {
       videoLogger.warn('Failed to load video, using fallback');
       this.isVideoPlaying = false;
       // Try fallback if available
-      const currentSrc = video.src;
+      const currentSrc = video.src; // browser-expanded absolute URL
       const bgKey = this.getBackgroundForLevel(this.currentLevel);
       const bgConfig = VIDEO_BACKGROUNDS[bgKey];
-      if (bgConfig && bgConfig.fallbackSrc && currentSrc === bgConfig.src) {
-        videoLogger.info('Attempting fallback...');
-        video.src = bgConfig.fallbackSrc;
-        video.load();
+      if (bgConfig && bgConfig.fallbackSrc) {
+        // Normalise bgConfig.src to an absolute URL before comparing with the browser-expanded currentSrc
+        const resolvedBgSrc = new URL(bgConfig.src, location.href).href;
+        if (currentSrc === resolvedBgSrc) {
+          videoLogger.info('Attempting fallback...');
+          video.style.display = '';
+          video.src = bgConfig.fallbackSrc;
+          video.load();
+        } else {
+          // Current src is already the fallback (or an unexpected URL) — hide the video
+          // to avoid an infinite retry loop.
+          video.style.display = 'none';
+        }
       } else {
         video.style.display = 'none';
       }
@@ -430,6 +439,7 @@ export class ReactiveVideoBackground {
     }
     
     if (instant) {
+      this.videoElement.style.display = '';
       this.videoElement.src = newSrc;
       this.videoElement.load();
     } else {
@@ -444,6 +454,7 @@ export class ReactiveVideoBackground {
     this.crossfadeProgress = 0;
     
     // Load new video in secondary
+    this.secondaryVideo.style.display = '';
     this.secondaryVideo.src = newSrc;
     this.secondaryVideo.load();
     
@@ -455,6 +466,7 @@ export class ReactiveVideoBackground {
         if (this.crossfadeProgress >= 1) {
           clearInterval(fadeInterval);
           // Swap videos
+          this.videoElement.style.display = '';
           this.videoElement.src = newSrc;
           this.videoElement.load();
           this.videoElement.play().catch(() => {});
