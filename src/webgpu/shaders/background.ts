@@ -46,7 +46,7 @@ export const BackgroundShaders = () => {
           // Level 1: Calm blue
           // Level 10: Chaotic red
           // JUICE: Faster ramp up to "danger" colors (max at level 8)
-          let levelFactor = min(level * 0.125, 1.0);
+          let levelFactor = clamp((level - 1.0) / 9.0, 0.0, 1.0);
 
           // Base deep space color - shifts to red as level increases
           // NEON BRICKLAYER: More dramatic shift from Calm Blue to Chaotic Red/Purple

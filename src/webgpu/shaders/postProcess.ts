@@ -114,7 +114,7 @@ export const PostProcessShaders = () => {
 
             let baseAberration = vignetteAberration + levelAberration;
             // Add glitch aberration
-            let glitchAberration = glitchStrength * 0.05;
+            let glitchAberration = glitchStrength * 0.08;
             let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
 
             // Chromatic Aberration with Glitch Offset
