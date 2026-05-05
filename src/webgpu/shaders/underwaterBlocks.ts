@@ -400,11 +400,12 @@ export const UnderwaterBlockShaders = () => {
                 finalColor = mix(finalColor, finalColor * vec3f(0.9, 0.95, 1.1), 0.3);
             }
             
-            // Rim lighting
+            // Rim lighting - Fresnel Schlick approximation (rimPower^4) for brighter edge glow
             let rimPower = 1.0 - NdotV;
-            rimPower = rimPower * rimPower;
+            let rimPower2 = rimPower * rimPower;
+            let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), anyMetal * fUniforms.metallic);
-            finalColor += rimColor * rimPower * 0.1;
+            finalColor += rimColor * rimPower4 * 0.4;
             
             // Lock tension
             let lockPercent = fUniforms.lockPercent;
@@ -435,6 +436,10 @@ export const UnderwaterBlockShaders = () => {
                 return vec4f(ghostColor, 0.35 + scan * 0.2);
             }
             
+            // Amplified emissive pulse for more visible pulsing effect
+            let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
+            finalColor += baseColor * emissivePulse * 0.8;
+
             // Tone mapping
             finalColor = acesToneMapping(finalColor);
             
