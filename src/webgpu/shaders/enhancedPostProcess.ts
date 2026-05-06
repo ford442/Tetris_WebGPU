@@ -179,8 +179,8 @@ export const EnhancedPostProcessShaders = () => {
                 let dist = length(uv - center);
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
-                let width = params.x;
-                let strength = params.y;
+                let width = params.x * 1.5; // JUICE: Wider shockwave
+                let strength = params.y * 1.5; // JUICE: Stronger distortion
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
