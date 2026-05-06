@@ -279,6 +279,10 @@ export const Shaders = () => {
                          ghostGlitch += 0.15;
                     }
 
+                    // JUICE: Gentle sine wave pulse on the ghost piece for that "breathing neon" feel
+                    let ghostPulse = sin(time * 3.0) * 0.15 + 0.85;
+                    ghostAlpha *= ghostPulse;
+
                     // Flicker effect
                     let flickerNoise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time * 20.0) * 43758.5453);
                     if (flickerNoise > 0.94) {
