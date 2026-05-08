@@ -207,10 +207,10 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  const strength = 3.5 + Math.min(distance * 0.3, 1.5);
-  const width = 1.5 + Math.min(distance * 0.2, 0.8);
-  const aberration = 0.6 + Math.min(distance * 0.1, 1.0);
-  const speed = 5.0 + Math.min(distance * 0.4, 4.0);
+  const strength = 5.0 + Math.min(distance * 0.3, 1.5);
+  const width = 2.5 + Math.min(distance * 0.2, 0.8);
+  const aberration = 1.0 + Math.min(distance * 0.1, 1.0);
+  const speed = 7.0 + Math.min(distance * 0.4, 4.0);
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.15, 1.5);

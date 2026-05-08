@@ -63,7 +63,7 @@ export const BackgroundShaders = () => {
           let wobble = sin(uniforms.time * (2.0 + levelFactor * 5.0));
 
           // BOOSTED: Add rotation to the tunnel for more disorientation/speed feel
-          let angle = warpSurge * 0.1 * sin(time * 5.0);
+          let angle = warpSurge * 0.3 * sin(time * 8.0);
           let c = cos(angle);
           let s = sin(angle);
           let rotatedCentered = vec2<f32>(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
@@ -120,7 +120,7 @@ export const BackgroundShaders = () => {
             let scale = select(1.0, 2.618, layer > 0);
 
             // Speed scales with level + warp surge
-            let warpSpeed = 1.0 + level * 1.5 + warpSurge * 5.0;
+            let warpSpeed = 1.0 + level * 2.5 + warpSurge * 8.0;
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift
