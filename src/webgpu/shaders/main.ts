@@ -181,7 +181,7 @@ export const Shaders = () => {
                
                 // Color the rim based on piece color for glass, white for metal
                 let rimColor = mix(vColor.rgb * 0.8, vec3<f32>(1.0), metalMask);
-                finalColor += rimColor * rimLight * 0.2;
+                finalColor += rimColor * rimLight * 0.4; // JUICE: Multiplied Fresnel Rim lighting by 2.0
                 // Simple fresnel (needed for ghost piece downstream)
                 // dotNV already computed above for iridescence
                 let fresnelBase = 1.0 - dotNV;
@@ -214,10 +214,10 @@ export const Shaders = () => {
                      let warnRed = vec3<f32>(1.0, 0.0, 0.15);
                      let warnHot = vec3<f32>(1.0, 0.3, 0.3);
                      var warningColor = mix(warnOrange, warnRed, tension);
-                     warningColor = mix(warningColor, warnHot, sharpPulse * tension);
+                     warningColor = mix(warningColor, warnHot, sharpPulse * tension) * 1.5; // JUICE: Multiplied warningColor for stronger emissive pulse
                     
                      // Apply with intensity that increases near lock
-                     let intensity = tension * sharpPulse * 1.2;
+                     let intensity = tension * sharpPulse * 1.5; // JUICE: Increased tension intensity for stronger pulse
                      finalColor = mix(finalColor, warningColor, intensity);
                     
                      // Add Scanline Emission
