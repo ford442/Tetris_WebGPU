@@ -75,7 +75,7 @@ export const BackgroundShaders = () => {
 
           // Smoothed and clamped warp strength to prevent nausea
           // BOOSTED: Increased max warp
-          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.4, 0.4);
+          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.6, 0.6) * 1.5;
 
           // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
           // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
@@ -91,7 +91,7 @@ export const BackgroundShaders = () => {
               let fi = f32(i);
               // Near stars: dense, fast | Far stars: sparse, slow
               let scale = select(25.0, 55.0, i > 0);
-              let speed = (0.25 + fi * 0.15) * (1.0 + level * 0.4 + warpSurge * 3.0);
+              let speed = (0.25 + fi * 0.15) * (1.0 + level * 0.6 + warpSurge * 4.5); // JUICE: multiplied level and warpSurge speed by 1.5
 
               // Parallax shift
               let shift = vec2<f32>(0.0, -time * speed * 0.08);
@@ -120,7 +120,7 @@ export const BackgroundShaders = () => {
             let scale = select(1.0, 2.618, layer > 0);
 
             // Speed scales with level + warp surge
-            let warpSpeed = 1.0 + level * 2.5 + warpSurge * 8.0;
+            let warpSpeed = 1.0 + level * 3.75 + warpSurge * 12.0; // JUICE: multiplied level and warpSurge speed by 1.5
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift
@@ -157,19 +157,18 @@ export const BackgroundShaders = () => {
           // Manual mix for level influence (mix towards red/orange) (ENHANCED)
           let dangerColor = vec3<f32>(1.0, 0.0, 0.0); // Pure chaotic Red
           let warningColor = vec3<f32>(1.0, 0.2, 0.0); // Aggressive Red-Orange
+          let calmBlue = vec3<f32>(0.0, 0.5, 1.0); // Calm blue at Level 1
 
           // Shift aggressively with level
           // Level 0-5: Blue/Cyan -> Purple
           // Level 5-10: Purple -> Red/Orange
 
-          // Branchless level color shifting
-          let isHighLevel = step(5.0, level);
-          let highLevelFactor = min(max(level - 5.0, 0.0) * 0.2, 1.0) * isHighLevel;
-          let lowLevelFactor = min(level * 0.2, 1.0) * (1.0 - isHighLevel);
+          // Smooth mapping from level 1 to 10
+          let levelRatio = clamp((level - 1.0) / 9.0, 0.0, 1.0);
 
-          neonCyan = mix(neonCyan, mix(vec3<f32>(0.0, 0.8, 1.0), dangerColor, isHighLevel), mix(lowLevelFactor, highLevelFactor, isHighLevel));
-          neonBlue = mix(neonBlue, mix(vec3<f32>(0.4, 0.0, 1.0), vec3<f32>(0.3, 0.0, 0.0), isHighLevel), mix(lowLevelFactor, highLevelFactor, isHighLevel));
-          neonPurple = mix(neonPurple, mix(neonPurple, warningColor, highLevelFactor * 0.7), isHighLevel);
+          neonCyan = mix(calmBlue, dangerColor, levelRatio);
+          neonBlue = mix(vec3<f32>(0.1, 0.2, 1.0), vec3<f32>(0.8, 0.0, 0.0), levelRatio);
+          neonPurple = mix(vec3<f32>(0.3, 0.1, 0.8), warningColor, levelRatio);
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
 

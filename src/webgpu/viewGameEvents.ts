@@ -207,8 +207,9 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  const strength = 5.0 + Math.min(distance * 0.3, 1.5);
-  const width = 2.5 + Math.min(distance * 0.2, 0.8);
+  // JUICE: Doubled shockwave strength and width
+  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.0;
+  const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 2.0;
   const aberration = 1.0 + Math.min(distance * 0.1, 1.0);
   const speed = 7.0 + Math.min(distance * 0.4, 4.0);
 
@@ -224,52 +225,55 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   const themeColors = view.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
   const trailColor = [...themeColors, 0.8];
 
-  for (let i = 0; i < distance * 4; i++) {
-    const r = startRow + i * 0.5;
+  // JUICE: Increased particle count and trail density
+  for (let i = 0; i < distance * 6; i++) {
+    const r = startRow + i * 0.33;
     const worldY = r * -2.2;
-    view.particleSystem.emitParticles(worldX, worldY, 0.0, 12, trailColor);
+    view.particleSystem.emitParticles(worldX, worldY, 0.0, 18, trailColor);
   }
 
   const impactY = y * -2.2;
   const burstColor = [...themeColors, 1.0];
   view.visualEffects.triggerFlash(0.1);
-  for (let i = 0; i < 300; i++) {
-    const angle = (i / 300) * Math.PI * 2;
-    const speed = 20.0 + Math.random() * 10.0;
+
+  // JUICE: Multiplied particle speeds and counts by 1.5x
+  for (let i = 0; i < 450; i++) {
+    const angle = (i / 450) * Math.PI * 2;
+    const speed = (20.0 + Math.random() * 10.0) * 1.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
-  for (let i = 0; i < 20; i++) {
-    const speedL = 8.0 + Math.random() * 12.0;
+  for (let i = 0; i < 30; i++) {
+    const speedL = (8.0 + Math.random() * 12.0) * 1.5;
     const angleL = Math.PI - Math.random() * 0.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleL, speedL, burstColor);
 
-    const speedR = 8.0 + Math.random() * 12.0;
+    const speedR = (8.0 + Math.random() * 12.0) * 1.5;
     const angleR = Math.random() * 0.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
   }
 
-  for (let i = 0; i < 60; i++) {
-    const angle = (i / 60.0) * Math.PI * 2.0;
-    const speed = 45.0;
+  for (let i = 0; i < 90; i++) {
+    const angle = (i / 90.0) * Math.PI * 2.0;
+    const speed = 45.0 * 1.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 30.0 + Math.random() * 30.0;
+    const speed = (30.0 + Math.random() * 30.0) * 1.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [1.0, 1.0, 0.8, 1.0]);
   }
 
-  for (let i = 0; i < 40; i++) {
-    const angle = (i / 40) * Math.PI * 2 + (Math.PI / 40);
-    const speed = 30.0;
+  for (let i = 0; i < 60; i++) {
+    const angle = (i / 60) * Math.PI * 2 + (Math.PI / 60);
+    const speed = 30.0 * 1.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     const dir = i % 2 === 0 ? 1 : -1;
-    const speed = 20.0 + Math.random() * 20.0;
+    const speed = (20.0 + Math.random() * 20.0) * 1.5;
     const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.2;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
