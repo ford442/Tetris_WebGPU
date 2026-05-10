@@ -14,7 +14,8 @@ export {
 
 export {
   GridShader, 
-  BackgroundShaders, 
+  BackgroundShaders,
+  VideoBackgroundShaders,
   Shaders,
   PremiumBlockShaders,
   FrostedGlassShaders

@@ -11,6 +11,7 @@ export { UnderwaterBlockShaders } from './underwaterBlocks.js';
 export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
+export { VideoBackgroundShaders } from './videoBackground.js';
 export { Shaders } from './main.js';
 export { PremiumBlockShaders } from './premiumBlocks.js';
 export { FrostedGlassShaders } from './frostedGlass.js';
