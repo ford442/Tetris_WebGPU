@@ -15,7 +15,7 @@ export interface Particle {
 
 export class ParticleSystem {
     particles: Particle[] = [];
-    maxParticles: number = 10000; // Increased to 10000 for Neon Bricklayer intensity
+    maxParticles: number = 5000; // Capped to 5000 for Neon Bricklayer intensity
 
     // Ring Buffer strategy for emissions
     private emitIndex: number = 0;
