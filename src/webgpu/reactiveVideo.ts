@@ -238,7 +238,12 @@ export class ReactiveVideoBackground {
   
   // NEW: Track current background config
   currentBackground: VideoBackgroundKey | null = null;
-  
+
+  // WebGPU video support
+  private useWebGPUVideo: boolean = false;
+  private videoTexture: GPUExternalTexture | null = null;
+  private device: GPUDevice | null = null;
+
   // Video playback state
   isVideoPlaying: boolean = false;
   
@@ -407,6 +412,45 @@ export class ReactiveVideoBackground {
       // Use library defaults
       this.videoSources = Object.values(VIDEO_BACKGROUNDS).map(bg => bg.src);
     }
+  }
+
+  setWebGPUDevice(device: GPUDevice | null) {
+    this.device = device;
+    this.useWebGPUVideo = !!device && typeof device.importExternalTexture === 'function';
+
+    // If WebGPU video is available, we keep the DOM elements hidden and use GPU compositing.
+    const displayMode = this.useWebGPUVideo ? 'none' : 'block';
+    this.videoElement.style.display = displayMode;
+    this.secondaryVideo.style.display = displayMode;
+  }
+
+  getExternalVideoTexture(): GPUExternalTexture | null {
+    if (!this.useWebGPUVideo || !this.device || !this.videoElement || this.videoElement.paused) {
+      return null;
+    }
+
+    if (this.videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return null;
+    }
+
+    try {
+      this.videoTexture = this.device.importExternalTexture({ source: this.videoElement });
+      return this.videoTexture;
+    } catch (e) {
+      videoLogger.warn('importExternalTexture failed, falling back to DOM video', e);
+      this.useWebGPUVideo = false;
+      this.videoElement.style.display = 'block';
+      this.secondaryVideo.style.display = 'block';
+      return null;
+    }
+  }
+
+  isUsingWebGPUVideo(): boolean {
+    return this.useWebGPUVideo && !!this.videoTexture;
+  }
+
+  isVideoReadyForWebGPU(): boolean {
+    return !!this.device && this.useWebGPUVideo && !this.videoElement.paused && this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
   }
 
   // ENHANCED: Update for level with smooth crossfade and background selection
