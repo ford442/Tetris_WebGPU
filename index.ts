@@ -68,6 +68,7 @@ uiContainer.innerHTML = `
             <button id="pause-button">PAUSE</button>
             <button id="glitch-button">FX: OFF</button>
             <button id="bloom-button">BLOOM: ON</button>
+            <button id="video-toggle" class="toggle-btn">VIDEO: ON</button>
           </div>
           
           <div class="panel-box music-controls">
@@ -169,11 +170,13 @@ uiContainer.innerHTML = `
   // Connect game to view for reactive events
   game.view = view;
 
+  const savedUseVideo = localStorage.getItem('tetris_use_reactive_video') !== 'false';
+
   // Enable premium visuals preset (FXAA, film grain, CRT, bloom, supersampling)
   view.setPremiumVisualsPreset({
     renderScale: 1.5,        // 1.5x supersampling - crisp visuals
     useEnhancedPostProcess: true,
-    useReactiveVideo: true,  // Videos speed up/slow/reverse/glitch
+    useReactiveVideo: savedUseVideo,  // Videos speed up/slow/reverse/glitch
     useReactiveMusic: true   // Music reacts to gameplay
   });
 
@@ -193,29 +196,31 @@ uiContainer.innerHTML = `
     highScoreElement.textContent = highestScore.score.toLocaleString();
   }
 
+  function applyTheme(className: string, themeName: string) {
+    document.body.className = className;
+    view.setTheme(themeName as any);
+    localStorage.setItem('tetris_theme_class', className);
+    localStorage.setItem('tetris_theme_name', themeName);
+  }
+
   document.getElementById('pastel-theme')!.addEventListener('click', () => {
-    document.body.className = 'pastel-theme';
-    view.setTheme('pastel');
+    applyTheme('pastel-theme', 'pastel');
   });
 
   document.getElementById('neon-theme')!.addEventListener('click', () => {
-    document.body.className = 'neon-theme';
-    view.setTheme('neon');
+    applyTheme('neon-theme', 'neon');
   });
 
   document.getElementById('futuristic-theme')!.addEventListener('click', () => {
-    document.body.className = 'futuristic-theme';
-    view.setTheme('future'); // Assuming we add 'future' to View
+    applyTheme('futuristic-theme', 'future'); // Assuming we add 'future' to View
   });
 
   document.getElementById('gold-theme')!.addEventListener('click', () => {
-    document.body.className = 'gold-theme';
-    view.setTheme('gold');
+    applyTheme('gold-theme', 'gold');
   });
 
   document.getElementById('glass-theme')!.addEventListener('click', () => {
-    document.body.className = 'glass-theme';
-    view.setTheme('glass');
+    applyTheme('glass-theme', 'glass');
   });
 
   document.getElementById('start-button')!.addEventListener('click', () => {
@@ -240,6 +245,28 @@ uiContainer.innerHTML = `
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.bloomEnabled ? "BLOOM: ON" : "BLOOM: OFF";
       btn.blur();
+  });
+
+  const videoToggle = document.getElementById('video-toggle') as HTMLButtonElement;
+
+  function updateVideoToggle(useVideo: boolean) {
+    videoToggle.textContent = useVideo ? 'VIDEO: ON' : 'VIDEO: OFF';
+    view.setPremiumVisualsPreset({
+      renderScale: 1.5,
+      useEnhancedPostProcess: true,
+      useReactiveVideo: useVideo,
+      useReactiveMusic: true
+    });
+    localStorage.setItem('tetris_use_reactive_video', String(useVideo));
+  }
+
+  let currentVideoState = savedUseVideo;
+  updateVideoToggle(currentVideoState);
+
+  videoToggle.addEventListener('click', () => {
+    currentVideoState = !currentVideoState;
+    updateVideoToggle(currentVideoState);
+    videoToggle.blur();
   });
 
   // Music volume control
@@ -295,6 +322,8 @@ uiContainer.innerHTML = `
   window.controller = controller;
   window.soundManager = soundManager;
 
-  // Set default
-  document.getElementById('neon-theme')!.click();
+  // Load saved theme
+  const savedThemeClass = localStorage.getItem('tetris_theme_class') || 'neon-theme';
+  const savedThemeName = localStorage.getItem('tetris_theme_name') || 'neon';
+  applyTheme(savedThemeClass, savedThemeName);
 })();
