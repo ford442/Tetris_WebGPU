@@ -440,6 +440,35 @@ export default class View {
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
       handleHardDrop(this, x, y, distance, colorIdx);
   }
+
+  setBloomIntensityWithDuration(intensity: number, durationMs: number = 0) {
+    if (!this.bloomSystem) return;
+
+    this.bloomSystem.setParameters({
+      intensity: Math.max(0, intensity),
+    });
+    this.bloomIntensity = intensity;
+
+    if (durationMs > 0) {
+      setTimeout(() => {
+        if (this.bloomSystem) {
+          this.bloomSystem.setParameters({ intensity: 1.0 });
+          this.bloomIntensity = 1.0;
+        }
+      }, durationMs);
+    }
+  }
+
+  triggerNeonBloomFlash(strength: number = 1.0) {
+    const peak = 1.8 + strength * 1.2;
+    this.setBloomIntensityWithDuration(peak, 280);
+  }
+
+  // We added neonBloomFlash to visualEffects for smooth exponential decay per frame.
+  // This helper enables components to directly trigger the flash through the view.
+  triggerNeonBloomFlashEffects(strength: number = 1.0) {
+    this.visualEffects.triggerNeonBloomFlash(strength);
+  }
   renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
   renderEndScreen(state: any) { handleRenderEndScreen(this, state); }
   renderPauseScreen() { handleRenderPauseScreen(this); }
@@ -960,13 +989,24 @@ export default class View {
     this._postProcessParams.level = this.visualEffects.currentLevel;
     this._postProcessParams.warpSurge = this.visualEffects.warpSurge;
     this._postProcessParams.enableFXAA = this.useEnhancedPostProcess ? 1.0 : 0.0;
+    // Update Bloom System with dynamic neon flash intensity from effects
+    if (this.bloomSystem && this.visualEffects.neonBloomIntensity > 0) {
+       this.bloomSystem.setParameters({
+           intensity: this.bloomIntensity + this.visualEffects.neonBloomIntensity
+       });
+    } else if (this.bloomSystem) {
+       this.bloomSystem.setParameters({
+           intensity: this.bloomIntensity
+       });
+    }
+
     // When multi-pass bloom is active it handles bloom exclusively — disable the
     // in-shader 13-tap bloom to avoid double-blooming that washes out the board.
     const inShaderBloom = this.useEnhancedPostProcess && this.bloomEnabled && !this.useMultiPassBloom;
     this._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
     this._postProcessParams.enableFilmGrain = 1.0;
     this._postProcessParams.enableCRT = 0.0;
-    this._postProcessParams.bloomIntensity = this.bloomIntensity;
+    this._postProcessParams.bloomIntensity = this.bloomIntensity + this.visualEffects.neonBloomIntensity;
     this._postProcessParams.bloomThreshold = 0.72;
     this._postProcessParams.materialAwareBloom = (this.useEnhancedPostProcess && !this.useMultiPassBloom) ? 1.0 : 0.0;
     this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
