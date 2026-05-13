@@ -445,7 +445,7 @@ export const PremiumBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3<f32>(1.0), metallic);
-            finalColor += rimColor * rimPower4 * 0.4;
+            finalColor += rimColor * rimPower4 * 2.5; // JUICE: Enhanced Fresnel Rim Lighting
             
             // Emissive (for cyber/neon)
             let emissiveStrength = vColor.a > 0.8 ? 0.0 : 1.0; // Only for full blocks

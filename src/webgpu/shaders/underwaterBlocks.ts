@@ -405,7 +405,7 @@ export const UnderwaterBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), anyMetal * fUniforms.metallic);
-            finalColor += rimColor * rimPower4 * 0.4;
+            finalColor += rimColor * rimPower4 * 2.5; // JUICE: Enhanced Fresnel Rim Lighting
             
             // Lock tension
             let lockPercent = fUniforms.lockPercent;
