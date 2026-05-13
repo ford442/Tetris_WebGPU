@@ -8,6 +8,7 @@ import {
   ParticleShaders,
   GridShader,
   BackgroundShaders,
+  VideoBackgroundShaders,
   Shaders,
   PremiumBlockShaders,
 } from './webgpu/shaders.js';
@@ -146,6 +147,7 @@ export default class View {
 
   // Background specific
   backgroundPipeline!: GPURenderPipeline;
+  videoBackgroundPipeline!: GPURenderPipeline;
   backgroundVertexBuffer!: GPUBuffer;
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
@@ -486,6 +488,16 @@ export default class View {
     return createProceduralFallbackTexture(this.device);
   }
 
+  private createVideoBindGroup(videoTexture: GPUExternalTexture): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout: this.videoBackgroundPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: videoTexture }
+      ]
+    });
+  }
+
   async preRender() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) return;
@@ -497,6 +509,8 @@ export default class View {
 
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
     this.ctxWebGPU.configure({ device: this.device, format: presentationFormat, alphaMode: 'premultiplied' });
+
+    this.reactiveVideoBackground.setWebGPUDevice(this.device);
 
     this.blockSampler = this.device.createSampler({
       magFilter: 'nearest', minFilter: 'nearest', mipmapFilter: 'nearest',
@@ -599,6 +613,14 @@ export default class View {
 
     this.backgroundUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.backgroundBindGroup = this.device.createBindGroup({ layout: this.backgroundPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.backgroundUniformBuffer } }] });
+
+    const videoBgShader = VideoBackgroundShaders();
+    this.videoBackgroundPipeline = this.device.createRenderPipeline({
+      label: 'video background pipeline', layout: 'auto',
+      vertex: { module: this.device.createShaderModule({ code: videoBgShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
+      fragment: { module: this.device.createShaderModule({ code: videoBgShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
+      primitive: { topology: 'triangle-list' }
+    });
     
     // Initialize Frosted Glass Backboard
     await this.initFrostedGlassBackboard();
@@ -1019,6 +1041,7 @@ export default class View {
     
     // 1. Background (Video or Shader)
     const renderVideo = this.reactiveVideoBackground?.isVideoPlaying ?? false;
+    const videoTex = renderVideo ? this.reactiveVideoBackground?.getExternalVideoTexture() : null;
     const clearColors = this.visualEffects.getClearColors();
     const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
     const clearValue = colorAttachment0.clearValue as GPUColorDict;
@@ -1027,17 +1050,19 @@ export default class View {
     clearValue.b = clearColors.b;
     clearValue.a = 0.0;
 
-    if (!renderVideo) {
-        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
+    const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
+    if (renderVideo && videoTex && this.useReactiveVideo) {
+        bgPassEncoder.setPipeline(this.videoBackgroundPipeline);
+        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
+        bgPassEncoder.setBindGroup(0, this.createVideoBindGroup(videoTex));
+        bgPassEncoder.draw(6);
+    } else if (!renderVideo) {
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
         bgPassEncoder.draw(6);
-        bgPassEncoder.end();
-    } else {
-        const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
-        bgPassEncoder.end();
     }
+    bgPassEncoder.end();
 
     // 2. Frosted Glass Backboard (Ethereal Hardware Panel)
     if (this.useFrostedGlass && this.frostedGlassPipeline) {

@@ -72,7 +72,7 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[6] = m.anisotropic;
   view._materialUniforms[7] = m.dispersion;
   view._materialUniforms[8] = view.particleInteractionUniforms.particleInfluence;
-  view._materialUniforms[9] = 0;
+  view._materialUniforms[9] = view.usePremiumMaterials ? 1.0 : 0.0;
 
   view.device.queue.writeBuffer(view.materialUniformBuffer, 0, view._materialUniforms.subarray(0, 4));
 }
