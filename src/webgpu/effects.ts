@@ -20,6 +20,10 @@ export class VisualEffects {
     shockwaveCenter: number[] = [0.5, 0.5];
     shockwaveParams: number[] = [0.15, 0.08, 0.03, 2.0]; // width, strength, aberration, speed
 
+    // Neon Bloom state
+    neonBloomIntensity: number = 0;
+    neonBloomBaseIntensity: number = 1.0;
+
     // Video background state (delegated to ReactiveVideoBackground)
     isVideoPlaying: boolean = false;
     currentLevel: number = 0;
@@ -64,6 +68,10 @@ export class VisualEffects {
         this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
+        // Neon Bloom decay
+        this.neonBloomIntensity *= 1.0 / (1.0 + dt * 6.0); // Fast decay for snappy flash
+        if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
+
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
@@ -98,6 +106,11 @@ export class VisualEffects {
         this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
     }
 
+    triggerNeonBloomFlash(strength: number = 1.0): void {
+        this.neonBloomIntensity += strength;
+        this.neonBloomIntensity = Math.min(this.neonBloomIntensity, 3.0); // Cap max bloom explosion
+    }
+
     triggerGlitch(intensity: number): void {
         this.glitchIntensity = intensity;
     }
@@ -115,12 +128,21 @@ export class VisualEffects {
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
-        
+        // NEON BRICKLAYER: Prevent weaker shockwaves from overwriting massive ones
+        if (this.shockwaveTimer > 0 && this.shockwaveParams[1] > strength) {
+            return;
+        }
+
         this.shockwaveCenter = center;
         this.shockwaveParams = [width, strength, aberration, speed];
         // Start effect at 0.01 to avoid 0.0 check failure
         // The shader uses time * 2.0 for radius, so 0.01 is a small starting circle
         this.shockwaveTimer = 0.01;
+
+        // JUICE: Massive shockwaves trigger a neon bloom flash
+        if (strength > 0.6) {
+            this.triggerNeonBloomFlash(strength * 1.8);
+        }
     }
 
     private _shockwaveParamsF32 = new Float32Array(4);
