@@ -25,6 +25,15 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 }
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
+
+  const camY = -20.0;
+  const camZ = 75.0;
+  const fov = (35 * Math.PI) / 180;
+  const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+
+  const midY = lines[Math.floor(lines.length / 2)] * -2.2;
+  const uvY = 0.5 - (midY - camY) / visibleHeight;
+
   // BALANCED FLASH INTENSITY - Prevents blinding while maintaining satisfying feedback
   //
   // DESIGN RATIONALE:
