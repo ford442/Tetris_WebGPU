@@ -10,7 +10,8 @@ export function VideoBackgroundShaders() {
       fn main(@location(0) position: vec3<f32>) -> VertexOutput {
         var output: VertexOutput;
         output.position = vec4<f32>(position, 1.0);
-        output.uv = position.xy * 0.5 + vec2<f32>(0.5, 0.5);
+        // Flip Y: NDC has +1 at top, textures have 0 at top
+        output.uv = vec2<f32>(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);
         return output;
       }
     `,
