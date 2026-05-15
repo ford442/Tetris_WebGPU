@@ -200,9 +200,9 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
 }
 
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
-    // Warmth (R-B): gold frame is warm (+0.6), cool glass center is cold (-0.1)
-    let warmth = texColor.r - texColor.b;
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.05}, ${config.metalThresholdHigh ?? 0.55}, warmth);
+    // Luminance: bright silver/white frame maps to metal, dark marble center maps to glass
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.35}, ${config.metalThresholdHigh ?? 0.45}, luma);
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
 `;

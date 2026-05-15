@@ -1056,7 +1056,7 @@ export default class View {
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.createVideoBindGroup(videoTex));
         bgPassEncoder.draw(6);
-    } else if (!renderVideo) {
+    } else {
         bgPassEncoder.setPipeline(this.backgroundPipeline);
         bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
         bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
