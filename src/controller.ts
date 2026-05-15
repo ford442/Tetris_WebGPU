@@ -399,6 +399,20 @@ export default class Controller {
     const code = event.code;
     if (this.keys[code]) {
         this.keys[code] = false;
+        const action = this.keyMap[code];
+        if (action === 'left' && this.lastDirection === 'left') {
+          if (this.isActionPressed('right')) {
+            this.lastDirection = 'right';
+          } else {
+            this.lastDirection = null;
+          }
+        } else if (action === 'right' && this.lastDirection === 'right') {
+          if (this.isActionPressed('left')) {
+            this.lastDirection = 'left';
+          } else {
+            this.lastDirection = null;
+          }
+        }
     }
   }
 
