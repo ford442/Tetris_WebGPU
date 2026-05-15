@@ -61,6 +61,7 @@ uiContainer.innerHTML = `
             <button id="futuristic-theme">Future</button>
             <button id="gold-theme">Gold</button>
             <button id="glass-theme">Glass</button>
+            <!-- Gold/Glass injected here so they are guaranteed to exist in the UI container -->
           </div>
 
           <div class="control-buttons panel-box">
@@ -199,6 +200,8 @@ uiContainer.innerHTML = `
   function applyTheme(className: string, themeName: string) {
     document.body.className = className;
     view.setTheme(themeName as any);
+    // Also update material uniforms / PBR block rendering for Gold & Glass themes
+    view.setMaterialTheme?.(themeName, 1);
     localStorage.setItem('tetris_theme_class', className);
     localStorage.setItem('tetris_theme_name', themeName);
   }

@@ -386,16 +386,15 @@ export class ReactiveVideoBackground {
 
   // NEW: Get background key for level - maps all 15 bg videos across level tiers
   private getBackgroundForLevel(level: number): VideoBackgroundKey {
-    if (level >= 17) return 'bioluminescentCave';
-    if (level >= 16) return 'cosmicRift';
-    if (level >= 15) return 'holographicParticles';
-    if (level >= 14) return 'auroraSurge';
-    if (level >= 13) return 'voidFracture';
-    if (level >= 12) return 'quantumFoam';
-    if (level >= 11) return 'nebulaDrift';
-    if (level >= 10) return 'solarFlare';
-    if (level >= 9) return 'glitchField';
-    if (level >= 8) return 'crystalVoid';
+    // Map levels to individual video files
+    // Using a clamp to ensure we don't exceed bg15
+    const videoIndex = Math.min(level + 1, 15);
+    const dynamicKey = `level${videoIndex}` as VideoBackgroundKey;
+
+    // Fallback to library defaults if specific level key isn't in VIDEO_BACKGROUNDS
+    if (VIDEO_BACKGROUNDS[dynamicKey]) return dynamicKey;
+
+    // Original tier logic fallback
     if (level >= 7) return 'plasmaStorm';
     if (level >= 6) return 'volumetricFog';
     if (level >= 4) return 'neonGrid';
@@ -464,15 +463,20 @@ export class ReactiveVideoBackground {
     if (!bgConfig) return;
     
     // Apply base params for this background
-    this.brightness = bgConfig.baseParams.brightness;
-    this.contrast = bgConfig.baseParams.contrast;
-    this.saturation = bgConfig.baseParams.saturation;
+    this.brightness = bgConfig.baseParams?.brightness ?? 1.0;
+    this.contrast = bgConfig.baseParams?.contrast ?? 1.0;
+    this.saturation = bgConfig.baseParams?.saturation ?? 1.0;
     
     const newSrc = bgConfig.src;
     
-    // Normalise relative src to absolute URL before comparing with the browser-expanded videoElement.src
+    if (!newSrc) return;
+
+    // PERFECT URL normalization (handles relative/absolute, query strings, and initial empty src)
     const resolvedNew = new URL(newSrc, location.href).href;
-    if (!newSrc || this.videoElement.src === resolvedNew) return;
+    const currentSrc = this.videoElement.src || '';
+    if (currentSrc === resolvedNew) {
+      return; // Already on the correct background for this level tier
+    }
     
     this.currentBackground = bgKey;
     
@@ -484,7 +488,7 @@ export class ReactiveVideoBackground {
     
     if (instant) {
       this.videoElement.style.display = '';
-      this.videoElement.src = newSrc;
+      this.videoElement.src = newSrc; // keep original relative form for cleanliness
       this.videoElement.load();
     } else {
       this.startCrossfade(newSrc);

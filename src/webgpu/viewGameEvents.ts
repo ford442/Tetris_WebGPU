@@ -113,18 +113,35 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
           const speed = 25.0;
           view.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.0, 1.0, 1.0]);
         }
-        view.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
+        const camY = -20.0;
+        const camZ = 75.0;
+        const fov = (35 * Math.PI) / 180;
+        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+        const uvY = 0.5 - (worldY - camY) / visibleHeight;
+        view.visualEffects.triggerShockwave([0.5, uvY], 0.3, 0.15, 0.1, 3.0);
         view.visualEffects.triggerGlitch(0.5);
       }
 
       if (lines.length === 4 && c === 5) {
-        view.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1, 3.0);
+        const camY = -20.0;
+        const camZ = 75.0;
+        const fov = (35 * Math.PI) / 180;
+        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+        const uvY = 0.5 - (worldY - camY) / visibleHeight;
+        view.visualEffects.triggerShockwave([0.5, uvY], 0.4, 0.2, 0.1, 3.0);
       }
     }
   });
 
   if (isAllClear) {
-    view.visualEffects.triggerShockwave([0.5, 0.5], 0.5, 0.3, 0.2, 4.0);
+    // Average Y of all cleared lines
+    const avgWorldY = (lines.reduce((sum, y) => sum + y, 0) / lines.length) * -2.2;
+    const camY = -20.0;
+    const camZ = 75.0;
+    const fov = (35 * Math.PI) / 180;
+    const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+    const uvY = 0.5 - (avgWorldY - camY) / visibleHeight;
+    view.visualEffects.triggerShockwave([0.5, uvY], 0.5, 0.3, 0.2, 4.0);
     view.visualEffects.triggerShake(1.5, 0.8);
 
     const centerX = 5.0 * 2.2;
@@ -147,7 +164,25 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
 export function onLock(view: any, isTSpin: boolean = false): void {
   view.visualEffects.triggerLock(0.3);
   view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
-  view.visualEffects.triggerShockwave([0.5, 0.5], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+
+  if (view.state?.activePiece) {
+    const { x, y } = view.state.activePiece;
+    const worldX = (x + 1.5) * 2.2;
+    const worldY = (y + 1.5) * -2.2;
+
+    const camY = -20.0;
+    const camZ = 75.0;
+    const fov = (35 * Math.PI) / 180;
+    const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+    const visibleWidth = visibleHeight * (view.canvasWebGPU.width / view.canvasWebGPU.height);
+
+    const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
+    const uvY = 0.5 - (worldY - camY) / visibleHeight;
+
+    view.visualEffects.triggerShockwave([uvX, uvY], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+  } else {
+    view.visualEffects.triggerShockwave([0.5, 0.5], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+  }
   
   if (isTSpin && view.state?.activePiece) {
     // Extra T-Spin lock effects
@@ -169,6 +204,9 @@ export function onLock(view: any, isTSpin: boolean = false): void {
 
 export function onHold(view: any): void {
   view.visualEffects.triggerFlash(0.3);
+  // Add a subtle warp/aberration glitch to simulate "teleportation"
+  view.visualEffects.triggerAberration(0.3);
+  view.visualEffects.triggerGlitch(0.2);
 
   const centerX = 4.5 * 2.2;
   const centerY = -10.0 * 2.2;
@@ -185,6 +223,7 @@ export function onHold(view: any): void {
 
 export function onRotate(view: any): void {
   view.visualEffects.triggerRotate(0.2);
+  view.visualEffects.triggerAberration(0.15); // Add tactile visual bump
 
   if (view.state && view.state.activePiece) {
     const { x, y } = view.state.activePiece;
