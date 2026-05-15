@@ -25,6 +25,15 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 }
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
+
+  const camY = -20.0;
+  const camZ = 75.0;
+  const fov = (35 * Math.PI) / 180;
+  const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+
+  const midY = lines[Math.floor(lines.length / 2)] * -2.2;
+  const uvY = 0.5 - (midY - camY) / visibleHeight;
+
   // BALANCED FLASH INTENSITY - Prevents blinding while maintaining satisfying feedback
   //
   // DESIGN RATIONALE:
@@ -113,18 +122,18 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
           const speed = 25.0;
           view.particleSystem.emitParticlesRadial(worldX, worldY, 0.0, angle, speed, [1.0, 0.0, 1.0, 1.0]);
         }
-        view.visualEffects.triggerShockwave([0.5, 0.5], 0.3, 0.15, 0.1, 3.0);
+        view.visualEffects.triggerShockwave([0.5, uvY], 0.3, 0.15, 0.1, 3.0);
         view.visualEffects.triggerGlitch(0.5);
       }
 
       if (lines.length === 4 && c === 5) {
-        view.visualEffects.triggerShockwave([0.5, 0.5], 0.4, 0.2, 0.1, 3.0);
+        view.visualEffects.triggerShockwave([0.5, uvY], 0.4, 0.2, 0.1, 3.0);
       }
     }
   });
 
   if (isAllClear) {
-    view.visualEffects.triggerShockwave([0.5, 0.5], 0.5, 0.3, 0.2, 4.0);
+    view.visualEffects.triggerShockwave([0.5, uvY], 0.5, 0.3, 0.2, 4.0);
     view.visualEffects.triggerShake(1.5, 0.8);
 
     const centerX = 5.0 * 2.2;
@@ -169,6 +178,8 @@ export function onLock(view: any, isTSpin: boolean = false): void {
 
 export function onHold(view: any): void {
   view.visualEffects.triggerFlash(0.3);
+  view.visualEffects.triggerAberration(0.3);
+  view.visualEffects.triggerGlitch(0.2);
 
   const centerX = 4.5 * 2.2;
   const centerY = -10.0 * 2.2;
@@ -185,6 +196,7 @@ export function onHold(view: any): void {
 
 export function onRotate(view: any): void {
   view.visualEffects.triggerRotate(0.2);
+  view.visualEffects.triggerAberration(0.15);
 
   if (view.state && view.state.activePiece) {
     const { x, y } = view.state.activePiece;
