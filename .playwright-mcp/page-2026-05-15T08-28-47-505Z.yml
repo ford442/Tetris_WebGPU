@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - generic:
+    - heading "TETRIS" [level=1] [ref=e2]
+    - generic:
+      - generic [ref=e3]:
+        - paragraph [ref=e5]: HOLD
+        - generic [ref=e7]:
+          - paragraph [ref=e8]: SCORE
+          - paragraph [ref=e9]: "0"
+        - generic [ref=e10]:
+          - paragraph [ref=e11]: LINES
+          - paragraph [ref=e12]: "0"
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: LEVEL
+          - paragraph [ref=e15]: "0"
+      - generic [ref=e16]:
+        - paragraph [ref=e18]: NEXT
+        - generic [ref=e20]:
+          - paragraph [ref=e21]: THEME
+          - button "Pastel" [ref=e22] [cursor=pointer]
+          - button "Neon" [ref=e23] [cursor=pointer]
+          - button "Future" [ref=e24] [cursor=pointer]
+        - generic [ref=e25]:
+          - button "START" [ref=e26] [cursor=pointer]
+          - button "PAUSE" [ref=e27] [cursor=pointer]
+          - 'button "FX: OFF" [ref=e28] [cursor=pointer]'
+  - generic [ref=e29]: No appropriate GPU adapter found.

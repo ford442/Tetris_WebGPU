@@ -1,0 +1,26 @@
+- generic [active]:
+  - generic:
+    - heading "TETRIS" [level=1] [ref=e1]
+    - generic:
+      - generic [ref=e2]:
+        - paragraph [ref=e4]: HOLD
+        - generic [ref=e6]:
+          - paragraph [ref=e7]: SCORE
+          - paragraph [ref=e8]: "0"
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: LINES
+          - paragraph [ref=e11]: "0"
+        - generic [ref=e12]:
+          - paragraph [ref=e13]: LEVEL
+          - paragraph [ref=e14]: "0"
+      - generic [ref=e15]:
+        - paragraph [ref=e17]: NEXT
+        - generic [ref=e19]:
+          - paragraph [ref=e20]: THEME
+          - button "Pastel" [ref=e21] [cursor=pointer]
+          - button "Neon" [ref=e22] [cursor=pointer]
+          - button "Future" [ref=e23] [cursor=pointer]
+        - generic [ref=e24]:
+          - button "START" [ref=e25] [cursor=pointer]
+          - button "PAUSE" [ref=e26] [cursor=pointer]
+          - 'button "FX: OFF" [ref=e27] [cursor=pointer]'
