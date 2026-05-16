@@ -25,7 +25,6 @@ import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
 import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
-import { lineClearAnimator } from './effects/lineClearAnimation.js';
 import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
 import { ChaosModeController } from './webgpu/chaosMode.js';
@@ -65,8 +64,6 @@ import {
   cycleTheme as cycleThemeImpl,
   renderPiece as renderPieceImpl,
 } from './webgpu/viewMaterials.js';
-import { updateFrameUniforms } from './webgpu/viewUniforms.js';
-import { postProcessUniforms } from './webgpu/postProcessUniforms.js';
 import {
   generateMipmaps as generateMipmapsUtil,
   createSolidFallbackTexture,
@@ -86,6 +83,7 @@ import {
   showFloatingText as handleShowFloatingText,
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
+import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
 
 const glMatrix = Matrix;
 
@@ -115,7 +113,6 @@ export default class View {
   visualY: number = 0;
   private _previousActivePiece: any = null;
   state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string | null, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
-  blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
   vertexBuffer!: GPUBuffer;
@@ -133,9 +130,7 @@ export default class View {
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
   uniformBindGroup_CACHE: GPUBindGroup[] = [];
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
-  x: number = 0;
 
-  lastEffectCounter: number = 0;
   useGlitch: boolean = false;
   private _shakeOffsetSmoothed = {x: 0, y: 0};
 
@@ -321,7 +316,6 @@ export default class View {
     this.VIEWMATRIX = Matrix.mat4.create();
     this.PROJMATRIX = Matrix.mat4.create();
     this.vpMatrix = Matrix.mat4.create();
-    this.blockData = {};
     if (this.isWebGPU.result) {
       this.element.appendChild(this.canvasWebGPU);
       window.addEventListener('resize', this.resize.bind(this));
@@ -406,7 +400,7 @@ export default class View {
     }
 
     if (this.device) {
-        this.renderPlayfild_Border_WebGPU();
+        this.renderPlayfield_Border_WebGPU();
         const bgColors = this.currentTheme.backgroundColors;
         this._f32_3.set(bgColors[0]);
         this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
@@ -768,7 +762,7 @@ export default class View {
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
 
-    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfild_Border_WebGPU
+    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfield_Border_WebGPU
     this.materialUniformBuffer = this.device.createBuffer({
       size: 16, // 4 floats: metallic, roughness, transmission, padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -777,7 +771,7 @@ export default class View {
     const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
     this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
 
-    this.renderPlayfild_Border_WebGPU();
+    this.renderPlayfield_Border_WebGPU();
 
     this.vertexUniformBuffer = this.device.createBuffer({
       size: this.state.playfield.length * 10 * 256,
@@ -829,346 +823,14 @@ export default class View {
   }
 
   render(dt: number) {
-    if (!this.device) return;
-
-    // Safety cap dt to prevent massive jumps on lag spikes
-    const clampedDt = Math.min(dt, 0.1);
-
-    // Smooth Piece Interpolation (Exponential Decay Lerp)
-    if (this.state && this.state.activePiece) {
-      const targetX = this.state.activePiece.x;
-      const targetY = this.state.activePiece.y;
-
-      // If the active piece object reference changed (e.g. piece spawned or held), snap instantly
-      if (this._previousActivePiece !== this.state.activePiece) {
-        this.visualX = targetX;
-        this.visualY = targetY;
-        this._previousActivePiece = this.state.activePiece;
-      } else {
-        const smoothingFactor = 25.0; // Higher = Snappier, Lower = Smoother
-        const expDecayPiece = 1.0 / (1.0 + clampedDt * smoothingFactor);
-        this.visualX = targetX + (this.visualX - targetX) * expDecayPiece;
-        this.visualY = targetY + (this.visualY - targetY) * expDecayPiece;
-      }
-    } else {
-      this._previousActivePiece = null;
-    }
-
-    this.visualEffects.updateEffects(clampedDt);
-    lineClearAnimator.update(clampedDt);
-    const time = (performance.now() - this.startTime) / 1000.0;
-
-    // Camera updates - Ethereal Floating Panel View
-    let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
-    let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
-    const shake = this.visualEffects.getShakeOffset();
-
-    // Smooth Camera Shake Interpolation using exponential decay
-    const shakeDecay = Math.exp(-clampedDt * 10.0);
-    this._shakeOffsetSmoothed.x = shake.x + (this._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
-    this._shakeOffsetSmoothed.y = shake.y + (this._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
-
-    camX += this._shakeOffsetSmoothed.x;
-    camY += this._shakeOffsetSmoothed.y;
-
-    this._camEye[0] = camX; this._camEye[1] = camY; this._camEye[2] = 75.0;
-    Matrix.mat4.lookAt(this.VIEWMATRIX, this._camEye, this._camTarget, this._camUp);
-    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._camEye);
-
-    // Particle upload
-    if (this.particleSystem.pendingUploadCount > 0) {
-        for(let i = 0; i < this.particleSystem.pendingUploadCount; i++) {
-            const index = this.particleSystem.pendingUploadIndices[i];
-            const offset = i * 16;
-            const dataSlice = this.particleSystem.pendingUploads.subarray(offset, offset + 16);
-            this.device.queue.writeBuffer(this.particleStorageBuffer, index * 64, dataSlice);
-        }
-        this.particleSystem.clearPending();
-    }
-
-    // Compute uniforms
-    const swParams = this.visualEffects.getShockwaveParams();
-    const swCenter = this.visualEffects.shockwaveCenter;
-    const swTimer = this.visualEffects.shockwaveTimer;
-    this._f32_12[0] = dt; this._f32_12[1] = time; this._f32_12[2] = swTimer; this._f32_12[3] = 0.0;
-    this._f32_12[4] = swCenter[0]; this._f32_12[5] = swCenter[1]; this._f32_12[6] = 0.0; this._f32_12[7] = 0.0;
-    this._f32_12[8] = swParams[0]; this._f32_12[9] = swParams[1]; this._f32_12[10] = swParams[2]; this._f32_12[11] = swParams[3];
-    this.device.queue.writeBuffer(this.particleComputeUniformBuffer, 0, this._f32_12);
-
-    const result = updateFrameUniforms(this, dt, time);
-    const commandEncoder = result.commandEncoder;
-    
-    // Check if particles are active from the update result
-    if (result.hasActiveParticles) {
-        const computePass = commandEncoder.beginComputePass();
-        computePass.setPipeline(this.particleComputePipeline);
-        computePass.setBindGroup(0, this.particleComputeBindGroup);
-        computePass.dispatchWorkgroups(Math.ceil(this.particleSystem.maxParticles / 64));
-        computePass.end();
-    }
-
-    // Update render uniforms
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 0, this.vpMatrix as Float32Array);
-    this._f32_1[0] = time;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 64, this._f32_1);
-
-    // Ghost piece
-    let ghostX = -100.0, ghostWidth = 0.0, ghostUVX = -1.0, ghostUVW = 0.0;
-    if (this.state?.activePiece) {
-        const widthInBlocks = this.state.activePiece.blocks[0].length;
-        const gridCenterX = this.state.activePiece.x + widthInBlocks / 2.0;
-        ghostX = gridCenterX * BLOCK_WORLD_SIZE;
-        ghostWidth = widthInBlocks * BLOCK_WORLD_SIZE;
-        const camZ = 75.0;
-        const fov = (35 * Math.PI) / 180;
-        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
-        const visibleWidth = visibleHeight * (this.canvasWebGPU.width / this.canvasWebGPU.height);
-        ghostUVX = 0.5 + (ghostX - BOARD_WORLD_CENTER_X) / visibleWidth;
-        ghostUVW = ghostWidth / visibleWidth;
-    }
-    
-    let lockPercent = 0.0;
-    if (this.state?.lockTimer !== undefined && this.state?.lockDelayTime) {
-        lockPercent = Math.min(this.state.lockTimer / this.state.lockDelayTime, 1.0);
-    }
-
-    this._f32_1[0] = ghostX;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 68, this._f32_1);
-    this._f32_1[0] = ghostWidth;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 72, this._f32_1);
-    this._f32_1[0] = this.visualEffects.warpSurge;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 76, this._f32_1);
-    this._f32_1[0] = lockPercent;
-    this.device.queue.writeBuffer(this.particleUniformBuffer, 80, this._f32_1);
-
-    // Background uniforms
-    this._f32_1[0] = time;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 0, this._f32_1);
-    this._f32_1[0] = this.visualEffects.currentLevel;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 4, this._f32_1);
-    this._f32_2[0] = this.canvasWebGPU.width; this._f32_2[1] = this.canvasWebGPU.height;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 8, this._f32_2);
-    this._f32_1[0] = lockPercent;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 64, this._f32_1);
-    this._f32_1[0] = this.visualEffects.warpSurge;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 68, this._f32_1);
-    this._f32_1[0] = ghostUVX;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 72, this._f32_1);
-    this._f32_1[0] = ghostUVW;
-    this.device.queue.writeBuffer(this.backgroundUniformBuffer, 76, this._f32_1);
-
-    // Block uniforms - standard
-    this._f32_1[0] = time;
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 48, this._f32_1);
-    this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
-    this._f32_1[0] = lockPercent;
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 56, this._f32_1);
-    this._f32_1[0] = this.visualEffects.currentLevel;
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 60, this._f32_1);
-
-    // NEW: Underwater uniforms (offset 96-127 in fragment shader)
-    // Check if we're in bioluminescent level
-    const isUnderwaterLevel = this.reactiveVideoBackground?.isSeaCreatureLevel ?? false;
-    if (isUnderwaterLevel && this.reactiveVideoBackground) {
-      this._f32_1[0] = 1.0; // isUnderwater
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 96, this._f32_1);
-      this._f32_1[0] = 0.6; // causticIntensity
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 100, this._f32_1);
-      this._f32_1[0] = 0.8; // godRayStrength
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 104, this._f32_1);
-      this._f32_1[0] = 0.5; // bioluminescence
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 108, this._f32_1);
-      this._f32_1[0] = this.reactiveVideoBackground.seaCreatureIntensity; // creatureIntensity
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 112, this._f32_1);
-      this._f32_1[0] = this.reactiveVideoBackground.creatureSwimOffset; // creatureSwimOffset
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 116, this._f32_1);
-      this._f32_1[0] = 5.0; // waterDepth
-      this.device.queue.writeBuffer(this.fragmentUniformBuffer, 120, this._f32_1);
-      
-      // Update chaos mode for underwater theme
-      this.chaosMode.setUnderwaterMode(true);
-      
-      // Update jellyfish system
-      this.jellyfishSystem.update(dt, time);
-    } else {
-      // Not underwater - zero out underwater uniforms
-      this._f32_1[0] = 0.0;
-      for (let offset = 96; offset <= 120; offset += 4) {
-        this.device.queue.writeBuffer(this.fragmentUniformBuffer, offset, this._f32_1);
-      }
-      this.chaosMode.setUnderwaterMode(false);
-    }
-
-    // Post-process uniforms - using new unified system
-    this._postProcessParams.time = time;
-    this._postProcessParams.useGlitch = Math.max(this.useGlitch ? 1.0 : 0.0, this.visualEffects.glitchIntensity);
-    this._postProcessParams.shockwaveCenter[0] = this.visualEffects.shockwaveCenter[0];
-    this._postProcessParams.shockwaveCenter[1] = this.visualEffects.shockwaveCenter[1];
-    this._postProcessParams.shockwaveTime = this.visualEffects.shockwaveTimer;
-    const currentShockwaveParams = this.visualEffects.getShockwaveParams();
-    this._postProcessParams.shockwaveParams[0] = currentShockwaveParams[0];
-    this._postProcessParams.shockwaveParams[1] = currentShockwaveParams[1];
-    this._postProcessParams.shockwaveParams[2] = currentShockwaveParams[2];
-    this._postProcessParams.shockwaveParams[3] = currentShockwaveParams[3];
-    this._postProcessParams.level = this.visualEffects.currentLevel;
-    this._postProcessParams.warpSurge = this.visualEffects.warpSurge;
-    this._postProcessParams.enableFXAA = this.useEnhancedPostProcess ? 1.0 : 0.0;
-    // Update Bloom System with dynamic neon flash intensity from effects
-    if (this.bloomSystem && this.visualEffects.neonBloomIntensity > 0) {
-       this.bloomSystem.setParameters({
-           intensity: this.bloomIntensity + this.visualEffects.neonBloomIntensity
-       });
-    } else if (this.bloomSystem) {
-       this.bloomSystem.setParameters({
-           intensity: this.bloomIntensity
-       });
-    }
-
-    // When multi-pass bloom is active it handles bloom exclusively — disable the
-    // in-shader 13-tap bloom to avoid double-blooming that washes out the board.
-    const inShaderBloom = this.useEnhancedPostProcess && this.bloomEnabled && !this.useMultiPassBloom;
-    this._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
-    this._postProcessParams.enableFilmGrain = 1.0;
-    this._postProcessParams.enableCRT = 0.0;
-    this._postProcessParams.bloomIntensity = this.bloomIntensity + this.visualEffects.neonBloomIntensity;
-    this._postProcessParams.bloomThreshold = 0.72;
-    this._postProcessParams.materialAwareBloom = (this.useEnhancedPostProcess && !this.useMultiPassBloom) ? 1.0 : 0.0;
-    this._postProcessParams.screenResolution[0] = this.canvasWebGPU.width;
-    this._postProcessParams.screenResolution[1] = this.canvasWebGPU.height;
-
-    const ppUniforms = postProcessUniforms.pack(this._postProcessParams);
-    this.device.queue.writeBuffer(this.postProcessUniformBuffer, 0, ppUniforms);
-
-    // RENDER PASSES
-    
-    // 1. Background (Video or Shader)
-    const renderVideo = this.reactiveVideoBackground?.isVideoPlaying ?? false;
-    const videoTex = renderVideo ? this.reactiveVideoBackground?.getExternalVideoTexture() : null;
-    const clearColors = this.visualEffects.getClearColors();
-    const colorAttachment0 = (this._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-    const clearValue = colorAttachment0.clearValue as GPUColorDict;
-    clearValue.r = clearColors.r;
-    clearValue.g = clearColors.g;
-    clearValue.b = clearColors.b;
-    clearValue.a = 0.0;
-
-    const bgPassEncoder = commandEncoder.beginRenderPass(this._backgroundPassDescriptor);
-    if (renderVideo && videoTex && this.useReactiveVideo) {
-        bgPassEncoder.setPipeline(this.videoBackgroundPipeline);
-        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-        bgPassEncoder.setBindGroup(0, this.createVideoBindGroup(videoTex));
-        bgPassEncoder.draw(6);
-    } else {
-        bgPassEncoder.setPipeline(this.backgroundPipeline);
-        bgPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-        bgPassEncoder.setBindGroup(0, this.backgroundBindGroup);
-        bgPassEncoder.draw(6);
-    }
-    bgPassEncoder.end();
-
-    // 2. Frosted Glass Backboard (Ethereal Hardware Panel)
-    if (this.useFrostedGlass && this.frostedGlassPipeline) {
-        this.updateFrostedGlassUniforms();
-        const glassPassEncoder = commandEncoder.beginRenderPass({
-            colorAttachments: [{ 
-                view: this._offscreenTextureView, 
-                loadOp: 'load', 
-                storeOp: 'store' 
-            }],
-            depthStencilAttachment: { 
-                view: this._depthTextureView, 
-                depthLoadOp: 'load', 
-                depthStoreOp: 'store' 
-            }
-        });
-        glassPassEncoder.setPipeline(this.frostedGlassPipeline);
-        glassPassEncoder.setVertexBuffer(0, this.frostedGlassVertexBuffer);
-        glassPassEncoder.setBindGroup(0, this.frostedGlassBindGroup);
-        glassPassEncoder.draw(6);
-        glassPassEncoder.end();
-    }
-
-    // 3. Main scene (Blocks, Grid, Particles)
-    this.renderPlayfild_WebGPU(this.state);
-    const passEncoder = commandEncoder.beginRenderPass(this._mainPassDescriptor);
-    
-    // Grid
-    passEncoder.setPipeline(this.gridPipeline);
-    passEncoder.setBindGroup(0, this.gridBindGroup);
-    passEncoder.setVertexBuffer(0, this.gridVertexBuffer);
-    passEncoder.draw(this.gridVertexCount);
-
-    // Blocks
-    passEncoder.setPipeline(this.pipeline);
-    passEncoder.setVertexBuffer(0, this.vertexBuffer);
-    passEncoder.setVertexBuffer(1, this.normalBuffer);
-    passEncoder.setVertexBuffer(2, this.uvBuffer);
-
-    for (let index = 0; index < this.uniformBindGroup_ARRAY_border.length; index++) {
-      passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY_border[index]);
-      passEncoder.draw(this.numberOfVertices);
-    }
-
-    for (let index = 0; index < this.uniformBindGroup_ARRAY.length; index++) {
-      passEncoder.setBindGroup(0, this.uniformBindGroup_ARRAY[index]);
-      passEncoder.draw(this.numberOfVertices);
-    }
-
-    // OPTIMIZED: Only render particles if potentially active (emitted recently or shockwave active)
-    if (result.hasActiveParticles) {
-        passEncoder.setPipeline(this.particlePipeline);
-        passEncoder.setBindGroup(0, this.particleRenderBindGroup);
-        passEncoder.setVertexBuffer(0, this.particleStorageBuffer);
-        passEncoder.draw(6, this.particleSystem.maxParticles, 0, 0);
-    }
-
-    passEncoder.end();
-
-    // 4. Post-process with optional multi-pass bloom
-    if (this.useMultiPassBloom && this.bloomEnabled && this._bloomInputTexture) {
-      // Use new multi-pass bloom system
-      // Render post-process without bloom to the persistent _bloomInputTexture
-      const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-      ppColorAttachment0.view = this._bloomInputTexture.createView();
-
-      const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
-      ppPassEncoder.setPipeline(this.postProcessPipeline);
-      ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
-      ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-      ppPassEncoder.draw(6);
-      ppPassEncoder.end();
-
-      // Apply multi-pass bloom
-      const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-      this.bloomSystem.render(
-        this._bloomInputTexture.createView(),
-        textureViewScreen,
-        commandEncoder
-      );
-    } else {
-      // Use original simple bloom
-      const textureViewScreen = this.ctxWebGPU.getCurrentTexture().createView();
-      const ppColorAttachment0 = (this._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-      ppColorAttachment0.view = textureViewScreen;
-      
-      const ppPassEncoder = commandEncoder.beginRenderPass(this._ppPassDescriptor);
-      ppPassEncoder.setPipeline(this.postProcessPipeline);
-      ppPassEncoder.setBindGroup(0, this.postProcessBindGroup);
-      ppPassEncoder.setVertexBuffer(0, this.backgroundVertexBuffer);
-      ppPassEncoder.draw(6);
-      ppPassEncoder.end();
-    }
-
-    this.device.queue.submit([commandEncoder.finish()]);
-  };
+    executeRenderLoop(this, dt);
+  }
 
   // Pre-allocated buffer for batched uniform updates (max 200 blocks * 64 floats per block)
   private _uniformBatchBuffer = new Float32Array(200 * 64);
 
   // Playfield rendering (delegated to viewPlayfield.ts)
-  async renderPlayfild_WebGPU(state: any) {
+  async renderPlayfield_WebGPU(state: any) {
     if (!this.device || !this.blockTexture) return;
     renderPlayfieldBlocks(
       this.device, state, this.currentTheme, this.visualEffects,
@@ -1179,7 +841,7 @@ export default class View {
     );
   }
 
-  async renderPlayfild_Border_WebGPU() {
+  async renderPlayfield_Border_WebGPU() {
     if (!this.device) return;
     const result = renderPlayfieldBorder(
       this.device, this.pipeline, this.fragmentUniformBuffer,

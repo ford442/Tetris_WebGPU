@@ -434,7 +434,7 @@ export function renderMainScreen(view: any, state: any): void {
     }
   }
 
-  view.renderPlayfild_WebGPU(state);
+  view.renderPlayfield_WebGPU(state);
   view.renderPiece(view.nextPieceContext, state.nextPiece, 30);
   view.renderPiece(view.holdPieceContext, state.holdPiece, 20);
 
