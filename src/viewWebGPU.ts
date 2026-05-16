@@ -415,6 +415,10 @@ export default class View {
         this._f32_3.set(bgColors[2]);
         this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
     }
+
+    if (this.currentTheme.materialTheme) {
+        this.setMaterialTheme(this.currentTheme.materialTheme);
+    }
   }
 
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
