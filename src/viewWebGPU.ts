@@ -113,7 +113,6 @@ export default class View {
   visualY: number = 0;
   private _previousActivePiece: any = null;
   state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string | null, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
-  blockData: any;
   device!: GPUDevice;
   numberOfVertices!: number;
   vertexBuffer!: GPUBuffer;
@@ -131,9 +130,7 @@ export default class View {
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
   uniformBindGroup_CACHE: GPUBindGroup[] = [];
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
-  x: number = 0;
 
-  lastEffectCounter: number = 0;
   useGlitch: boolean = false;
   private _shakeOffsetSmoothed = {x: 0, y: 0};
 
@@ -319,7 +316,6 @@ export default class View {
     this.VIEWMATRIX = Matrix.mat4.create();
     this.PROJMATRIX = Matrix.mat4.create();
     this.vpMatrix = Matrix.mat4.create();
-    this.blockData = {};
     if (this.isWebGPU.result) {
       this.element.appendChild(this.canvasWebGPU);
       window.addEventListener('resize', this.resize.bind(this));
@@ -404,7 +400,7 @@ export default class View {
     }
 
     if (this.device) {
-        this.renderPlayfild_Border_WebGPU();
+        this.renderPlayfield_Border_WebGPU();
         const bgColors = this.currentTheme.backgroundColors;
         this._f32_3.set(bgColors[0]);
         this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
@@ -766,7 +762,7 @@ export default class View {
     this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
 
-    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfild_Border_WebGPU
+    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfield_Border_WebGPU
     this.materialUniformBuffer = this.device.createBuffer({
       size: 16, // 4 floats: metallic, roughness, transmission, padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -775,7 +771,7 @@ export default class View {
     const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
     this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
 
-    this.renderPlayfild_Border_WebGPU();
+    this.renderPlayfield_Border_WebGPU();
 
     this.vertexUniformBuffer = this.device.createBuffer({
       size: this.state.playfield.length * 10 * 256,
@@ -834,7 +830,7 @@ export default class View {
   private _uniformBatchBuffer = new Float32Array(200 * 64);
 
   // Playfield rendering (delegated to viewPlayfield.ts)
-  async renderPlayfild_WebGPU(state: any) {
+  async renderPlayfield_WebGPU(state: any) {
     if (!this.device || !this.blockTexture) return;
     renderPlayfieldBlocks(
       this.device, state, this.currentTheme, this.visualEffects,
@@ -845,7 +841,7 @@ export default class View {
     );
   }
 
-  async renderPlayfild_Border_WebGPU() {
+  async renderPlayfield_Border_WebGPU() {
     if (!this.device) return;
     const result = renderPlayfieldBorder(
       this.device, this.pipeline, this.fragmentUniformBuffer,

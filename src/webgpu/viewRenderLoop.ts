@@ -380,7 +380,7 @@ function renderFrostedGlassPass(view: any, commandEncoder: any) {
  * Render main scene pass (blocks, grid, particles)
  */
 function renderMainPass(view: any, commandEncoder: any, result: any) {
-  view.renderPlayfild_WebGPU(view.state);
+  view.renderPlayfield_WebGPU(view.state);
   const passEncoder = commandEncoder.beginRenderPass(view._mainPassDescriptor);
   
   // Grid
