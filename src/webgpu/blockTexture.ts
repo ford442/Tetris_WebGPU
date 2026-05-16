@@ -89,7 +89,7 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   atlasTileColumn: 1,
   atlasTileRow: 1,
   atlasTileInset: 0.03,
-  materialDetectionMode: 'luminance',
+  materialDetectionMode: 'color_signal',
   metalThresholdLow: 0.35,
   metalThresholdHigh: 0.45,
   useProceduralFallback: true,
