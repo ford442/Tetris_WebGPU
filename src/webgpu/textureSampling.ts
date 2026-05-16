@@ -165,6 +165,24 @@ fn getAtlasTransform() -> vec4<f32> {
 export function getSimpleTextureSamplingWGSL(): string {
   const config = getBlockTextureConfig();
   
+  let materialMaskLogic = `
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.45}, ${config.metalThresholdHigh ?? 0.55}, luma);
+  `;
+
+  if (config.materialDetectionMode === 'color_signal') {
+    materialMaskLogic = `
+    let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.35}, ${config.metalThresholdHigh ?? 0.45}, goldSignal);
+    `;
+  } else if (config.materialDetectionMode === 'luminance' && config.samplingMode === 'atlas') {
+      materialMaskLogic = `
+    // Luminance: bright silver/white frame maps to metal, dark marble center maps to glass
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.35}, ${config.metalThresholdHigh ?? 0.45}, luma);
+      `;
+  }
+
   // For simple shaders, we inline the constants directly
   if (config.samplingMode === 'single') {
     return `
@@ -173,9 +191,7 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(uv.x, 1.0 - uv.y);
 }
 
-fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
-    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.45}, ${config.metalThresholdHigh ?? 0.55}, luma);
+fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
 `;
@@ -199,10 +215,7 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
             (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
 }
 
-fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
-    // Luminance: bright silver/white frame maps to metal, dark marble center maps to glass
-    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.35}, ${config.metalThresholdHigh ?? 0.45}, luma);
+fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
 `;
