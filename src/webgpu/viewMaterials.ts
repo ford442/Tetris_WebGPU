@@ -56,13 +56,31 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
   renderLogger.info(`Switched to ${themeName} with material ${materialThemeName}`);
 }
 
+// Maps material names to pbrBlocks.ts materialType indices
+// 0=Classic, 1=Gold, 2=Chrome, 3=Glass, 4=Cyber, 5=Gem
+function getMaterialTypeIndex(name: string): number {
+  switch (name) {
+    case 'Gold':    return 1;
+    case 'Chrome':  return 2;
+    case 'Glass':   return 3;
+    case 'Cyber':   return 4;
+    case 'Ruby': case 'Sapphire': case 'Emerald': return 5;
+    default:        return 0;
+  }
+}
+
 /**
  * Write material uniform data to the fragment uniform buffer.
+ * Offsets match pbrBlocks.ts FragmentUniforms: metallic starts at byte 48,
+ * materialType (u32) at byte 80, particleIntensity/enablePBR/textureMix at 84-92.
  */
 export function updateMaterialUniforms(view: MaterialViewLike) {
   if (!view.device || !view.currentMaterial) return;
 
   const m = view.currentMaterial;
+
+  // Floats: metallic(48) roughness(52) transmission(56) ior(60)
+  //         subsurface(64) clearcoat(68) anisotropic(72) dispersion(76)
   view._materialUniforms[0] = m.metallic;
   view._materialUniforms[1] = m.roughness;
   view._materialUniforms[2] = m.transmission;
@@ -71,10 +89,17 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[5] = m.clearcoat;
   view._materialUniforms[6] = m.anisotropic;
   view._materialUniforms[7] = m.dispersion;
-  view._materialUniforms[8] = view.particleInteractionUniforms.particleInfluence;
-  view._materialUniforms[9] = 0.0;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._materialUniforms.subarray(0, 8));
 
-  view.device.queue.writeBuffer(view.materialUniformBuffer, 0, view._materialUniforms.subarray(0, 4));
+  // materialType as u32 at byte 80 — must use Uint32Array to write correct bit pattern
+  const u32Scratch = new Uint32Array([getMaterialTypeIndex(m.name)]);
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 80, u32Scratch);
+
+  // particleIntensity(84) enablePBR(88) textureMix(92)
+  view._materialUniforms[0] = view.particleInteractionUniforms.particleInfluence;
+  view._materialUniforms[1] = view.usePremiumMaterials ? 1.0 : 0.0;
+  view._materialUniforms[2] = m.name === 'Image Sampled' ? 1.0 : 0.5;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
 }
 
 /**

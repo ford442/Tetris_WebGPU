@@ -72,7 +72,39 @@ fn subsurfaceScattering(NdotL: f32, subsurface: f32, color: vec3f) -> vec3f {
 `;
 
 export const PBRBlockShaders = () => {
-    const vertex = `...`; // (unchanged — your original vertex shader)
+    const vertex = `
+        struct VertexUniforms {
+            viewProjectionMatrix : mat4x4<f32>,
+            modelMatrix          : mat4x4<f32>,
+            normalMatrix         : mat4x4<f32>,
+            colorVertex          : vec4<f32>
+        };
+        @binding(0) @group(0) var<uniform> vUniforms : VertexUniforms;
+
+        struct VertexOutput {
+            @builtin(position) Position : vec4f,
+            @location(0) vWorldPos      : vec4f,
+            @location(1) vNormal        : vec3f,
+            @location(2) vColor         : vec4f,
+            @location(3) vUV            : vec2f
+        };
+
+        @vertex
+        fn main(
+            @location(0) position : vec4<f32>,
+            @location(1) normal   : vec4<f32>,
+            @location(2) uv       : vec2<f32>
+        ) -> VertexOutput {
+            var out: VertexOutput;
+            let worldPos         = vUniforms.modelMatrix * position;
+            out.vWorldPos        = worldPos;
+            out.vNormal          = (vUniforms.normalMatrix * normal).xyz;
+            out.Position         = vUniforms.viewProjectionMatrix * worldPos;
+            out.vColor           = vUniforms.colorVertex;
+            out.vUV              = uv;
+            return out;
+        }
+    `;
 
     // Get configurable texture sampling code
     const textureSamplingCode = getSimpleTextureSamplingWGSL();
@@ -123,12 +155,11 @@ export const PBRBlockShaders = () => {
         fn main(@location(0) vWorldPos : vec4f,
                 @location(1) vNormal : vec3f,
                 @location(2) vColor : vec4f,
-                @location(3) vUV : vec2f,
-                @location(4) vViewDir : vec3f) -> @location(0) vec4f {
+                @location(3) vUV : vec2f) -> @location(0) vec4f {
 
             let time = fUniforms.time;
             let N = normalize(vNormal);
-            let V = vViewDir;
+            let V = normalize(fUniforms.eyePosition.xyz - vWorldPos.xyz);
             let L = normalize(fUniforms.lightPosition.xyz - vWorldPos.xyz);
             let H = normalize(L + V);
             let NdotL = max(dot(N, L), 0.0);

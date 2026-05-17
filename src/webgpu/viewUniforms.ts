@@ -104,15 +104,16 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
   view._f32_1[0] = ghostUVW;
   device.queue.writeBuffer(view.backgroundUniformBuffer, 76, view._f32_1);
 
-  // Block (fragment) uniforms
+  // Block (fragment) uniforms — offsets match pbrBlocks.ts FragmentUniforms:
+  // lightPosition(0), eyePosition(16), time(32), useGlitch(36), lockPercent(40), level(44)
   view._f32_1[0] = time;
-  device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._f32_1);
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 32, view._f32_1);
   view._f32_1[0] = view.useGlitch ? 1.0 : 0.0;
-  device.queue.writeBuffer(view.fragmentUniformBuffer, 52, view._f32_1);
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 36, view._f32_1);
   view._f32_1[0] = lockPercent;
-  device.queue.writeBuffer(view.fragmentUniformBuffer, 56, view._f32_1);
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 40, view._f32_1);
   view._f32_1[0] = view.visualEffects.currentLevel;
-  device.queue.writeBuffer(view.fragmentUniformBuffer, 60, view._f32_1);
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 44, view._f32_1);
 
   // Underwater / bioluminescent uniforms
   const isUnderwaterLevel = view.reactiveVideoBackground?.isSeaCreatureLevel ?? false;
