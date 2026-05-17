@@ -93,12 +93,11 @@ describe('block texture configuration', () => {
   it('has correct default configuration', () => {
     const config = getBlockTextureConfig();
     expect(config.url).toBe('./block.png');
-    expect(config.samplingMode).toBe('atlas');
-    expect(config.atlasColumns).toBe(4);
-    expect(config.atlasRows).toBe(3);
-    expect(config.atlasTileColumn).toBe(1);
-    expect(config.atlasTileRow).toBe(1);
-    expect(config.atlasTileInset).toBe(0.03);
+    expect(config.samplingMode).toBe('subregion');
+    expect(config.subregionX).toBeCloseTo(0.368, 3);
+    expect(config.subregionY).toBeCloseTo(0.193, 3);
+    expect(config.subregionWidth).toBeCloseTo(0.247, 3);
+    expect(config.subregionHeight).toBeCloseTo(0.446, 3);
     expect(config.materialDetectionMode).toBe('color_signal');
   });
 
@@ -113,7 +112,7 @@ describe('block texture configuration', () => {
     const config = getBlockTextureConfig();
     expect(config.url).toBe('./custom.png');
     // Other values should remain unchanged
-    expect(config.samplingMode).toBe('atlas');
+    expect(config.samplingMode).toBe('subregion');
   });
 
   it('can switch to single tile mode', () => {
@@ -175,7 +174,7 @@ describe('block texture configuration', () => {
     resetBlockTextureConfig();
     const config = getBlockTextureConfig();
     expect(config.url).toBe('./block.png');
-    expect(config.samplingMode).toBe('atlas');
+    expect(config.samplingMode).toBe('subregion');
   });
 
   it('returns correct atlas sampling params', () => {
@@ -195,10 +194,16 @@ describe('block texture configuration', () => {
   });
 
   it('uses previous atlas values when not specified', () => {
-    // Default config has atlas values, so they persist when switching modes
+    // Seed atlas values explicitly, then switch modes — they should persist
+    setBlockTextureConfig({
+      samplingMode: 'atlas',
+      atlasColumns: 4,
+      atlasRows: 3,
+      atlasTileInset: 0.03,
+    });
     setBlockTextureConfig({ samplingMode: 'single' });
     const params = getAtlasSamplingParams();
-    // Should keep the default atlas values even in single mode
+    // Should keep the previously-set atlas values even in single mode
     expect(params.columns).toBe(4);
     expect(params.rows).toBe(3);
     expect(params.inset).toBe(0.03);

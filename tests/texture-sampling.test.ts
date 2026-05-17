@@ -15,21 +15,20 @@ describe('texture sampling WGSL generation', () => {
   });
 
   describe('getSimpleTextureSamplingWGSL', () => {
-    it('generates atlas mode code by default', () => {
+    it('generates subregion mode code by default', () => {
       const code = getSimpleTextureSamplingWGSL();
-      expect(code).toContain('ATLAS_COLUMNS');
-      expect(code).toContain('ATLAS_ROWS');
+      expect(code).toContain('SUBREGION mode');
       expect(code).toContain('transformUVForSampling');
       expect(code).toContain('extractMaterialMask');
+      expect(code).not.toContain('ATLAS_COLUMNS');
     });
 
-    it('includes correct atlas constants for default config', () => {
+    it('includes correct subregion constants for default config', () => {
       const code = getSimpleTextureSamplingWGSL();
-      expect(code).toContain('ATLAS_COLUMNS: f32 = 4.0');
-      expect(code).toContain('ATLAS_ROWS: f32 = 3.0');
-      expect(code).toContain('ATLAS_TILE_COL: f32 = 1.0');
-      expect(code).toContain('ATLAS_TILE_ROW: f32 = 1.0');
-      expect(code).toContain('ATLAS_INSET: f32 = 0.03');
+      expect(code).toContain('0.368');
+      expect(code).toContain('0.193');
+      expect(code).toContain('0.247');
+      expect(code).toContain('0.446');
     });
 
     it('generates single mode code when configured', () => {
@@ -100,11 +99,9 @@ describe('texture sampling WGSL generation', () => {
   });
 
   describe('getTextureSamplingDefines', () => {
-    it('generates preprocessor defines for atlas mode', () => {
+    it('generates preprocessor defines for subregion mode by default', () => {
       const defines = getTextureSamplingDefines();
-      expect(defines).toContain('#define TEXTURE_MODE_ATLAS');
-      expect(defines).toContain('#define ATLAS_COLUMNS 4');
-      expect(defines).toContain('#define ATLAS_ROWS 3');
+      expect(defines).toContain('#define TEXTURE_MODE_SUBREGION');
     });
 
     it('generates correct defines for single mode', () => {
@@ -123,6 +120,7 @@ describe('texture sampling WGSL generation', () => {
   describe('configuration changes affect generated code', () => {
     it('updates atlas dimensions in generated code', () => {
       setBlockTextureConfig({
+        samplingMode: 'atlas',
         atlasColumns: 8,
         atlasRows: 6,
       });
@@ -133,6 +131,7 @@ describe('texture sampling WGSL generation', () => {
 
     it('updates tile position in generated code', () => {
       setBlockTextureConfig({
+        samplingMode: 'atlas',
         atlasTileColumn: 3,
         atlasTileRow: 2,
       });
@@ -142,7 +141,7 @@ describe('texture sampling WGSL generation', () => {
     });
 
     it('updates inset value in generated code', () => {
-      setBlockTextureConfig({ atlasTileInset: 0.05 });
+      setBlockTextureConfig({ samplingMode: 'atlas', atlasTileInset: 0.05 });
       const code = getSimpleTextureSamplingWGSL();
       expect(code).toContain('ATLAS_INSET: f32 = 0.05');
     });

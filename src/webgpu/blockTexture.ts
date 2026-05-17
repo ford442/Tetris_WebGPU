@@ -80,15 +80,22 @@ export interface BlockTextureConfig {
   useProceduralFallback?: boolean;
 }
 
-/** Default configuration for block.png (4x3 atlas with gold/silver tile) */
+/**
+ * Default configuration for block.png — subregion mode picking the middle crystal block.
+ *
+ * Pixel analysis of the 2816×1536 image located dark hinge valleys at:
+ *   columns: x ≈ 344, 1037, 1733, 2430
+ *   rows:    y ≈ 296, 981
+ * The middle full block occupies x=[1037,1733], y=[296,981] (≈695×685 px, nearly square).
+ * Normalised: x=1037/2816≈0.368, y=296/1536≈0.193, w=696/2816≈0.247, h=685/1536≈0.446
+ */
 export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   url: './block.png',
-  samplingMode: 'atlas',
-  atlasColumns: 4,
-  atlasRows: 3,
-  atlasTileColumn: 1,
-  atlasTileRow: 1,
-  atlasTileInset: 0.03,
+  samplingMode: 'subregion',
+  subregionX: 0.368,
+  subregionY: 0.193,
+  subregionWidth: 0.247,
+  subregionHeight: 0.446,
   materialDetectionMode: 'color_signal',
   metalThresholdLow: 0.35,
   metalThresholdHigh: 0.45,

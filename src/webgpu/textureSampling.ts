@@ -184,6 +184,27 @@ export function getSimpleTextureSamplingWGSL(): string {
   }
 
   // For simple shaders, we inline the constants directly
+  if (config.samplingMode === 'subregion') {
+    const sx = config.subregionX ?? 0.0;
+    const sy = config.subregionY ?? 0.0;
+    const sw = config.subregionWidth ?? 1.0;
+    const sh = config.subregionHeight ?? 1.0;
+    return `
+// Texture sampling: SUBREGION mode (${sx.toFixed(3)},${sy.toFixed(3)}) ${(sw * 100).toFixed(1)}%x${(sh * 100).toFixed(1)}%
+fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
+    let texUV = vec2<f32>(uv.x, 1.0 - uv.y);
+    return vec2<f32>(
+        ${sx} + texUV.x * ${sw},
+        ${sy} + texUV.y * ${sh}
+    );
+}
+
+fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
+    return vec2<f32>(metalMask, 1.0 - metalMask);
+}
+`;
+  }
+
   if (config.samplingMode === 'single') {
     return `
 // Texture sampling: SINGLE mode
