@@ -131,30 +131,30 @@ export const Shaders = () => {
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
 
                 // ── Crystal-glass material detection ───────────────────────────────────
-                // Gold/silver frame lives in the middle luminance band with a warm hue.
-                // Crystal glass is either very bright (facet reflections) or very dark
-                // (crack shadows) — both extremes of the luminance range.
+                // Gold frame: mid-luminance AND warm hue (R > B).
+                // Crystal glass interior: mid-to-high luminance but COOL (B >= R).
+                // Pixel analysis of block.png confirms crystal warmth = -7..-16 (raw),
+                // gold frame warmth = +40..+70. They are cleanly separable by warmth sign.
                 let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-                // warmth = R channel dominance over B  (gold/brass is warm, crystal is cool)
+                // warmth = R channel dominance over B (gold/brass: warm, crystal: cool/neutral)
                 let warmth = texColor.r - texColor.b;
-                // lumaBand peaks at mid-luma and falls off at both bright and dark extremes
-                let lumaBand = smoothstep(0.38, 0.56, luma)
-                             * (1.0 - smoothstep(0.80, 0.93, luma));
-                // Combine luminance band with warm-colour signal → robust frame mask
-                let metalMask = clamp(
-                    lumaBand + smoothstep(0.12, 0.30, warmth) * 0.55,
-                    0.0, 1.0
-                );
+                // lumaBand: mid-luma range where the gold frame lives
+                let lumaBand = smoothstep(0.25, 0.55, luma)
+                             * (1.0 - smoothstep(0.82, 0.95, luma));
+                // warmthSignal: only non-zero for warm/golden hues — zero for grey/cool crystal
+                let warmthSignal = smoothstep(0.05, 0.20, warmth);
+                // metalMask requires BOTH mid-luma AND warm colour.
+                // Grey/cool crystal pixels have warmthSignal≈0 → metalMask≈0 (glass).
+                let metalMask = clamp(lumaBand * warmthSignal * 3.0, 0.0, 1.0);
                 let glassMask = 1.0 - metalMask;
 
                 // ── Crystal glass: stained-glass colour effect ─────────────────────────
-                // Piece colour provides the hue; crystal luma provides brightness variance.
-                // Bright facets become piece-coloured highlights; dark cracks stay dark.
-                let crystalBrightness = smoothstep(0.18, 0.88, luma);
-                // Specular-like highlight from the brightest facets in the texture
-                let crystalHighlight  = max(luma - 0.70, 0.0) * 2.0;
-                let glassColor = vColor.rgb * (0.45 + crystalBrightness * 0.55)
-                               + texColor.rgb * crystalHighlight;
+                // Piece colour provides the hue; crystal luma drives brightness variation.
+                // Use white for the brightest specular sparkles (avoids grey from texColor).
+                let crystalBrightness = smoothstep(0.15, 0.90, luma);
+                let crystalHighlight  = max(luma - 0.70, 0.0) * 3.0;
+                let glassColor = vColor.rgb * (0.40 + crystalBrightness * 0.60)
+                               + vec3<f32>(1.0) * crystalHighlight * 0.5;
 
                 // ── Metal / frame: preserve gold & hinge detail ────────────────────────
                 // Keep the gorgeous gold/silver texture colour, barely push warmth.
@@ -164,7 +164,7 @@ export const Shaders = () => {
 
                 // Transparency: glass is translucent so the video portal shows through;
                 // the gold frame is nearly opaque to read as solid structure.
-                let materialAlpha = mix(0.40, 0.94, metalMask);
+                let materialAlpha = mix(0.55, 0.94, metalMask);
 
                 // --- Composition ---
                 // Light factor stays in [0.3, 0.9] — leaves headroom for specular.
