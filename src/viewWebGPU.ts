@@ -511,7 +511,7 @@ export default class View {
     this.reactiveVideoBackground.setWebGPUDevice(this.device);
 
     this.blockSampler = this.device.createSampler({
-      magFilter: 'nearest', minFilter: 'nearest', mipmapFilter: 'nearest',
+      magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear',
       addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
     });
 

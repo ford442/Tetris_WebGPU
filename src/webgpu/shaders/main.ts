@@ -129,27 +129,48 @@ export const Shaders = () => {
                 // Use configurable texture sampling
                 let texUV = transformUVForSampling(sampleUV);
                 let texColor = textureSample(blockTexture, blockSampler, texUV);
-                
-                // Use configurable material mask extraction
-                let masks = extractMaterialMask(texColor.rgb);
-                let metalMask = masks.x;
-                let glassMask = masks.y;
-                
-                // Enhance material separation:
-                // Gold: slightly more pronounced metallic push (12%) to accentuate the frame
-                let goldColor = mix(texColor.rgb * vColor.rgb, vec3<f32>(1.0, 0.88, 0.40), 0.12);
-                // Glass: subtle theme-color tint (15%) so piece identity is visible, darkened slightly for contrast
-                let glassColor = mix(texColor.rgb * 0.9, vColor.rgb, 0.15);
-                var baseColor = mix(glassColor, goldColor, metalMask);
 
-                // Better transparency mapping: Glass slightly translucent, gold opaque
-                let materialAlpha = mix(0.75, 1.0, metalMask);
-                
+                // ── Crystal-glass material detection ───────────────────────────────────
+                // Gold/silver frame lives in the middle luminance band with a warm hue.
+                // Crystal glass is either very bright (facet reflections) or very dark
+                // (crack shadows) — both extremes of the luminance range.
+                let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+                // warmth = R channel dominance over B  (gold/brass is warm, crystal is cool)
+                let warmth = texColor.r - texColor.b;
+                // lumaBand peaks at mid-luma and falls off at both bright and dark extremes
+                let lumaBand = smoothstep(0.38, 0.56, luma)
+                             * (1.0 - smoothstep(0.80, 0.93, luma));
+                // Combine luminance band with warm-colour signal → robust frame mask
+                let metalMask = clamp(
+                    lumaBand + smoothstep(0.12, 0.30, warmth) * 0.55,
+                    0.0, 1.0
+                );
+                let glassMask = 1.0 - metalMask;
+
+                // ── Crystal glass: stained-glass colour effect ─────────────────────────
+                // Piece colour provides the hue; crystal luma provides brightness variance.
+                // Bright facets become piece-coloured highlights; dark cracks stay dark.
+                let crystalBrightness = smoothstep(0.18, 0.88, luma);
+                // Specular-like highlight from the brightest facets in the texture
+                let crystalHighlight  = max(luma - 0.70, 0.0) * 2.0;
+                let glassColor = vColor.rgb * (0.45 + crystalBrightness * 0.55)
+                               + texColor.rgb * crystalHighlight;
+
+                // ── Metal / frame: preserve gold & hinge detail ────────────────────────
+                // Keep the gorgeous gold/silver texture colour, barely push warmth.
+                let metalColor = texColor.rgb * 1.12 + vec3<f32>(0.025, 0.010, 0.0);
+
+                var baseColor = mix(glassColor, metalColor, metalMask);
+
+                // Transparency: glass is translucent so the video portal shows through;
+                // the gold frame is nearly opaque to read as solid structure.
+                let materialAlpha = mix(0.40, 0.94, metalMask);
+
                 // --- Composition ---
-                // so total light factor stays in [0.3, 1.0] and never blows out the texture.
-                let lightFactor = 0.25 + diffuse * 0.65; // max = 0.9, leaves room for specular
-                // Very subtle specular: just a glint on metal, barely visible on glass
-                let specularStrength = mix(0.04, 0.12, metalMask);
+                // Light factor stays in [0.3, 0.9] — leaves headroom for specular.
+                let lightFactor = 0.25 + diffuse * 0.65;
+                // Stronger specular on polished metal, subtle shimmer on glass
+                let specularStrength = mix(0.04, 0.15, metalMask);
                 var finalColor:vec3<f32> = baseColor * lightFactor + vec3<f32>${params.specularColor} * specular * specularStrength;
                 // Pre-compute dotNV for iridescence and fresnel
                 let dotNV = max(dot(N, V), 0.0);
@@ -165,14 +186,14 @@ export const Shaders = () => {
                         sin(iridescence * 6.28 + 2.09) * 0.5 + 0.5,
                         sin(iridescence * 6.28 + 4.18) * 0.5 + 0.5
                     );
-                    finalColor += rainbow * specular * 0.15 * glassMask;
+                    finalColor += rainbow * specular * 0.28 * glassMask;
                 }
                 // Add Glitch Mod
                 finalColor += glitchColorMod;
                 let breath = sin(time * 1.5) * 0.03 + 0.03;
                 let distCenter = length(vUV - vec2<f32>(0.5));
                 let centerGlow = clamp((0.45 - distCenter) / 0.35, 0.0, 1.0);
-                finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.5;
+                finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.8;
                 // ENHANCED rim lighting -- more pronounced edge glow
                 let rimFalloff = 1.0 - max(dot(N, V), 0.0);
                 let rimFalloff2 = rimFalloff * rimFalloff;
