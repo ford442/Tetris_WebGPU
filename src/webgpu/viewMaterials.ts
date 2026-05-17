@@ -40,7 +40,7 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
   view.currentTheme = theme;
 
   const materialThemeName = (theme as any).materialTheme || 'classic';
-  view.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber'].includes(materialThemeName);
+  view.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber', 'imageSampled'].includes(materialThemeName);
 
   view.currentMaterial = getPieceMaterial(materialThemeName, pieceType);
 

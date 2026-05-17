@@ -136,6 +136,21 @@ export const Materials: Record<string, Material> = {
     anisotropic: 0.2,
     dispersion: 0.0,
   },
+
+  // Image Sampled - use texture directly with minimal material interference
+  imageSampled: {
+    name: 'Image Sampled',
+    baseColor: [1.0, 1.0, 1.0],
+    metallic: 0.1,
+    roughness: 0.4,
+    transmission: 0.0,
+    ior: 1.0,
+    subsurface: 0.0,
+    emissive: [0, 0, 0],
+    clearcoat: 0.1,
+    anisotropic: 0.0,
+    dispersion: 0.0,
+  },
 };
 
 // Material presets for each tetromino type
@@ -147,6 +162,7 @@ export const MaterialThemes: Record<string, Material[]> = {
   premium: [Materials.ruby, Materials.sapphire, Materials.emerald, Materials.gold, 
             Materials.chrome, Materials.glass, Materials.ruby, Materials.sapphire],
   cyber: Array(8).fill(Materials.cyber),
+  imageSampled: Array(8).fill(Materials.imageSampled),
 };
 
 // Piece type to material mapping (for themed pieces)

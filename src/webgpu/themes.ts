@@ -24,6 +24,7 @@ export interface Themes {
   premium: ThemeColors; // NEW
   cyber: ThemeColors;   // NEW
   chrome: ThemeColors;  // NEW
+  imageSampled: ThemeColors; // NEW: Direct block.png sampling
 }
 
 // Theme-specific video playlists - full bg1–bg15 sequence
@@ -205,5 +206,24 @@ export const themes: Themes = {
       [0.1, 0.1, 0.15]
     ],
     materialTheme: 'chrome'
+  },
+  // NEW: Image Sampled - uses block.png texture directly
+  imageSampled: {
+    0: [0.3, 0.3, 0.3],
+    1: [1.0, 1.0, 1.0],
+    2: [1.0, 1.0, 1.0],
+    3: [1.0, 1.0, 1.0],
+    4: [1.0, 1.0, 1.0],
+    5: [1.0, 1.0, 1.0],
+    6: [1.0, 1.0, 1.0],
+    7: [1.0, 1.0, 1.0],
+    border: [0.7, 0.7, 0.7],
+    levelVideos: ThemeVideos.Space,
+    backgroundColors: [
+      [0.1, 0.1, 0.1],
+      [0.15, 0.15, 0.15],
+      [0.08, 0.08, 0.08]
+    ],
+    materialTheme: 'imageSampled'
   },
 };

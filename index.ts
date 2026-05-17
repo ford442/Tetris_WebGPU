@@ -61,6 +61,7 @@ uiContainer.innerHTML = `
             <button id="futuristic-theme">Future</button>
             <button id="gold-theme">Gold</button>
             <button id="glass-theme">Glass</button>
+            <button id="image-sampled-theme">Image Sampled</button>
             <!-- Gold/Glass injected here so they are guaranteed to exist in the UI container -->
           </div>
 
@@ -224,6 +225,10 @@ uiContainer.innerHTML = `
 
   document.getElementById('glass-theme')!.addEventListener('click', () => {
     applyTheme('glass-theme', 'glass');
+  });
+
+  document.getElementById('image-sampled-theme')!.addEventListener('click', () => {
+    applyTheme('image-sampled-theme', 'imageSampled');
   });
 
   document.getElementById('start-button')!.addEventListener('click', () => {
