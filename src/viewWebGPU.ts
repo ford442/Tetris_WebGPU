@@ -567,7 +567,7 @@ export default class View {
         }
     }
 
-    const shader = Shaders();
+    const shader = PBRBlockShaders();
     const cubeData = CubeData();
     this.numberOfVertices = cubeData.positions.length / 3;
     this.vertexBuffer = this.CreateGPUBuffer(this.device, cubeData.positions);
@@ -753,10 +753,7 @@ export default class View {
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, lightPosition);
     this._f32_3.set(eyePosition);
     this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._f32_3);
-    this._f32_4.set(this.currentTheme[5] || [1.0, 1.0, 1.0, 1.0]);
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 32, this._f32_4);
-    this._f32_1[0] = this.useGlitch ? 1.0 : 0.0;
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 52, this._f32_1);
+    // Bytes 32-47 are time/useGlitch/lockPercent/level — zeroed here, updated each frame
 
     // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfield_Border_WebGPU
     this.materialUniformBuffer = this.device.createBuffer({
@@ -784,7 +781,6 @@ export default class View {
                 { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler },
-                { binding: 4, resource: { buffer: this.materialUniformBuffer, offset: 0, size: 16 } }
             ],
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
@@ -841,7 +837,7 @@ export default class View {
     if (!this.device) return;
     const result = renderPlayfieldBorder(
       this.device, this.pipeline, this.fragmentUniformBuffer,
-      this.blockTexture, this.blockSampler, this.materialUniformBuffer,
+      this.blockTexture, this.blockSampler,
       this.vpMatrix as Float32Array, this.currentTheme,
       this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
     );

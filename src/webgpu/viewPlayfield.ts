@@ -123,7 +123,6 @@ export function renderPlayfieldBorder(
   fragmentUniformBuffer: GPUBuffer,
   blockTexture: GPUTexture,
   blockSampler: GPUSampler,
-  materialUniformBuffer: GPUBuffer,
   vpMatrix: Float32Array | Matrix.mat4,
   currentTheme: any,
   _f32_3: Float32Array,
@@ -155,7 +154,6 @@ export function renderPlayfieldBorder(
           { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: 144 } },
           { binding: 2, resource: blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: blockTexture.mipLevelCount }) },
           { binding: 3, resource: blockSampler },
-          { binding: 4, resource: { buffer: materialUniformBuffer, offset: 0, size: 16 } }
         ],
       });
 
