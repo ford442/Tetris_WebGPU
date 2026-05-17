@@ -83,8 +83,9 @@ export const GridShader = () => {
 
             // Distance Fade (Fog)
             let center = vec2<f32>(10.0, -20.0);
-            let distFromCenter = length(vPos.xy - center);
-            let fade = 1.0 - smoothstep(15.0, 30.0, distFromCenter);
+            let diffFromCenter = vPos.xy - center;
+            let distFromCenterSq = dot(diffFromCenter, diffFromCenter);
+            let fade = 1.0 - smoothstep(225.0, 900.0, distFromCenterSq); // 15^2 to 30^2
             alpha *= fade;
 
             // NEON BRICKLAYER: Ghost Landing Zone
