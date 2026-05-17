@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/tetris-webgpu/',
+  base: process.env.NODE_ENV === 'production' ? '/tetris-webgpu/' : '/',
+  server: {
+    allowedHosts: ['code.noahcohn.com', 'localhost'],
+  },
 });
