@@ -251,6 +251,10 @@ export const Shaders = () => {
                      }
                 }
 
+                // Amplified emissive pulse for more visible pulsing effect
+                let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
+                finalColor += finalColor * emissivePulse * 0.25;
+
                 // Subtle Surface Noise (Texture)
                 let noise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233))) * 43758.5453);
                 finalColor += vec3<f32>(noise) * 0.015;
