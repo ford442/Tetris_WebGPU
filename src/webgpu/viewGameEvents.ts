@@ -255,15 +255,16 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
-  // JUICE: Doubled shockwave strength and width
+  // JUICE: Doubled shockwave strength and width, massively amplified aberration and speed for heavier impacts
   const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.0;
   const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 2.0;
-  const aberration = 1.0 + Math.min(distance * 0.1, 1.0);
-  const speed = 7.0 + Math.min(distance * 0.4, 4.0);
+  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 2.5; // NEON BRICKLAYER: Hyper aberration
+  const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 1.5;      // NEON BRICKLAYER: Faster ripple expansion
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.15, 1.5);
-  view.visualEffects.triggerShake(8.0 + distance * 0.5, 0.5);
+  // NEON BRICKLAYER: Slightly heavier camera shake
+  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
 }
 
 export function onHardDrop(view: any, x: number, y: number, distance: number, colorIdx: number = 0): void {
