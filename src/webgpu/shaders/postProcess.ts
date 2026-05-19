@@ -68,7 +68,8 @@ export const PostProcessShaders = () => {
                     finalUV -= dir * distortion;
 
                     // Add chromatic aberration at the edge of the shockwave
-                    shockwaveAberration = params.z * (1.0 - abs(diff)/width) * (1.0 - time);
+                    // NEON BRICKLAYER: Multiplied shockwave aberration by 2.5 for extreme "Juice" on hard drops
+                    shockwaveAberration = params.z * 2.5 * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
 
                 // Second ring (Echo) - NEON BRICKLAYER
@@ -115,16 +116,19 @@ export const PostProcessShaders = () => {
             let baseAberration = vignetteAberration + levelAberration;
             // Add glitch aberration
             let glitchAberration = glitchStrength * 0.08;
-            let totalAberration = baseAberration + shockwaveAberration + glitchAberration;
 
-            // Chromatic Aberration with Glitch Offset
-            // R and B channels get offset by the glitch wave in opposite directions
+            // NEON BRICKLAYER: We separate shockwave aberration so we can heavily distort the RGB split independently from vignette
+            let totalAberration = baseAberration + glitchAberration;
+
+            // Chromatic Aberration with Glitch Offset + Heavy Shockwave Split
+            // R and B channels get offset by the glitch wave and shockwave in opposite directions
             // JUICE: Vertical aberration added for lens effect (scaled by UV y)
-            let vertAberration = totalAberration * (uv.y - 0.5) * 0.2;
+            let horizOffset = totalAberration + glitchOffset + shockwaveAberration;
+            let vertAberration = totalAberration * (uv.y - 0.5) * 0.2 + (shockwaveAberration * 0.5);
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, vertAberration)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset, vertAberration)).r;
             var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, vertAberration)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset, vertAberration)).b;
             let a = textureSample(myTexture, mySampler, finalUV).a;
 
             // Bloom-ish boost (optimized 5-tap tent filter)

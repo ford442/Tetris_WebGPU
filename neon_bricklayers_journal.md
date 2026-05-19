@@ -8,3 +8,5 @@
 - "Juiced up the shockwave on hard drops by multiplying its width and distortion strength by 1.5 in both the enhanced and material-aware post-processing shaders, giving it a much heavier, crunchier impact." (Verified already active)
 - "Added a gentle sine wave 'breathing' pulse to the ghost piece's alpha channel. It makes the piece look like glowing neon rather than static hologram wireframe." (Verified already active)
 - "Increased the hard drop particle speed multiplier from 1.5x to 2.0x. The particles now explode outward with much more explosive force, adding an incredibly satisfying sense of heavy impact and 'crunch' to fast locks!"
+- "Massively boosted the Chromatic Aberration during shockwaves. Pushing the Red and Blue channels apart vertically and horizontally makes Hard Drops feel like they are tearing the screen apart!"
+- "Amplified the camera shake scaling and shockwave ripple speed on Hard Drops to make high-distance drops feel earth-shattering."

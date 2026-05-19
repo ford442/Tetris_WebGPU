@@ -237,7 +237,8 @@ export const MaterialAwarePostProcessShaders = () => {
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * strength * (1.0 - time);
                     finalUV -= dir * distortion;
-                    shockwaveAberration = params.z * (1.0 - abs(diff)/width) * (1.0 - time);
+                    // NEON BRICKLAYER: Multiplied shockwave aberration by 2.5 for extreme "Juice" on hard drops
+                    shockwaveAberration = params.z * 2.5 * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
 
                 // Echo rings
@@ -261,18 +262,24 @@ export const MaterialAwarePostProcessShaders = () => {
             let vignetteAberration = (d2 * d2) * 0.08;
             let levelAberration = levelStress * 0.003 * sin(uniforms.time * 2.0);
             let glitchAberration = glitchStrength * 0.02;
-            let totalAberration = vignetteAberration + levelAberration + shockwaveAberration + glitchAberration;
+
+            // NEON BRICKLAYER: We separate shockwave aberration so we can heavily distort the RGB split independently from vignette
+            let totalAberration = vignetteAberration + levelAberration + glitchAberration;
 
             // Glitch offset
             let glitchOffset = glitchStrength * 0.02 * sin(finalUV.y * 50.0 + uniforms.time * 20.0);
             let tear = step(0.97, fract(finalUV.y * 2.0 + uniforms.time * 10.0)) * glitchStrength * 0.03;
             finalUV.x += tear;
 
-            // Sample with chromatic aberration
+            // Sample with chromatic aberration + Heavy Shockwave Split
+            // JUICE: Vertical aberration added for lens effect on shockwaves (scaled by UV y)
+            let horizOffset = totalAberration + glitchOffset + shockwaveAberration;
+            let vertAberration = totalAberration * (uv.y - 0.5) * 0.2 + (shockwaveAberration * 0.5);
+
             let baseSample = textureSample(myTexture, mySampler, finalUV);
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(totalAberration + glitchOffset, 0.0)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset, vertAberration)).r;
             var g = baseSample.g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(totalAberration + glitchOffset, 0.0)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset, vertAberration)).b;
             var color = vec3<f32>(r, g, b);
             let sampledAlpha = baseSample.a;
 
