@@ -47,6 +47,7 @@ import {
 } from './webgpu/viewPremium.js';
 import {
   resolveBlockTextureUrl,
+  getTextureMipLevelCount,
 } from './webgpu/blockTexture.js';
 import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
 import {
@@ -510,8 +511,8 @@ export default class View {
     this.reactiveVideoBackground.setWebGPUDevice(this.device);
 
     this.blockSampler = this.device.createSampler({
-      magFilter: 'nearest', minFilter: 'nearest', mipmapFilter: 'nearest',
-      addressModeU: 'repeat', addressModeV: 'repeat',
+      magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear',
+      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
     });
 
     try {
@@ -552,10 +553,12 @@ export default class View {
         this.blockTexture = this.device.createTexture({
           size: [imageBitmap.width, imageBitmap.height, 1],
           format: 'rgba8unorm',
+          mipLevelCount: getTextureMipLevelCount(imageBitmap.width, imageBitmap.height),
           usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
-        textureLogger.info('Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height);
+        generateMipmapsUtil(this.device, this.blockTexture, imageBitmap.width, imageBitmap.height, this.blockTexture.mipLevelCount);
+        textureLogger.info('Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'with', this.blockTexture.mipLevelCount, 'mips');
     } catch (e) {
         textureLogger.error('Failed to load block texture:', e);
         try {
