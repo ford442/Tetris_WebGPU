@@ -278,14 +278,14 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   for (let i = 0; i < distance * 6; i++) {
     const r = startRow + i * 0.33;
     const worldY = r * -2.2;
-    view.particleSystem.emitParticles(worldX, worldY, 0.0, 18, trailColor);
+    view.particleSystem.emitParticles(worldX, worldY, 0.0, 36, trailColor);
   }
 
   const impactY = y * -2.2;
   const burstColor = [...themeColors, 1.0];
   view.visualEffects.triggerFlash(0.1);
   view.visualEffects.triggerAberration(1.5); // JUICE: Heavy chromatic aberration on hard drop
-  view.visualEffects.triggerNeonBloomFlash(2.0); // JUICE: Explode with neon bloom on hard drop
+  view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
 
   // JUICE: Multiplied particle speeds and counts by 2.0x for heavier impact
   for (let i = 0; i < 450; i++) {
