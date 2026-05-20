@@ -269,7 +269,7 @@ export const PBRBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
-            finalColor += rimColor * rimPower4 * 2.5; // JUICE: Enhanced Fresnel Rim Lighting
+            finalColor += rimColor * rimPower4 * 5.0; // JUICE: Enhanced Fresnel Rim Lighting
 
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;
