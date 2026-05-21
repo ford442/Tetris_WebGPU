@@ -10,3 +10,4 @@
 - "Increased the hard drop particle speed multiplier from 1.5x to 2.0x. The particles now explode outward with much more explosive force, adding an incredibly satisfying sense of heavy impact and 'crunch' to fast locks!"
 - "Massively boosted the Chromatic Aberration during shockwaves. Pushing the Red and Blue channels apart vertically and horizontally makes Hard Drops feel like they are tearing the screen apart!"
 - "Amplified the camera shake scaling and shockwave ripple speed on Hard Drops to make high-distance drops feel earth-shattering."
+- "Changed Neon Bloom decay to use true exponential decay (\`Math.exp(-dt * 10.0)\`) instead of algebraic decay. This makes the flashes hit instantly and dissipate smoothly, drastically improving the game feel."

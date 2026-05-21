@@ -69,7 +69,7 @@ export class VisualEffects {
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         // Neon Bloom decay
-        this.neonBloomIntensity *= 1.0 / (1.0 + dt * 6.0); // Fast decay for snappy flash
+        this.neonBloomIntensity *= Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
