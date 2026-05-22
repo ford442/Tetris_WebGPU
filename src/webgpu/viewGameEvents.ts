@@ -195,6 +195,7 @@ export function onLock(view: any, isTSpin: boolean = false): void {
   
   if (isTSpin && view.state?.activePiece) {
     // Extra T-Spin lock effects
+    view.visualEffects.triggerNeonBloomFlash(2.0); // JUICE: Boom!
     const { x, y } = view.state.activePiece;
     const worldX = (x + 1) * 2.2;
     const worldY = (y + 1) * -2.2;
