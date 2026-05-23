@@ -57,7 +57,7 @@ export class VisualEffects {
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
         const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity *= Math.exp(-dt * 15.0);
+        this.shakeIntensity *= 1.0 / (1.0 + dt * 15.0);
         this.aberrationIntensity *= aberrationDecay;
 
         // Warp surge decay
@@ -69,7 +69,7 @@ export class VisualEffects {
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         // Neon Bloom decay
-        this.neonBloomIntensity *= Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
+        this.neonBloomIntensity *= 1.0 / (1.0 + dt * 10.0); // NEON BRICKLAYER: Fast algebraic approximation for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;

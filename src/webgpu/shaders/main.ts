@@ -191,8 +191,9 @@ export const Shaders = () => {
                 // Add Glitch Mod
                 finalColor += glitchColorMod;
                 let breath = sin(time * 1.5) * 0.03 + 0.03;
-                let distCenter = length(vUV - vec2<f32>(0.5));
-                let centerGlow = clamp((0.45 - distCenter) / 0.35, 0.0, 1.0);
+                let diffCenter = vUV - vec2<f32>(0.5);
+                let distCenterSq = dot(diffCenter, diffCenter);
+                let centerGlow = clamp((0.2025 - distCenterSq) / 0.1225, 0.0, 1.0);
                 finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.8;
                 // ENHANCED rim lighting -- more pronounced edge glow
                 let rimFalloff = 1.0 - max(dot(N, V), 0.0);

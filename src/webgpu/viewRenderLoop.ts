@@ -94,7 +94,7 @@ function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt:
   const shake = view.visualEffects.getShakeOffset();
 
   // Smooth Camera Shake Interpolation using exponential decay
-  const shakeDecay = Math.exp(-clampedDt * 10.0);
+  const shakeDecay = 1.0 / (1.0 + clampedDt * 10.0);
   view._shakeOffsetSmoothed.x = shake.x + (view._shakeOffsetSmoothed.x - shake.x) * shakeDecay;
   view._shakeOffsetSmoothed.y = shake.y + (view._shakeOffsetSmoothed.y - shake.y) * shakeDecay;
 
