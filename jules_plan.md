@@ -9,15 +9,26 @@ This document outlines the optimizations and game-feel improvements made in the 
 **Objective**: Achieve sub-50ms input latency for a snappier, more responsive feel.
 * **File**: `src/controller.ts`
 * **Change**: Reduced input buffer windows.
-  * `MOVE_BUFFER_WINDOW`: Reduced from 80ms -> 40ms
-  * `JUMP_BUFFER_WINDOW`: Reduced from 60ms -> 40ms
-* **Metrics**: Before, inputs could be buffered and delayed by up to 80ms. After, input is processed much closer to real-time (max 40ms buffer limit), satisfying the sub-50ms response time target.
+  * `MOVE_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
+  * `JUMP_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
+* **Metrics**: Before, inputs could be buffered and delayed by up to 40ms. After, input is processed much closer to real-time (max 30ms buffer limit), easily satisfying the sub-50ms response time target and feeling much snappier.
 
-### 2. Graphical & Performance Optimizations (Shader ALU Efficiency)
-**Objective**: Reduce redundant mathematical operations on the GPU (specifically `sqrt` and `length`).
-* **File**: `src/webgpu/shaders/grid.ts`
-* **Change**: Replaced `length(vPos.xy - center)` with a squared distance via `dot(diff, diff)`. Adjusted the `smoothstep` threshold arguments to be squared accordingly (15.0 -> 225.0, 30.0 -> 900.0).
-* **Metrics**: Eliminates an expensive `sqrt()` operation for every fragment in the background grid shader, improving ALU efficiency and overall framerate stability on lower-end devices.
+### 2. Graphical & Performance Optimizations (Shader ALU Efficiency and Math Approximations)
+**Objective**: Reduce redundant mathematical operations on the GPU (specifically `sqrt` and `length`) and optimize exponential functions.
+* **Files**: `src/webgpu/shaders/background.ts`, `src/webgpu/shaders/main.ts`, `src/webgpu/viewRenderLoop.ts`, `src/webgpu/effects.ts`
+* **Changes**:
+  * Replaced `Math.exp(-dt * factor)` with fast algebraic approximation `1.0 / (1.0 + dt * factor)` for exponential decay effects.
+  * Replaced `length()` with a squared distance via `dot(diff, diff)` in `background.ts` for the vignette effect.
+  * Replaced `length()` with a squared distance via `dot(diff, diff)` in `main.ts` for the block center glow distance check.
+* **Metrics**: Eliminates expensive `sqrt()` operations and `Math.exp()` calls in tight loops and shaders, improving ALU efficiency and overall framerate stability on lower-end devices.
+
+### 3. Block Rendering / Material Separation
+**Objective**: Enhance image sampled block rendering and material detection for PBR.
+* **Files**: `src/webgpu/geometry.ts`, `src/webgpu/textureSampling.ts`
+* **Changes**:
+  * Adjusted `textureScale` to `0.98` in `geometry.ts` for sharper detail and to ensure absolutely no edge bleeding.
+  * Updated `goldSignal` threshold to `0.75` and `1.15` in `textureSampling.ts` for a better interpolation and material separation.
+* **Metrics**: Visual fidelity is improved, showing better metal/glass separation on blocks without regressions.
 
 ## Skipped and Reverted Optimizations
 

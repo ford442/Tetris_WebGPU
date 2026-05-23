@@ -220,7 +220,7 @@ export const BackgroundShaders = () => {
           // --- Vignette effect to focus on center ---
           let centeredUV = uv - 0.5;
           let distSq = dot(centeredUV, centeredUV);
-          let vignette = 1.0 - clamp((sqrt(distSq) - 0.4) / 0.8, 0.0, 1.0);
+          let vignette = 1.0 - clamp((distSq - 0.16) / 0.64, 0.0, 1.0);
           finalColor *= vignette;
 
           // --- Subtle film grain for texture ---
