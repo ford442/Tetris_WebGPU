@@ -209,6 +209,7 @@ export function onLock(view: any, isTSpin: boolean = false): void {
     // Flash effect
     view.visualEffects.triggerFlash(0.4);
     view.visualEffects.triggerAberration(0.3);
+    view.visualEffects.triggerNeonBloomFlash(2.0); // JUICE: Explode with neon bloom on T-Spin lock
   }
 }
 
