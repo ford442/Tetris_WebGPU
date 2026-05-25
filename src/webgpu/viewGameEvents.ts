@@ -63,6 +63,18 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
     view.visualEffects.triggerAberration(0.3 + lines.length * 0.1);
   }
 
+  // JUICE: Supernova Line Clears
+  // Trigger a massive Neon Bloom Flash that scales with the number of lines cleared.
+  // Tetrises (4 lines) and T-Spins feel like a localized supernova.
+  const bloomIntensity = 1.0 + lines.length * 0.5;
+  view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
+
+  // JUICE: Warp Surge on Big Plays
+  // If it's a Tetris or T-Spin, heavily distort the background hyperspace tunnel.
+  if (lines.length >= 4 || tSpin) {
+    view.visualEffects.triggerWarpSurge(2.0 + lines.length * 0.5);
+  }
+
   lines.forEach((y: number) => {
     const worldY = y * -2.2;
 
