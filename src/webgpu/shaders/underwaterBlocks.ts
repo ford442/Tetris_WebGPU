@@ -199,7 +199,10 @@ export const UnderwaterBlockShaders = () => {
             padding : f32,                   // 124
             
             // Reserved (offset 128)
-            reserved : vec4f,        // 128-143
+            movementFlash : f32,     // 128
+            lineClearFlash: f32,     // 132
+            pad1          : f32,     // 136
+            pad2          : f32,     // 140
         };
         
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
@@ -405,7 +408,8 @@ export const UnderwaterBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), anyMetal * fUniforms.metallic);
-            finalColor += rimColor * rimPower4 * 5.0; // JUICE: Enhanced Fresnel Rim Lighting
+            let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
+            finalColor += rimColor * rimPower4 * dynamicRim; // JUICE: Enhanced Fresnel Rim Lighting + Dynamic Flash
             
             // Lock tension
             let lockPercent = fUniforms.lockPercent;
@@ -437,8 +441,9 @@ export const UnderwaterBlockShaders = () => {
             }
             
             // Amplified emissive pulse for more visible pulsing effect
-            let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
-            finalColor += baseColor * emissivePulse * 0.8;
+            let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
+            let emissivePulse = idlePulse * 0.8 + fUniforms.movementFlash * 2.5 + fUniforms.lineClearFlash * 5.0;
+            finalColor += baseColor * emissivePulse;
 
             // Tone mapping
             finalColor = acesToneMapping(finalColor);

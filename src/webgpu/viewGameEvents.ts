@@ -26,6 +26,14 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
 
+  const base = 0.45;
+  const lineBonus = Math.min(lines.length * 0.12, 0.35);
+  const specialBonus = (tSpin || backToBack) ? 0.15 : 0;
+  const comboBonus = Math.min(combo * 0.03, 0.12);
+
+  const strength = Math.min(base + lineBonus + specialBonus + comboBonus, 0.95);
+  view.visualEffects.triggerLineClearFlash(strength);
+
   const camY = -20.0;
   const camZ = 75.0;
   const fov = (35 * Math.PI) / 180;
@@ -247,6 +255,7 @@ export function onHold(view: any): void {
 export function onRotate(view: any): void {
   view.visualEffects.triggerRotate(0.2);
   view.visualEffects.triggerAberration(0.15); // Add tactile visual bump
+  view.visualEffects.triggerMovementFlash(0.15);
 
   if (view.state && view.state.activePiece) {
     const { x, y } = view.state.activePiece;
@@ -516,6 +525,7 @@ export function renderPauseScreen(view: any): void {
 }
 
 export function onMove(view: any, x: number, y: number): void {
+  view.visualEffects.triggerMovementFlash(0.2);
   const worldX = (x + 1.5) * 2.2;
   const worldY = (y + 1.5) * -2.2;
   // JUICE: Denser, brighter trail for better feedback

@@ -299,8 +299,8 @@ export const PremiumBlockShaders = () => {
             // NEW: Particle interaction
             particleMaterialType : u32,  // 0=none, 1=glass, 2=gold, 3=chrome, 4=cyber, 5=gem
             particleIntensity : f32,
-            pad1 : f32,
-            pad2 : f32,
+            movementFlash : f32,
+            lineClearFlash : f32,
         };
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
         @binding(2) @group(0) var blockTexture : texture_2d<f32>;
@@ -445,7 +445,8 @@ export const PremiumBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3<f32>(1.0), metallic);
-            finalColor += rimColor * rimPower4 * 5.0; // JUICE: Enhanced Fresnel Rim Lighting
+            let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
+            finalColor += rimColor * rimPower4 * dynamicRim; // JUICE: Enhanced Fresnel Rim Lighting + Dynamic Flash
             
             // Emissive (for cyber/neon)
             let emissiveStrength = vColor.a > 0.8 ? 0.0 : 1.0; // Only for full blocks
@@ -488,8 +489,9 @@ export const PremiumBlockShaders = () => {
             }
             
             // Amplified emissive pulse for more visible pulsing effect
-            let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
-            finalColor += baseColor * emissivePulse * 0.8;
+            let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
+            let emissivePulse = idlePulse * 0.8 + fUniforms.movementFlash * 2.5 + fUniforms.lineClearFlash * 5.0;
+            finalColor += baseColor * emissivePulse;
 
             // HDR tone mapping (simple Reinhard)
             finalColor = finalColor / (finalColor + vec3<f32>(1.0));
