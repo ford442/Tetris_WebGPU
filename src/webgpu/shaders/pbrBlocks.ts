@@ -132,7 +132,10 @@ export const PBRBlockShaders = () => {
             particleIntensity : f32,    // 84
             enablePBR     : f32,        // 88
             textureMix    : f32,        // 92
-            reserved      : vec4f,      // 96-111
+            movementFlash : f32,        // 96
+            lineClearFlash: f32,        // 100
+            pad1          : f32,        // 104
+            pad2          : f32,        // 108
             reserved2     : vec4f,      // 112-127
         };
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
@@ -269,7 +272,8 @@ export const PBRBlockShaders = () => {
             let rimPower2 = rimPower * rimPower;
             let rimPower4 = rimPower2 * rimPower2;
             let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
-            finalColor += rimColor * rimPower4 * 5.0; // JUICE: Enhanced Fresnel Rim Lighting
+            let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
+            finalColor += rimColor * rimPower4 * dynamicRim; // JUICE: Enhanced Fresnel Rim Lighting + Dynamic Flash
 
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;
@@ -293,8 +297,9 @@ export const PBRBlockShaders = () => {
             }
 
             // Amplified emissive pulse for more visible pulsing effect
-            let emissivePulse = sin(time * 3.0) * 0.5 + 0.5;
-            finalColor += baseColor * emissivePulse * 1.2;
+            let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
+            let emissivePulse = idlePulse * 1.2 + fUniforms.movementFlash * 2.5 + fUniforms.lineClearFlash * 5.0;
+            finalColor += baseColor * emissivePulse;
 
             finalColor = acesToneMapping(finalColor);
             let materialAlpha = mix(0.85, 0.98, metalMask);

@@ -128,12 +128,27 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     }
     view.chaosMode.setUnderwaterMode(true);
     view.jellyfishSystem.update(dt, time);
+
+    // Write specifically for underwater layout offsets
+    view._f32_1[0] = view.visualEffects.movementFlashTimer;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 128, view._f32_1);
+    view._f32_1[0] = view.visualEffects.lineClearFlashTimer;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 132, view._f32_1);
   } else {
     view._f32_1[0] = 0.0;
     for (let offset = 96; offset <= 120; offset += 4) {
-      device.queue.writeBuffer(view.fragmentUniformBuffer, offset, view._f32_1);
+      // Skip 96 and 100 which are now used for movement/lineClear flash on non-underwater
+      if (offset !== 96 && offset !== 100) {
+        device.queue.writeBuffer(view.fragmentUniformBuffer, offset, view._f32_1);
+      }
     }
     view.chaosMode.setUnderwaterMode(false);
+
+    // Emissive flashes for standard/premium layouts
+    view._f32_1[0] = view.visualEffects.movementFlashTimer;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 96, view._f32_1);
+    view._f32_1[0] = view.visualEffects.lineClearFlashTimer;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 100, view._f32_1);
   }
 
   // Post-process uniforms

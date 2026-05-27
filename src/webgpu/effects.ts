@@ -24,6 +24,10 @@ export class VisualEffects {
     neonBloomIntensity: number = 0;
     neonBloomBaseIntensity: number = 1.0;
 
+    // Block Emissive state
+    movementFlashTimer: number = 0;
+    lineClearFlashTimer: number = 0;
+
     // Video background state (delegated to ReactiveVideoBackground)
     isVideoPlaying: boolean = false;
     currentLevel: number = 0;
@@ -72,6 +76,13 @@ export class VisualEffects {
         this.neonBloomIntensity *= 1.0 / (1.0 + dt * 10.0); // NEON BRICKLAYER: Fast algebraic approximation for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
+        // Block Emissive decay
+        this.movementFlashTimer *= 1.0 / (1.0 + dt * 8.0);
+        if (this.movementFlashTimer < 0.01) this.movementFlashTimer = 0;
+
+        this.lineClearFlashTimer *= 1.0 / (1.0 + dt * 4.0);
+        if (this.lineClearFlashTimer < 0.01) this.lineClearFlashTimer = 0;
+
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
@@ -89,6 +100,14 @@ export class VisualEffects {
 
     triggerRotate(duration: number = 0.2): void {
         this.rotationFlashTimer = duration;
+    }
+
+    triggerMovementFlash(duration: number = 1.0): void {
+        this.movementFlashTimer = duration;
+    }
+
+    triggerLineClearFlash(duration: number = 1.0): void {
+        this.lineClearFlashTimer = duration;
     }
 
     triggerLock(duration: number = 0.3): void {
