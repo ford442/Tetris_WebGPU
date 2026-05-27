@@ -12,3 +12,5 @@
 - "Amplified the camera shake scaling and shockwave ripple speed on Hard Drops to make high-distance drops feel earth-shattering."
 - "Changed Neon Bloom decay to use true exponential decay (\`Math.exp(-dt * 10.0)\`) instead of algebraic decay. This makes the flashes hit instantly and dissipate smoothly, drastically improving the game feel."
 - "Adding Neon Bloom flash on T-Spin locks significantly enhances the rewarding feel of setting them up."
+- "Added 'Supernova' Line Clears: triggering a massive Neon Bloom Flash that scales with the number of lines cleared. Tetrises and T-Spins now visually explode like a localized supernova!"
+- "Added 'Warp Surge' on big plays: tetrises and T-Spins now significantly distort the hyperspace tunnel background, making the big clears feel even more chaotic and impactful."
