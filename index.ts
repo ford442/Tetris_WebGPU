@@ -203,6 +203,15 @@ uiContainer.innerHTML = `
       view.useReactiveMusic = true;
     }
   };
+  // ===================================================================
+  // Experimental: Positive Reinforcement Subliminal System
+  // Loaded from localStorage (default true for the experimental phase).
+  // The pause menu toggle (injected above) syncs this live.
+  // ===================================================================
+  const subliminalEnabled = localStorage.getItem('tetris_subliminal_enabled') !== 'false';
+  const subliminal = new SubliminalReinforcement({ enabled: subliminalEnabled });
+  window.subliminalReinforcement = subliminal;
+
   const controller = new Controller(game, view, view, soundManager);
 
   // Wire the subliminal system into the controller for event-driven triggers
@@ -215,19 +224,6 @@ uiContainer.innerHTML = `
   if (highScoreElement && highestScore) {
     highScoreElement.textContent = highestScore.score.toLocaleString();
   }
-
-  // ===================================================================
-  // Experimental: Positive Reinforcement Subliminal System
-  // Loaded from localStorage (default true for the experimental phase).
-  // The pause menu toggle (injected above) syncs this live.
-  // ===================================================================
-  const subliminalEnabled = localStorage.getItem('tetris_subliminal_enabled') !== 'false';
-  const subliminal = new SubliminalReinforcement({ enabled: subliminalEnabled });
-  window.subliminalReinforcement = subliminal;
-
-  // Attach to controller after creation (keeps constructor signature stable)
-  // Controller will call subliminal.triggerReinforcement(...) on positive moments.
-  // See controller.ts gameLoop + saveHighScore paths.
 
   function applyTheme(className: string, themeName: string) {
     document.body.className = className;
