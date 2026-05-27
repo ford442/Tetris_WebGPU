@@ -98,7 +98,16 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   // particleIntensity(84) enablePBR(88) textureMix(92)
   view._materialUniforms[0] = view.particleInteractionUniforms.particleInfluence;
   view._materialUniforms[1] = view.usePremiumMaterials ? 1.0 : 0.0;
-  view._materialUniforms[2] = m.name === 'Image Sampled' ? 1.0 : 0.5;
+
+  // Stronger texture mix for any theme that advertises image-based metal/glass sampling.
+  // This gives Gold, Glass, and Premium the gold-translucent crystal detail they were
+  // designed to use from block.png + extractMaterialMask, while keeping classic/neon lightly tinted.
+  const materialTheme = (view.currentTheme as any)?.materialTheme || '';
+  const wantsStrongImage = view.usePremiumMaterials ||
+                           materialTheme === 'imageSampled' ||
+                           m.name.toLowerCase().includes('image');
+  view._materialUniforms[2] = wantsStrongImage ? 0.88 : 0.32;
+
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
 }
 

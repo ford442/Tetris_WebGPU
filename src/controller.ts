@@ -2,6 +2,7 @@ import Game from "./game.js";
 import View from "./viewWebGPU.js";
 import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
+import { SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 
 const DAS = 70; // Delayed Auto Shift (ms) - Faster for improved responsiveness and top-level play
 const ARR = 0;  // Auto Repeat Rate (ms) - Instant piece movement when holding left or right
@@ -36,6 +37,10 @@ export default class Controller {
 
   // Track last horizontal direction for SOCD cleaning
   lastDirection: 'left' | 'right' | null = null;
+
+  // Experimental: Positive Reinforcement Subliminal System (wired from index.ts)
+  subliminal: SubliminalReinforcement | null = null;
+  private playTimeMs: number = 0;
 
   // Input buffering for game-feel improvements
   bufferedAction: Action | null = null;
@@ -146,6 +151,7 @@ export default class Controller {
 
     // Stop gravity timer - now handled in gameLoop
     this.stopTimer();
+    this.playTimeMs = 0;
 
     this.lastLevel = this.game.level;
     this.lastTime = performance.now();
@@ -279,6 +285,7 @@ export default class Controller {
     this.actionTimers.left = 0;
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
+    this.playTimeMs = 0;
 
     this.isPaused = false;
     this.hidePauseMenu();
@@ -515,9 +522,12 @@ export default class Controller {
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
-          // Save high score on game over
-          this.game.saveHighScore();
+          // Save high score on game over (returns true if this is a new personal record)
+          const isNewHigh = this.game.saveHighScore();
           this.updateHighScoreDisplay();
+          if (isNewHigh && this.subliminal) {
+            this.subliminal.triggerReinforcement('highScore', 'strong');
+          }
       }
   }
 
@@ -539,6 +549,12 @@ export default class Controller {
 
       const dt = time - this.lastTime;
       this.lastTime = time;
+
+      // Experimental subliminal: accumulate active play time (paused games don't count)
+      if (this.isPlaying && !this.isPaused) {
+        this.playTimeMs += dt;
+        this.subliminal?.checkBackgroundReinforcement(this.playTimeMs);
+      }
 
       // 0. Process Buffered Actions
       this.processBufferedAction(time);
@@ -580,6 +596,8 @@ export default class Controller {
       if (this.game.level > this.lastLevel) {
           this.soundManager.playLevelUp();
           this.lastLevel = this.game.level;
+          // Experimental subliminal reinforcement (strong on level up)
+          this.subliminal?.triggerReinforcement('levelUp', 'strong');
       }
 
       if (result.linesCleared.length > 0) {
@@ -593,6 +611,12 @@ export default class Controller {
           
           // Update combo display
           this.updateComboDisplay(combo);
+
+          // Experimental: subliminal positive reinforcement on clears
+          if (this.subliminal) {
+            const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
+            this.subliminal.triggerReinforcement('lineClear', intensity);
+          }
       } else if (result.locked) {
           this.soundManager.playLock();
           this.viewWebGPU.onLock(result.tSpin);
@@ -600,14 +624,21 @@ export default class Controller {
           if (this.game.scoringSystem.combo < 0) {
             this.updateComboDisplay(0);
           }
+          // T-Spin lock is a strong positive moment
+          if (result.tSpin && this.subliminal) {
+            this.subliminal.triggerReinforcement('tspin', 'strong');
+          }
       }
       if (result.gameOver) {
           this.soundManager.playGameOver();
           this.isPlaying = false;
           this.view.renderEndScreen(this.game.getState());
-          // Save high score on game over
-          this.game.saveHighScore();
+          // Save high score on game over (returns true if this is a new personal record)
+          const isNewHigh = this.game.saveHighScore();
           this.updateHighScoreDisplay();
+          if (isNewHigh && this.subliminal) {
+            this.subliminal.triggerReinforcement('highScore', 'strong');
+          }
           return;
       }
 

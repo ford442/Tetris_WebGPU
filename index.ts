@@ -2,6 +2,7 @@ import Game from "./src/game.js";
 import View from "./src/viewWebGPU.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
+import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
 
 declare global {
@@ -10,6 +11,7 @@ declare global {
     view: View;
     controller: Controller;
     soundManager: SoundManager;
+    subliminalReinforcement?: SubliminalReinforcement;
   }
 }
 
@@ -124,6 +126,18 @@ uiContainer.innerHTML = `
         </div>
       </div>
       
+      <!-- Experimental Section: Positive Reinforcement Subliminal System -->
+      <div class="pause-experimental-section">
+        <h3>EXPERIMENTAL</h3>
+        <div class="experimental-toggle">
+          <label>
+            <input type="checkbox" id="subliminal-toggle" checked>
+            <span>Positive Reinforcement <small>(subliminal 25-45ms cues)</small></span>
+          </label>
+          <div class="experimental-hint">Gentle visual priming for focus &amp; motivation. Toggle anytime.</div>
+        </div>
+      </div>
+      
       <!-- Controls Reference -->
       <div class="pause-controls">
         <h3>CONTROLS</h3>
@@ -191,12 +205,29 @@ uiContainer.innerHTML = `
   };
   const controller = new Controller(game, view, view, soundManager);
 
+  // Wire the subliminal system into the controller for event-driven triggers
+  // (line clears, T-spins, level ups, new high scores, background cadence).
+  (controller as any).subliminal = subliminal;
+
   // Initialize high score display
   const highestScore = game.getHighScoreManager().getHighestScore();
   const highScoreElement = document.getElementById('high-score');
   if (highScoreElement && highestScore) {
     highScoreElement.textContent = highestScore.score.toLocaleString();
   }
+
+  // ===================================================================
+  // Experimental: Positive Reinforcement Subliminal System
+  // Loaded from localStorage (default true for the experimental phase).
+  // The pause menu toggle (injected above) syncs this live.
+  // ===================================================================
+  const subliminalEnabled = localStorage.getItem('tetris_subliminal_enabled') !== 'false';
+  const subliminal = new SubliminalReinforcement({ enabled: subliminalEnabled });
+  window.subliminalReinforcement = subliminal;
+
+  // Attach to controller after creation (keeps constructor signature stable)
+  // Controller will call subliminal.triggerReinforcement(...) on positive moments.
+  // See controller.ts gameLoop + saveHighScore paths.
 
   function applyTheme(className: string, themeName: string) {
     document.body.className = className;
@@ -276,6 +307,27 @@ uiContainer.innerHTML = `
     updateVideoToggle(currentVideoState);
     videoToggle.blur();
   });
+
+  // -------------------------------------------------------------------
+  // Experimental Subliminal Toggle (pause menu)
+  // -------------------------------------------------------------------
+  const subliminalToggle = document.getElementById('subliminal-toggle') as HTMLInputElement | null;
+
+  function syncSubliminalToggle() {
+    if (subliminalToggle) {
+      subliminalToggle.checked = subliminal.isEnabled();
+    }
+  }
+
+  if (subliminalToggle) {
+    // Initial sync (in case localStorage had explicit false)
+    subliminalToggle.checked = subliminal.isEnabled();
+
+    subliminalToggle.addEventListener('change', () => {
+      subliminal.setEnabled(subliminalToggle.checked);
+      // Persist is handled inside setEnabled
+    });
+  }
 
   // Music volume control
   const musicVolumeSlider = document.getElementById('music-volume') as HTMLInputElement;

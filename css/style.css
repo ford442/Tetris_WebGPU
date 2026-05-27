@@ -513,6 +513,54 @@ canvas {
     accent-color: #00ffff;
 }
 
+/* Experimental Subliminal Toggle (gold/glass aesthetic) */
+.pause-experimental-section {
+    width: 100%;
+    padding: 12px 15px;
+    background: rgba(20, 16, 4, 0.35);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 215, 0, 0.18);
+}
+
+.pause-experimental-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 0.78rem;
+    color: #ffdd44;
+    letter-spacing: 3px;
+    text-align: center;
+}
+
+.experimental-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffdd44;
+    font-size: 0.82rem;
+    cursor: pointer;
+    line-height: 1.3;
+}
+
+.experimental-toggle input[type="checkbox"] {
+    accent-color: #ffdd44;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.experimental-toggle small {
+    opacity: 0.65;
+    font-size: 0.72em;
+    letter-spacing: normal;
+}
+
+.experimental-hint {
+    font-size: 0.68rem;
+    color: #886600;
+    margin-top: 5px;
+    line-height: 1.35;
+    padding-left: 24px;
+}
+
 /* Controls Reference */
 .pause-controls {
     width: 100%;
