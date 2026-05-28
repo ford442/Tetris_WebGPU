@@ -259,10 +259,10 @@ export class SubliminalReinforcement {
       'font-weight:600',
       'letter-spacing:3.2px',
       'text-transform:uppercase',
-      'color:#ffdd44',
-      'text-shadow:0 0 6px #ffd700, 0 0 14px rgba(255,215,0,0.45)',
+      'color:#ffffff',
+      'text-shadow:0 0 8px #fff, 0 0 16px #0ff, 0 0 24px #0ff, 0 0 32px #00f',
       'opacity:0',
-      'transition:opacity 18ms linear',
+      'transition:opacity 18ms linear, transform 18ms linear',
       'white-space:nowrap',
       'user-select:none',
     ].join(';');
@@ -288,13 +288,15 @@ export class SubliminalReinforcement {
 
     // Gentle extra "pop" on strong moments (still extremely brief)
     if (intensity === 'strong' && !debug) {
-      this.overlay.style.transform = 'translate(-50%, -50%) scale(1.06)';
+      this.overlay.style.transform = 'translate(-50%, -50%) scale(1.15)';
+    } else {
+      this.overlay.style.transform = 'translate(-50%, -50%) scale(1.05)';
     }
 
     const reset = () => {
       if (this.overlay) {
         this.overlay.style.opacity = '0';
-        this.overlay.style.transform = 'translate(-50%, -50%)';
+        this.overlay.style.transform = 'translate(-50%, -50%) scale(1.0)';
       }
     };
 

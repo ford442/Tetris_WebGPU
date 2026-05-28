@@ -14,3 +14,4 @@
 - "Adding Neon Bloom flash on T-Spin locks significantly enhances the rewarding feel of setting them up."
 - "Added 'Supernova' Line Clears: triggering a massive Neon Bloom Flash that scales with the number of lines cleared. Tetrises and T-Spins now visually explode like a localized supernova!"
 - "Added 'Warp Surge' on big plays: tetrises and T-Spins now significantly distort the hyperspace tunnel background, making the big clears feel even more chaotic and impactful."
+- "Enhanced the Subliminal Reinforcement system to use bright white/cyan neon text shadows, added a snappy scale transform on flashes, and integrated a subtle Neon Bloom flash in the WebGPU pipeline during strong cues to increase the visceral impact of positive reinforcement."
