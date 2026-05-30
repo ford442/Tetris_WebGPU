@@ -548,7 +548,7 @@ export default class Game {
           }
       } else {
           // Moved off the edge, reset lock timer entirely (coyote time)
-          this.lockTimer = 0;
+          this.lockTimer = -150; // Extra grace period when falling off a ledge
           this.lockResets = 0; // Treat the piece as entirely fresh
       }
   }
