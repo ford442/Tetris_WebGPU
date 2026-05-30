@@ -5,13 +5,29 @@ This document outlines the optimizations and game-feel improvements made in the 
 
 ## Changes Implemented
 
-### 1. Playability & Game-Feel (Input Latency)
+### 1. Game Feel & Input Responsiveness (Coyote Time & DAS Tuning)
+**Objective**: Improve the responsiveness of inputs and the forgiveness of the locking behavior to create a snappier, tighter game feel.
+* **Files**: `src/controller.ts`, `src/game.ts`
+* **Changes**:
+  * Set Delayed Auto Shift (`DAS`) to 100ms in `controller.ts` for snappier horizontal movement tuning, maintaining `ARR` at 0.
+  * Implemented a "Coyote Time" behavior in `game.ts` inside `handleMoveReset`. When a piece slides off an edge and is no longer on the ground, `lockTimer` is offset to `-150ms` (rather than strictly resetting to 0), adding a critical 150ms grace period for last-second tucks.
+* **Metrics**: The previous configuration offered no forgiveness when sliding off edges, which could feel rigid or punishing. The new 150ms buffer provides a tactile cushion that aligns with modern Tetris guidelines for extended placement mechanics without breaking the core state machine.
+
+### 2. Playability & Game-Feel (Input Latency)
 **Objective**: Achieve sub-50ms input latency for a snappier, more responsive feel.
 * **File**: `src/controller.ts`
 * **Change**: Reduced input buffer windows.
   * `MOVE_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
   * `JUMP_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
 * **Metrics**: Before, inputs could be buffered and delayed by up to 40ms. After, input is processed much closer to real-time (max 30ms buffer limit), easily satisfying the sub-50ms response time target and feeling much snappier.
+
+### 3. Visual Game Feel Effects (Action Feedback)
+**Objective**: Ensure tactile actions like rotating and hard dropping provide visceral, visual "juice" to complement the input snappiness.
+* **File**: `src/webgpu/viewGameEvents.ts`
+* **Changes**:
+  * Increased chromatic aberration trigger on rotations from 0.15 to 0.3 for a stronger tactile visual bump.
+  * Multiplied the hard drop particle speed factors by 3.0x (previously 2.0x) in the `emitParticlesRadial` loops.
+* **Metrics**: Increased visual punch aligns on-screen feedback weightier with the improved snappiness of the inputs.
 
 ### 2. Graphical & Performance Optimizations (Shader ALU Efficiency and Math Approximations)
 **Objective**: Reduce redundant mathematical operations on the GPU (specifically `sqrt` and `length`) and optimize exponential functions.

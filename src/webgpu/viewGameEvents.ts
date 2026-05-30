@@ -254,7 +254,7 @@ export function onHold(view: any): void {
 
 export function onRotate(view: any): void {
   view.visualEffects.triggerRotate(0.2);
-  view.visualEffects.triggerAberration(0.15); // Add tactile visual bump
+  view.visualEffects.triggerAberration(0.3); // Add tactile visual bump
   view.visualEffects.triggerMovementFlash(0.15);
 
   if (view.state && view.state.activePiece) {
@@ -310,32 +310,32 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   view.visualEffects.triggerAberration(1.5); // JUICE: Heavy chromatic aberration on hard drop
   view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
 
-  // JUICE: Multiplied particle speeds and counts by 2.0x for heavier impact
+  // JUICE: Multiplied particle speeds and counts by 3.0x for heavier impact
   for (let i = 0; i < 450; i++) {
     const angle = (i / 450) * Math.PI * 2;
-    const speed = (20.0 + Math.random() * 10.0) * 2.0;
+    const speed = (20.0 + Math.random() * 10.0) * 3.0;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
   for (let i = 0; i < 30; i++) {
-    const speedL = (8.0 + Math.random() * 12.0) * 2.0;
+    const speedL = (8.0 + Math.random() * 12.0) * 3.0;
     const angleL = Math.PI - Math.random() * 0.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleL, speedL, burstColor);
 
-    const speedR = (8.0 + Math.random() * 12.0) * 2.0;
+    const speedR = (8.0 + Math.random() * 12.0) * 3.0;
     const angleR = Math.random() * 0.5;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angleR, speedR, burstColor);
   }
 
   for (let i = 0; i < 90; i++) {
     const angle = (i / 90.0) * Math.PI * 2.0;
-    const speed = 45.0 * 2.0;
+    const speed = 45.0 * 3.0;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
   for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = (30.0 + Math.random() * 30.0) * 2.0;
+    const speed = (30.0 + Math.random() * 30.0) * 3.0;
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, [1.0, 1.0, 0.8, 1.0]);
   }
 
