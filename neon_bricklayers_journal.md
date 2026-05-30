@@ -16,3 +16,4 @@
 - "Added 'Warp Surge' on big plays: tetrises and T-Spins now significantly distort the hyperspace tunnel background, making the big clears feel even more chaotic and impactful."
 - "Enhanced the Subliminal Reinforcement system to use bright white/cyan neon text shadows, added a snappy scale transform on flashes, and integrated a subtle Neon Bloom flash in the WebGPU pipeline during strong cues to increase the visceral impact of positive reinforcement."
 - "Verified all requested game feel and visual features are present. The Infinity lock resets, T-Spins, level-reactive backgrounds, and bloom/chromatic aberration on shockwaves have already been flawlessly implemented in the engine."
+- "Replaced the subtle white ghost scanlines with intense, cyan/blue colored holographic scan overlays (`vec3<f32>(0.2, 0.8, 1.0) * (scanEffect + horizontalScan) * 5.0`). This significantly enhances the 'neon hologram' vibe of the ghost piece!"
