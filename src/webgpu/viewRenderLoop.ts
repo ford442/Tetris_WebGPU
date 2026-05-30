@@ -336,17 +336,7 @@ function renderBackgroundPass(view: any, commandEncoder: any) {
   clearValue.a = 0.0;
 
   const bgPassEncoder = commandEncoder.beginRenderPass(view._backgroundPassDescriptor);
-  if (renderVideo && videoTex && view.useReactiveVideo) {
-    bgPassEncoder.setPipeline(view.videoBackgroundPipeline);
-    bgPassEncoder.setVertexBuffer(0, view.backgroundVertexBuffer);
-    bgPassEncoder.setBindGroup(0, view.createVideoBindGroup(videoTex));
-    bgPassEncoder.draw(6);
-  } else {
-    bgPassEncoder.setPipeline(view.backgroundPipeline);
-    bgPassEncoder.setVertexBuffer(0, view.backgroundVertexBuffer);
-    bgPassEncoder.setBindGroup(0, view.backgroundBindGroup);
-    bgPassEncoder.draw(6);
-  }
+  view.backgroundRenderer.draw(bgPassEncoder, renderVideo, videoTex);
   bgPassEncoder.end();
 }
 
@@ -380,7 +370,7 @@ function renderFrostedGlassPass(view: any, commandEncoder: any) {
  * Render main scene pass (blocks, grid, particles)
  */
 function renderMainPass(view: any, commandEncoder: any, result: any) {
-  view.renderPlayfield_WebGPU(view.state);
+  view.blockRenderer.updateUniforms(view.state);
   const passEncoder = commandEncoder.beginRenderPass(view._mainPassDescriptor);
   
   // Grid
@@ -389,21 +379,7 @@ function renderMainPass(view: any, commandEncoder: any, result: any) {
   passEncoder.setVertexBuffer(0, view.gridVertexBuffer);
   passEncoder.draw(view.gridVertexCount);
 
-  // Blocks
-  passEncoder.setPipeline(view.pipeline);
-  passEncoder.setVertexBuffer(0, view.vertexBuffer);
-  passEncoder.setVertexBuffer(1, view.normalBuffer);
-  passEncoder.setVertexBuffer(2, view.uvBuffer);
-
-  for (let index = 0; index < view.uniformBindGroup_ARRAY_border.length; index++) {
-    passEncoder.setBindGroup(0, view.uniformBindGroup_ARRAY_border[index]);
-    passEncoder.draw(view.numberOfVertices);
-  }
-
-  for (let index = 0; index < view.uniformBindGroup_ARRAY.length; index++) {
-    passEncoder.setBindGroup(0, view.uniformBindGroup_ARRAY[index]);
-    passEncoder.draw(view.numberOfVertices);
-  }
+  view.blockRenderer.draw(passEncoder);
 
   // Particles (only if active)
   if (result.hasActiveParticles) {
@@ -420,36 +396,5 @@ function renderMainPass(view: any, commandEncoder: any, result: any) {
  * Render post-process pass
  */
 function renderPostProcessPass(view: any, commandEncoder: any) {
-  if (view.useMultiPassBloom && view.bloomEnabled && view._bloomInputTexture) {
-    // Use new multi-pass bloom system
-    const ppColorAttachment0 = (view._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-    ppColorAttachment0.view = view._bloomInputTexture.createView();
-
-    const ppPassEncoder = commandEncoder.beginRenderPass(view._ppPassDescriptor);
-    ppPassEncoder.setPipeline(view.postProcessPipeline);
-    ppPassEncoder.setBindGroup(0, view.postProcessBindGroup);
-    ppPassEncoder.setVertexBuffer(0, view.backgroundVertexBuffer);
-    ppPassEncoder.draw(6);
-    ppPassEncoder.end();
-
-    // Apply multi-pass bloom
-    const textureViewScreen = view.ctxWebGPU.getCurrentTexture().createView();
-    view.bloomSystem.render(
-      view._bloomInputTexture.createView(),
-      textureViewScreen,
-      commandEncoder
-    );
-  } else {
-    // Use original simple bloom
-    const textureViewScreen = view.ctxWebGPU.getCurrentTexture().createView();
-    const ppColorAttachment0 = (view._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
-    ppColorAttachment0.view = textureViewScreen;
-    
-    const ppPassEncoder = commandEncoder.beginRenderPass(view._ppPassDescriptor);
-    ppPassEncoder.setPipeline(view.postProcessPipeline);
-    ppPassEncoder.setBindGroup(0, view.postProcessBindGroup);
-    ppPassEncoder.setVertexBuffer(0, view.backgroundVertexBuffer);
-    ppPassEncoder.draw(6);
-    ppPassEncoder.end();
-  }
+  view.postProcessor.render(commandEncoder, view.vpMatrix as Float32Array);
 }
