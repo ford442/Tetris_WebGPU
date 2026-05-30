@@ -322,7 +322,7 @@ export const Shaders = () => {
                                    + vec3<f32>(0.4, 0.85, 1.0) * fresnelTerm * 4.0; // Cyan/Blue rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Glitch
-                    ghostFinal += vec3<f32>(scanEffect + horizontalScan); // Scan overlays
+                    ghostFinal += vec3<f32>(0.2, 0.8, 1.0) * (scanEffect + horizontalScan) * 5.0; // NEON BRICKLAYER: Colored, intense scan overlays
                     ghostFinal += vec3<f32>(gridPattern) * ghostColor * 0.6; // Grid pattern
 
                     // Digital noise sparkles
