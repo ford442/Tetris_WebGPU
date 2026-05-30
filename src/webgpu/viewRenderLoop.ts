@@ -9,6 +9,7 @@ import { updateFrameUniforms } from './viewUniforms.js';
 import { postProcessUniforms } from './postProcessUniforms.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
 import { BLOCK_WORLD_SIZE, BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
+import { updateBorderAudioGlow } from './viewPlayfield.js';
 
 const glMatrix = Matrix;
 
@@ -53,6 +54,11 @@ export function executeRenderLoop(view: any, dt: number) {
 
   // Update render uniforms
   updateRenderUniforms(view, time, result);
+
+  // Dynamic lava material: roughness cools as piece falls (call per-frame only for lava)
+  if ((view.currentTheme as any)?.materialTheme === 'lava') {
+    view.updateMaterialUniforms?.();
+  }
 
   // Execute render passes
   executeRenderPasses(view, commandEncoder, result);
@@ -187,6 +193,14 @@ function updateRenderUniforms(view: any, time: number, result: any) {
   view._f32_1[0] = lockPercent;
   view.device.queue.writeBuffer(view.particleUniformBuffer, 80, view._f32_1);
 
+  // Grid radial ripple uniforms (epicenter + wave time for 500ms lock ripple)
+  // Written to shared particleUniformBuffer (offsets 84/92 fit in 96B buffer)
+  view._f32_2[0] = view.visualEffects.gridRippleCenter[0] || 0.0;
+  view._f32_2[1] = view.visualEffects.gridRippleCenter[1] || 0.0;
+  view.device.queue.writeBuffer(view.particleUniformBuffer, 84, view._f32_2);
+  view._f32_1[0] = view.visualEffects.gridRippleTime || 0.0;
+  view.device.queue.writeBuffer(view.particleUniformBuffer, 92, view._f32_1);
+
   // Background uniforms
   view._f32_1[0] = time;
   view.device.queue.writeBuffer(view.backgroundUniformBuffer, 0, view._f32_1);
@@ -299,6 +313,61 @@ function updatePostProcessUniforms(view: any, time: number) {
   view._postProcessParams.materialAwareBloom = (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0;
   view._postProcessParams.screenResolution[0] = view.canvasWebGPU.width;
   view._postProcessParams.screenResolution[1] = view.canvasWebGPU.height;
+  view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;
+
+  // Compute board height fill ratio (0-1) for contracting danger vignette.
+  // Uses highest occupied row (top = low index). No allocations in hot path.
+  let dangerLevel = 0.0;
+  const pf = view.state && view.state.playfield;
+  if (pf && pf.length === 20) {
+    let minRow = 20;
+    for (let r = 0; r < 20; r++) {
+      const row = pf[r];
+      for (let c = 0; c < 10; c++) {
+        if (row[c] !== 0) {
+          if (r < minRow) minRow = r;
+          break;
+        }
+      }
+    }
+    dangerLevel = (minRow < 20) ? (20 - minRow) / 20.0 : 0.0;
+  }
+  view._postProcessParams.dangerLevel = dangerLevel;
+
+  // Game over kaleidoscope time (2s spin on final board in post-process kaleido UV)
+  view._postProcessParams.gameOverKaleidoTime = view.visualEffects.gameOverKaleidoTimer || 0;
+
+  // Column heights (topmost row index per column, 0=top of board) for simple depth-based
+  // soft shadows in pbrBlocks shader. Written directly here (per task) at 144+; no hot allocs
+  // (reuse _f32_1). Reuses the pf already scanned above for dangerLevel.
+  if (pf && pf.length === 20) {
+    for (let c = 0; c < 10; c++) {
+      let top = 20.0;
+      for (let r = 0; r < 20; r++) {
+        if (pf[r][c] !== 0) {
+          top = r;  // row index as f32 for uniform array
+          break;
+        }
+      }
+      view._f32_1[0] = top;  // number (coerces to f32 on write)
+      view.device.queue.writeBuffer(view.fragmentUniformBuffer, 144 + c * 4, view._f32_1);
+    }
+  }
+
+  // Audio frequency bands (from reactiveMusic analyser) for border glow pulsing.
+  // bass -> left/right, mid -> bottom, treble -> top. Written at 184+ (fits in 208B buffer).
+  if (view.reactiveMusicSystem && typeof view.reactiveMusicSystem.getFrequencyBands === 'function') {
+    const bands = view.reactiveMusicSystem.getFrequencyBands();
+    view._f32_1[0] = bands.bass || 0;
+    view.device.queue.writeBuffer(view.fragmentUniformBuffer, 184, view._f32_1);
+    view._f32_1[0] = bands.mid || 0;
+    view.device.queue.writeBuffer(view.fragmentUniformBuffer, 188, view._f32_1);
+    view._f32_1[0] = bands.treble || 0;
+    view.device.queue.writeBuffer(view.fragmentUniformBuffer, 192, view._f32_1);
+  }
+
+  // Drive border glow (per-side pulsing) via the helper in viewPlayfield (uniforms + shader primary).
+  updateBorderAudioGlow(view.vertexUniformBuffer_border || null, 0, 0, 0, view.device || null);
 
   const ppUniforms = postProcessUniforms.pack(view._postProcessParams);
   view.device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);

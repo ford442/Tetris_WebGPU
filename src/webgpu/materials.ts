@@ -151,6 +151,36 @@ export const Materials: Record<string, Material> = {
     anisotropic: 0.0,
     dispersion: 0.0,
   },
+
+  // Lava - high emissive red-orange glow, starts smooth/hot, cools (rougher) as piece falls
+  lava: {
+    name: 'Lava',
+    baseColor: [0.85, 0.28, 0.06],
+    metallic: 0.25,
+    roughness: 0.12,   // Hot lava starts relatively smooth/flowing
+    transmission: 0.0,
+    ior: 1.35,
+    subsurface: 0.25,
+    emissive: [0.95, 0.32, 0.06],  // High emissive for magma glow
+    clearcoat: 0.15,
+    anisotropic: 0.15,
+    dispersion: 0.0,
+  },
+
+  // Hologram - translucent projection with animated scanlines (added per request)
+  hologram: {
+    name: 'Hologram',
+    baseColor: [0.7, 0.9, 1.0],
+    metallic: 0.1,
+    roughness: 0.35,
+    transmission: 0.4,  // semi-transparent for holographic feel
+    ior: 1.2,
+    subsurface: 0.1,
+    emissive: [0.1, 0.2, 0.3], // subtle blue holo glow
+    clearcoat: 0.2,
+    anisotropic: 0.0,
+    dispersion: 0.0,
+  },
 };
 
 // Material presets for each tetromino type
@@ -163,6 +193,8 @@ export const MaterialThemes: Record<string, Material[]> = {
             Materials.chrome, Materials.glass, Materials.ruby, Materials.sapphire],
   cyber: Array(8).fill(Materials.cyber),
   imageSampled: Array(8).fill(Materials.imageSampled),
+  lava: Array(8).fill(Materials.lava),
+  hologram: Array(8).fill(Materials.hologram),
 };
 
 // Piece type to material mapping (for themed pieces)

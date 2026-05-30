@@ -10,7 +10,8 @@
  * 32-47:  level, warpSurge, enableFXAA, enableBloom, enableFilmGrain, enableCRT, padding(2)
  * 48-63:  screenResolution(xy), bloomIntensity, bloomThreshold
  * 64-79:  materialAwareBloom, padding(3)
- * 80-143: reserved for future expansion
+ * 80-95:  aberrationPulse (hard drop)
+ * 96-143: reserved (dangerLevel at 96, aberration at 100, levelUpFlash at 104/116, gameOverKaleidoTime at 120 for 2s board kaleidoscope)
  */
 
 // ============================================================================
@@ -53,9 +54,13 @@ struct PostProcessUniforms {
     _pad3: f32,             // 92
     
     // Frame 5-8: Reserved (offset 96-144)
-    reserved: vec4f,        // 96
-    reserved2: vec4f,       // 112
-    reserved3: vec2f,       // 128
+    dangerLevel: f32,       // 96  (board height fill ratio 0-1, contracts vignette inner radius as stack rises)
+    aberrationPulse: f32,   // 100 (short-lived hard-drop chromatic aberration spike, 300ms exp decay)
+    levelUpFlashColor: vec3f,   // 104 (r,g,b from theme.backgroundColors[0] for level-up additive burn)
+    levelUpFlashIntensity: f32, // 116 (high opacity -> 0 over exactly 400ms)
+    gameOverKaleidoTime: f32,   // 120 (2s spinning 6-triangle kaleidoscope mirror on final board state + fade; post-process UV)
+    reserved2: vec4f,       // 124
+    reserved3: vec2f,       // 136
 };
 `;
 
@@ -88,6 +93,19 @@ export interface PostProcessUniformData {
   // Frame 4
   materialAwareBloom: number;
   screenResolution: [number, number];
+
+  // Hard drop aberration pulse (new for enhanced post-process chromatic spike)
+  aberrationPulse?: number;
+
+  // Board danger / fill level (0-1) for contracting red vignette on postProcess
+  dangerLevel?: number;
+
+  // Level-up color burn flash (additive fullscreen quad in final composite, 400ms fade, color = theme bg[0])
+  levelUpFlashColor?: [number, number, number];
+  levelUpFlashIntensity?: number;
+
+  // Game over: 2s spinning 6-segment kaleidoscope mirror on captured final board state (post-process UV transform)
+  gameOverKaleidoTime?: number;
 }
 
 export class PostProcessUniformManager {
@@ -111,6 +129,11 @@ export class PostProcessUniformManager {
     bloomThreshold: 0.35,
     materialAwareBloom: 1.0, // Enable material-aware bloom by default
     screenResolution: [1920, 1080],
+    aberrationPulse: 0,
+    dangerLevel: 0,
+    levelUpFlashColor: [0.2, 0.6, 1.0],
+    levelUpFlashIntensity: 0,
+    gameOverKaleidoTime: 0,
   };
 
   /**
@@ -154,8 +177,18 @@ export class PostProcessUniformManager {
     this.data[22] = v.screenResolution[1];
     this.data[23] = 0; // _pad3
     
-    // Reserved (offset 96 = floats 24-35)
-    for (let i = 24; i < 36; i++) {
+    // dangerLevel at 96 (float 24), aberration at 100 (float 25)
+    this.data[24] = (v as any).dangerLevel || 0;     // u_dangerLevel for board-fill vignette
+    this.data[25] = (v as any).aberrationPulse || 0;
+    // levelUpFlash at 104 (floats 26-28 color, 29 intensity) - 400ms additive color burn from theme bg[0]
+    const flashCol = (v as any).levelUpFlashColor || [0, 0, 0];
+    this.data[26] = flashCol[0] || 0;
+    this.data[27] = flashCol[1] || 0;
+    this.data[28] = flashCol[2] || 0;
+    this.data[29] = (v as any).levelUpFlashIntensity || 0;
+    // gameOverKaleidoTime at 120 (float 30) - 2s board kaleidoscope spin + fade in post-process
+    this.data[30] = (v as any).gameOverKaleidoTime || 0;
+    for (let i = 31; i < 36; i++) {
       this.data[i] = 0;
     }
     

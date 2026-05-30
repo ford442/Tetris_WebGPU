@@ -39,6 +39,8 @@ export interface ViewLike {
     goldSpecularBoost: number;
     cyberEmissivePulse: number;
   };
+  particleSystem: any;
+  state: any;
 }
 
 export function setPremiumVisualsPreset(view: ViewLike, options: {
@@ -130,11 +132,43 @@ export function onTSpinReactive(view: ViewLike) {
   if (view.reactiveVideoBackground?.isSeaCreatureLevel) {
     view.jellyfishSystem.onTSpin();
   }
+
+  // NEW: Brief procedural crown sprite above the T-piece on T-Spin
+  if (view.particleSystem && view.state?.activePiece) {
+    const p = view.state.activePiece;
+    const cx = (p.x + (p.blocks[0]?.length || 4) / 2) * 2.2;
+    const cz = 0; // board is mostly 2D in world Z
+    const cy = (p.y + (p.blocks.length || 3) / 2) * -2.2 + 2.5; // above the piece
+
+    const bg = (view.currentTheme as any).backgroundColors || [[0.8,0.8,0.8], [0.6,0.6,0.6]];
+    const c1 = bg[0] || [0.8, 0.8, 0.8];
+    const c2 = bg[1] || [0.6, 0.6, 0.6];
+
+    view.particleSystem.emitTSpinCrown(cx, cy, cz, c1, c2);
+  }
 }
 
 export function onPerfectClearReactive(view: ViewLike) {
   if (view.useReactiveVideo) {
     view.reactiveVideoBackground.onPerfectClear();
+  }
+
+  // Extend with particle "PERFECT" text assembly (upward drift -> targets from pixel font -> 1.5s hold -> scatter)
+  if (view.particleSystem) {
+    const theme = (view.currentTheme as any) || {};
+    const bg = theme.backgroundColors || [[0.4, 0.9, 1.0], [1.0, 0.85, 0.3]];
+    // Bright celebratory color (primary bg or warm highlight)
+    const bright: number[] = [
+      (bg[0]?.[0] ?? 0.6) * 0.7 + 0.3,
+      (bg[0]?.[1] ?? 0.85) * 0.7 + 0.3,
+      (bg[0]?.[2] ?? 0.95) * 0.6 + 0.4,
+      0.95
+    ];
+
+    // Center of screen, floating above mid-board (tuned to world coords from renderMetrics)
+    const cx = 11.0;
+    const cy = -9.0;
+    view.particleSystem.emitPerfectClearText(cx, cy, bright);
   }
 }
 

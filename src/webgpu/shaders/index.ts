@@ -12,6 +12,7 @@ export { ParticleShaders } from './particle.js';
 export { GridShader } from './grid.js';
 export { BackgroundShaders } from './background.js';
 export { VideoBackgroundShaders } from './videoBackground.js';
+export { AuroraBackgroundShaders } from './auroraBackground.js';
 export { Shaders } from './main.js';
 export { BlockShaders } from './blocks.js';
 export { VideoBackgroundShader } from './video.js';

@@ -36,6 +36,10 @@ export class ReactiveMusicSystem {
   private isTension: boolean = false;
   private currentScale: number[] = [];
   
+  // Audio analysis for visual band reactivity (exposed for border glow in renderloop)
+  private analyser: AnalyserNode | null = null;
+  private _fftData: Uint8Array | null = null;
+  
   // Musical scales
   private scales: Record<string, number[]> = {
     minor: [0, 3, 5, 7, 10, 12, 15, 17], // Minor pentatonic extension
@@ -62,6 +66,13 @@ export class ReactiveMusicSystem {
     this.compressor.attack.value = 0.003;
     this.compressor.release.value = 0.25;
     this.compressor.connect(this.masterGain);
+    
+    // Analyser tap for frequency band exposure (bass/mid/treble for border glow)
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 64;
+    this.analyser.smoothingTimeConstant = 0.65;
+    this.compressor.connect(this.analyser); // tap, no further audio connection needed
+    this._fftData = new Uint8Array(this.analyser.frequencyBinCount);
     
     // Base music gain
     this.baseMusicGain = this.ctx.createGain();
@@ -387,6 +398,34 @@ export class ReactiveMusicSystem {
       comboLevel: this.comboLevel,
       currentScale: Object.keys(this.scales).find(k => this.scales[k] === this.currentScale),
       hasBaseMusic: !!this.baseMusicBuffer,
+    };
+  }
+
+  // Audio frequency band magnitudes for visual reactivity (bass L/R border, mid bottom, treble top)
+  // Called once per frame from render loop; no hot-path allocations.
+  getFrequencyBands(): { bass: number; mid: number; treble: number } {
+    if (!this.analyser || !this._fftData) {
+      return { bass: 0, mid: 0, treble: 0 };
+    }
+    this.analyser.getByteFrequencyData(this._fftData);
+    const n = this._fftData.length;
+    if (n === 0) return { bass: 0, mid: 0, treble: 0 };
+
+    let bass = 0, mid = 0, treble = 0;
+    // Simple 3-band split (tuned for 32-bin fft from fftSize=64)
+    const bassEnd = Math.min(8, n);
+    const midEnd = Math.min(20, n);
+    for (let i = 0; i < bassEnd; i++) bass += this._fftData[i];
+    for (let i = bassEnd; i < midEnd; i++) mid += this._fftData[i];
+    for (let i = midEnd; i < n; i++) treble += this._fftData[i];
+
+    const bassN = bassEnd;
+    const midN = midEnd - bassEnd;
+    const trebN = n - midEnd;
+    return {
+      bass: bassN > 0 ? (bass / (bassN * 255)) : 0,
+      mid: midN > 0 ? (mid / (midN * 255)) : 0,
+      treble: trebN > 0 ? (treble / (trebN * 255)) : 0,
     };
   }
 }

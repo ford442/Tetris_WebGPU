@@ -66,6 +66,12 @@ export class ParticleMaterialInteraction {
       specularFlashIntensity: 0.8,
       neonBurstIntensity: 0.3,
       interactionRadius: 2.5
+    },
+    lava: {
+      refractionStrength: 0.0,
+      specularFlashIntensity: 0.9,
+      neonBurstIntensity: 1.8,
+      interactionRadius: 2.2
     }
   };
 
@@ -108,6 +114,15 @@ export class ParticleMaterialInteraction {
           intensity: intensity * params.neonBurstIntensity,
           decay: 0.88,
           color: [0.0, 1.0, 1.0, 0.8] // Cyan neon
+        };
+        break;
+
+      case 'lava':
+        interaction = {
+          type: 'neon_burst',
+          intensity: intensity * params.neonBurstIntensity,
+          decay: 0.65,
+          color: [1.0, 0.45, 0.1, 0.95] // Lava embers / sparks
         };
         break;
         

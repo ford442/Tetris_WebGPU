@@ -166,6 +166,19 @@ export const EnhancedPostProcessShaders = () => {
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && 
                            distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
+            // Game over kaleidoscope (early before sampling)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let p = finalUV - vec2<f32>(0.5);
+                let r = length(p);
+                var a = atan2(p.y, p.x);
+                let spin = uniforms.gameOverKaleidoTime * 0.7;
+                let sa = 1.04719755;
+                a = a + spin;
+                a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
+                let ka = vec2<f32>(cos(a), sin(a)) * r + vec2<f32>(0.5);
+                finalUV = ka;
+            }
+
             // Shockwave Effect
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
@@ -226,10 +239,18 @@ export const EnhancedPostProcessShaders = () => {
             let horizOffset = totalAberration + glitchOffset + shockwaveAberration;
             let vertAberration = totalAberration * (uv.y - 0.5) * 0.2 + (shockwaveAberration * 0.5);
 
+            // NEW: Hard-drop triggered short-lived chromatic aberration spike (u_aberrationPulse)
+            // 300ms exp decay (CPU side), separate per-channel RGB offsets for a sharp "spike" at impact.
+            // Positive/negative splits create classic red/cyan fringing that peaks then fades.
+            let pulse = uniforms.aberrationPulse;
+            let pulseR = pulse * 0.022;
+            let pulseG = pulse * 0.004;
+            let pulseB = pulse * -0.018;
+
             let baseSample = textureSample(myTexture, mySampler, finalUV);
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset, vertAberration)).r;
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR, vertAberration + pulseG * 0.6)).r;
             var g = baseSample.g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset, vertAberration)).b;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB, vertAberration + pulseR * 0.4)).b;
             var color = vec3<f32>(r, g, b);
             let sampledAlpha = baseSample.a;
 
@@ -273,9 +294,22 @@ export const EnhancedPostProcessShaders = () => {
                 color = mix(color, invert, clamp(uniforms.warpSurge * 0.6, 0.0, 0.6));
             }
 
+            // Level-up color burn flash: additive fullscreen overlay on the final composite quad (400ms, theme bg[0])
+            let levelUpFlash = uniforms.levelUpFlashIntensity;
+            if (levelUpFlash > 0.01) {
+                let fc = uniforms.levelUpFlashColor;
+                color += fc * (levelUpFlash * 1.05);
+            }
+
             // Simple scanlines overlay
             let scanline = sin(finalUV.y * 600.0 + uniforms.time * 10.0) * 0.02;
             color -= vec3<f32>(scanline);
+
+            // Fade the kaleido (if active)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let kaleidoFade = uniforms.gameOverKaleidoTime / 2.0;
+                color *= kaleidoFade;
+            }
 
             // HDR tone mapping
             color = color / (color + vec3<f32>(1.0));

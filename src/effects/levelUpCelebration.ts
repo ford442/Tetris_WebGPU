@@ -42,6 +42,28 @@ export function getLevelConfig(level: number): LevelUpConfig {
   };
 }
 
+/**
+ * WebGPU-side level-up color burn flash helpers.
+ * Returns the theme's backgroundColors[0] (or safe fallback) for the additive fullscreen flash.
+ */
+export function getLevelUpFlashColor(backgroundColors: number[][] | undefined): [number, number, number] {
+  if (backgroundColors && backgroundColors.length > 0 && backgroundColors[0]) {
+    const c = backgroundColors[0];
+    return [c[0] ?? 0.3, c[1] ?? 0.7, c[2] ?? 1.0];
+  }
+  return [0.3, 0.7, 1.0];
+}
+
+/**
+ * Trigger the 400ms additive color-burn fullscreen quad flash (implemented in postProcess final composite).
+ * Called from viewGameEvents on level change, using the live theme's background color.
+ */
+export function triggerLevelUpWebGPUFlash(visualEffects: any, backgroundColors: number[][] | undefined): void {
+  if (!visualEffects || typeof visualEffects.triggerLevelUpColorFlash !== 'function') return;
+  const color = getLevelUpFlashColor(backgroundColors);
+  visualEffects.triggerLevelUpColorFlash(color);
+}
+
 export function createLevelUpOverlay(level: number): HTMLElement {
   const overlay = document.createElement('div');
   overlay.className = 'level-up-overlay';
@@ -188,7 +210,10 @@ export const levelUpCelebration = {
   getLevelTheme,
   getLevelConfig,
   createLevelUpOverlay,
-  addLevelUpStyles
+  addLevelUpStyles,
+  // WebGPU color burn flash (400ms additive via postProcess.ts final composite + theme bg[0])
+  getLevelUpFlashColor,
+  triggerLevelUpWebGPUFlash
 };
 
 export default levelUpCelebration;

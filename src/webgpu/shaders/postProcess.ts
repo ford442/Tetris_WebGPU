@@ -39,6 +39,19 @@ export const PostProcessShaders = () => {
             var finalUV = distortedUV;
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
+            // Game over kaleidoscope (must be early, before any textureSample using finalUV)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let p = finalUV - vec2<f32>(0.5);
+                let r = length(p);
+                var a = atan2(p.y, p.x);
+                let spin = uniforms.gameOverKaleidoTime * 0.7;
+                let sa = 1.04719755;
+                a = a + spin;
+                a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
+                let ka = vec2<f32>(cos(a), sin(a)) * r + vec2<f32>(0.5);
+                finalUV = ka;
+            }
+
             // Shockwave
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
@@ -171,6 +184,22 @@ export const PostProcessShaders = () => {
             let vignette = 1.0 - clamp((distFromCenterSq - vignetteInnerRadiusSq) / (vignetteOuterSq - vignetteInnerRadiusSq), 0.0, 1.0);
             color *= vignette;
 
+            // Danger vignette: screen-edge red that contracts (inner radius shrinks) as board fills (u_dangerLevel)
+            // Pulses opacity at 2 Hz (sin(time * 4 * PI)) only when dangerLevel > 0.75
+            let danger = uniforms.dangerLevel;
+            if (danger > 0.01) {
+                let dangerInner = 0.28 - danger * 0.26; // contracts toward 0.02 when full (deeper red encroachment)
+                let dangerOuter = 1.35;
+                let dangerVig = 1.0 - clamp((distFromCenterSq - dangerInner) / (dangerOuter - dangerInner), 0.0, 1.0);
+                let red = vec3<f32>(0.55, 0.04, 0.04); // deep red
+                let dangerOpacity = danger * 0.9;
+                if (danger > 0.75) {
+                    let pulse = 0.5 + 0.5 * sin(uniforms.time * 12.56637); // exactly 2 Hz
+                    dangerOpacity *= (0.55 + 0.45 * pulse);
+                }
+                color = mix(color, red, dangerVig * dangerOpacity);
+            }
+
             // NEON BRICKLAYER: Warp Surge Flash
             let warpSurge = uniforms.warpSurge;
             if (warpSurge > 0.01) {
@@ -178,9 +207,35 @@ export const PostProcessShaders = () => {
                 color = mix(color, invert, clamp(warpSurge * 0.8, 0.0, 0.8));
             }
 
+            // Level-up color burn flash: additive fullscreen overlay on the final composite quad
+            // High opacity start, exact 400ms linear fade, color cycles with new level's theme.backgroundColors[0]
+            let levelUpFlash = uniforms.levelUpFlashIntensity;
+            if (levelUpFlash > 0.01) {
+                let fc = uniforms.levelUpFlashColor;
+                color += fc * (levelUpFlash * 1.05);
+            }
+
+            // Game over: 6-triangle kaleidoscope mirror on the (final board state in) myTexture
+            // Spins slowly while gameOverKaleidoTime > 0 (set 2.0 on trigger, decayed in effects + written in renderloop)
+            // Replaces normal distortion path for the duration; board is static at game over so this "captures" it.
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let p = finalUV - vec2<f32>(0.5);
+                let r = length(p);
+                var a = atan2(p.y, p.x);
+                let spin = uniforms.gameOverKaleidoTime * 0.7; // slow rad/sec spin
+                let sa = 1.04719755; // PI/3 for 6 segments
+                a = a + spin;
+                // 6-way mirror fold
+                a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
             // Scanlines
             let scanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
             color -= vec3<f32>(scanline);
+
+            // Fade the kaleido (if active) as the 2s timer expires (hands off to HTML overlay)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let kaleidoFade = uniforms.gameOverKaleidoTime / 2.0;
+                color *= kaleidoFade;
+            }
 
             if (!inBounds) {
                 return vec4<f32>(0.0, 0.0, 0.0, 1.0);

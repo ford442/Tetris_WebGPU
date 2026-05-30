@@ -23,6 +23,7 @@ export interface MaterialViewLike {
     goldSpecularBoost: number;
     cyberEmissivePulse: number;
   };
+  useWireframe: boolean;
 }
 
 /**
@@ -40,7 +41,7 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
   view.currentTheme = theme;
 
   const materialThemeName = (theme as any).materialTheme || 'classic';
-  view.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber', 'imageSampled'].includes(materialThemeName);
+  view.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber', 'imageSampled', 'lava', 'hologram'].includes(materialThemeName);
 
   view.currentMaterial = getPieceMaterial(materialThemeName, pieceType);
 
@@ -57,7 +58,7 @@ export function setMaterialTheme(view: MaterialViewLike, themeName: string, piec
 }
 
 // Maps material names to pbrBlocks.ts materialType indices
-// 0=Classic, 1=Gold, 2=Chrome, 3=Glass, 4=Cyber, 5=Gem
+// 0=Classic, 1=Gold, 2=Chrome, 3=Glass, 4=Cyber, 5=Gem, 6=Lava, 7=Hologram
 function getMaterialTypeIndex(name: string): number {
   switch (name) {
     case 'Gold':    return 1;
@@ -65,6 +66,8 @@ function getMaterialTypeIndex(name: string): number {
     case 'Glass':   return 3;
     case 'Cyber':   return 4;
     case 'Ruby': case 'Sapphire': case 'Emerald': return 5;
+    case 'Lava':    return 6;
+    case 'Hologram': return 7;
     default:        return 0;
   }
 }
@@ -79,10 +82,13 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
 
   const m = view.currentMaterial;
 
+  // Dynamic roughness for lava: increases (cools) as the active piece falls
+  let roughness = m.roughness;
+
   // Floats: metallic(48) roughness(52) transmission(56) ior(60)
   //         subsurface(64) clearcoat(68) anisotropic(72) dispersion(76)
   view._materialUniforms[0] = m.metallic;
-  view._materialUniforms[1] = m.roughness;
+  view._materialUniforms[1] = roughness;
   view._materialUniforms[2] = m.transmission;
   view._materialUniforms[3] = m.ior;
   view._materialUniforms[4] = m.subsurface;
@@ -108,6 +114,20 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
                            m.name.toLowerCase().includes('image');
   view._materialUniforms[2] = wantsStrongImage ? 0.88 : 0.32;
 
+  // Apply lava cooling roughness (after materialTheme is declared)
+  if (materialTheme === 'lava') {
+    const active = (view as any).state?.activePiece;
+    let cooling = 0.65; // default for locked/cleared blocks (cooled crust)
+    if (active && typeof active.y === 'number') {
+      // y=0 at top (fresh hot), y~18 near floor (cooler)
+      cooling = Math.max(0, Math.min(1, (active.y || 0) / 18.0)) * 0.65;
+    }
+    roughness = m.roughness + cooling;
+    // Re-write just the roughness slot (offset 52) so cooling takes effect this frame
+    view._materialUniforms[0] = roughness;
+    view.device.queue.writeBuffer(view.fragmentUniformBuffer, 52, view._materialUniforms.subarray(0, 1));
+  }
+
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
 }
 
@@ -119,6 +139,21 @@ export function cycleTheme(view: MaterialViewLike) {
   const currentIndex = themeNames.indexOf((view.currentTheme as any).materialTheme || 'neon');
   const nextIndex = (currentIndex + 1) % themeNames.length;
   setMaterialTheme(view, themeNames[nextIndex]);
+}
+
+/**
+ * Enable/disable wireframe rendering option for the block pipeline.
+ * When on, the (shader) renders only lit edges as thin neon quads per face,
+ * interior transparent. The flag is written to uniform pad for shader consumption.
+ */
+export function setWireframe(view: MaterialViewLike, enabled: boolean) {
+  view.useWireframe = !!enabled;
+  if (view.device && view.fragmentUniformBuffer) {
+    // Write 0/1 to pad1 offset 104 in FragmentUniforms (pbrBlocks.ts)
+    // Shader can check this to switch to wireframe edge-only mode.
+    const scratch = new Float32Array([enabled ? 1.0 : 0.0]);
+    view.device.queue.writeBuffer(view.fragmentUniformBuffer, 104, scratch);
+  }
 }
 
 /**

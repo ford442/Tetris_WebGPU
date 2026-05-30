@@ -24,6 +24,7 @@ export interface Themes {
   premium: ThemeColors; // NEW
   cyber: ThemeColors;   // NEW
   chrome: ThemeColors;  // NEW
+  lava: ThemeColors;    // NEW: Molten lava with emissive magma glow
   imageSampled: ThemeColors; // NEW: Direct block.png sampling
 }
 
@@ -206,6 +207,25 @@ export const themes: Themes = {
       [0.1, 0.1, 0.15]
     ],
     materialTheme: 'chrome'
+  },
+  // NEW: Lava theme - red-orange molten blocks with pulsing emissive glow (cooling magma)
+  lava: {
+    0: [0.12, 0.04, 0.02],
+    1: [1.0, 0.45, 0.08],   // I - bright lava
+    2: [0.92, 0.28, 0.05],  // J - deep orange
+    3: [0.98, 0.38, 0.06],  // L - hot orange
+    4: [1.0, 0.65, 0.15],   // O - yellow-hot core
+    5: [0.88, 0.22, 0.04],  // S - red magma
+    6: [0.95, 0.32, 0.07],  // T - flowing lava
+    7: [0.90, 0.25, 0.05],  // Z - ember red
+    border: [1.0, 0.65, 0.2],
+    levelVideos: ThemeVideos.Default,
+    backgroundColors: [
+      [0.08, 0.02, 0.01],   // Deep volcanic
+      [0.12, 0.04, 0.015],
+      [0.06, 0.015, 0.01]
+    ],
+    materialTheme: 'lava'
   },
   // NEW: Image Sampled - uses block.png texture directly
   imageSampled: {

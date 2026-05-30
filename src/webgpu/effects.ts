@@ -28,6 +28,31 @@ export class VisualEffects {
     movementFlashTimer: number = 0;
     lineClearFlashTimer: number = 0;
 
+    // Ghost/shadow vertical light-trail state (animates 200ms after piece move)
+    ghostTrailTimer: number = 0;
+    private _lastActiveY: number = -999;
+    private _lastActiveRot: number = -999;
+
+    // Dedicated short-lived (300ms exp decay) chromatic aberration pulse for hard drops
+    // (separate from general aberrationIntensity; fed to u_aberrationPulse uniform in enhanced post-process)
+    hardDropAberrationPulse: number = 0;
+
+    // Grid radial ripple from last lock (epicenter + 0..0.5s wave time for 500ms outward fade on grid lines)
+    gridRippleCenter: [number, number] = [0.0, 0.0];
+    gridRippleTime: number = 0.0;
+
+    // Level-up color burn flash (WebGPU additive fullscreen quad, 400ms exact fade, color from theme.backgroundColors[0])
+    levelUpFlashColor: [number, number, number] = [0.2, 0.6, 1.0];
+    levelUpFlashIntensity: number = 0;
+
+    // Magnetic UV wobble for placed blocks near active piece (set each frame in viewPlayfield; vanishes on lock when !activePiece)
+    magnetWorldX: number = 0;
+    magnetWorldY: number = 0;
+    magnetStrength: number = 0;
+
+    // Game over kaleidoscope on final board state (WebGPU post-process 6-triangle spin 2s)
+    gameOverKaleidoTimer: number = 0;
+
     // Video background state (delegated to ReactiveVideoBackground)
     isVideoPlaying: boolean = false;
     currentLevel: number = 0;
@@ -83,6 +108,33 @@ export class VisualEffects {
         this.lineClearFlashTimer *= 1.0 / (1.0 + dt * 4.0);
         if (this.lineClearFlashTimer < 0.01) this.lineClearFlashTimer = 0;
 
+        // Ghost trail decay (200ms window after moves)
+        if (this.ghostTrailTimer > 0) this.ghostTrailTimer -= dt;
+        if (this.ghostTrailTimer < 0) this.ghostTrailTimer = 0;
+
+        // Hard drop chromatic aberration pulse: exponential decay targeting ~300ms
+        // (e^(-dt/0.08) gives strong initial dropoff, effectively gone after 0.3s)
+        this.hardDropAberrationPulse *= Math.exp(-dt / 0.08);
+        if (this.hardDropAberrationPulse < 0.005) this.hardDropAberrationPulse = 0;
+
+        // Grid ripple decay (age the wave; render loop / shader handles visual fade at 500ms)
+        if (this.gridRippleTime > 0.0) {
+            this.gridRippleTime += dt;
+            if (this.gridRippleTime > 0.5) this.gridRippleTime = 0.0;
+        }
+
+        // Level-up color burn flash: linear fade over exactly 400ms (high initial opacity additive)
+        if (this.levelUpFlashIntensity > 0) {
+            this.levelUpFlashIntensity -= dt / 0.4;
+            if (this.levelUpFlashIntensity < 0) this.levelUpFlashIntensity = 0;
+        }
+
+        // Game over kaleidoscope: 2s spin + fade on captured final board in post-process
+        if (this.gameOverKaleidoTimer > 0) {
+            this.gameOverKaleidoTimer -= dt;
+            if (this.gameOverKaleidoTimer < 0) this.gameOverKaleidoTimer = 0;
+        }
+
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
@@ -114,6 +166,13 @@ export class VisualEffects {
         this.lockTimer = duration;
     }
 
+    /**
+     * Manually trigger the ghost light-trail animation (e.g. on hard drop or special moves).
+     */
+    triggerGhostTrail(duration: number = 0.2): void {
+        this.ghostTrailTimer = duration;
+    }
+
     triggerShake(magnitude: number, duration: number): void {
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
@@ -123,6 +182,33 @@ export class VisualEffects {
     triggerAberration(magnitude: number): void {
         this.aberrationIntensity += magnitude;
         this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
+    }
+
+    /**
+     * Trigger the dedicated hard-drop aberration pulse (decays exp over ~300ms).
+     * This feeds the u_aberrationPulse uniform for a sharp RGB channel spike in enhanced post-process.
+     */
+    triggerHardDropAberrationPulse(strength: number = 1.0): void {
+        this.hardDropAberrationPulse = Math.max(this.hardDropAberrationPulse, strength);
+    }
+
+    /**
+     * Start a 500ms radial ripple on the grid originating from a lock position.
+     * Epicenter in world coords; render loop passes to grid uniforms + shader does distortion + fade.
+     */
+    triggerGridRipple(x: number, y: number): void {
+        this.gridRippleCenter[0] = x;
+        this.gridRippleCenter[1] = y;
+        this.gridRippleTime = 0.001; // start the outward wave
+    }
+
+    /**
+     * Trigger the WebGPU-side fullscreen additive color-burn flash on level up.
+     * Color comes from the new level's theme.backgroundColors[0]; fades over 400ms at high opacity.
+     */
+    triggerLevelUpColorFlash(color: [number, number, number], duration: number = 0.4): void {
+        this.levelUpFlashColor = color && color.length >= 3 ? [color[0], color[1], color[2]] : [0.3, 0.7, 1.0];
+        this.levelUpFlashIntensity = 1.0; // start at high opacity for burn
     }
 
     triggerNeonBloomFlash(strength: number = 1.0): void {

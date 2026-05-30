@@ -216,6 +216,19 @@ export const MaterialAwarePostProcessShaders = () => {
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && 
                            distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
+            // Game over kaleidoscope (early before sampling)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let p = finalUV - vec2<f32>(0.5);
+                let r = length(p);
+                var a = atan2(p.y, p.x);
+                let spin = uniforms.gameOverKaleidoTime * 0.7;
+                let sa = 1.04719755;
+                a = a + spin;
+                a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
+                let ka = vec2<f32>(cos(a), sin(a)) * r + vec2<f32>(0.5);
+                finalUV = ka;
+            }
+
             // Shockwave Effect
             let center = uniforms.shockwaveCenter;
             let time = uniforms.shockwaveTime;
@@ -324,9 +337,22 @@ export const MaterialAwarePostProcessShaders = () => {
                 color = mix(color, invert, clamp(uniforms.warpSurge * 0.5, 0.0, 0.5));
             }
 
+            // Level-up color burn flash: additive fullscreen overlay on the final composite quad (400ms, theme bg[0])
+            let levelUpFlash = uniforms.levelUpFlashIntensity;
+            if (levelUpFlash > 0.01) {
+                let fc = uniforms.levelUpFlashColor;
+                color += fc * (levelUpFlash * 1.05);
+            }
+
             // Subtle scanlines overlay
             let scanline = sin(finalUV.y * 600.0 + uniforms.time * 10.0) * 0.015;
             color -= vec3<f32>(scanline);
+
+            // Fade the kaleido (if active)
+            if (uniforms.gameOverKaleidoTime > 0.001) {
+                let kaleidoFade = uniforms.gameOverKaleidoTime / 2.0;
+                color *= kaleidoFade;
+            }
 
             // HDR tone mapping
             color = color / (color + vec3<f32>(1.0));

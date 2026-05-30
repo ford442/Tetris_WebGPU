@@ -162,6 +162,35 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
     }
   });
 
+  // =====================================================================
+  // SHARP SHARD BURST (directional elongated spinning shards from cleared rows)
+  // Uses extended ParticleSystem + LineClearAnimator (with color snapshot support).
+  // Shards burst outward (horizontal +/-X from board center per column), carry
+  // authentic block colors when available, high speed -> shader stretch = thin shards,
+  // 0.6s life, visual spin from dynamics + existing sparkle. Wired in onLineClear.
+  // =====================================================================
+  {
+    const snapshot: number[][] | null = (view.state && view.state.playfield) ? [] : null;
+    if (snapshot && view.state.playfield) {
+      for (const y of lines) {
+        if (y >= 0 && y < view.state.playfield.length) {
+          snapshot.push([...view.state.playfield[y]]);
+        } else {
+          snapshot.push(new Array(10).fill(0));
+        }
+      }
+    }
+
+    // Exercise the extended triggerLineClear API (now accepts rowColorSnapshots)
+    lineClearAnimator.triggerLineClear(lines, undefined, snapshot || undefined);
+
+    // Emit the colored directional shards (the core new effect)
+    if (view.particleSystem && typeof view.particleSystem.emitLineClearShards === 'function') {
+      const getWorldY = (r: number) => r * -2.2;
+      view.particleSystem.emitLineClearShards(lines, snapshot, view.currentTheme, getWorldY);
+    }
+  }
+
   if (isAllClear) {
     // Average Y of all cleared lines
     const avgWorldY = (lines.reduce((sum, y) => sum + y, 0) / lines.length) * -2.2;
@@ -198,6 +227,9 @@ export function onLock(view: any, isTSpin: boolean = false): void {
     const { x, y } = view.state.activePiece;
     const worldX = (x + 1.5) * 2.2;
     const worldY = (y + 1.5) * -2.2;
+
+    // NEW: emit radial ripple on grid from the just-locked piece position (last-locked block area)
+    view.visualEffects.triggerGridRipple(worldX, worldY);
 
     const camY = -20.0;
     const camZ = 75.0;
@@ -308,6 +340,7 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   const burstColor = [...themeColors, 1.0];
   view.visualEffects.triggerFlash(0.1);
   view.visualEffects.triggerAberration(1.5); // JUICE: Heavy chromatic aberration on hard drop
+  view.visualEffects.triggerHardDropAberrationPulse(1.2); // NEW: 300ms exp decay spike -> u_aberrationPulse uniform (separate RGB offsets in enhancedPostProcess)
   view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
 
   // JUICE: Multiplied particle speeds and counts by 3.0x for heavier impact
@@ -389,6 +422,9 @@ export function renderMainScreen(view: any, state: any): void {
     if (view.useReactiveVideo && view.reactiveVideoBackground) {
       view.reactiveVideoBackground.updateForLevel(state.level);
     }
+
+    // WebGPU-side fullscreen additive color-burn flash (400ms, theme backgroundColors[0])
+    levelUpCelebration.triggerLevelUpWebGPUFlash(view.visualEffects, view.currentTheme?.backgroundColors);
     
     // Show floating text with level color
     showFloatingText(view, `LEVEL ${state.level}!`, "WARP SPEED");
@@ -475,6 +511,7 @@ export function renderMainScreen(view: any, state: any): void {
 }
 
 import { gameOverAnimation } from '../effects/gameOverAnimation.js';
+import { lineClearAnimator } from '../effects/lineClearAnimation.js';
 
 export function renderEndScreen(view: any, state: any): void {
   // Add styles first

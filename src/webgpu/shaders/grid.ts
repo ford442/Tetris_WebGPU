@@ -13,6 +13,9 @@ export const GridShader = () => {
             ghostWidth : f32, // Offset 72
             warpSurge : f32, // Offset 76
             lockPercent: f32, // Offset 80
+            rippleCenter: vec2<f32>, // Offset 84 - last lock epicenter for radial ripple
+            rippleTime: f32, // Offset 92 - wave age 0..0.5s for 500ms fade
+            _padRipple: f32, // Offset 96
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -32,6 +35,21 @@ export const GridShader = () => {
                 pos.y += wave;
             }
 
+            // Radial ripple distortion from last lock position (new)
+            // Travels outward over 500ms and fades; distorts grid line vertices radially
+            if (uniforms.rippleTime > 0.001 && uniforms.rippleTime < 0.5) {
+                let toEpic = pos.xy - uniforms.rippleCenter;
+                let d = length(toEpic);
+                if (d > 0.001) {
+                    let dir = toEpic / d;
+                    // Phase makes wave travel outward; tuned speed/freq for ~500ms across grid
+                    let phase = d * 2.2 - uniforms.rippleTime * 28.0;
+                    let fade = 1.0 - (uniforms.rippleTime / 0.5);
+                    let amp = sin(phase) * 0.55 * fade;
+                    pos.xy += dir * amp;
+                }
+            }
+
             output.Position = uniforms.viewProjectionMatrix * vec4<f32>(pos, 1.0);
             output.vPos = pos;
             return output;
@@ -45,6 +63,9 @@ export const GridShader = () => {
             ghostWidth : f32,
             warpSurge : f32,
             lockPercent: f32,
+            rippleCenter: vec2<f32>, // last lock epicenter for radial ripple
+            rippleTime: f32, // wave age 0..0.5 for 500ms outward fade
+            _padRipple: f32,
         };
         @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
@@ -118,6 +139,17 @@ export const GridShader = () => {
                      color = mix(color, red, tension * warningPulse * 0.7);
                      alpha += tension * warningPulse * 0.5;
                  }
+            }
+
+            // Radial ripple wave intensity (bright traveling ring on grid lines)
+            if (uniforms.rippleTime > 0.001 && uniforms.rippleTime < 0.5) {
+                let d = length(vPos.xy - uniforms.rippleCenter);
+                let phase = d * 2.2 - uniforms.rippleTime * 28.0;
+                let fade = 1.0 - (uniforms.rippleTime / 0.5);
+                let wave = max(sin(phase), 0.0) * 0.9 * fade;
+                alpha += wave * 0.7;
+                // Subtle cyan tint for the ripple crest
+                color = mix(color, vec3<f32>(0.5, 0.85, 1.0), wave * 0.4);
             }
 
             return vec4<f32>(color, alpha);

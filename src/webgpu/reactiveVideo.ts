@@ -239,6 +239,33 @@ export class ReactiveVideoBackground {
   // NEW: Track current background config
   currentBackground: VideoBackgroundKey | null = null;
 
+  // Aurora procedural background mode (new shader category)
+  // Registered here and activates automatically for the 'future' theme.
+  // Wave parameters are advanced using game time passed via uniform from the render loop.
+  auroraActive: boolean = false;
+  auroraParams: { time: number; speed: number; intensity: number } = {
+    time: 0,
+    speed: 0.42,
+    intensity: 1.0
+  };
+
+  // Register/activate aurora background mode for the future theme
+  setAuroraForTheme(theme: string): void {
+    this.auroraActive = (theme === 'future');
+    if (this.auroraActive) {
+      this.auroraParams.time = 0;
+      // Future theme gets the beautiful moving aurora curtains instead of video
+    }
+  }
+
+  // Advance aurora wave parameters using game time (called each frame with uniform time)
+  advanceAurora(time: number): void {
+    if (this.auroraActive) {
+      this.auroraParams.time = time;
+      // Speed and intensity can be modulated here if needed based on game state
+    }
+  }
+
   // WebGPU video support
   private useWebGPUVideo: boolean = false;
   private videoTexture: GPUExternalTexture | null = null;
@@ -455,6 +482,11 @@ export class ReactiveVideoBackground {
   // ENHANCED: Update for level with smooth crossfade and background selection
   updateForLevel(level: number, instant: boolean = false): void {
     this.currentLevel = level;
+    
+    // Auto-activate the new aurora procedural background mode for the 'future' theme
+    if (this.currentTheme === 'future') {
+      this.setAuroraForTheme('future');
+    }
     
     // NEW: Select background based on level
     const bgKey = this.getBackgroundForLevel(level);
@@ -746,6 +778,10 @@ export class ReactiveVideoBackground {
     // Decay invert/sepia
     this.invert *= 0.95;
     this.sepia *= 0.95;
+
+    // Advance aurora wave parameters with game time (for the auroraBackground shader when active for future theme)
+    const currentTime = performance.now() / 1000.0;
+    this.advanceAurora(currentTime);
     
     // NEW: Sea creature gentle pulse and intensity decay for bioluminescent level
     if (this.isSeaCreatureLevel) {

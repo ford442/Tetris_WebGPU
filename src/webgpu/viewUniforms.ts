@@ -87,6 +87,13 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
   view._f32_1[0] = lockPercent;
   device.queue.writeBuffer(view.particleUniformBuffer, 80, view._f32_1);
 
+  // Grid radial ripple uniforms (epicenter + wave time for 500ms lock ripple)
+  view._f32_2[0] = view.visualEffects.gridRippleCenter[0] || 0.0;
+  view._f32_2[1] = view.visualEffects.gridRippleCenter[1] || 0.0;
+  device.queue.writeBuffer(view.particleUniformBuffer, 84, view._f32_2);
+  view._f32_1[0] = view.visualEffects.gridRippleTime || 0.0;
+  device.queue.writeBuffer(view.particleUniformBuffer, 92, view._f32_1);
+
   // Background uniforms
   view._f32_1[0] = time;
   device.queue.writeBuffer(view.backgroundUniformBuffer, 0, view._f32_1);
@@ -106,6 +113,8 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
 
   // Block (fragment) uniforms — offsets match pbrBlocks.ts FragmentUniforms:
   // lightPosition(0), eyePosition(16), time(32), useGlitch(36), lockPercent(40), level(44)
+  // 96/100: movement/lineClearFlash; 104-112: magnetWorldX/Y/Strength (placed block UV wobble near active)
+  // 144: columnHeights[10] (depth soft shadows); 184-192: bass/mid/treble audio bands (for border glow per side)
   view._f32_1[0] = time;
   device.queue.writeBuffer(view.fragmentUniformBuffer, 32, view._f32_1);
   view._f32_1[0] = view.useGlitch ? 1.0 : 0.0;
@@ -149,6 +158,14 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     device.queue.writeBuffer(view.fragmentUniformBuffer, 96, view._f32_1);
     view._f32_1[0] = view.visualEffects.lineClearFlashTimer;
     device.queue.writeBuffer(view.fragmentUniformBuffer, 100, view._f32_1);
+
+    // Magnetic UV wobble influence (from viewPlayfield active-piece center; subtle lean on nearby placed blocks)
+    view._f32_1[0] = view.visualEffects.magnetWorldX || 0;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 104, view._f32_1);
+    view._f32_1[0] = view.visualEffects.magnetWorldY || 0;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 108, view._f32_1);
+    view._f32_1[0] = view.visualEffects.magnetStrength || 0;
+    device.queue.writeBuffer(view.fragmentUniformBuffer, 112, view._f32_1);
   }
 
   // Post-process uniforms
@@ -169,6 +186,24 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     bloomThreshold: 0.35,
     materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,
     screenResolution: [view.canvasWebGPU.width, view.canvasWebGPU.height],
+    aberrationPulse: view.visualEffects.hardDropAberrationPulse || 0,
+    // dangerLevel computed identically to the renderloop path for both uniform update sites
+    dangerLevel: (() => {
+      let d = 0.0;
+      const pf = view.state && view.state.playfield;
+      if (pf && pf.length === 20) {
+        let minRow = 20;
+        for (let r = 0; r < 20; r++) {
+          const row = pf[r];
+          for (let c = 0; c < 10; c++) if (row[c] !== 0) { if (r < minRow) minRow = r; break; }
+        }
+        d = (minRow < 20) ? (20 - minRow) / 20.0 : 0.0;
+      }
+      return d;
+    })(),
+    // Level-up 400ms additive color burn flash (color from theme.backgroundColors[0])
+    levelUpFlashColor: view.visualEffects.levelUpFlashColor as [number, number, number],
+    levelUpFlashIntensity: view.visualEffects.levelUpFlashIntensity || 0,
   });
   device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
 

@@ -111,7 +111,7 @@ export const PBRBlockShaders = () => {
 
     const fragment = `
         // =========================================================================
-        // FRAGMENT UNIFORMS - 128 bytes, aligned for WebGPU
+        // FRAGMENT UNIFORMS - 208 bytes (184+ for bass/mid/treble audio bands driving border glow), aligned for WebGPU
         // =========================================================================
         struct FragmentUniforms {
             lightPosition : vec4f,      // 0-15
@@ -128,15 +128,23 @@ export const PBRBlockShaders = () => {
             clearcoat     : f32,        // 68
             anisotropic   : f32,        // 72
             dispersion    : f32,        // 76
-            materialType  : u32,        // 80
+            materialType  : u32,        // 80 (0=classic,6=lava,7=hologram)
             particleIntensity : f32,    // 84
             enablePBR     : f32,        // 88
             textureMix    : f32,        // 92
             movementFlash : f32,        // 96
             lineClearFlash: f32,        // 100
-            pad1          : f32,        // 104
-            pad2          : f32,        // 108
-            reserved2     : vec4f,      // 112-127
+            magnetWorldX  : f32,        // 104 (for subtle placed-block UV lean toward active piece)
+            magnetWorldY  : f32,        // 108
+            magnetStrength: f32,        // 112 (first of reserved2; 1.0 when active, 0 on lock)
+            pad2          : f32,        // 116
+            reserved2     : vec4f,      // 120-127 (remaining)
+            padHeights    : vec4f,      // 128-143 (preserve 128/132 for underwater flash timers)
+            columnHeights : array<f32, 10>, // 144 (10*4=40B; per-col top row for depth shadows)
+            bassLevel     : f32,        // 184 (audio reactive border glow: bass -> L/R sides)
+            midLevel      : f32,        // 188 (mid -> bottom)
+            trebleLevel   : f32,        // 192 (treble -> top)
+            padAudio      : f32,        // 196
         };
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
         @binding(2) @group(0) var blockTexture : texture_2d<f32>;
@@ -176,6 +184,21 @@ export const PBRBlockShaders = () => {
             if (fUniforms.useGlitch > 0.0) {
                 let glitchOffset = fUniforms.useGlitch * 0.03 * sin(texUV.y * 40.0 + time * 15.0);
                 texUV.x += glitchOffset;
+            }
+
+            // Subtle magnetic UV wobble on placed blocks within ~2 rows of active piece.
+            // "Lean toward" the falling piece via small signed UV offset proportional to horiz world distance.
+            // Stash + strength computed in viewPlayfield.ts each frame; zeroed on lock (no activePiece).
+            if (fUniforms.magnetStrength > 0.01) {
+                let dx = vWorldPos.x - fUniforms.magnetWorldX;
+                let dy = abs(vWorldPos.y - fUniforms.magnetWorldY);
+                let rowDist = dy * 0.45; // approx world-units-per-row (BLOCK_WORLD_SIZE ~2.2)
+                if (rowDist < 2.3) {
+                    let proximity = 1.0 - (rowDist / 2.3);
+                    let lean = dx * 0.009 * proximity * fUniforms.magnetStrength; // subtle, signed for lean direction
+                    texUV.x += lean;
+                    texUV.y += lean * 0.12 * proximity; // tiny vertical for volume/3D feel
+                }
             }
 
             // Sample texture with UVs
@@ -300,6 +323,67 @@ export const PBRBlockShaders = () => {
             let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
             let emissivePulse = idlePulse * 1.2 + fUniforms.movementFlash * 2.5 + fUniforms.lineClearFlash * 5.0;
             finalColor += baseColor * emissivePulse;
+
+            // Lava-specific magma glow: slow pulsing + bubbling variation (cooling magma look)
+            if (materialType == 6u) {
+                let magmaSlow = sin(time * 1.6) * 0.5 + 0.5;
+                let magmaFast = sin(time * 5.3 + vWorldPos.x * 7.0) * 0.35 + 0.65;
+                let magmaPulse = magmaSlow * 0.7 + magmaFast * 0.3;
+                // Extra intensity on lava (high emissive values from material)
+                finalColor += baseColor * magmaPulse * 2.1;
+            }
+
+            // Hologram material: animated horizontal scanline overlay for holographic projection
+            if (materialType == 7u) {
+                let scanDensity = 42.0;
+                let scrollSpeed = 0.75; // slow downward scroll
+                // Use vUV.y for consistent horizontal lines across the block face
+                let scanPos = vUV.y * scanDensity - time * scrollSpeed;
+                let scan = fract(scanPos);
+                let lineWidth = 0.07;
+                // Soft bright horizontal lines (classic holo scan)
+                let scanIntensity = smoothstep(0.0, lineWidth, scan) *
+                                    smoothstep(lineWidth * 2.2, lineWidth, scan);
+                // Flicker frequency increases with level (tied to fUniforms.level)
+                let flickerFreq = 5.5 + fUniforms.level * 3.2;
+                let flicker = 0.65 + 0.35 * sin(time * flickerFreq + vUV.x * 7.0);
+                let holoAlpha = 0.28 * scanIntensity * flicker;
+                // Cool holographic cyan tint, additive for projection "glow"
+                let holoTint = vec3f(0.55, 0.82, 1.0);
+                finalColor += holoTint * holoAlpha * 2.8;
+                // Slight desaturation/base reduction for see-through holo effect
+                finalColor *= (0.78 + holoAlpha * 0.25);
+            }
+
+            // Depth-based soft shadow: each block casts downward onto lower blocks in same column.
+            // columnHeights[c] = topmost row (0=top) or 20; vertical dist in rows from vWorldPos (2.2 hardcoded).
+            // Additional darkening term, subtle, only for solid placed blocks (ghosts early-return before).
+            {
+                let colF = floor(vWorldPos.x / 2.2 + 0.0001);
+                let col = i32(clamp(colF, 0.0, 9.0));
+                let topRow = fUniforms.columnHeights[col];
+                let myRow = floor(-vWorldPos.y / 2.2 + 0.0001);
+                let vDepth = myRow - topRow;
+                if (topRow >= 0.0 && vDepth > 0.5) {
+                    let shadow = clamp(vDepth / 9.0, 0.0, 0.28); // soft max ~28% darken deep in stack
+                    finalColor *= (1.0 - shadow);
+                }
+            }
+
+            // Audio-reactive border glow pulsing driven by bands written from viewRenderLoop.
+            // bassLevel pulses left/right outer frame, trebleLevel top, midLevel bottom.
+            // Detects border via vWorldPos ranges (outside main board rect); boosts emissive.
+            {
+                let borderBoost = 0.0;
+                if (vWorldPos.x < -0.8 || vWorldPos.x > 21.0) {
+                    borderBoost = fUniforms.bassLevel * 0.55; // L/R sides
+                } else if (vWorldPos.y > 1.5) {
+                    borderBoost = fUniforms.trebleLevel * 0.55; // top
+                } else if (vWorldPos.y < -44.5) {
+                    borderBoost = fUniforms.midLevel * 0.55; // bottom
+                }
+                finalColor += vec3f(borderBoost);
+            }
 
             finalColor = acesToneMapping(finalColor);
             let materialAlpha = mix(0.85, 0.98, metalMask);

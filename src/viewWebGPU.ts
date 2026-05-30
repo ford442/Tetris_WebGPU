@@ -64,6 +64,7 @@ import {
   updateMaterialUniforms as updateMaterialUniformsImpl,
   cycleTheme as cycleThemeImpl,
   renderPiece as renderPieceImpl,
+  setWireframe as setWireframeImpl,
 } from './webgpu/viewMaterials.js';
 import {
   generateMipmaps as generateMipmapsUtil,
@@ -214,6 +215,7 @@ export default class View {
   materialUniformBuffer!: GPUBuffer;
   usePremiumMaterials: boolean = false;
   currentMaterial: any = null;
+  useWireframe: boolean = false;  // wireframe option for block pipeline (edges only, neon, transparent interior)
 
   // NEW: Supersampling / Render Scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x)
   renderScale: number = 1.0;
@@ -255,7 +257,9 @@ export default class View {
     bloomIntensity: 1.0,
     bloomThreshold: 0.35,
     materialAwareBloom: 0,
-    screenResolution: [0, 0] as [number, number]
+    screenResolution: [0, 0] as [number, number],
+    aberrationPulse: 0,  // hard drop 300ms chromatic spike -> u_aberrationPulse
+    dangerLevel: 0       // board height fill ratio 0-1 for danger vignette (postProcess)
   };
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
@@ -738,8 +742,8 @@ export default class View {
       knee: 0.1
     });
 
-    // Expanded to 144 bytes for underwater uniforms (was 96)
-    this.fragmentUniformBuffer = this.device.createBuffer({ size: 144, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // Expanded to 208 bytes for audio bands (bass/mid/treble at 184+) + columnHeights (was 192)
+    this.fragmentUniformBuffer = this.device.createBuffer({ size: 208, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     let lightPosition = this._f32_3;
@@ -781,7 +785,7 @@ export default class View {
             label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 144 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 208 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler },
             ],
@@ -858,6 +862,7 @@ export default class View {
   setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as any, themeName, pieceType); }
   updateMaterialUniforms() { updateMaterialUniformsImpl(this as any); }
   cycleTheme() { cycleThemeImpl(this as any); }
+  setWireframe(enabled: boolean) { setWireframeImpl(this as any, enabled); }  // wireframe for blocks (see viewMaterials)
 
   // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
   setPremiumVisualsPreset(options: any = {}) { setPremiumPresetImpl(this as any, options); }

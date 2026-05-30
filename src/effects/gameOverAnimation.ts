@@ -316,6 +316,9 @@ export function triggerGameOverEffects(view: any): void {
   view.visualEffects.triggerFlash(1.0);
   view.visualEffects.triggerShake(3.0, 1.0);
   view.visualEffects.warpSurge = 10.0;
+
+  // WebGPU-side: start 2s kaleidoscope on final board state (captured implicitly in offscreen at this moment; post-process applies 6-triangle mirror spin)
+  view.visualEffects.gameOverKaleidoTimer = 2.0;
   
   // Multiple shockwaves
   setTimeout(() => {

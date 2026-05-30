@@ -63,6 +63,7 @@ uiContainer.innerHTML = `
             <button id="futuristic-theme">Future</button>
             <button id="gold-theme">Gold</button>
             <button id="glass-theme">Glass</button>
+            <button id="lava-theme">Lava</button>
             <button id="image-sampled-theme">Image Sampled</button>
             <!-- Gold/Glass injected here so they are guaranteed to exist in the UI container -->
           </div>
@@ -72,6 +73,7 @@ uiContainer.innerHTML = `
             <button id="pause-button">PAUSE</button>
             <button id="glitch-button">FX: OFF</button>
             <button id="bloom-button">BLOOM: ON</button>
+            <button id="wire-button">WIRE: OFF</button>
             <button id="video-toggle" class="toggle-btn">VIDEO: ON</button>
           </div>
           
@@ -254,6 +256,10 @@ uiContainer.innerHTML = `
     applyTheme('glass-theme', 'glass');
   });
 
+  document.getElementById('lava-theme')!.addEventListener('click', () => {
+    applyTheme('lava-theme', 'lava');
+  });
+
   document.getElementById('image-sampled-theme')!.addEventListener('click', () => {
     applyTheme('image-sampled-theme', 'imageSampled');
   });
@@ -279,6 +285,17 @@ uiContainer.innerHTML = `
       view.toggleBloom();
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.bloomEnabled ? "BLOOM: ON" : "BLOOM: OFF";
+      btn.blur();
+  });
+
+  document.getElementById('wire-button')!.addEventListener('click', (e) => {
+      view.useWireframe = !view.useWireframe;
+      const btn = e.target as HTMLButtonElement;
+      btn.textContent = view.useWireframe ? "WIRE: ON" : "WIRE: OFF";
+      // Notify materials system (the wireframe option lives in viewMaterials)
+      if (typeof view.setWireframe === 'function') {
+        view.setWireframe(view.useWireframe);
+      }
       btn.blur();
   });
 
