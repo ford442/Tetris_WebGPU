@@ -55,9 +55,10 @@ import {
   updateFrostedGlassUniforms as updateFrostedGlassUniformsImpl,
 } from './webgpu/viewFrostedGlass.js';
 import {
-  renderPlayfieldBlocks,
-  renderPlayfieldBorder,
-} from './webgpu/viewPlayfield.js';
+  BlockRenderer,
+} from './webgpu/renderers/blockRenderer.js';
+import { BackgroundRenderer } from './webgpu/renderers/backgroundRenderer.js';
+import { PostProcessor } from './webgpu/renderers/postProcessor.js';
 import {
   setMaterialTheme as setMaterialThemeImpl,
   updateMaterialUniforms as updateMaterialUniformsImpl,
@@ -130,6 +131,7 @@ export default class View {
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
   uniformBindGroup_CACHE: GPUBindGroup[] = [];
   uniformBindGroup_ARRAY_border: GPUBindGroup[] = [];
+  blockRenderer!: BlockRenderer;
 
   useGlitch: boolean = false;
   private _shakeOffsetSmoothed = {x: 0, y: 0};
@@ -146,6 +148,7 @@ export default class View {
   backgroundVertexBuffer!: GPUBuffer;
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
+  backgroundRenderer!: BackgroundRenderer;
   startTime: number;
 
   // Frosted Glass Backboard (Ethereal Hardware Panel)
@@ -165,6 +168,7 @@ export default class View {
   depthTexture!: GPUTexture;
   _bloomInputTexture: GPUTexture | null = null;
   sampler!: GPUSampler;
+  postProcessor!: PostProcessor;
 
   // Render pass caching - GC optimized (lazy init pattern)
   private _offscreenTextureView!: GPUTextureView;
@@ -276,6 +280,9 @@ export default class View {
 
     // NEW: Initialize chaos mode
     this.chaosMode = new ChaosModeController();
+    this.backgroundRenderer = new BackgroundRenderer(this as any);
+    this.blockRenderer = new BlockRenderer(this as any);
+    this.postProcessor = new PostProcessor(this as any);
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -365,7 +372,7 @@ export default class View {
       alphaMode: 'premultiplied',
     });
 
-    this.recreateRenderTargets(); // Fire and forget - async is handled internally
+    this.postProcessor.resize(scaledWidth, scaledHeight);
 
     // Resize bloom system (async - GPU syncs before destroying old textures)
     if (this.bloomSystem) {
@@ -377,7 +384,7 @@ export default class View {
     }
   }
 
-  private recreateRenderTargets() { recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
+  recreateRenderTargets() { recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
 
   // NEW: Set render scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x supersampling)
   setRenderScale(scale: number) {
@@ -402,12 +409,7 @@ export default class View {
     if (this.device) {
         this.renderPlayfield_Border_WebGPU();
         const bgColors = this.currentTheme.backgroundColors;
-        this._f32_3.set(bgColors[0]);
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
-        this._f32_3.set(bgColors[1]);
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
-        this._f32_3.set(bgColors[2]);
-        this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
+        this.backgroundRenderer.setThemeColors(bgColors);
     }
 
     if (this.currentTheme.materialTheme) {
@@ -623,9 +625,7 @@ export default class View {
     await this.initFrostedGlassBackboard();
     
     const bgColors = this.currentTheme.backgroundColors;
-    this._f32_3.set(bgColors[0]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 16, this._f32_3);
-    this._f32_3.set(bgColors[1]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 32, this._f32_3);
-    this._f32_3.set(bgColors[2]); this.device.queue.writeBuffer(this.backgroundUniformBuffer, 48, this._f32_3);
+    this.backgroundRenderer.setThemeColors(bgColors);
 
     const gridShader = GridShader();
     const gridData = GridData();
@@ -826,26 +826,11 @@ export default class View {
 
   // Playfield rendering (delegated to viewPlayfield.ts)
   async renderPlayfield_WebGPU(state: any) {
-    if (!this.device || !this.blockTexture) return;
-    renderPlayfieldBlocks(
-      this.device, state, this.currentTheme, this.visualEffects,
-      this.visualX, this.visualY, this.vpMatrix as Float32Array,
-      this.uniformBindGroup_CACHE, this.uniformBindGroup_ARRAY,
-      this.vertexUniformBuffer, this._uniformBatchBuffer,
-      this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
-    );
+    this.blockRenderer.updateUniforms(state);
   }
 
   async renderPlayfield_Border_WebGPU() {
-    if (!this.device) return;
-    const result = renderPlayfieldBorder(
-      this.device, this.pipeline, this.fragmentUniformBuffer,
-      this.blockTexture, this.blockSampler,
-      this.vpMatrix as Float32Array, this.currentTheme,
-      this._f32_3, this._f32_4, this.MODELMATRIX, this.NORMALMATRIX
-    );
-    this.vertexUniformBuffer_border = result.vertexUniformBuffer;
-    this.uniformBindGroup_ARRAY_border = result.bindGroups;
+    this.blockRenderer.refreshBorder();
   }
 
   CheckWebGPU() {
