@@ -8,6 +8,7 @@ import {
   getBlockTextureConfig,
   resetBlockTextureConfig,
   getAtlasSamplingParams,
+  createBlockTextureSamplerDescriptor,
   DEFAULT_BLOCK_TEXTURE_CONFIG,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
@@ -64,6 +65,18 @@ describe('block texture helpers', () => {
   it('computes mip levels from the largest texture dimension', () => {
     expect(getTextureMipLevelCount(256, 256)).toBe(9);
     expect(getTextureMipLevelCount(2816, 1536)).toBe(12);
+  });
+
+  it('creates a sharp clamped sampler descriptor for authored block images', () => {
+    expect(createBlockTextureSamplerDescriptor()).toEqual({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      mipmapFilter: 'nearest',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+      lodMinClamp: 0,
+      lodMaxClamp: 1,
+    });
   });
 
   it('paints a glass-and-metal fallback texture layout', () => {

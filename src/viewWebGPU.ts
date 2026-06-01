@@ -48,6 +48,7 @@ import {
 import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
+  createBlockTextureSamplerDescriptor,
 } from './webgpu/blockTexture.js';
 import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
 import {
@@ -516,10 +517,7 @@ export default class View {
 
     this.reactiveVideoBackground.setWebGPUDevice(this.device);
 
-    this.blockSampler = this.device.createSampler({
-      magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear',
-      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
-    });
+    this.blockSampler = this.device.createSampler(createBlockTextureSamplerDescriptor());
 
     try {
         const textureUrl = resolveBlockTextureUrl(import.meta.url);

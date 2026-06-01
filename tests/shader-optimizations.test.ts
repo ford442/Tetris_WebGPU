@@ -46,8 +46,16 @@ describe('shader optimization updates', () => {
     expect(maxUV).toBeLessThan(0.995);
   });
 
-  it('uses reduced glass tint mixing to preserve color clarity', () => {
+  it('samples block image detail from explicit mip 0 in the PBR shader', () => {
     const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('let glassTint = mix(vec3f(1.0), vColor.rgb, 0.02);');
+    expect(fragment).toContain('textureSampleLevel(blockTexture, blockSampler, texUV, 0.0)');
+  });
+
+  it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
+    const { fragment } = PBRBlockShaders();
+    expect(fragment).toContain('var finalAlpha = 1.0;');
+    expect(fragment).toContain('let glassOpacity = mix(0.15, 1.0, fresnel);');
+    expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
+    expect(fragment).not.toContain('let materialAlpha = mix(0.85, 0.98, metalMask);');
   });
 });

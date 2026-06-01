@@ -201,8 +201,9 @@ export const PBRBlockShaders = () => {
                 }
             }
 
-            // Sample texture with UVs
-            let texColor = textureSample(blockTexture, blockSampler, texUV);
+            // Sample the authored block image from its sharpest mip. The 3D block faces
+            // are small enough on screen that implicit LOD selection can soften the gold/glass detail.
+            let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
             
             // Extract material masks using configurable method
             let masks = extractMaterialMask(texColor.rgb);
@@ -214,6 +215,7 @@ export const PBRBlockShaders = () => {
 
             let materialType = fUniforms.materialType;
             var finalColor: vec3f;
+            var finalAlpha = 1.0;
 
             if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
@@ -254,25 +256,21 @@ export const PBRBlockShaders = () => {
 
                 // Glass transmission
                 if (transmission > 0.0 && glassMask > 0.1) {
-                    let f1 = 1.0 - NdotV; let fresnel = f1 * f1 * f1;
-                    // Lower the minimum transmission opacity and preserve more of the base texture color
-                    let transmissionAlpha = mix(max(0.0, 1.0 - transmission * 1.8), 1.0, fresnel);
-                    let refractDir = refract(-V, N, 1.0 / fUniforms.ior);
-                    let refractionColorBase = proceduralEnvReflect(refractDir, time);
-                    // Less overpowering glass tint
-                    let glassTint = mix(vec3f(1.0), vColor.rgb, 0.02);
-                    let refractionColor = refractionColorBase * glassTint;
+                    let f1 = 1.0 - NdotV;
+                    let fresnel = f1 * f1 * f1;
+                    let glassOpacity = mix(0.15, 1.0, fresnel);
+                    finalAlpha = mix(1.0, glassOpacity, transmission * glassMask);
+                    finalColor = mix(finalColor, vColor.rgb * 1.5, 0.6 * glassMask);
 
                     if (fUniforms.dispersion > 0.0) {
-                        let ef = 1.0 - NdotV; let edgeFactor = ef * ef;
+                        let edgeFactor = f1 * f1;
                         let rainbow = vec3f(
                             sin(time * 2.0) * 0.1 + 0.9,
                             sin(time * 2.0 + 2.09) * 0.1 + 0.9,
                             sin(time * 2.0 + 4.18) * 0.1 + 0.9
                         );
-                        finalColor += (rainbow - 1.0) * fUniforms.dispersion * edgeFactor * glassMask;
+                        finalColor += (rainbow - 1.0) * fUniforms.dispersion * edgeFactor * glassMask * 2.0;
                     }
-                    finalColor = mix(refractionColor, finalColor, transmissionAlpha);
                 }
 
                 // Gem subsurface
@@ -386,7 +384,7 @@ export const PBRBlockShaders = () => {
             }
 
             finalColor = acesToneMapping(finalColor);
-            let materialAlpha = mix(0.85, 0.98, metalMask);
+            let materialAlpha = mix(finalAlpha, 1.0, metalMask);
             return vec4f(finalColor, materialAlpha * vColor.w);
         }
     `;
