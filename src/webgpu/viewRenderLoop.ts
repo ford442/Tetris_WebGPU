@@ -337,6 +337,13 @@ function updatePostProcessUniforms(view: any, time: number) {
   // Game over kaleidoscope time (2s spin on final board in post-process kaleido UV)
   view._postProcessParams.gameOverKaleidoTime = view.visualEffects.gameOverKaleidoTimer || 0;
 
+  // Line clear laser uniforms
+  view._postProcessParams.lineClearLaserY[0] = view.visualEffects.lineClearLaserY[0];
+  view._postProcessParams.lineClearLaserY[1] = view.visualEffects.lineClearLaserY[1];
+  view._postProcessParams.lineClearLaserY[2] = view.visualEffects.lineClearLaserY[2];
+  view._postProcessParams.lineClearLaserY[3] = view.visualEffects.lineClearLaserY[3];
+  view._postProcessParams.lineClearLaserIntensity = view.visualEffects.lineClearLaserIntensity || 0;
+
   // Column heights (topmost row index per column, 0=top of board) for simple depth-based
   // soft shadows in pbrBlocks shader. Written directly here (per task) at 144+; no hot allocs
   // (reuse _f32_1). Reuses the pf already scanned above for dangerLevel.

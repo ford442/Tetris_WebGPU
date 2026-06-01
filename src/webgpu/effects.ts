@@ -28,6 +28,10 @@ export class VisualEffects {
     movementFlashTimer: number = 0;
     lineClearFlashTimer: number = 0;
 
+    // Supernova Line Clear Laser state
+    lineClearLaserY: Float32Array = new Float32Array([0.0, 0.0, 0.0, 0.0]);
+    lineClearLaserIntensity: number = 0.0;
+
     // Ghost/shadow vertical light-trail state (animates 200ms after piece move)
     ghostTrailTimer: number = 0;
     private _lastActiveY: number = -999;
@@ -88,6 +92,15 @@ export class VisualEffects {
         const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
         this.shakeIntensity *= Math.exp(-dt * 15.0);
         this.aberrationIntensity *= aberrationDecay;
+
+        // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)
+        if (this.lineClearLaserIntensity > 0) {
+            this.lineClearLaserIntensity *= Math.exp(-dt / 0.06);
+            if (this.lineClearLaserIntensity < 0.005) {
+                this.lineClearLaserIntensity = 0;
+                this.lineClearLaserY.fill(0);
+            }
+        }
 
         // Warp surge decay
         this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
@@ -214,6 +227,23 @@ export class VisualEffects {
     triggerNeonBloomFlash(strength: number = 1.0): void {
         this.neonBloomIntensity += strength;
         this.neonBloomIntensity = Math.min(this.neonBloomIntensity, 3.0); // Cap max bloom explosion
+    }
+
+    triggerLineClearLaser(lines: number[], strength: number = 1.0): void {
+        this.lineClearLaserIntensity = strength;
+        this.lineClearLaserY.fill(0); // Clear previous
+
+        // Map world Y back to UV Y
+        const camY = -20.0;
+        const camZ = 75.0;
+        const fov = (35 * Math.PI) / 180;
+        const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
+
+        for (let i = 0; i < Math.min(lines.length, 4); i++) {
+            const worldY = lines[i] * -2.2;
+            const uvY = 0.5 - (worldY - camY) / visibleHeight;
+            this.lineClearLaserY[i] = uvY;
+        }
     }
 
     triggerGlitch(intensity: number): void {

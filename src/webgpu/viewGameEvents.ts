@@ -77,6 +77,10 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   const bloomIntensity = 1.0 + lines.length * 0.5;
   view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
 
+  // JUICE: Supernova Line Clear Laser
+  // Trigger a localized horizontal laser/plasma beam exactly on the cleared rows
+  view.visualEffects.triggerLineClearLaser(lines, 1.0 + lines.length * 0.5);
+
   // JUICE: Warp Surge on Big Plays
   // If it's a Tetris or T-Spin, heavily distort the background hyperspace tunnel.
   if (lines.length >= 4 || tSpin) {
