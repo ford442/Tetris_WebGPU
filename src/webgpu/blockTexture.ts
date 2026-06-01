@@ -1,4 +1,5 @@
 export const PROCEDURAL_BLOCK_TEXTURE_SIZE = 256;
+export const BLOCK_TEXTURE_MAX_LOD = 1;
 
 export type GradientStop = {
   offset: number;
@@ -160,6 +161,18 @@ export function getAtlasSamplingParams(): {
 
 export function getTextureMipLevelCount(width: number, height: number): number {
   return Math.floor(Math.log2(Math.max(width, height))) + 1;
+}
+
+export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
+  return {
+    magFilter: 'linear',
+    minFilter: 'linear',
+    mipmapFilter: 'nearest',
+    addressModeU: 'clamp-to-edge',
+    addressModeV: 'clamp-to-edge',
+    lodMinClamp: 0,
+    lodMaxClamp: BLOCK_TEXTURE_MAX_LOD,
+  };
 }
 
 export function getProceduralBlockTextureGradientStops(): GradientStop[] {

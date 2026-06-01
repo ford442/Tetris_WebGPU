@@ -90,6 +90,7 @@ describe('texture sampling WGSL generation', () => {
     it('includes sampleBlockTexture helper function', () => {
       const code = getTextureSamplingWGSL();
       expect(code).toContain('fn sampleBlockTexture');
+      expect(code).toContain('textureSampleLevel(blockTexture, blockSampler, texUV, 0.0)');
     });
 
     it('includes getAtlasTransform helper function', () => {
