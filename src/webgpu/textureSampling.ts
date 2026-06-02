@@ -103,7 +103,7 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
  */
 fn sampleBlockTexture(blockTexture: texture_2d<f32>, blockSampler: sampler, uv: vec2<f32>) -> vec4<f32> {
     let texUV = transformUVForSampling(uv);
-    return textureSample(blockTexture, blockSampler, texUV);
+    return textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
 }
 
 /**
