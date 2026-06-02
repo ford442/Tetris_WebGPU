@@ -260,7 +260,9 @@ export default class View {
     materialAwareBloom: 0,
     screenResolution: [0, 0] as [number, number],
     aberrationPulse: 0,  // hard drop 300ms chromatic spike -> u_aberrationPulse
-    dangerLevel: 0       // board height fill ratio 0-1 for danger vignette (postProcess)
+    dangerLevel: 0,      // board height fill ratio 0-1 for danger vignette (postProcess)
+    lineClearLaserY: [0, 0, 0, 0] as [number, number, number, number],
+    lineClearLaserIntensity: 0
   };
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
@@ -692,7 +694,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: 144, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: 160, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
