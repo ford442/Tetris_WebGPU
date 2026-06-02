@@ -72,9 +72,13 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   }
 
   // JUICE: Supernova Line Clears
-  // Trigger a massive Neon Bloom Flash that scales with the number of lines cleared.
-  // Tetrises (4 lines) and T-Spins feel like a localized supernova.
-  const bloomIntensity = 1.0 + lines.length * 0.5;
+  // Variable neonBloomIntensity spike based on event importance.
+  let bloomIntensity = 0.7;
+  if (lines.length >= 4 || tSpin || combo >= 5) {
+    bloomIntensity = 2.0;
+  } else if (lines.length === 2 || lines.length === 3) {
+    bloomIntensity = 1.3;
+  }
   view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
 
   // JUICE: Warp Surge on Big Plays
