@@ -311,6 +311,24 @@ export const EnhancedPostProcessShaders = () => {
                 color *= kaleidoFade;
             }
 
+            // JUICE: Supernova Line Clear Laser
+            let laserIntensity = uniforms.lineClearLaserIntensity;
+            if (laserIntensity > 0.01) {
+                var laserGlow = 0.0;
+                for (var i: i32 = 0; i < 4; i++) {
+                    let yPos = uniforms.lineClearLaserY[i];
+                    if (yPos > 0.01) {
+                        let distY = abs(uv.y - yPos);
+                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * exp(-distY * 10.0);
+                        if (distY < 0.02) {
+                            color.b += 0.2 * laserIntensity;
+                        }
+                    }
+                }
+                let laserColor = vec3<f32>(0.2, 0.8, 1.0) * laserIntensity * 2.5;
+                color += laserColor * laserGlow;
+            }
+
             // HDR tone mapping
             color = color / (color + vec3<f32>(1.0));
             color = sqrt(color); // Fast gamma approx

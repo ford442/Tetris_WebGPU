@@ -237,6 +237,27 @@ export const PostProcessShaders = () => {
                 color *= kaleidoFade;
             }
 
+            // JUICE: Supernova Line Clear Laser
+            let laserIntensity = uniforms.lineClearLaserIntensity;
+            if (laserIntensity > 0.01) {
+                var laserGlow = 0.0;
+                for (var i: i32 = 0; i < 4; i++) {
+                    let yPos = uniforms.lineClearLaserY[i];
+                    if (yPos > 0.01) {
+                        let distY = abs(uv.y - yPos);
+                        // Sharp falloff for intense laser beam look
+                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * exp(-distY * 10.0);
+                        // Add horizontal tear/glitch near the laser
+                        if (distY < 0.02) {
+                            color.b += 0.2 * laserIntensity;
+                        }
+                    }
+                }
+                // Cyan/white beam color
+                let laserColor = vec3<f32>(0.2, 0.8, 1.0) * laserIntensity * 2.5;
+                color += laserColor * laserGlow;
+            }
+
             if (!inBounds) {
                 return vec4<f32>(0.0, 0.0, 0.0, 1.0);
             }

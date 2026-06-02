@@ -53,14 +53,16 @@ struct PostProcessUniforms {
     screenHeight: f32,      // 88
     _pad3: f32,             // 92
     
-    // Frame 5-8: Reserved (offset 96-144)
+    // Frame 5-9: Reserved (offset 96-160)
     dangerLevel: f32,       // 96  (board height fill ratio 0-1, contracts vignette inner radius as stack rises)
     aberrationPulse: f32,   // 100 (short-lived hard-drop chromatic aberration spike, 300ms exp decay)
     levelUpFlashColor: vec3f,   // 104 (r,g,b from theme.backgroundColors[0] for level-up additive burn)
     levelUpFlashIntensity: f32, // 116 (high opacity -> 0 over exactly 400ms)
     gameOverKaleidoTime: f32,   // 120 (2s spinning 6-triangle kaleidoscope mirror on final board state + fade; post-process UV)
-    reserved2: vec4f,       // 124
-    reserved3: vec2f,       // 136
+    _pad4: f32,                 // 124 (pad to 16-byte boundary for vec4f)
+    lineClearLaserY: vec4f,     // 128 (up to 4 y-coordinates for line clear laser beams)
+    lineClearLaserIntensity: f32, // 144
+    // Struct size is automatically padded to 160 by WGSL (multiple of 16)
 };
 `;
 
@@ -106,11 +108,15 @@ export interface PostProcessUniformData {
 
   // Game over: 2s spinning 6-segment kaleidoscope mirror on captured final board state (post-process UV transform)
   gameOverKaleidoTime?: number;
+
+  // Supernova line clear laser effect
+  lineClearLaserY?: [number, number, number, number];
+  lineClearLaserIntensity?: number;
 }
 
 export class PostProcessUniformManager {
-  // 144 bytes = 9 vec4s (with padding)
-  private data = new Float32Array(36); // 36 floats = 144 bytes
+  // 160 bytes = 10 vec4s (with padding)
+  private data = new Float32Array(40); // 40 floats = 160 bytes
   
   // Default values
   defaults: PostProcessUniformData = {
@@ -134,6 +140,8 @@ export class PostProcessUniformManager {
     levelUpFlashColor: [0.2, 0.6, 1.0],
     levelUpFlashIntensity: 0,
     gameOverKaleidoTime: 0,
+    lineClearLaserY: [0, 0, 0, 0],
+    lineClearLaserIntensity: 0,
   };
 
   /**
@@ -188,10 +196,19 @@ export class PostProcessUniformManager {
     this.data[29] = (v as any).levelUpFlashIntensity || 0;
     // gameOverKaleidoTime at 120 (float 30) - 2s board kaleidoscope spin + fade in post-process
     this.data[30] = (v as any).gameOverKaleidoTime || 0;
-    for (let i = 31; i < 36; i++) {
-      this.data[i] = 0;
-    }
     
+    this.data[31] = 0; // _pad4 at 124
+
+    const laserY = (v as any).lineClearLaserY || [0, 0, 0, 0];
+    this.data[32] = laserY[0]; // offset 128
+    this.data[33] = laserY[1];
+    this.data[34] = laserY[2];
+    this.data[35] = laserY[3];
+    this.data[36] = (v as any).lineClearLaserIntensity || 0; // offset 144
+    this.data[37] = 0;
+    this.data[38] = 0;
+    this.data[39] = 0;
+
     return this.data;
   }
 

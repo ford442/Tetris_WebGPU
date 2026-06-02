@@ -228,8 +228,8 @@ export class ParticleSystem {
         worldY: number,
         themeColors: Record<number, number[]> | null
     ): void {
-        const life = 0.58 + Math.random() * 0.04; // ~0.6s fade
-        const baseScale = 0.18; // small base; stretch will make them thin shards
+        const life = 0.65 + Math.random() * 0.15; // JUICE: slightly longer life for vapor trail
+        const baseScale = 0.28; // JUICE: larger base for chunkier plasma shards
 
         for (let i = 0; i < clearedCols.length; i++) {
             const col = clearedCols[i];
@@ -258,14 +258,15 @@ export class ParticleSystem {
             }
 
             // Emit 3-5 shards per cleared block position for a nice burst density
-            const shardsPerBlock = 4;
+            const shardsPerBlock = 5; // JUICE: more shards per block
             for (let s = 0; s < shardsPerBlock; s++) {
                 // Directional outward from center of board (left side -> left, right side -> right)
                 const outward = (col < 4.5) ? -1.0 : 1.0;
-                const speed = 18.0 + this.rand(8.0, 22.0);
-                const vx = outward * speed + this.rand(-4.0, 4.0); // main horizontal burst + jitter
-                const vy = this.rand(-14.0, 14.0); // vertical spread for "outward" feel from the row
-                const vz = this.rand(-6.0, 6.0) * 0.3;
+                // JUICE: Massively increased speed for explosive row vaporization
+                const speed = 40.0 + this.rand(20.0, 40.0);
+                const vx = outward * speed * 1.2 + this.rand(-10.0, 10.0); // Stronger horizontal burst
+                const vy = this.rand(-20.0, 20.0); // More vertical spread
+                const vz = this.rand(-8.0, 8.0) * 0.5;
 
                 // Slight positional offset around the block for organic burst origin
                 const ox = this.rand(-0.6, 0.6);
@@ -276,7 +277,7 @@ export class ParticleSystem {
                     vx, vy, vz,
                     color,
                     life,
-                    baseScale + Math.random() * 0.08
+                    baseScale + Math.random() * 0.12
                 );
             }
         }
