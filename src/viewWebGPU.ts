@@ -242,6 +242,13 @@ export default class View {
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
 
+  // === SHOCKWAVE EFFECT (as requested) ===
+  shockwaveParams: any = {
+    center: new Float32Array([0.5, 0.5]),
+    strength: 0.0,
+    radius: 0.0,
+  };
+
   // Pre-allocated object for post process parameters to avoid GC
   private _postProcessParams = {
     time: 0,
@@ -770,6 +777,10 @@ export default class View {
     // Initialize with default material values
     const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
     this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
+
+    // Pass it explicitly to the post-process pipeline
+    (this as any).postProcessUniforms = (this as any).postProcessUniforms || {};
+    (this as any).postProcessUniforms.shockwaveParams = this.shockwaveParams;
 
     this.renderPlayfield_Border_WebGPU();
 

@@ -243,9 +243,12 @@ export default class Game {
     this.activPiece.y = ghostY;
 
     // Trigger visual effect
-    // NEON BRICKLAYER: Trigger Hard Drop Shockwave (Juice) - Params tuned in View
+    // === EXPLICIT SHOCKWAVE AS REQUESTED ===
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
+    if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
+        this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
+    }
 
     // Reuse existing object if possible to prevent GC
     if (!this.lastDropPos) {

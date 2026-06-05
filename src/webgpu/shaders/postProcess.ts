@@ -59,8 +59,15 @@ export const PostProcessShaders = () => {
             let params = uniforms.shockwaveParams;
             let level = uniforms.level;
 
+            // === EXPLICIT SHOCKWAVE EFFECT AS REQUESTED ===
             // Shockwave Logic
             var shockwaveAberration = 0.0;
+
+            // Shockwave distortion effect for hard drops
+            if (params.y > 0.0) {
+                // Apply stronger / different distortion for hard drop
+                shockwaveAberration += params.z * 0.5;
+            }
             if (time > 0.0 && time < 1.0) {
                 let dist = length(uv - center);
                 // NEON BRICKLAYER: Use speed from params.w
