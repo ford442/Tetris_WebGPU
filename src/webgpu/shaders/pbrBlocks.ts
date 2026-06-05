@@ -372,7 +372,7 @@ export const PBRBlockShaders = () => {
             // bassLevel pulses left/right outer frame, trebleLevel top, midLevel bottom.
             // Detects border via vWorldPos ranges (outside main board rect); boosts emissive.
             {
-                let borderBoost = 0.0;
+                var borderBoost = 0.0;
                 if (vWorldPos.x < -0.8 || vWorldPos.x > 21.0) {
                     borderBoost = fUniforms.bassLevel * 0.55; // L/R sides
                 } else if (vWorldPos.y > 1.5) {
