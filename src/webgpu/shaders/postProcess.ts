@@ -146,10 +146,19 @@ export const PostProcessShaders = () => {
             let horizOffset = totalAberration + glitchOffset + shockwaveAberration;
             let vertAberration = totalAberration * (uv.y - 0.5) * 0.2 + (shockwaveAberration * 0.5);
 
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset, vertAberration)).r;
-            var g = textureSample(myTexture, mySampler, finalUV).g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset, vertAberration)).b;
-            let a = textureSample(myTexture, mySampler, finalUV).a;
+            // NEW: Hard-drop triggered short-lived chromatic aberration spike (u_aberrationPulse)
+            // 300ms exp decay (CPU side), separate per-channel RGB offsets for a sharp "spike" at impact.
+            // Positive/negative splits create classic red/cyan fringing that peaks then fades.
+            let pulse = uniforms.aberrationPulse;
+            let pulseR = pulse * 0.022;
+            let pulseG = pulse * 0.004;
+            let pulseB = pulse * -0.018;
+
+            let baseSample = textureSample(myTexture, mySampler, finalUV);
+            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR, vertAberration + pulseG * 0.6)).r;
+            var g = baseSample.g;
+            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB, vertAberration + pulseR * 0.4)).b;
+            let a = baseSample.a;
 
             // Bloom-ish boost (optimized 5-tap tent filter)
             var color = vec3<f32>(r, g, b);

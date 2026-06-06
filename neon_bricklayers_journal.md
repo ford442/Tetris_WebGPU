@@ -26,3 +26,4 @@
 - "Tuned Game Feel: Ensured Infinity lock delay mechanics feel generous but fair by resetting the lock timer up to 15 times on move/rotate. Verified SRS logic for smooth wall kicks and T-Spins."
 - "Ensured DAS (Delayed Auto Shift) and ARR (Auto Repeat Rate) are perfectly tuned for sub-50ms input latency."
 - "Verified that the maximum particle count is capped to prevent browser lag while maintaining high-impact visual explosions."
+- "Modified postProcess.ts and materialAwarePostProcess.ts to incorporate `aberrationPulse` so that hard drops look like they tear the screen apart by pushing Red and Blue color channels away!"
