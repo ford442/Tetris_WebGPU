@@ -218,8 +218,11 @@ export const PBRBlockShaders = () => {
             let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
 
             let materialBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, metalMask);
-            // Match main.ts: authored texture drives colour; piece hue tints the crystal interior.
+            // Authored texture + piece tint (main.ts path); textureMix only gates the lighting branch.
             var baseColor = mix(vColor.rgb, materialBase, clamp(effectiveTextureMix, 0.0, 1.0));
+            if (effectiveTextureMix > 0.45) {
+                baseColor = materialBase;
+            }
 
             let materialType = fUniforms.materialType;
             var finalColor: vec3f;
@@ -375,10 +378,10 @@ export const PBRBlockShaders = () => {
                 return vec4f(ghostColorFinal, 0.35 + scan * 0.2);
             }
 
-            // Amplified emissive pulse for more visible pulsing effect
+            // Gentle emissive pulse (main.ts uses 0.25 scale to avoid washout)
             let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
-            let emissivePulse = idlePulse * 1.2 + fUniforms.movementFlash * 2.5 + fUniforms.lineClearFlash * 5.0;
-            finalColor += baseColor * emissivePulse;
+            let emissivePulse = idlePulse * 0.25 + fUniforms.movementFlash * 0.4 + fUniforms.lineClearFlash * 0.8;
+            finalColor += finalColor * emissivePulse;
 
             // Lava-specific magma glow: slow pulsing + bubbling variation (cooling magma look)
             if (materialType == 6u) {
@@ -441,7 +444,7 @@ export const PBRBlockShaders = () => {
                 finalColor += vec3f(borderBoost);
             }
 
-            finalColor = acesToneMapping(finalColor);
+            finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));
             let materialAlpha = mix(finalAlpha, 1.0, metalMask);
             return vec4f(finalColor, materialAlpha * vColor.w);
         }

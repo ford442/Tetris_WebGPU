@@ -55,10 +55,9 @@ export function executeRenderLoop(view: any, dt: number) {
   // Update render uniforms
   updateRenderUniforms(view, time, result);
 
-  // Dynamic lava material: roughness cools as piece falls (call per-frame only for lava)
-  if ((view.currentTheme as any)?.materialTheme === 'lava') {
-    view.updateMaterialUniforms?.();
-  }
+  // Refresh material slots (metallic@48, textureMix@92) — must run after frame uniforms
+  // so stale viewRenderLoop writes cannot clobber them (see viewUniforms.ts offsets).
+  view.updateMaterialUniforms?.();
 
   // Execute render passes
   executeRenderPasses(view, commandEncoder, result);
@@ -218,59 +217,16 @@ function updateRenderUniforms(view: any, time: number, result: any) {
   view._f32_1[0] = ghostUVW;
   view.device.queue.writeBuffer(view.backgroundUniformBuffer, 76, view._f32_1);
 
-  // Block uniforms - standard
-  view._f32_1[0] = time;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._f32_1);
-  view._f32_1[0] = view.useGlitch ? 1.0 : 0.0;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 52, view._f32_1);
-  view._f32_1[0] = lockPercent;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 56, view._f32_1);
-  view._f32_1[0] = view.visualEffects.currentLevel;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 60, view._f32_1);
+  // Fragment block uniforms (time@32, glitch@36, movementFlash@96, magnet@104, etc.)
+  // are written in viewUniforms.updateFrameUniforms with pbrBlocks.ts layout.
+  // Do NOT write time/glitch at byte 48 — that slot is metallic in FragmentUniforms.
 
-  // Underwater uniforms
-  const isUnderwaterLevel = view.reactiveVideoBackground?.isSeaCreatureLevel ?? false;
-  if (isUnderwaterLevel && view.reactiveVideoBackground) {
-    updateUnderwaterUniforms(view);
-    view.chaosMode.setUnderwaterMode(true);
+  if (view.reactiveVideoBackground?.isSeaCreatureLevel) {
     view.jellyfishSystem.update(result.dt, result.time);
-  } else {
-    clearUnderwaterUniforms(view);
-    view.chaosMode.setUnderwaterMode(false);
   }
 
   // Post-process uniforms
   updatePostProcessUniforms(view, time);
-}
-
-/**
- * Update underwater-specific shader uniforms
- */
-function updateUnderwaterUniforms(view: any) {
-  view._f32_1[0] = 1.0; // isUnderwater
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 96, view._f32_1);
-  view._f32_1[0] = 0.6; // causticIntensity
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 100, view._f32_1);
-  view._f32_1[0] = 0.8; // godRayStrength
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 104, view._f32_1);
-  view._f32_1[0] = 0.5; // bioluminescence
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 108, view._f32_1);
-  view._f32_1[0] = view.reactiveVideoBackground.seaCreatureIntensity;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 112, view._f32_1);
-  view._f32_1[0] = view.reactiveVideoBackground.creatureSwimOffset;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 116, view._f32_1);
-  view._f32_1[0] = 5.0; // waterDepth
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 120, view._f32_1);
-}
-
-/**
- * Clear underwater uniforms (when not in underwater level)
- */
-function clearUnderwaterUniforms(view: any) {
-  view._f32_1[0] = 0.0;
-  for (let offset = 96; offset <= 120; offset += 4) {
-    view.device.queue.writeBuffer(view.fragmentUniformBuffer, offset, view._f32_1);
-  }
 }
 
 /**
