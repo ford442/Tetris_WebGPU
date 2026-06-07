@@ -20,6 +20,10 @@ export class VisualEffects {
     shockwaveCenter: number[] = [0.5, 0.5];
     shockwaveParams: number[] = [0.15, 0.08, 0.03, 2.0]; // width, strength, aberration, speed
 
+    // Black Hole state
+    blackHoleTime: number = 0;
+    blackHoleCenter: number[] = [0.5, 0.5];
+
     // Neon Bloom state
     neonBloomIntensity: number = 0;
     neonBloomBaseIntensity: number = 1.0;
@@ -151,6 +155,11 @@ export class VisualEffects {
         if (this.shakeIntensity < 0.01) this.shakeIntensity = 0;
         if (this.aberrationIntensity < 0.01) this.aberrationIntensity = 0;
 
+        if (this.blackHoleTime > 0) {
+            this.blackHoleTime += dt * 0.8;
+            if (this.blackHoleTime > 1.0) this.blackHoleTime = 0.0;
+        }
+
         if (this.shockwaveTimer > 0) {
             this.shockwaveTimer += dt * 0.8; // Speed
             if (this.shockwaveTimer > 1.0) this.shockwaveTimer = 0.0;
@@ -260,6 +269,11 @@ export class VisualEffects {
         this.triggerGlitch(0.8 + (level * 0.05));
         this.triggerAberration(0.5 + (level * 0.05));
         this.triggerShake(2.0 + (level * 0.2), 0.8);
+    }
+
+    triggerBlackHole(center: number[]): void {
+        this.blackHoleCenter = center;
+        this.blackHoleTime = 0.01;
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
