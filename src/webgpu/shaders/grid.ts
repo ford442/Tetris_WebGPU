@@ -46,7 +46,7 @@ export const GridShader = () => {
                     let phase = d * 2.2 - uniforms.rippleTime * 28.0;
                     let fade = 1.0 - (uniforms.rippleTime / 0.5);
                     let amp = sin(phase) * 0.55 * fade;
-                    pos.xy += dir * amp;
+                    pos = vec3<f32>(pos.xy + dir * amp, pos.z);
                 }
             }
 

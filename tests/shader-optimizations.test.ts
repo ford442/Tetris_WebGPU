@@ -62,7 +62,8 @@ describe('shader optimization updates', () => {
   it('composes gold frame and tinted glass from authored texture masks', () => {
     const { fragment } = PBRBlockShaders();
     expect(fragment).toContain('composeMaterialBaseColor');
-    expect(fragment).toContain('let warmEnv = envColor * vec3f(1.18, 0.94, 0.52)');
-    expect(fragment).toContain('let refractDir = refract(-V, N, 1.0 / max(fUniforms.ior, 1.01))');
+    expect(fragment).toContain('effectiveTextureMix > 0.45');
+    expect(fragment).toContain('finalAlpha = mix(0.82, 0.96, metalMask)');
+    expect(fragment).toContain('isBorderBlock');
   });
 });

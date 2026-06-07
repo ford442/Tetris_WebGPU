@@ -19,8 +19,23 @@ export interface BlockTexturePainter {
   strokeRect(x: number, y: number, width: number, height: number): void;
 }
 
+/** Resolve block.png against the Vite deployment base (e.g. /tetris-webgpu/block.png). */
 export function resolveBlockTextureUrl(_moduleUrl?: string): string {
-  return currentTextureConfig.url;
+  const configured = currentTextureConfig.url;
+  // Absolute URLs and data URLs are used as-is.
+  if (/^(https?:|data:|\/)/.test(configured)) {
+    return configured;
+  }
+  const base =
+    (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const asset = configured.replace(/^\.\//, '');
+  return `${normalizedBase}${asset}`;
+}
+
+/** Default authored block texture URL (honours Vite base path). */
+export function getDefaultBlockTextureUrl(): string {
+  return resolveBlockTextureUrl();
 }
 
 // ============================================================================
@@ -91,7 +106,7 @@ export interface BlockTextureConfig {
  * Normalised: x=1037/2816≈0.368, y=296/1536≈0.193, w=696/2816≈0.247, h=685/1536≈0.446
  */
 export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
-  url: './block.png',
+  url: 'block.png',
   samplingMode: 'subregion',
   subregionX: 0.368,
   subregionY: 0.193,
@@ -105,7 +120,7 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
 
 /** Configuration for single-tile textures (e.g., a single 256x256 block image) */
 export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
-  url: './block.png',
+  url: 'block.png',
   samplingMode: 'single',
   materialDetectionMode: 'luminance',
   metalThresholdLow: 0.45,

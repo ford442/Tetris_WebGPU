@@ -108,14 +108,11 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[0] = view.particleInteractionUniforms.particleInfluence;
   view._materialUniforms[1] = view.usePremiumMaterials ? 1.0 : 0.0;
 
-  // Stronger texture mix for any theme that advertises image-based metal/glass sampling.
-  // This gives Gold, Glass, and Premium the gold-translucent crystal detail they were
-  // designed to use from block.png + extractMaterialMask, while keeping classic/neon lightly tinted.
+  // Always sample block.png gold frame + stained-glass crystal at high strength.
+  // Low mix was leaving neon/pastel pieces flat grey against the snow-globe background.
   const materialTheme = (view.currentTheme as any)?.materialTheme || '';
-  const wantsStrongImage = view.usePremiumMaterials ||
-                           materialTheme === 'imageSampled' ||
-                           m.name.toLowerCase().includes('image');
-  view._materialUniforms[2] = wantsStrongImage ? 0.88 : 0.32;
+  const authoredLoaded = (view as { authoredBlockTextureLoaded?: boolean }).authoredBlockTextureLoaded !== false;
+  view._materialUniforms[2] = authoredLoaded ? 0.94 : 0.55;
 
   // Apply lava cooling roughness (after materialTheme is declared)
   if (materialTheme === 'lava') {

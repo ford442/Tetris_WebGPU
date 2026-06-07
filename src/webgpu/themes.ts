@@ -75,7 +75,7 @@ export const themes: Themes = {
       [0.69, 0.92, 0.95], // Mint
       [0.88, 0.75, 0.91]  // Lavender
     ],
-    materialTheme: 'classic'
+    materialTheme: 'imageSampled'
   },
   neon: {
     0: [0.1, 0.1, 0.1],
@@ -93,7 +93,7 @@ export const themes: Themes = {
       [0.8, 0.3, 1.0], // Neon Purple
       [0.2, 0.5, 1.0]  // Neon Blue
     ],
-    materialTheme: 'classic'
+    materialTheme: 'imageSampled'
   },
   future: {
     0: [0.1, 0.1, 0.1],
@@ -157,7 +157,7 @@ export const themes: Themes = {
     1: [0.9, 0.1, 0.15],  // I - Ruby
     2: [0.1, 0.3, 0.9],   // J - Sapphire
     3: [1.0, 0.78, 0.28], // L - Gold
-    4: [0.95, 0.95, 0.95],// O - Chrome
+    4: [0.35, 0.85, 1.0], // O - Cyan glass (was chrome grey)
     5: [0.1, 0.9, 0.3],   // S - Emerald
     6: [0.95, 0.98, 1.0], // T - Glass
     7: [0.9, 0.1, 0.15],  // Z - Ruby

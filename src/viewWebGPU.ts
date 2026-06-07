@@ -50,6 +50,7 @@ import {
   getTextureMipLevelCount,
   createBlockTextureSamplerDescriptor,
 } from './webgpu/blockTexture.js';
+import { UNIFORM_BUFFER_SIZES } from './config/renderConfig.js';
 import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
 import {
   initFrostedGlassBackboard as initFrostedGlassImpl,
@@ -200,6 +201,8 @@ export default class View {
   // Block Texture and Sampler
   blockTexture!: GPUTexture;
   blockSampler!: GPUSampler;
+  /** True when block.png loaded; false when procedural/solid fallback is in use. */
+  authoredBlockTextureLoaded: boolean = true;
 
   // Pre-allocated Float32Arrays for reduced GC pressure
   private _f32_1 = new Float32Array(1);
@@ -569,8 +572,10 @@ export default class View {
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         generateMipmapsUtil(this.device, this.blockTexture, imageBitmap.width, imageBitmap.height, this.blockTexture.mipLevelCount);
+        this.authoredBlockTextureLoaded = true;
         textureLogger.info('Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'with', this.blockTexture.mipLevelCount, 'mips');
     } catch (e) {
+        this.authoredBlockTextureLoaded = false;
         textureLogger.error('Failed to load block texture:', e);
         try {
           this.blockTexture = this.createProceduralFallbackTexture();
@@ -699,7 +704,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: 192, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.POST_PROCESS, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
@@ -748,7 +753,7 @@ export default class View {
     });
 
     // 224 bytes — WGSL minBindingSize for FragmentUniforms (audio bands at 184+, struct tail padding)
-    this.fragmentUniformBuffer = this.device.createBuffer({ size: 224, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.fragmentUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.FRAGMENT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     let lightPosition = this._f32_3;
@@ -794,7 +799,7 @@ export default class View {
             label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 224 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler },
             ],

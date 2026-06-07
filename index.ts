@@ -190,12 +190,30 @@ uiContainer.innerHTML = `
 
   const savedUseVideo = localStorage.getItem('tetris_use_reactive_video') !== 'false';
 
-  // Enable premium visuals preset (FXAA, film grain, CRT, bloom, supersampling)
+  const themeClassMap: Record<string, string> = {
+    pastel: 'pastel-theme',
+    neon: 'neon-theme',
+    future: 'futuristic-theme',
+    gold: 'gold-theme',
+    glass: 'glass-theme',
+    lava: 'lava-theme',
+    imageSampled: 'image-sampled-theme',
+    premium: 'neon-theme',
+    cyber: 'neon-theme',
+    chrome: 'neon-theme',
+  };
+  const savedThemeName = localStorage.getItem('tetris_theme_name') || 'premium';
+  const savedThemeClass = localStorage.getItem('tetris_theme_class')
+    || themeClassMap[savedThemeName]
+    || 'neon-theme';
+
+  // Premium visuals (supersampling, bloom, reactive video) — does not override theme/material
   view.setPremiumVisualsPreset({
-    renderScale: 1.5,        // 1.5x supersampling - crisp visuals
-    useEnhancedPostProcess: true,
-    useReactiveVideo: savedUseVideo,  // Videos speed up/slow/reverse/glitch
-    useReactiveMusic: true   // Music reacts to gameplay
+    renderScale: 1.5,
+    enhancedPostProcess: true,
+    reactiveVideo: savedUseVideo,
+    reactiveMusic: true,
+    particleInteraction: true,
   });
 
   // Initialize reactive music when sound manager is ready
@@ -395,8 +413,6 @@ uiContainer.innerHTML = `
   window.controller = controller;
   window.soundManager = soundManager;
 
-  // Load saved theme
-  const savedThemeClass = localStorage.getItem('tetris_theme_class') || 'neon-theme';
-  const savedThemeName = localStorage.getItem('tetris_theme_name') || 'neon';
+  // Apply saved theme (premium by default — gold frame + stained glass from block.png)
   applyTheme(savedThemeClass, savedThemeName);
 })();

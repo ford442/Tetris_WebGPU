@@ -59,7 +59,7 @@ describe('block texture helpers', () => {
   it('resolves the block texture asset from the deployment base', () => {
     expect(
       resolveBlockTextureUrl('https://example.com/src/webgpu/blockTexture.ts')
-    ).toBe('./block.png');
+    ).toBe('/block.png');
   });
 
   it('computes mip levels from the largest texture dimension', () => {
@@ -106,7 +106,7 @@ describe('block texture configuration', () => {
 
   it('has correct default configuration', () => {
     const config = getBlockTextureConfig();
-    expect(config.url).toBe('./block.png');
+    expect(config.url).toBe('block.png');
     expect(config.samplingMode).toBe('subregion');
     expect(config.subregionX).toBeCloseTo(0.368, 3);
     expect(config.subregionY).toBeCloseTo(0.193, 3);
@@ -187,7 +187,7 @@ describe('block texture configuration', () => {
     setBlockTextureConfig({ url: './changed.png', samplingMode: 'single' });
     resetBlockTextureConfig();
     const config = getBlockTextureConfig();
-    expect(config.url).toBe('./block.png');
+    expect(config.url).toBe('block.png');
     expect(config.samplingMode).toBe('subregion');
   });
 
@@ -245,6 +245,6 @@ describe('block texture configuration', () => {
 
   it('resolveBlockTextureUrl returns configured URL', () => {
     setBlockTextureConfig({ url: './new-texture.png' });
-    expect(resolveBlockTextureUrl()).toBe('./new-texture.png');
+    expect(resolveBlockTextureUrl()).toBe('/new-texture.png');
   });
 });

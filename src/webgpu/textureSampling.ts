@@ -58,8 +58,8 @@ fn composeMaterialBaseColor(texColor: vec3<f32>, pieceColor: vec3<f32>, metalMas
     let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
     let crystalBrightness = smoothstep(0.15, 0.90, luma);
     let crystalHighlight = max(luma - 0.70, 0.0) * 3.0;
-    let glassColor = pieceColor * (0.40 + crystalBrightness * 0.60)
-                   + vec3<f32>(1.0) * crystalHighlight * 0.5;
+    let glassColor = pieceColor * (0.58 + crystalBrightness * 0.52)
+                   + vec3<f32>(1.0) * crystalHighlight * 0.45;
     let metalColor = texColor.rgb * 1.12 + vec3<f32>(0.025, 0.010, 0.0);
     return mix(glassColor, metalColor, metalMask);
 }

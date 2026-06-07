@@ -212,21 +212,68 @@ export const PBRBlockShaders = () => {
             let glassMask = masks.y;
 
             let textureMix = fUniforms.textureMix;
+            // Border frame always samples block.png gold/crystal detail at full strength
+            let isBorderBlock = vWorldPos.x < -0.8 || vWorldPos.x > 21.0
+                             || vWorldPos.y > 1.5 || vWorldPos.y < -44.5;
+            let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
+
             let materialBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, metalMask);
-            var baseColor = mix(vColor.rgb, materialBase, textureMix);
+            // Match main.ts: authored texture drives colour; piece hue tints the crystal interior.
+            var baseColor = mix(vColor.rgb, materialBase, clamp(effectiveTextureMix, 0.0, 1.0));
 
             let materialType = fUniforms.materialType;
             var finalColor: vec3f;
             var finalAlpha = 1.0;
 
-            if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
+            // Tight specular (shared across paths)
+            let nh2 = NdotH * NdotH;
+            let nh4 = nh2 * nh2;
+            let nh16 = nh4 * nh4 * nh4 * nh4;
+            let nh128 = nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16;
+            let tightSpec = nh128;
+
+            if (effectiveTextureMix > 0.45) {
+                // Authored block.png path: gold frame + stained-glass crystal (matches main.ts)
+                let lightFactor = 0.25 + NdotL * 0.65;
+                let specularStrength = mix(0.04, 0.18, metalMask);
+                finalColor = baseColor * lightFactor + vec3f(tightSpec * specularStrength);
+
+                if (metalMask > 0.2 && fUniforms.metallic > 0.3) {
+                    let R = reflect(-V, N);
+                    let warmEnv = proceduralEnvReflect(R, time) * vec3f(1.15, 0.92, 0.55);
+                    let fresnel = 1.0 - NdotV;
+                    let fresnel3 = fresnel * fresnel * fresnel;
+                    finalColor += warmEnv * fresnel3 * metalMask * fUniforms.metallic * 0.85;
+                    let metalRough = max(fUniforms.roughness, 0.08);
+                    let D = distributionGGX(NdotH, metalRough);
+                    let G = geometrySmith(NdotV, NdotL, metalRough);
+                    let metalSpec = (D * G) / max(4.0 * NdotV * NdotL, 0.001);
+                    finalColor += vec3f(metalSpec) * metalMask * 0.35;
+                }
+
+                if (glassMask > 0.2) {
+                    let iridescence = sin(NdotV * 8.0 - time * 0.5) * 0.5 + 0.5;
+                    let rainbow = vec3f(
+                        sin(iridescence * 6.28) * 0.5 + 0.5,
+                        sin(iridescence * 6.28 + 2.09) * 0.5 + 0.5,
+                        sin(iridescence * 6.28 + 4.18) * 0.5 + 0.5
+                    );
+                    finalColor += rainbow * tightSpec * 0.22 * glassMask;
+                    let diffCenter = vUV - vec2f(0.5);
+                    let centerGlow = clamp((0.2025 - dot(diffCenter, diffCenter)) / 0.1225, 0.0, 1.0);
+                    let breath = sin(time * 1.5) * 0.03 + 0.03;
+                    finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.8;
+                    let edgeFresnel = 1.0 - NdotV;
+                    let edge3 = edgeFresnel * edgeFresnel * edgeFresnel;
+                    finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
+                }
+
+                finalAlpha = mix(0.82, 0.96, metalMask);
+            } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;
                 finalColor = baseColor * lightFactor;
-                let nh2 = NdotH * NdotH; let nh4 = nh2 * nh2; let nh16 = nh4 * nh4 * nh4 * nh4;
-                let nh128 = nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16;
-                let specular = nh128 * metalMask * 0.5;
-                finalColor += vec3f(specular);
+                finalColor += vec3f(tightSpec * metalMask * 0.5);
             } else {
                 // Full PBR
                 let metallic = fUniforms.metallic;

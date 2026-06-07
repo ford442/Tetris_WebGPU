@@ -57,7 +57,7 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     enhancedPostProcess = true,
     reactiveVideo = true,
     reactiveMusic = true,
-    materialTheme = 'premium',
+    materialTheme,
     chaosMode = false,
     particleInteraction = true
   } = options;
@@ -84,7 +84,9 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     view.chaosMode.toggle();
   }
 
-  view.setMaterialTheme(materialTheme);
+  if (materialTheme !== undefined) {
+    view.setMaterialTheme(materialTheme);
+  }
 
   if (view.bloomSystem) {
     view.bloomSystem.setParameters({
@@ -96,7 +98,8 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     });
   }
 
-  renderLogger.info(`Visual preset applied: ${renderScale}x supersampling, ${materialTheme} materials, chaos: ${chaosMode}`);
+  const matLabel = materialTheme ?? (view.currentTheme as any)?.materialTheme ?? 'unchanged';
+  renderLogger.info(`Visual preset applied: ${renderScale}x supersampling, ${matLabel} materials, chaos: ${chaosMode}`);
 }
 
 export function onLineClearReactive(view: ViewLike, lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) {
