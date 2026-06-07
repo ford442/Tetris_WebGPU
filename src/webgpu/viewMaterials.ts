@@ -4,7 +4,7 @@
  */
 
 import { themes, Themes } from './themes.js';
-import { getPieceMaterial } from './materials.js';
+import { getPieceMaterial, MaterialThemes } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
 
 export interface MaterialViewLike {
@@ -32,22 +32,25 @@ export interface MaterialViewLike {
 export function setMaterialTheme(view: MaterialViewLike, themeName: string, pieceType: number = 1) {
   if (!view.device) return;
 
-  const theme = themes[themeName as keyof Themes];
-  if (!theme) {
+  const visualTheme = themes[themeName as keyof Themes];
+  let materialThemeName: string;
+
+  if (visualTheme) {
+    view.currentTheme = visualTheme;
+    materialThemeName = visualTheme.materialTheme || 'classic';
+  } else if (themeName in MaterialThemes) {
+    materialThemeName = themeName;
+  } else {
     renderLogger.warn(`Unknown theme: ${themeName}`);
     return;
   }
-
-  view.currentTheme = theme;
-
-  const materialThemeName = (theme as any).materialTheme || 'classic';
   view.usePremiumMaterials = ['gold', 'chrome', 'glass', 'premium', 'cyber', 'imageSampled', 'lava', 'hologram'].includes(materialThemeName);
 
   view.currentMaterial = getPieceMaterial(materialThemeName, pieceType);
 
   updateMaterialUniforms(view);
 
-  const bgColors = (theme as any).backgroundColors;
+  const bgColors = visualTheme?.backgroundColors;
   if (bgColors && view.backgroundUniformBuffer) {
     view._f32_3.set(bgColors[0]); view.device.queue.writeBuffer(view.backgroundUniformBuffer, 16, view._f32_3);
     view._f32_3.set(bgColors[1]); view.device.queue.writeBuffer(view.backgroundUniformBuffer, 32, view._f32_3);

@@ -71,7 +71,7 @@ describe('block texture helpers', () => {
     expect(createBlockTextureSamplerDescriptor()).toEqual({
       magFilter: 'linear',
       minFilter: 'linear',
-      mipmapFilter: 'nearest',
+      mipmapFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
       lodMinClamp: 0,

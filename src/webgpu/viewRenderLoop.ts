@@ -362,7 +362,7 @@ function updatePostProcessUniforms(view: any, time: number) {
   }
 
   // Audio frequency bands (from reactiveMusic analyser) for border glow pulsing.
-  // bass -> left/right, mid -> bottom, treble -> top. Written at 184+ (fits in 208B buffer).
+  // bass -> left/right, mid -> bottom, treble -> top. Written at 184+ (fits in 224B fragment buffer).
   if (view.reactiveMusicSystem && typeof view.reactiveMusicSystem.getFrequencyBands === 'function') {
     const bands = view.reactiveMusicSystem.getFrequencyBands();
     view._f32_1[0] = bands.bass || 0;

@@ -426,9 +426,7 @@ export default class View {
         this.backgroundRenderer.setThemeColors(bgColors);
     }
 
-    if (this.currentTheme.materialTheme) {
-        this.setMaterialTheme(this.currentTheme.materialTheme);
-    }
+    this.setMaterialTheme(themeName);
   }
 
   renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
@@ -701,7 +699,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: 160, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.postProcessUniformBuffer = this.device.createBuffer({ size: 192, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
@@ -749,8 +747,8 @@ export default class View {
       knee: 0.1
     });
 
-    // Expanded to 208 bytes for audio bands (bass/mid/treble at 184+) + columnHeights (was 192)
-    this.fragmentUniformBuffer = this.device.createBuffer({ size: 208, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // 224 bytes — WGSL minBindingSize for FragmentUniforms (audio bands at 184+, struct tail padding)
+    this.fragmentUniformBuffer = this.device.createBuffer({ size: 224, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     let lightPosition = this._f32_3;
@@ -796,7 +794,7 @@ export default class View {
             label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 208 } },
+                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: 224 } },
                 { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
                 { binding: 3, resource: this.blockSampler },
             ],

@@ -78,6 +78,16 @@ export const PARTICLES_CONFIG = {
   SIZE_MULTIPLIER: 1.0,
 } as const;
 
+// WebGPU uniform buffer sizes (must match WGSL struct layout / minBindingSize)
+export const UNIFORM_BUFFER_SIZES = {
+  /** PostProcessUniforms — vec3/vec4 alignment pads struct to 192B */
+  POST_PROCESS: 192,
+  /** PBR FragmentUniforms — array tail padding to 224B */
+  FRAGMENT: 224,
+  /** PBR VertexUniforms — 3×mat4 + vec4 = 208B */
+  VERTEX_BLOCK: 208,
+} as const;
+
 // Default exports
 export default {
   CAMERA: CAMERA_CONFIG,

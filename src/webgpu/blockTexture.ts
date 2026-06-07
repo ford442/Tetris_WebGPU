@@ -167,7 +167,7 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
   return {
     magFilter: 'linear',
     minFilter: 'linear',
-    mipmapFilter: 'nearest',
+    mipmapFilter: 'linear',
     addressModeU: 'clamp-to-edge',
     addressModeV: 'clamp-to-edge',
     lodMinClamp: 0,

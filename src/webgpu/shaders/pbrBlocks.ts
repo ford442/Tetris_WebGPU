@@ -111,7 +111,7 @@ export const PBRBlockShaders = () => {
 
     const fragment = `
         // =========================================================================
-        // FRAGMENT UNIFORMS - 208 bytes (184+ for bass/mid/treble audio bands driving border glow), aligned for WebGPU
+        // FRAGMENT UNIFORMS - 224 bytes (audio bands at 184+, WGSL struct tail padding)
         // =========================================================================
         struct FragmentUniforms {
             lightPosition : vec4f,      // 0-15
@@ -145,6 +145,7 @@ export const PBRBlockShaders = () => {
             midLevel      : f32,        // 188 (mid -> bottom)
             trebleLevel   : f32,        // 192 (treble -> top)
             padAudio      : f32,        // 196
+            _structPad    : vec2f,      // 200 (WGSL pads struct to 224B minBindingSize)
         };
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
         @binding(2) @group(0) var blockTexture : texture_2d<f32>;

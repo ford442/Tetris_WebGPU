@@ -287,7 +287,7 @@ export function renderPlayfieldBorder(
         label: "uniformBindGroup_next 635", layout: pipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: vertexUniformBuffer, offset: offset_ARRAY, size: 208 } },
-          { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: 208 } },
+          { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: 224 } },
           { binding: 2, resource: blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: blockTexture.mipLevelCount }) },
           { binding: 3, resource: blockSampler },
         ],
