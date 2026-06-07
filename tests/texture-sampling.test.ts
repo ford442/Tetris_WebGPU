@@ -42,6 +42,13 @@ describe('texture sampling WGSL generation', () => {
       const code = getSimpleTextureSamplingWGSL();
       expect(code).toContain('fn extractMaterialMask');
       expect(code).toContain('metalMask');
+      expect(code).toContain('fn composeMaterialBaseColor');
+    });
+
+    it('uses warmth-based gold/crystal separation by default', () => {
+      const code = getSimpleTextureSamplingWGSL();
+      expect(code).toContain('let warmth = texColor.r - texColor.b');
+      expect(code).toContain('let warmthSignal = smoothstep(0.05, 0.2, warmth)');
     });
   });
 
@@ -60,6 +67,7 @@ describe('texture sampling WGSL generation', () => {
       expect(code).toContain('MATERIAL_MODE_COLOR_SIGNAL');
       expect(code).toContain('MATERIAL_MODE_ALPHA');
       expect(code).toContain('MATERIAL_MODE_NONE');
+      expect(code).toContain('MATERIAL_MODE_WARMTH');
     });
 
     it('includes configurable threshold values', () => {

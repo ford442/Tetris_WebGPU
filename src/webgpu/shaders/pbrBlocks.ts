@@ -211,7 +211,8 @@ export const PBRBlockShaders = () => {
             let glassMask = masks.y;
 
             let textureMix = fUniforms.textureMix;
-            var baseColor = mix(vColor.rgb, texColor.rgb, textureMix);
+            let materialBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, metalMask);
+            var baseColor = mix(vColor.rgb, materialBase, textureMix);
 
             let materialType = fUniforms.materialType;
             var finalColor: vec3f;
@@ -249,27 +250,36 @@ export const PBRBlockShaders = () => {
 
                 let R = reflect(-V, N);
                 let envColor = proceduralEnvReflect(R, time);
-                let reflection = envColor * F * metallic * metalMask;
+                // Warm environment tint on gold frame — avoids cold blue static on metal
+                let warmEnv = envColor * vec3f(1.18, 0.94, 0.52);
+                let metalEnv = mix(envColor, warmEnv, metalMask);
+                let reflection = metalEnv * F * metallic * metalMask;
 
                 finalColor = diffuse + vec3f(specular) * (0.5 + metallic * metalMask);
                 finalColor += reflection;
 
-                // Glass transmission
+                // Glass transmission: refraction + edge reflection (not raw texture noise)
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f1 = 1.0 - NdotV;
                     let fresnel = f1 * f1 * f1;
-                    let glassOpacity = mix(0.15, 1.0, fresnel);
+                    let glassOpacity = mix(0.12, 0.92, fresnel);
                     finalAlpha = mix(1.0, glassOpacity, transmission * glassMask);
-                    finalColor = mix(finalColor, vColor.rgb * 1.5, 0.6 * glassMask);
+
+                    let refractDir = refract(-V, N, 1.0 / max(fUniforms.ior, 1.01));
+                    let refractEnv = proceduralEnvReflect(refractDir, time);
+                    let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
+                    let refractedColor = refractEnv * glassTint;
+                    let glassReflect = envColor * fresnel * 0.28 * glassMask;
+                    let glassBody = mix(refractedColor, finalColor, 0.38 * glassMask);
+                    finalColor = mix(finalColor, glassBody + glassReflect, transmission * glassMask);
 
                     if (fUniforms.dispersion > 0.0) {
                         let edgeFactor = f1 * f1;
-                        let rainbow = vec3f(
-                            sin(time * 2.0) * 0.1 + 0.9,
-                            sin(time * 2.0 + 2.09) * 0.1 + 0.9,
-                            sin(time * 2.0 + 4.18) * 0.1 + 0.9
+                        finalColor += vec3f(
+                            fUniforms.dispersion * edgeFactor * glassMask * 0.06,
+                            fUniforms.dispersion * edgeFactor * glassMask * 0.03,
+                            -fUniforms.dispersion * edgeFactor * glassMask * 0.04
                         );
-                        finalColor += (rainbow - 1.0) * fUniforms.dispersion * edgeFactor * glassMask * 2.0;
                     }
                 }
 

@@ -13,7 +13,57 @@
  * - Edge inset to avoid atlas bleeding
  */
 
-import { getBlockTextureConfig } from './blockTexture.js';
+import { getBlockTextureConfig, type BlockTextureConfig } from './blockTexture.js';
+
+/** WGSL body for extractMaterialMask — separates gold frame from cool crystal glass */
+function getMaterialMaskLogicWGSL(config: BlockTextureConfig): string {
+  const low = config.metalThresholdLow ?? 0.45;
+  const high = config.metalThresholdHigh ?? 0.55;
+
+  if (config.materialDetectionMode === 'warmth') {
+    return `
+    // Gold frame: mid-luminance AND warm hue (R > B).
+    // Crystal interior: cool/neutral (B >= R) — pixel analysis of block.png.
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let warmth = texColor.r - texColor.b;
+    let lumaBand = smoothstep(0.25, 0.55, luma) * (1.0 - smoothstep(0.82, 0.95, luma));
+    let warmthSignal = smoothstep(${low}, ${high}, warmth);
+    let metalMask = clamp(lumaBand * warmthSignal * 3.0, 0.0, 1.0);
+    `;
+  }
+
+  if (config.materialDetectionMode === 'color_signal') {
+    return `
+    let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
+    let metalMask = smoothstep(${low}, ${high}, goldSignal);
+    `;
+  }
+
+  if (config.materialDetectionMode === 'luminance' && config.samplingMode === 'atlas') {
+    return `
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let metalMask = smoothstep(${low}, ${high}, luma);
+    `;
+  }
+
+  return `
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let metalMask = smoothstep(${low}, ${high}, luma);
+  `;
+}
+
+/** Shared WGSL helper that builds tinted glass + preserved gold frame colours */
+const MATERIAL_COMPOSE_WGSL = `
+fn composeMaterialBaseColor(texColor: vec3<f32>, pieceColor: vec3<f32>, metalMask: f32) -> vec3<f32> {
+    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    let crystalBrightness = smoothstep(0.15, 0.90, luma);
+    let crystalHighlight = max(luma - 0.70, 0.0) * 3.0;
+    let glassColor = pieceColor * (0.40 + crystalBrightness * 0.60)
+                   + vec3<f32>(1.0) * crystalHighlight * 0.5;
+    let metalColor = texColor.rgb * 1.12 + vec3<f32>(0.025, 0.010, 0.0);
+    return mix(glassColor, metalColor, metalMask);
+}
+`;
 
 /**
  * Generate WGSL code for texture sampling based on current configuration
@@ -40,7 +90,7 @@ const textureSamplingMode: u32 = ${getModeValue(config.samplingMode)}u;
 const ATLAS_COLUMNS: f32 = ${config.atlasColumns ?? 1}.0;
 const ATLAS_ROWS: f32 = ${config.atlasRows ?? 1}.0;
 const ATLAS_TILE_COL: f32 = ${config.atlasTileColumn ?? 0}.0;
-const ATLAS_TILE_ROW: ${config.atlasTileRow ?? 0}.0;
+const ATLAS_TILE_ROW: f32 = ${config.atlasTileRow ?? 0}.0;
 const ATLAS_INSET: f32 = ${config.atlasTileInset ?? 0.0};
 
 // Subregion configuration (used when mode is SUBREGION)
@@ -54,6 +104,7 @@ const MATERIAL_MODE_LUMINANCE = 0u;
 const MATERIAL_MODE_COLOR_SIGNAL = 1u;
 const MATERIAL_MODE_ALPHA = 2u;
 const MATERIAL_MODE_NONE = 3u;
+const MATERIAL_MODE_WARMTH = 4u;
 const materialDetectionMode: u32 = ${getMaterialModeValue(config.materialDetectionMode)}u;
 const METAL_THRESHOLD_LOW: f32 = ${config.metalThresholdLow ?? 0.45};
 const METAL_THRESHOLD_HIGH: f32 = ${config.metalThresholdHigh ?? 0.55};
@@ -124,6 +175,13 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
             let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
             metalMask = smoothstep(METAL_THRESHOLD_LOW, METAL_THRESHOLD_HIGH, goldSignal);
         }
+        case MATERIAL_MODE_WARMTH: {
+            let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            let warmth = texColor.r - texColor.b;
+            let lumaBand = smoothstep(0.25, 0.55, luma) * (1.0 - smoothstep(0.82, 0.95, luma));
+            let warmthSignal = smoothstep(METAL_THRESHOLD_LOW, METAL_THRESHOLD_HIGH, warmth);
+            metalMask = clamp(lumaBand * warmthSignal * 3.0, 0.0, 1.0);
+        }
         case MATERIAL_MODE_ALPHA: {
             // Alpha-based: would need alpha channel input
             metalMask = 0.5; // Neutral fallback
@@ -164,24 +222,7 @@ fn getAtlasTransform() -> vec4<f32> {
  */
 export function getSimpleTextureSamplingWGSL(): string {
   const config = getBlockTextureConfig();
-  
-  let materialMaskLogic = `
-    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.45}, ${config.metalThresholdHigh ?? 0.55}, luma);
-  `;
-
-  if (config.materialDetectionMode === 'color_signal') {
-    materialMaskLogic = `
-    let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.80}, ${config.metalThresholdHigh ?? 1.20}, goldSignal);
-    `;
-  } else if (config.materialDetectionMode === 'luminance' && config.samplingMode === 'atlas') {
-      materialMaskLogic = `
-    // Luminance: bright silver/white frame maps to metal, dark marble center maps to glass
-    let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.35}, ${config.metalThresholdHigh ?? 0.45}, luma);
-      `;
-  }
+  const materialMaskLogic = getMaterialMaskLogicWGSL(config);
 
   // For simple shaders, we inline the constants directly
   if (config.samplingMode === 'subregion') {
@@ -192,7 +233,7 @@ export function getSimpleTextureSamplingWGSL(): string {
     return `
 // Texture sampling: SUBREGION mode (${sx.toFixed(3)},${sy.toFixed(3)}) ${(sw * 100).toFixed(1)}%x${(sh * 100).toFixed(1)}%
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
-    let texUV = vec2<f32>(uv.x, 1.0 - uv.y);
+    let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
     return vec2<f32>(
         ${sx} + texUV.x * ${sw},
         ${sy} + texUV.y * ${sh}
@@ -202,6 +243,8 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
+
+${MATERIAL_COMPOSE_WGSL}
 `;
   }
 
@@ -209,12 +252,14 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return `
 // Texture sampling: SINGLE mode
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
-    return vec2<f32>(uv.x, 1.0 - uv.y);
+    return clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
+
+${MATERIAL_COMPOSE_WGSL}
 `;
   }
   
@@ -228,17 +273,18 @@ const ATLAS_TILE_ROW: f32 = ${config.atlasTileRow ?? 1}.0;
 const ATLAS_INSET: f32 = ${config.atlasTileInset ?? 0.03};
 
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
-    let texUV = vec2<f32>(uv.x, 1.0 - uv.y);
+    let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
     let atlasTiles = vec2<f32>(ATLAS_COLUMNS, ATLAS_ROWS);
     let atlasTile = vec2<f32>(ATLAS_TILE_COL, ATLAS_TILE_ROW);
     let atlasInset = vec2<f32>(ATLAS_INSET, ATLAS_INSET);
-    return (clamp(texUV, vec2<f32>(0.0), vec2<f32>(1.0)) * 
-            (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
+    return (texUV * (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
 }
 
 fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
     return vec2<f32>(metalMask, 1.0 - metalMask);
 }
+
+${MATERIAL_COMPOSE_WGSL}
 `;
 }
 
@@ -258,7 +304,8 @@ function getMaterialModeValue(mode?: string): number {
     case 'color_signal': return 1;
     case 'alpha': return 2;
     case 'none': return 3;
-    default: return 1; // Default to color_signal
+    case 'warmth': return 4;
+    default: return 4; // Default to warmth (block.png gold/crystal split)
   }
 }
 

@@ -70,7 +70,7 @@ export interface BlockTextureConfig {
   
   // Material detection configuration
   /** Method to use for detecting metal vs glass regions */
-  materialDetectionMode?: 'luminance' | 'color_signal' | 'alpha' | 'none';
+  materialDetectionMode?: 'luminance' | 'color_signal' | 'warmth' | 'alpha' | 'none';
   /** Threshold for metal detection (material-specific) */
   metalThresholdLow?: number;
   /** Threshold for metal detection (material-specific) */
@@ -97,9 +97,9 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionY: 0.193,
   subregionWidth: 0.247,
   subregionHeight: 0.446,
-  materialDetectionMode: 'color_signal',
-  metalThresholdLow: 0.35,
-  metalThresholdHigh: 0.45,
+  materialDetectionMode: 'warmth',
+  metalThresholdLow: 0.05,
+  metalThresholdHigh: 0.20,
   useProceduralFallback: true,
 };
 
