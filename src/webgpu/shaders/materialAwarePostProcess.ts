@@ -212,6 +212,29 @@ export const MaterialAwarePostProcessShaders = () => {
             let distortStrength = 0.05;
             let distortedUV = 0.5 + centeredUV * (1.0 + distSq * distortStrength);
             var finalUV = distortedUV;
+
+            // Black Hole Distortion Effect for Tetris/All Clears
+            if (uniforms.blackHoleTime > 0.001) {
+                let bhCenter = uniforms.blackHoleCenter;
+                let bhTime = uniforms.blackHoleTime;
+                let bhDiff = finalUV - bhCenter;
+                let bhDist = length(bhDiff);
+
+                // Exponential radius shrink as it decays
+                let bhRadius = 0.5 * (1.0 - pow(bhTime, 0.5));
+
+                if (bhDist < bhRadius && bhDist > 0.0) {
+                    let angle = atan2(bhDiff.y, bhDiff.x);
+                    // Faster spin towards the center and over time
+                    let spin = bhTime * 10.0 * (1.0 - bhDist / bhRadius);
+                    let newAngle = angle + spin;
+
+                    // Suck inwards (gravity)
+                    let suck = pow(bhDist / bhRadius, 2.0) * bhRadius;
+
+                    finalUV = bhCenter + vec2<f32>(cos(newAngle), sin(newAngle)) * suck;
+                }
+            }
             
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && 
                            distortedUV.y >= 0.0 && distortedUV.y <= 1.0);

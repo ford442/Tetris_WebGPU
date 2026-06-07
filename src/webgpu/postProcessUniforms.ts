@@ -62,6 +62,8 @@ struct PostProcessUniforms {
     _pad4: f32,                 // 124 (pad to 16-byte boundary for vec4f)
     lineClearLaserY: vec4f,     // 128 (up to 4 y-coordinates for line clear laser beams)
     lineClearLaserIntensity: f32, // 144
+    blackHoleTime: f32,           // 148
+    blackHoleCenter: vec2f,       // 152
     // Struct size is automatically padded to 160 by WGSL (multiple of 16)
 };
 `;
@@ -112,6 +114,8 @@ export interface PostProcessUniformData {
   // Supernova line clear laser effect
   lineClearLaserY?: [number, number, number, number];
   lineClearLaserIntensity?: number;
+  blackHoleTime?: number;
+  blackHoleCenter?: [number, number];
 }
 
 export class PostProcessUniformManager {
@@ -142,6 +146,8 @@ export class PostProcessUniformManager {
     gameOverKaleidoTime: 0,
     lineClearLaserY: [0, 0, 0, 0],
     lineClearLaserIntensity: 0,
+    blackHoleTime: 0,
+    blackHoleCenter: [0.5, 0.5],
   };
 
   /**
@@ -205,9 +211,10 @@ export class PostProcessUniformManager {
     this.data[34] = laserY[2];
     this.data[35] = laserY[3];
     this.data[36] = (v as any).lineClearLaserIntensity || 0; // offset 144
-    this.data[37] = 0;
-    this.data[38] = 0;
-    this.data[39] = 0;
+    this.data[37] = (v as any).blackHoleTime || 0;
+    const bhCenter = (v as any).blackHoleCenter || [0.5, 0.5];
+    this.data[38] = bhCenter[0];
+    this.data[39] = bhCenter[1];
 
     return this.data;
   }

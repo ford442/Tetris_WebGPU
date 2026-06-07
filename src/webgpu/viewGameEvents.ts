@@ -76,6 +76,13 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   let bloomIntensity = 0.7;
   if (lines.length >= 4 || tSpin || combo >= 5) {
     bloomIntensity = 2.0;
+    // Trigger Black Hole on Tetris or huge clears
+    if (lines.length >= 4) {
+      // Epicenter is the middle of the cleared lines
+      const midY = lines[Math.floor(lines.length / 2)] * -2.2;
+      const uvY = (Math.abs(midY) + 2.2) / 44.0;
+      view.visualEffects.triggerBlackHole([0.5, uvY]);
+    }
   } else if (lines.length === 2 || lines.length === 3) {
     bloomIntensity = 1.3;
   }

@@ -27,3 +27,5 @@
 - "Ensured DAS (Delayed Auto Shift) and ARR (Auto Repeat Rate) are perfectly tuned for sub-50ms input latency."
 - "Verified that the maximum particle count is capped to prevent browser lag while maintaining high-impact visual explosions."
 - "Modified postProcess.ts and materialAwarePostProcess.ts to incorporate `aberrationPulse` so that hard drops look like they tear the screen apart by pushing Red and Blue color channels away!"
+
+- "Implemented a massive 'Black Hole' gravitational lensing distortion and cyan event horizon glow in the post-processing pipeline, triggered on Tetris clears, causing the entire board to suck inward into a singularity!"
