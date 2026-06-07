@@ -319,7 +319,7 @@ export const EnhancedPostProcessShaders = () => {
                     let yPos = uniforms.lineClearLaserY[i];
                     if (yPos > 0.01) {
                         let distY = abs(uv.y - yPos);
-                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * exp(-distY * 10.0);
+                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * (1.0 / (1.0 + distY * 10.0));
                         if (distY < 0.02) {
                             color.b += 0.2 * laserIntensity;
                         }
