@@ -1,5 +1,5 @@
 export const PROCEDURAL_BLOCK_TEXTURE_SIZE = 256;
-export const BLOCK_TEXTURE_MAX_LOD = 1;
+export const BLOCK_TEXTURE_MAX_LOD = 4;
 
 export type GradientStop = {
   offset: number;
@@ -172,6 +172,7 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
     addressModeV: 'clamp-to-edge',
     lodMinClamp: 0,
     lodMaxClamp: BLOCK_TEXTURE_MAX_LOD,
+    maxAnisotropy: 16,
   };
 }
 

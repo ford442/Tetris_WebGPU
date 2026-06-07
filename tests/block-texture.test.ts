@@ -75,7 +75,8 @@ describe('block texture helpers', () => {
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
       lodMinClamp: 0,
-      lodMaxClamp: 1,
+      lodMaxClamp: 4,
+      maxAnisotropy: 16,
     });
   });
 

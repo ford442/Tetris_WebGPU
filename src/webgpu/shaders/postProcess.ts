@@ -301,7 +301,7 @@ export const PostProcessShaders = () => {
                     if (yPos > 0.01) {
                         let distY = abs(uv.y - yPos);
                         // Sharp falloff for intense laser beam look
-                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * exp(-distY * 10.0);
+                        laserGlow += 1.0 / (distY * 80.0 + 1.0) * (1.0 / (1.0 + distY * 10.0));
                         // Add horizontal tear/glitch near the laser
                         if (distY < 0.02) {
                             color.b += 0.2 * laserIntensity;

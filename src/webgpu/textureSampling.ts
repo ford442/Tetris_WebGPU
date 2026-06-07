@@ -173,7 +173,7 @@ export function getSimpleTextureSamplingWGSL(): string {
   if (config.materialDetectionMode === 'color_signal') {
     materialMaskLogic = `
     let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.75}, ${config.metalThresholdHigh ?? 1.15}, goldSignal);
+    let metalMask = smoothstep(${config.metalThresholdLow ?? 0.80}, ${config.metalThresholdHigh ?? 1.20}, goldSignal);
     `;
   } else if (config.materialDetectionMode === 'luminance' && config.samplingMode === 'atlas') {
       materialMaskLogic = `
