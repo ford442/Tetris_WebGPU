@@ -206,22 +206,42 @@ export const PBRBlockShaders = () => {
             // are small enough on screen that implicit LOD selection can soften the gold/glass detail.
             let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
             
-            // Extract material masks using configurable method
-            let masks = extractMaterialMask(texColor.rgb);
-            let metalMask = masks.x;
-            let glassMask = masks.y;
+            // Per-pixel warmth masks (used for low-mix / PBR fallback paths).
+            let textureMasks = extractMaterialMask(texColor.rgb);
+            let textureMetalMask = textureMasks.x;
+            let textureGlassMask = textureMasks.y;
+
+            // Geometric frame mask — matches the reference go.1ink.us build.
+            // Gold frame lives on the UV perimeter; stained-glass window is the interior.
+            // Per-pixel warmth detection is unreliable on block.png edge pixels.
+            let distX = min(vUV.x, 1.0 - vUV.x);
+            let distY = min(vUV.y, 1.0 - vUV.y);
+            let distEdge = min(distX, distY);
+            let borderThickness = 0.15;
+            let glassMaskGeo = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
+            let metalMaskGeo = 1.0 - glassMaskGeo;
 
             let textureMix = fUniforms.textureMix;
             // Border frame always samples block.png gold/crystal detail at full strength
             let isBorderBlock = vWorldPos.x < -0.8 || vWorldPos.x > 21.0
                              || vWorldPos.y > 1.5 || vWorldPos.y < -44.5;
             let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
+            let useAuthoredSampling = effectiveTextureMix > 0.45;
 
-            let materialBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, metalMask);
-            // Authored texture + piece tint (main.ts path); textureMix only gates the lighting branch.
-            var baseColor = mix(vColor.rgb, materialBase, clamp(effectiveTextureMix, 0.0, 1.0));
-            if (effectiveTextureMix > 0.45) {
-                baseColor = materialBase;
+            let metalMask = select(textureMetalMask, metalMaskGeo, useAuthoredSampling);
+            let glassMask = select(textureGlassMask, glassMaskGeo, useAuthoredSampling);
+
+            // Reference build: frame = pure texture gold, window = texture detail * piece tint.
+            let frameColor = texColor.rgb * 1.2;
+            let windowColor = texColor.rgb * (vColor.rgb + vec3f(0.2));
+            let authoredBase = mix(frameColor, windowColor, glassMaskGeo);
+            let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
+
+            var baseColor: vec3f;
+            if (useAuthoredSampling) {
+                baseColor = authoredBase;
+            } else {
+                baseColor = mix(vColor.rgb, textureBase, clamp(effectiveTextureMix, 0.0, 1.0));
             }
 
             let materialType = fUniforms.materialType;
@@ -235,8 +255,8 @@ export const PBRBlockShaders = () => {
             let nh128 = nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16;
             let tightSpec = nh128;
 
-            if (effectiveTextureMix > 0.45) {
-                // Authored block.png path: gold frame + stained-glass crystal (matches main.ts)
+            if (useAuthoredSampling) {
+                // Authored block.png path: gold frame + stained-glass crystal (reference build)
                 let lightFactor = 0.25 + NdotL * 0.65;
                 let specularStrength = mix(0.04, 0.18, metalMask);
                 finalColor = baseColor * lightFactor + vec3f(tightSpec * specularStrength);
@@ -271,7 +291,10 @@ export const PBRBlockShaders = () => {
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
                 }
 
-                finalAlpha = mix(0.82, 0.96, metalMask);
+                // Opaque gold frame; translucent glass window so the video portal shows through.
+                let edgeFresnel = 1.0 - NdotV;
+                let glassOpacity = mix(0.15, 0.80, edgeFresnel * edgeFresnel);
+                finalAlpha = mix(1.0, glassOpacity, glassMaskGeo);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;

@@ -82,6 +82,8 @@ export interface BlockTextureConfig {
   subregionWidth?: number;
   /** Height of subregion (for 'subregion' mode) */
   subregionHeight?: number;
+  /** Inset inside the subregion to avoid atlas hinge seams (0.0 - 0.2) */
+  subregionInset?: number;
   
   // Material detection configuration
   /** Method to use for detecting metal vs glass regions */
@@ -112,6 +114,7 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionY: 0.193,
   subregionWidth: 0.247,
   subregionHeight: 0.446,
+  subregionInset: 0.04,
   materialDetectionMode: 'warmth',
   metalThresholdLow: 0.05,
   metalThresholdHigh: 0.20,
