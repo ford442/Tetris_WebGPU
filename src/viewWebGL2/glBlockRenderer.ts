@@ -1,5 +1,10 @@
 import { CubeData } from '../webgpu/geometry.js';
 import { resolveBlockTextureUrl } from '../webgpu/blockTexture.js';
+import {
+  BLOCK_TILE_EXTRACT_SCALE,
+  extractBlockTileFromImage,
+  loadBlockTextureImage,
+} from '../webgpu/blockTextureExtract.js';
 import { createBlockShaderSources } from './blockShadersGLSL.js';
 import { textureLogger } from '../utils/logger.js';
 
@@ -48,8 +53,9 @@ export class GLBlockRenderer {
   private u_color!: WebGLUniformLocation;
   private u_lightPos!: WebGLUniformLocation;
   private u_eyePos!: WebGLUniformLocation;
-  private u_textureMix!: WebGLUniformLocation;
   private u_materialType!: WebGLUniformLocation;
+  private tileWidth = 0;
+  private tileHeight = 0;
 
   private _identity = new Float32Array([
     1, 0, 0, 0,
@@ -73,7 +79,6 @@ export class GLBlockRenderer {
     this.u_color = gl.getUniformLocation(this.program, 'u_color')!;
     this.u_lightPos = gl.getUniformLocation(this.program, 'u_lightPos')!;
     this.u_eyePos = gl.getUniformLocation(this.program, 'u_eyePos')!;
-    this.u_textureMix = gl.getUniformLocation(this.program, 'u_textureMix')!;
     this.u_materialType = gl.getUniformLocation(this.program, 'u_materialType')!;
 
     const cube = CubeData();
@@ -108,19 +113,29 @@ export class GLBlockRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     try {
       const url = resolveBlockTextureUrl(moduleUrl);
       textureLogger.info('[WebGL2] Loading block texture from:', url);
-      const image = await loadImage(url);
+      const image = await loadBlockTextureImage(url);
+      const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE);
+      this.tileWidth = extracted.width;
+      this.tileHeight = extracted.height;
+
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, extracted.canvas);
+      // Mip 0 only — preserve 2× extracted gold/glass detail from block.png
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       this.authoredTextureLoaded = true;
-      textureLogger.info('[WebGL2] Block texture loaded:', image.width, 'x', image.height);
+      textureLogger.info(
+        '[WebGL2] Block tile extracted:',
+        `${Math.round(extracted.sourceWidth)}×${Math.round(extracted.sourceHeight)}`,
+        '→',
+        `${extracted.width}×${extracted.height}`,
+        `(${extracted.scale}×)`,
+      );
     } catch (e) {
       textureLogger.error('[WebGL2] Block texture load failed:', e);
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
@@ -145,7 +160,7 @@ export class GLBlockRenderer {
     viewProjection: Float32Array,
     eyePos: [number, number, number],
     lightPos: [number, number, number],
-    textureMix: number,
+    _textureMix: number,
     materialType: number,
     instances: Array<{ modelMatrix: Float32Array; color: [number, number, number, number] }>,
   ): void {
@@ -158,7 +173,6 @@ export class GLBlockRenderer {
     gl.uniformMatrix4fv(this.u_viewProjection, false, viewProjection);
     gl.uniform3f(this.u_lightPos, lightPos[0], lightPos[1], lightPos[2]);
     gl.uniform3f(this.u_eyePos, eyePos[0], eyePos[1], eyePos[2]);
-    gl.uniform1f(this.u_textureMix, textureMix);
     gl.uniform1i(this.u_materialType, materialType);
 
     for (const inst of instances) {
@@ -170,14 +184,7 @@ export class GLBlockRenderer {
 
     gl.bindVertexArray(null);
   }
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image ${url}`));
-    img.src = url;
-  });
+  get tileSize(): { width: number; height: number } {
+    return { width: this.tileWidth, height: this.tileHeight };
+  }
 }
