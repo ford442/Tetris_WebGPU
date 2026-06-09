@@ -49,7 +49,12 @@ import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
   createBlockTextureSamplerDescriptor,
+  setBlockTextureConfig,
 } from './webgpu/blockTexture.js';
+import {
+  BLOCK_TILE_EXTRACT_SCALE,
+  extractBlockTileFromImage,
+} from './webgpu/blockTextureExtract.js';
 import { UNIFORM_BUFFER_SIZES } from './config/renderConfig.js';
 import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
 import {
@@ -560,8 +565,10 @@ export default class View {
           };
         });
 
-        // Preserve the authored texture data for direct WebGPU upload without browser-side premultiplication or color transforms.
-        const imageBitmap = await createImageBitmap(img, {
+        const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE);
+        setBlockTextureConfig({ samplingMode: 'single' });
+
+        const imageBitmap = await createImageBitmap(extracted.canvas, {
           premultiplyAlpha: 'none',
           colorSpaceConversion: 'none',
         });
@@ -574,7 +581,12 @@ export default class View {
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         generateMipmapsUtil(this.device, this.blockTexture, imageBitmap.width, imageBitmap.height, this.blockTexture.mipLevelCount);
         this.authoredBlockTextureLoaded = true;
-        textureLogger.info('Loaded successfully:', imageBitmap.width, 'x', imageBitmap.height, 'with', this.blockTexture.mipLevelCount, 'mips');
+        textureLogger.info(
+          'Loaded extracted tile:',
+          Math.round(extracted.sourceWidth), 'x', Math.round(extracted.sourceHeight),
+          '→', imageBitmap.width, 'x', imageBitmap.height,
+          `(${extracted.scale}×) with`, this.blockTexture.mipLevelCount, 'mips',
+        );
     } catch (e) {
         this.authoredBlockTextureLoaded = false;
         textureLogger.error('Failed to load block texture:', e);

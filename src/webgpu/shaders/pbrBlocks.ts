@@ -228,9 +228,9 @@ export const PBRBlockShaders = () => {
             let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
             let useAuthoredSampling = effectiveTextureMix > 0.45;
 
-            // Blend geometric frame with texture gold detection for visible hinges + stable edges.
+            // Blend geometric frame with texture warmth (gold hinges read from block.png pixels).
             let combinedMetalMask = clamp(
-                metalMaskGeo + textureMetalMask * (1.0 - metalMaskGeo) * 0.65,
+                max(metalMaskGeo, textureMetalMask * 0.92),
                 0.0, 1.0
             );
             let combinedGlassMask = 1.0 - combinedMetalMask;
@@ -238,10 +238,14 @@ export const PBRBlockShaders = () => {
             let metalMask = select(textureMetalMask, combinedMetalMask, useAuthoredSampling);
             let glassMask = select(textureGlassMask, combinedGlassMask, useAuthoredSampling);
 
-            // Reference build: frame = pure texture gold, window = texture detail * piece tint.
-            let frameColor = texColor.rgb * 1.2;
-            let windowColor = texColor.rgb * (vColor.rgb * 1.25 + vec3f(0.18));
-            let authoredBase = mix(frameColor, windowColor, combinedGlassMask);
+            let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
+            let crystalBright = smoothstep(0.15, 0.90, luma);
+            let crystalHi = max(luma - 0.65, 0.0) * 2.5;
+            let metalColor = texColor.rgb * 1.38 + vec3f(0.04, 0.018, 0.0);
+            let glassColor = texColor.rgb * (0.70 + crystalBright * 0.30)
+                           + vColor.rgb * 0.22 * crystalBright
+                           + vec3f(crystalHi * 0.40);
+            let authoredBase = mix(glassColor, metalColor, combinedMetalMask);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
