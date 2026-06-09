@@ -230,13 +230,16 @@ export function getSimpleTextureSamplingWGSL(): string {
     const sy = config.subregionY ?? 0.0;
     const sw = config.subregionWidth ?? 1.0;
     const sh = config.subregionHeight ?? 1.0;
+    const inset = config.subregionInset ?? 0.0;
     return `
 // Texture sampling: SUBREGION mode (${sx.toFixed(3)},${sy.toFixed(3)}) ${(sw * 100).toFixed(1)}%x${(sh * 100).toFixed(1)}%
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
     let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
+    let inset = ${inset};
+    let innerUV = texUV * (1.0 - inset * 2.0) + inset;
     return vec2<f32>(
-        ${sx} + texUV.x * ${sw},
-        ${sy} + texUV.y * ${sh}
+        ${sx} + innerUV.x * ${sw},
+        ${sy} + innerUV.y * ${sh}
     );
 }
 

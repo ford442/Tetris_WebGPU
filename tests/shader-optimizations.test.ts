@@ -59,11 +59,13 @@ describe('shader optimization updates', () => {
     expect(fragment).not.toContain('let materialAlpha = mix(0.85, 0.98, metalMask);');
   });
 
-  it('composes gold frame and tinted glass from authored texture masks', () => {
+  it('composes gold frame and tinted glass using geometric UV frame mask', () => {
     const { fragment } = PBRBlockShaders();
     expect(fragment).toContain('composeMaterialBaseColor');
-    expect(fragment).toContain('effectiveTextureMix > 0.45');
-    expect(fragment).toContain('finalAlpha = mix(0.82, 0.96, metalMask)');
+    expect(fragment).toContain('useAuthoredSampling');
+    expect(fragment).toContain('borderThickness = 0.15');
+    expect(fragment).toContain('let frameColor = texColor.rgb * 1.2');
+    expect(fragment).toContain('let glassOpacity = mix(0.15, 0.80');
     expect(fragment).toContain('isBorderBlock');
   });
 });
