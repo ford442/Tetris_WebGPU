@@ -228,13 +228,20 @@ export const PBRBlockShaders = () => {
             let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
             let useAuthoredSampling = effectiveTextureMix > 0.45;
 
-            let metalMask = select(textureMetalMask, metalMaskGeo, useAuthoredSampling);
-            let glassMask = select(textureGlassMask, glassMaskGeo, useAuthoredSampling);
+            // Blend geometric frame with texture gold detection for visible hinges + stable edges.
+            let combinedMetalMask = clamp(
+                metalMaskGeo + textureMetalMask * (1.0 - metalMaskGeo) * 0.65,
+                0.0, 1.0
+            );
+            let combinedGlassMask = 1.0 - combinedMetalMask;
+
+            let metalMask = select(textureMetalMask, combinedMetalMask, useAuthoredSampling);
+            let glassMask = select(textureGlassMask, combinedGlassMask, useAuthoredSampling);
 
             // Reference build: frame = pure texture gold, window = texture detail * piece tint.
             let frameColor = texColor.rgb * 1.2;
-            let windowColor = texColor.rgb * (vColor.rgb + vec3f(0.2));
-            let authoredBase = mix(frameColor, windowColor, glassMaskGeo);
+            let windowColor = texColor.rgb * (vColor.rgb * 1.25 + vec3f(0.18));
+            let authoredBase = mix(frameColor, windowColor, combinedGlassMask);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
@@ -257,7 +264,7 @@ export const PBRBlockShaders = () => {
 
             if (useAuthoredSampling) {
                 // Authored block.png path: gold frame + stained-glass crystal (reference build)
-                let lightFactor = 0.25 + NdotL * 0.65;
+                let lightFactor = 0.38 + NdotL * 0.62;
                 let specularStrength = mix(0.04, 0.18, metalMask);
                 finalColor = baseColor * lightFactor + vec3f(tightSpec * specularStrength);
 
@@ -291,10 +298,27 @@ export const PBRBlockShaders = () => {
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
                 }
 
-                // Opaque gold frame; translucent glass window so the video portal shows through.
+                // Opaque gold frame; glass window lets video through without going ghostly.
+                // Reference used ~0.8 window alpha; theme presets tune the range.
                 let edgeFresnel = 1.0 - NdotV;
-                let glassOpacity = mix(0.15, 0.80, edgeFresnel * edgeFresnel);
-                finalAlpha = mix(1.0, glassOpacity, glassMaskGeo);
+                let fresnelSq = edgeFresnel * edgeFresnel;
+                var glassMin: f32 = 0.58;
+                var glassMax: f32 = 0.90;
+                if (materialType == 1u) {
+                    // Gold — nearly solid blocks with a soft luminous center
+                    glassMin = 0.78;
+                    glassMax = 0.98;
+                } else if (materialType == 3u) {
+                    // Glass — most translucent so the portal reads clearly
+                    glassMin = 0.48;
+                    glassMax = 0.82;
+                } else if (materialType == 2u) {
+                    // Chrome — bright reflective panels
+                    glassMin = 0.72;
+                    glassMax = 0.96;
+                }
+                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
+                finalAlpha = mix(1.0, glassOpacity, combinedGlassMask);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;
