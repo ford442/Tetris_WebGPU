@@ -1,5 +1,5 @@
 import Game from "./game.js";
-import View from "./viewWebGPU.js";
+import type { IView } from "./view/IView.js";
 import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
@@ -13,8 +13,8 @@ type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' 
 
 export default class Controller {
   game: Game;
-  view: View;
-  viewWebGPU: View;
+  view: IView;
+  viewWebGPU: IView;
   soundManager: SoundManager;
   isPlaying: boolean;
   isPaused: boolean = false;
@@ -81,7 +81,7 @@ export default class Controller {
   private lastLevel: number = 1;
   private touchControls: TouchControls | null = null;
 
-  constructor(game: Game, view: View, viewWebGPU: View, soundManager: SoundManager) {
+  constructor(game: Game, view: IView, viewWebGPU: IView, soundManager: SoundManager) {
     this.game = game;
     this.view = view;
     this.viewWebGPU = viewWebGPU;
