@@ -92,6 +92,7 @@ import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
 const glMatrix = Matrix;
 
 export default class View {
+  readonly rendererName = 'webgpu' as const;
   element: HTMLElement;
   width: number;
   height: number;

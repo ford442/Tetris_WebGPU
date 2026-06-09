@@ -1,5 +1,5 @@
 import Game from "./src/game.js";
-import View from "./src/viewWebGPU.js";
+import { createView, getRendererPreference } from "./src/view/createView.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
@@ -175,7 +175,7 @@ uiContainer.innerHTML = `
   const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
   const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 
-  const view = await View.create(
+  const view = await createView(
       document.body,
       window.innerWidth,
       window.innerHeight,
@@ -184,6 +184,8 @@ uiContainer.innerHTML = `
       nextPieceCtx,
       holdPieceCtx
   );
+
+  console.info(`Tetris renderer: ${view.rendererName} (preference: ${getRendererPreference()})`);
 
   // Connect game to view for reactive events
   game.view = view;
