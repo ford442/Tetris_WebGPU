@@ -65,7 +65,8 @@ describe('shader optimization updates', () => {
     expect(fragment).toContain('useAuthoredSampling');
     expect(fragment).toContain('borderThickness = 0.15');
     expect(fragment).toContain('let frameColor = texColor.rgb * 1.2');
-    expect(fragment).toContain('let glassOpacity = mix(0.15, 0.80');
+    expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
+    expect(fragment).toContain('combinedMetalMask');
     expect(fragment).toContain('isBorderBlock');
   });
 });
