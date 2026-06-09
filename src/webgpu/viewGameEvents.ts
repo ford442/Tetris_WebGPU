@@ -326,9 +326,9 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
   // JUICE: Doubled shockwave strength and width, massively amplified aberration and speed for heavier impacts
-  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.0;
-  const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 2.0;
-  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 2.5; // NEON BRICKLAYER: Hyper aberration
+  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.5;
+  const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 2.5;
+  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 3.0; // NEON BRICKLAYER: Hyper aberration
   const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 1.5;      // NEON BRICKLAYER: Faster ripple expansion
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);

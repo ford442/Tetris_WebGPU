@@ -29,3 +29,5 @@
 - "Modified postProcess.ts and materialAwarePostProcess.ts to incorporate `aberrationPulse` so that hard drops look like they tear the screen apart by pushing Red and Blue color channels away!"
 
 - "Implemented a massive 'Black Hole' gravitational lensing distortion and cyan event horizon glow in the post-processing pipeline, triggered on Tetris clears, causing the entire board to suck inward into a singularity!"
+- "Reduced MAX_LOCK_RESETS to 15 for tighter Infinity feel."
+- "Enhanced hard-drop shockwave distortion + aberration (WGSL) for juicy impact."
