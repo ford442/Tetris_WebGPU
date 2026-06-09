@@ -223,8 +223,9 @@ export const EnhancedPostProcessShaders = () => {
                     let angle = (diff / width) * 3.14159;
                     let distortion = cos(angle) * strength * (1.0 - time);
                     finalUV -= dir * distortion;
-                    // NEON BRICKLAYER: Multiplied shockwave aberration by 2.5 for extreme "Juice" on hard drops
-                    shockwaveAberration = params.z * 2.5 * (1.0 - abs(diff)/width) * (1.0 - time);
+                    // NEON BRICKLAYER: Increased shockwave intensity + chromatic aberration on hard drops
+                    // for maximum "drop impact" feel (per Graphics & Game Feel requirements)
+                    shockwaveAberration = params.z * 3.0 * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
 
                 // Echo rings
