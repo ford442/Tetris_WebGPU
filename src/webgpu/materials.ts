@@ -183,22 +183,12 @@ export const Materials: Record<string, Material> = {
   },
 };
 
-// Material presets for each tetromino type
+/** Image-sampled blocks only — one material preset for all piece types. */
 export const MaterialThemes: Record<string, Material[]> = {
-  classic: Array(8).fill(Materials.classic),
-  gold: Array(8).fill(Materials.gold),
-  chrome: Array(8).fill(Materials.chrome),
-  glass: Array(8).fill(Materials.glass),
-  premium: [Materials.ruby, Materials.sapphire, Materials.emerald, Materials.gold, 
-            Materials.chrome, Materials.glass, Materials.ruby, Materials.sapphire],
-  cyber: Array(8).fill(Materials.cyber),
   imageSampled: Array(8).fill(Materials.imageSampled),
-  lava: Array(8).fill(Materials.lava),
-  hologram: Array(8).fill(Materials.hologram),
 };
 
-// Piece type to material mapping (for themed pieces)
-export const getPieceMaterial = (theme: string, pieceType: number): Material => {
-  const themeSet = MaterialThemes[theme] || MaterialThemes.classic;
-  return themeSet[pieceType] || Materials.classic;
+export const getPieceMaterial = (_theme: string, pieceType: number): Material => {
+  const themeSet = MaterialThemes.imageSampled;
+  return themeSet[pieceType] || Materials.imageSampled;
 };

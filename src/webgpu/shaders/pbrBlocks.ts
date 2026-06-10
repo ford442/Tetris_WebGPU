@@ -299,25 +299,9 @@ export const PBRBlockShaders = () => {
                 }
 
                 // Opaque gold frame; glass window lets video through without going ghostly.
-                // Reference used ~0.8 window alpha; theme presets tune the range.
                 let edgeFresnel = 1.0 - NdotV;
                 let fresnelSq = edgeFresnel * edgeFresnel;
-                var glassMin: f32 = 0.58;
-                var glassMax: f32 = 0.90;
-                if (materialType == 1u) {
-                    // Gold — nearly solid blocks with a soft luminous center
-                    glassMin = 0.78;
-                    glassMax = 0.98;
-                } else if (materialType == 3u) {
-                    // Glass — most translucent so the portal reads clearly
-                    glassMin = 0.48;
-                    glassMax = 0.82;
-                } else if (materialType == 2u) {
-                    // Chrome — bright reflective panels
-                    glassMin = 0.72;
-                    glassMax = 0.96;
-                }
-                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
+                let glassOpacity = mix(0.58, 0.90, fresnelSq);
                 finalAlpha = mix(1.0, glassOpacity, combinedGlassMask);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
