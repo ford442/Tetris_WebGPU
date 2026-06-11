@@ -22,7 +22,7 @@ export const LOCK_DELAY_CONFIG = {
   /** Standard lock delay time */
   LOCK_DELAY_MS: 500,
   /** Maximum number of lock delay resets (Infinity-like behavior) */
-  MAX_LOCK_RESETS: 25,
+  MAX_LOCK_RESETS: 15,
 } as const;
 
 // Playfield dimensions
