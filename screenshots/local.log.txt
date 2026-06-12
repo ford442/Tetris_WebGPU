@@ -1,0 +1,27 @@
+[console] [WASM] Physics Core Initialized (memory=65536 bytes) from ./release.wasm
+[console] [Texture] Loading from: /tetris-webgpu/block.png
+[console] Failed to load resource: the server responded with a status of 404 (Not Found)
+[console] [Texture] Loaded extracted tile: 640 x 630 → 1280 x 1261 (2×) with 11 mips
+[console] [Render] Backboard initialized
+[console] Tetris renderer: webgpu (preference: auto)
+[console] [Render] Scale set to 1.5x (1920x1080)
+[console] [Render] Enhanced post-processing enabled
+[console] [Render] Reactive music enabled
+[console] [Render] Particle interaction enabled
+[console] [Render] Visual preset applied: 1.5x supersampling, imageSampled materials, chaos: false
+[console] [Render] Scale set to 1.5x (1920x1080)
+[console] [Render] Enhanced post-processing enabled
+[console] [Render] Reactive music enabled
+[console] [Render] Particle interaction enabled
+[console] [Render] Visual preset applied: 1.5x supersampling, imageSampled materials, chaos: false
+[console] [Render] Switched to premium with material premium
+[console] [Render] Switched to premium with material premium
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+[pageerror] OperationError: A valid external Instance reference no longer exists.
+DOMException: OperationError: A valid external Instance reference no longer exists.
+[pageerror] OperationError: A valid external Instance reference no longer exists.
+DOMException: OperationError: A valid external Instance reference no longer exists.
