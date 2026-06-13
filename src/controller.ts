@@ -349,6 +349,8 @@ export default class Controller {
         case 'down':
             this.game.movePieceDown();
             this.soundManager.playMove();
+            this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
+            this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
             this.actionTimers.down = 0;
             break;
         case 'rotateCW':
@@ -441,6 +443,8 @@ export default class Controller {
           case 'down':
               this.game.movePieceDown();
               this.soundManager.playMove();
+              this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
+              this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
               this.actionTimers.down = 0;
               break;
           case 'rotateCW':
