@@ -110,17 +110,17 @@ void main() {
 
   float edgeFresnel = 1.0 - NdotV;
   float fresnelSq = edgeFresnel * edgeFresnel;
-  float glassMin = 0.58;
-  float glassMax = 0.90;
+  float glassMin = 0.38;
+  float glassMax = 0.78;
   if (u_materialType == 1) {
-    glassMin = 0.78;
-    glassMax = 0.98;
-  } else if (u_materialType == 3) {
-    glassMin = 0.48;
-    glassMax = 0.82;
-  } else if (u_materialType == 2) {
     glassMin = 0.72;
     glassMax = 0.96;
+  } else if (u_materialType == 3) {
+    glassMin = 0.28;
+    glassMax = 0.68;
+  } else if (u_materialType == 2) {
+    glassMin = 0.68;
+    glassMax = 0.94;
   }
   float glassOpacity = mix(glassMin, glassMax, fresnelSq);
   float alpha = mix(1.0, glassOpacity, glassMask) * vColor.a;

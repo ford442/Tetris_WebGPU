@@ -49,6 +49,7 @@ import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
   createBlockTextureSamplerDescriptor,
+  createBlockTextureBindingView,
   setBlockTextureConfig,
 } from './webgpu/blockTexture.js';
 import {
@@ -208,7 +209,7 @@ export default class View {
   blockTexture!: GPUTexture;
   blockSampler!: GPUSampler;
   /** True when block.png loaded; false when procedural/solid fallback is in use. */
-  authoredBlockTextureLoaded: boolean = true;
+  authoredBlockTextureLoaded: boolean = false;
 
   // Pre-allocated Float32Arrays for reduced GC pressure
   private _f32_1 = new Float32Array(1);
@@ -580,6 +581,7 @@ export default class View {
         });
         this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
         generateMipmapsUtil(this.device, this.blockTexture, imageBitmap.width, imageBitmap.height, this.blockTexture.mipLevelCount);
+        await this.device.queue.onSubmittedWorkDone();
         this.authoredBlockTextureLoaded = true;
         textureLogger.info(
           'Loaded extracted tile:',
@@ -813,7 +815,7 @@ export default class View {
             entries: [
                 { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
                 { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
-                { binding: 2, resource: this.blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: this.blockTexture.mipLevelCount }) },
+                { binding: 2, resource: createBlockTextureBindingView(this.blockTexture) },
                 { binding: 3, resource: this.blockSampler },
             ],
         });

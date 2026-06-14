@@ -194,6 +194,16 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
   };
 }
 
+/** Bind view for authored block.png — mip 0 only (shader uses textureSampleLevel(..., 0.0)). */
+export function createBlockTextureBindingView(texture: GPUTexture): GPUTextureView {
+  return texture.createView({
+    format: 'rgba8unorm',
+    dimension: '2d',
+    baseMipLevel: 0,
+    mipLevelCount: 1,
+  });
+}
+
 export function getProceduralBlockTextureGradientStops(): GradientStop[] {
   return [
     { offset: 0, color: '#d9dde5' },

@@ -361,7 +361,8 @@ export const EnhancedPostProcessShaders = () => {
                 return vec4<f32>(0.0, 0.0, 0.0, 0.0);
             }
 
-            return vec4<f32>(color, sampledAlpha);
+            // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
+            return vec4<f32>(color * sampledAlpha, sampledAlpha);
         }
     `;
 

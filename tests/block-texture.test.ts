@@ -9,6 +9,7 @@ import {
   resetBlockTextureConfig,
   getAtlasSamplingParams,
   createBlockTextureSamplerDescriptor,
+  createBlockTextureBindingView,
   DEFAULT_BLOCK_TEXTURE_CONFIG,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
@@ -65,6 +66,18 @@ describe('block texture helpers', () => {
   it('computes mip levels from the largest texture dimension', () => {
     expect(getTextureMipLevelCount(256, 256)).toBe(9);
     expect(getTextureMipLevelCount(2816, 1536)).toBe(12);
+  });
+
+  it('creates a mip-0-only binding view for block texture sampling', () => {
+    const view = createBlockTextureBindingView({
+      createView: (desc: GPUTextureViewDescriptor) => desc,
+    } as unknown as GPUTexture);
+    expect(view).toEqual({
+      format: 'rgba8unorm',
+      dimension: '2d',
+      baseMipLevel: 0,
+      mipLevelCount: 1,
+    });
   });
 
   it('creates a sharp clamped sampler descriptor for authored block images', () => {

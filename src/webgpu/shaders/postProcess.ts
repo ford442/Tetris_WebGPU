@@ -315,10 +315,11 @@ export const PostProcessShaders = () => {
             }
 
             if (!inBounds) {
-                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
             }
 
-            return vec4<f32>(color, a);
+            // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
+            return vec4<f32>(color * a, a);
         }
     `;
 
