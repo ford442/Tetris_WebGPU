@@ -203,7 +203,7 @@ export default class View {
 
   // Themes
   themes: Themes = themes;
-  currentTheme: ThemeColors = themes.neon;
+  currentTheme: ThemeColors = themes.imageSampled;
 
   // Block Texture and Sampler
   blockTexture!: GPUTexture;

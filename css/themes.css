@@ -35,6 +35,18 @@ body.futuristic-theme {
     font-family: 'Play', sans-serif;
 }
 
+body.image-sampled-theme {
+  --background-color: #0a0a0c;
+  --text-color: #e8dcc8;
+  --button-bg: rgba(200, 160, 80, 0.18);
+  --button-text: #f5ecd8;
+  --border-color: rgba(210, 175, 95, 0.55);
+  --h1-color: #e8c878;
+  --ui-bg: linear-gradient(135deg, rgba(20, 18, 14, 0.82), rgba(8, 8, 10, 0.88));
+  --backdrop: blur(8px);
+  --glow: 0 0 12px rgba(220, 180, 90, 0.35);
+}
+
 #ui-container {
   font-family: 'Play', sans-serif;
   position: absolute;
@@ -51,7 +63,7 @@ body.futuristic-theme {
   transition: all 0.5s ease;
 }
 
-.pastel-theme #ui-container, .neon-theme #ui-container, .futuristic-theme #ui-container {
+.pastel-theme #ui-container, .neon-theme #ui-container, .futuristic-theme #ui-container, .image-sampled-theme #ui-container {
   color: var(--text-color);
 }
 
@@ -64,7 +76,7 @@ body.futuristic-theme {
   text-shadow: 0 0 10px rgba(255,255,255,0.5);
 }
 
-.pastel-theme #ui-container h1, .neon-theme #ui-container h1, .futuristic-theme #ui-container h1 {
+.pastel-theme #ui-container h1, .neon-theme #ui-container h1, .futuristic-theme #ui-container h1, .image-sampled-theme #ui-container h1 {
   color: var(--h1-color);
 }
 
@@ -145,7 +157,8 @@ body.futuristic-theme {
 
 .pastel-theme button,
 .neon-theme button,
-.futuristic-theme button {
+.futuristic-theme button,
+.image-sampled-theme button {
   background-color: var(--button-bg);
   color: var(--button-text);
   border: 1px solid var(--border-color);
@@ -153,7 +166,8 @@ body.futuristic-theme {
 
 .pastel-theme button:hover,
 .neon-theme button:hover,
-.futuristic-theme button:hover {
+.futuristic-theme button:hover,
+.image-sampled-theme button:hover {
   background-color: var(--border-color);
   color: white;
   transform: translateY(-2px);

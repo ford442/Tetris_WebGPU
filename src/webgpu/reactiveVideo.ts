@@ -234,7 +234,7 @@ export class ReactiveVideoBackground {
   // Video sources for different levels/themes
   videoSources: string[] = [];
   currentLevel: number = 0;
-  currentTheme: string = 'neon';
+  currentTheme: string = 'imageSampled';
   
   // NEW: Track current background config
   currentBackground: VideoBackgroundKey | null = null;

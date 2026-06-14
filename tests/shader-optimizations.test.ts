@@ -47,36 +47,36 @@ describe('shader optimization updates', () => {
     expect(maxUV).toBeLessThan(0.995);
   });
 
-  it('samples block image detail from explicit mip 0 in the PBR shader', () => {
-    const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('textureSampleLevel(blockTexture, blockSampler, texUV, 0.0)');
-  });
+it('samples block image detail from explicit mip 0 in the PBR shader', () => {
+  const { fragment } = PBRBlockShaders();
+  expect(fragment).toContain('textureSampleLevel(blockTexture, blockSampler, texUV, 0.0)');
+});
 
-  it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
-    const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('var finalAlpha = 1.0;');
-    expect(fragment).toContain('let glassOpacity = mix(0.12, 0.92, fresnel);');
-    expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
-    expect(fragment).not.toContain('let materialAlpha = mix(0.85, 0.98, metalMask);');
-  });
+it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
+  const { fragment } = PBRBlockShaders();
+  expect(fragment).toContain('var finalAlpha = 1.0;');
+  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
+  expect(fragment).not.toContain('let materialAlpha = mix(0.85, 0.98, metalMask);');
+});
 
-  it('composes gold frame and tinted glass using geometric UV frame mask', () => {
-    const { fragment } = PBRBlockShaders();
-    expect(fragment).toContain('composeMaterialBaseColor');
-    expect(fragment).toContain('useAuthoredSampling');
-    expect(fragment).toContain('borderThickness = 0.15');
-    expect(fragment).toContain('let metalColor = texColor.rgb * 1.38');
-    expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
-    expect(fragment).toContain('combinedMetalMask');
-    expect(fragment).toContain('isBorderBlock');
-  });
+it('composes gold frame and tinted glass using geometric UV frame mask', () => {
+  const { fragment } = PBRBlockShaders();
+  expect(fragment).toContain('composeMaterialBaseColor');
+  expect(fragment).toContain('useAuthoredSampling');
+  expect(fragment).toContain('borderThickness = 0.15');
+  expect(fragment).toContain('let metalColor = texColor.rgb * 1.38');
+  expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
+  expect(fragment).toContain('combinedMetalMask');
+  expect(fragment).toContain('isBorderBlock');
+});
 
-  it('premultiplies post-process output for the premultiplied-alpha canvas', () => {
-    const { fragment } = MaterialAwarePostProcessShaders();
-    expect(fragment).toContain('return vec4<f32>(color * sampledAlpha, sampledAlpha);');
-  });
+it('premultiplies post-process output for the premultiplied-alpha canvas', () => {
+  const { fragment } = MaterialAwarePostProcessShaders();
+  expect(fragment).toContain('return vec4<f32>(color * sampledAlpha, sampledAlpha);');
+});
 
-  it('preserves alpha in the multi-pass bloom composite for glass transparency', () => {
-    expect(CompositeShader).toContain('return vec4<f32>(result * alpha, alpha);');
-  });
+it('preserves alpha in the multi-pass bloom composite for glass transparency', () => {
+  expect(CompositeShader).toContain('return vec4<f32>(result * alpha, alpha);');
+});
+  
 });

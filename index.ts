@@ -56,18 +56,6 @@ uiContainer.innerHTML = `
             <canvas id="next-piece-canvas" width="120" height="120"></canvas>
           </div>
 
-           <div class="theme-buttons panel-box">
-            <p class="panel-label">THEME</p>
-            <button id="pastel-theme">Pastel</button>
-            <button id="neon-theme">Neon</button>
-            <button id="futuristic-theme">Future</button>
-            <button id="gold-theme">Gold</button>
-            <button id="glass-theme">Glass</button>
-            <button id="lava-theme">Lava</button>
-            <button id="image-sampled-theme">Image Sampled</button>
-            <!-- Gold/Glass injected here so they are guaranteed to exist in the UI container -->
-          </div>
-
           <div class="control-buttons panel-box">
             <button id="start-button">START</button>
             <button id="pause-button">PAUSE</button>
@@ -192,24 +180,7 @@ uiContainer.innerHTML = `
 
   const savedUseVideo = localStorage.getItem('tetris_use_reactive_video') !== 'false';
 
-  const themeClassMap: Record<string, string> = {
-    pastel: 'pastel-theme',
-    neon: 'neon-theme',
-    future: 'futuristic-theme',
-    gold: 'gold-theme',
-    glass: 'glass-theme',
-    lava: 'lava-theme',
-    imageSampled: 'image-sampled-theme',
-    premium: 'neon-theme',
-    cyber: 'neon-theme',
-    chrome: 'neon-theme',
-  };
-  const savedThemeName = localStorage.getItem('tetris_theme_name') || 'premium';
-  const savedThemeClass = localStorage.getItem('tetris_theme_class')
-    || themeClassMap[savedThemeName]
-    || 'neon-theme';
-
-  // Premium visuals (supersampling, bloom, reactive video) — does not override theme/material
+  // Premium visuals (supersampling, bloom, reactive video)
   view.setPremiumVisualsPreset({
     renderScale: 1.5,
     enhancedPostProcess: true,
@@ -246,43 +217,6 @@ uiContainer.innerHTML = `
   if (highScoreElement && highestScore) {
     highScoreElement.textContent = highestScore.score.toLocaleString();
   }
-
-  function applyTheme(className: string, themeName: string) {
-    document.body.className = className;
-    view.setTheme(themeName as any);
-    // Also update material uniforms / PBR block rendering for Gold & Glass themes
-    view.setMaterialTheme?.(themeName, 1);
-    localStorage.setItem('tetris_theme_class', className);
-    localStorage.setItem('tetris_theme_name', themeName);
-  }
-
-  document.getElementById('pastel-theme')!.addEventListener('click', () => {
-    applyTheme('pastel-theme', 'pastel');
-  });
-
-  document.getElementById('neon-theme')!.addEventListener('click', () => {
-    applyTheme('neon-theme', 'neon');
-  });
-
-  document.getElementById('futuristic-theme')!.addEventListener('click', () => {
-    applyTheme('futuristic-theme', 'future'); // Assuming we add 'future' to View
-  });
-
-  document.getElementById('gold-theme')!.addEventListener('click', () => {
-    applyTheme('gold-theme', 'gold');
-  });
-
-  document.getElementById('glass-theme')!.addEventListener('click', () => {
-    applyTheme('glass-theme', 'glass');
-  });
-
-  document.getElementById('lava-theme')!.addEventListener('click', () => {
-    applyTheme('lava-theme', 'lava');
-  });
-
-  document.getElementById('image-sampled-theme')!.addEventListener('click', () => {
-    applyTheme('image-sampled-theme', 'imageSampled');
-  });
 
   document.getElementById('start-button')!.addEventListener('click', () => {
       controller.play();
@@ -415,6 +349,10 @@ uiContainer.innerHTML = `
   window.controller = controller;
   window.soundManager = soundManager;
 
-  // Apply saved theme (premium by default — gold frame + stained glass from block.png)
-  applyTheme(savedThemeClass, savedThemeName);
+  // Image-sampled blocks from block.png (gold frame + stained-glass crystal)
+  document.body.className = 'image-sampled-theme';
+  view.setTheme('imageSampled');
+  view.setMaterialTheme?.('imageSampled', 1);
+  localStorage.setItem('tetris_theme_class', 'image-sampled-theme');
+  localStorage.setItem('tetris_theme_name', 'imageSampled');
 })();

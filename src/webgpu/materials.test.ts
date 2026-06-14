@@ -1,37 +1,32 @@
 /**
  * Material System Test Suite
- * Run this to verify all premium materials work correctly
  */
 
 import { describe, it, expect } from 'vitest';
 import { Materials, MaterialThemes, getPieceMaterial } from './materials.js';
 
 describe('Material System', () => {
-  it('should have all materials with valid properties', () => {
-    Object.entries(Materials).forEach(([name, mat]) => {
-      expect(mat.metallic).toBeGreaterThanOrEqual(0);
-      expect(mat.metallic).toBeLessThanOrEqual(1);
-      expect(mat.roughness).toBeGreaterThanOrEqual(0);
-      expect(mat.roughness).toBeLessThanOrEqual(1);
-      expect(mat.ior).toBeGreaterThanOrEqual(0);
-      expect(mat.ior).toBeLessThanOrEqual(3);
-      expect(mat.name).toBeDefined();
-    });
+  it('should have imageSampled material with valid properties', () => {
+    const mat = Materials.imageSampled;
+    expect(mat.metallic).toBeGreaterThanOrEqual(0);
+    expect(mat.metallic).toBeLessThanOrEqual(1);
+    expect(mat.roughness).toBeGreaterThanOrEqual(0);
+    expect(mat.roughness).toBeLessThanOrEqual(1);
+    expect(mat.ior).toBeGreaterThanOrEqual(0);
+    expect(mat.ior).toBeLessThanOrEqual(3);
+    expect(mat.name).toBe('Image Sampled');
   });
 
-  it('should have theme mappings for all themes', () => {
-    expect(Object.keys(MaterialThemes).length).toBeGreaterThan(0);
-    Object.entries(MaterialThemes).forEach(([theme, mats]) => {
-      expect(mats.length).toBe(8); // 7 pieces + border
-    });
+  it('should expose only the imageSampled theme mapping', () => {
+    expect(Object.keys(MaterialThemes)).toEqual(['imageSampled']);
+    expect(MaterialThemes.imageSampled.length).toBe(8);
   });
 
-  it('should return correct materials for piece lookups', () => {
-    const classic = getPieceMaterial('classic', 1);
-    expect(classic).toBeDefined();
-    expect(classic.name).toBe('Classic');
-    
-    const gold = getPieceMaterial('gold', 1);
-    expect(gold.name).toBe('Gold');
+  it('should return imageSampled for all piece lookups', () => {
+    for (let pieceType = 0; pieceType < 8; pieceType++) {
+      const mat = getPieceMaterial('imageSampled', pieceType);
+      expect(mat).toBe(Materials.imageSampled);
+    }
+    expect(getPieceMaterial('gold', 1)).toBe(Materials.imageSampled);
   });
 });
