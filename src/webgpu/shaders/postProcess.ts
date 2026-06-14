@@ -111,8 +111,9 @@ export const PostProcessShaders = () => {
                     finalUV -= dir * distortion;
 
                     // Add chromatic aberration at the edge of the shockwave
-                    // NEON BRICKLAYER: Multiplied shockwave aberration by 2.5 for extreme "Juice" on hard drops
-                    shockwaveAberration = params.z * 2.5 * (1.0 - abs(diff)/width) * (1.0 - time);
+                    // NEON BRICKLAYER: Increased shockwave intensity + chromatic aberration on hard drops
+                    // for maximum "drop impact" feel (per Graphics & Game Feel requirements)
+                    shockwaveAberration = params.z * 3.0 * (1.0 - abs(diff)/width) * (1.0 - time);
                 }
 
                 // Second ring (Echo) - NEON BRICKLAYER
@@ -314,10 +315,11 @@ export const PostProcessShaders = () => {
             }
 
             if (!inBounds) {
-                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
             }
 
-            return vec4<f32>(color, a);
+            // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
+            return vec4<f32>(color * a, a);
         }
     `;
 

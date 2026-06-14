@@ -9,6 +9,7 @@ import {
   resetBlockTextureConfig,
   getAtlasSamplingParams,
   createBlockTextureSamplerDescriptor,
+  createBlockTextureBindingView,
   DEFAULT_BLOCK_TEXTURE_CONFIG,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
@@ -67,6 +68,18 @@ describe('block texture helpers', () => {
     expect(getTextureMipLevelCount(2816, 1536)).toBe(12);
   });
 
+  it('creates a mip-0-only binding view for block texture sampling', () => {
+    const view = createBlockTextureBindingView({
+      createView: (desc: GPUTextureViewDescriptor) => desc,
+    } as unknown as GPUTexture);
+    expect(view).toEqual({
+      format: 'rgba8unorm',
+      dimension: '2d',
+      baseMipLevel: 0,
+      mipLevelCount: 1,
+    });
+  });
+
   it('creates a sharp clamped sampler descriptor for authored block images', () => {
     expect(createBlockTextureSamplerDescriptor()).toEqual({
       magFilter: 'linear',
@@ -112,7 +125,7 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBeCloseTo(0.193, 3);
     expect(config.subregionWidth).toBeCloseTo(0.247, 3);
     expect(config.subregionHeight).toBeCloseTo(0.446, 3);
-    expect(config.materialDetectionMode).toBe('warmth');
+    expect(config.materialDetectionMode).toBe('color_signal');
   });
 
   it('has correct single tile configuration preset', () => {

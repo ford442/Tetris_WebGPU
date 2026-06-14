@@ -409,8 +409,10 @@ fn vsMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = input.uv;
 
-  // Sample original color
-  let original = textureSample(originalTexture, originalSampler, uv).rgb;
+  // Sample original color + alpha (glass blocks need alpha for video portal reveal)
+  let originalSample = textureSample(originalTexture, originalSampler, uv);
+  let original = originalSample.rgb;
+  let alpha = originalSample.a;
 
   // Sample bloom (already upsampled to full res)
   let bloom = textureSample(bloomTexture, bloomSampler, uv).rgb;
@@ -424,6 +426,7 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   // preserving relative brightness ratios without harsh clipping.
   result = result / (result + vec3<f32>(1.0));
 
-  return vec4<f32>(result, 1.0);
+  // Canvas uses alphaMode: 'premultiplied' — preserve glass transparency.
+  return vec4<f32>(result * alpha, alpha);
 }
 `;

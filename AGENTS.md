@@ -229,3 +229,35 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
 
 5. **Background video not visible**  
    Check that the WebGPU canvas clear color has `alpha: 0.0` and `alphaMode: 'premultiplied'`. Any opaque clear will hide the video portal.
+
+## Cursor Cloud specific instructions
+
+This is a **client-only SPA** — no Docker, database, or backend services. One process covers local development.
+
+### Services
+
+| Service | Command | Notes |
+|---------|---------|-------|
+| Vite dev server | `npm run dev -- --host 0.0.0.0 --port 5173` | Serves the app at `http://localhost:5173`. Use tmux for long-running dev. |
+| WebGPU browser | Google Chrome (preinstalled on Cloud VMs) | Required for visual/manual E2E testing. `navigator.gpu` must be available. |
+
+WASM (`public/release.wasm`) is a **build artifact**, not a daemon. Vite does not compile AssemblyScript; run `npm run asbuild:release` after `/assembly` changes (the VM update script handles this on startup).
+
+### Verify the environment
+
+```bash
+npm test              # 57 Vitest tests (pretest rebuilds WASM)
+npm run build:all     # Production build to /dist
+```
+
+There is **no** `npm run lint` script in this repo.
+
+### Browser / WebGPU on Cloud VMs
+
+- Chrome 148+ on the VM supports WebGPU. If initialization fails, launch with `--enable-unsafe-webgpu --enable-features=WebGPU`.
+- **AudioContext** requires a user gesture (click START or the canvas) before sound plays; console warnings before that are expected.
+- Manual gameplay testing needs keyboard focus on the game canvas after starting.
+
+### Production preview
+
+`npm run build:all` then `npm run preview` serves `/dist` with base path `/tetris-webgpu/` (see `vite.config.ts`).

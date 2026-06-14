@@ -12,6 +12,7 @@ import {
   borderWorldY,
 } from './renderMetrics.js';
 import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
+import { createBlockTextureBindingView } from './blockTexture.js';
 
 /**
  * Render the playfield blocks, building uniform batches for all visible blocks.
@@ -289,7 +290,7 @@ export function renderPlayfieldBorder(
         entries: [
           { binding: 0, resource: { buffer: vertexUniformBuffer, offset: offset_ARRAY, size: 208 } },
           { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
-          { binding: 2, resource: blockTexture.createView({ format: 'rgba8unorm', dimension: '2d', baseMipLevel: 0, mipLevelCount: blockTexture.mipLevelCount }) },
+          { binding: 2, resource: createBlockTextureBindingView(blockTexture) },
           { binding: 3, resource: blockSampler },
         ],
       });

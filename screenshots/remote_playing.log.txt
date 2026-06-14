@@ -1,0 +1,2 @@
+[console] WASM Physics Core Initialized (memory=65536 bytes) from ./release.wasm
+[console] Texture loaded successfully

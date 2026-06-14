@@ -115,9 +115,9 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionWidth: 0.247,
   subregionHeight: 0.446,
   subregionInset: 0.04,
-  materialDetectionMode: 'warmth',
-  metalThresholdLow: 0.05,
-  metalThresholdHigh: 0.20,
+  materialDetectionMode: 'color_signal',
+  metalThresholdLow: 0.80,
+  metalThresholdHigh: 1.20,
   useProceduralFallback: true,
 };
 
@@ -192,6 +192,16 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
     lodMaxClamp: BLOCK_TEXTURE_MAX_LOD,
     maxAnisotropy: 16,
   };
+}
+
+/** Bind view for authored block.png — mip 0 only (shader uses textureSampleLevel(..., 0.0)). */
+export function createBlockTextureBindingView(texture: GPUTexture): GPUTextureView {
+  return texture.createView({
+    format: 'rgba8unorm',
+    dimension: '2d',
+    baseMipLevel: 0,
+    mipLevelCount: 1,
+  });
 }
 
 export function getProceduralBlockTextureGradientStops(): GradientStop[] {

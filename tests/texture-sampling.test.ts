@@ -45,10 +45,10 @@ describe('texture sampling WGSL generation', () => {
       expect(code).toContain('fn composeMaterialBaseColor');
     });
 
-    it('uses warmth-based gold/crystal separation by default', () => {
+    it('uses color-signal-based gold/crystal separation by default', () => {
       const code = getSimpleTextureSamplingWGSL();
-      expect(code).toContain('let warmth = texColor.r - texColor.b');
-      expect(code).toContain('let warmthSignal = smoothstep(0.05, 0.2, warmth)');
+      expect(code).toContain('let goldSignal = texColor.r + texColor.g - texColor.b * 0.5');
+      expect(code).toContain('let metalMask = smoothstep(0.8, 1.2, goldSignal)');
     });
   });
 
