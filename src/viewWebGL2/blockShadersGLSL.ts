@@ -110,19 +110,7 @@ void main() {
 
   float edgeFresnel = 1.0 - NdotV;
   float fresnelSq = edgeFresnel * edgeFresnel;
-  float glassMin = 0.38;
-  float glassMax = 0.78;
-  if (u_materialType == 1) {
-    glassMin = 0.72;
-    glassMax = 0.96;
-  } else if (u_materialType == 3) {
-    glassMin = 0.28;
-    glassMax = 0.68;
-  } else if (u_materialType == 2) {
-    glassMin = 0.68;
-    glassMax = 0.94;
-  }
-  float glassOpacity = mix(glassMin, glassMax, fresnelSq);
+  float glassOpacity = mix(0.82, 0.97, fresnelSq);
   float alpha = mix(1.0, glassOpacity, glassMask) * vColor.a;
 
   outColor = vec4(clamp(finalColor, 0.0, 1.0), alpha);

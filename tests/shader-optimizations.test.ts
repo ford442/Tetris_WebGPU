@@ -65,7 +65,7 @@ it('composes gold frame and tinted glass using geometric UV frame mask', () => {
   expect(fragment).toContain('useAuthoredSampling');
   expect(fragment).toContain('borderThickness = 0.15');
   expect(fragment).toContain('let metalColor = texColor.rgb * 1.38');
-  expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
+    expect(fragment).toContain('let glassOpacity = mix(0.82, 0.97, fresnelSq)');
   expect(fragment).toContain('combinedMetalMask');
   expect(fragment).toContain('isBorderBlock');
 });

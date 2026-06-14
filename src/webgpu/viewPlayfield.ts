@@ -65,7 +65,7 @@ export function renderPlayfieldBlocks(
 
       let value = playfield[row][colom];
       let colorBlockindex = Math.abs(value);
-      let alpha = value < 0 ? 0.3 : 0.9;
+      let alpha = value < 0 ? 0.35 : 1.0;
       let color = currentTheme[colorBlockindex] || currentTheme[0];
 
       _f32_4[0] = color[0]; _f32_4[1] = color[1]; _f32_4[2] = color[2]; _f32_4[3] = alpha;
