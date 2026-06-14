@@ -112,7 +112,7 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBeCloseTo(0.193, 3);
     expect(config.subregionWidth).toBeCloseTo(0.247, 3);
     expect(config.subregionHeight).toBeCloseTo(0.446, 3);
-    expect(config.materialDetectionMode).toBe('warmth');
+    expect(config.materialDetectionMode).toBe('color_signal');
   });
 
   it('has correct single tile configuration preset', () => {

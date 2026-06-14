@@ -115,9 +115,9 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionWidth: 0.247,
   subregionHeight: 0.446,
   subregionInset: 0.04,
-  materialDetectionMode: 'warmth',
-  metalThresholdLow: 0.05,
-  metalThresholdHigh: 0.20,
+  materialDetectionMode: 'color_signal',
+  metalThresholdLow: 0.80,
+  metalThresholdHigh: 1.20,
   useProceduralFallback: true,
 };
 
