@@ -189,11 +189,13 @@ export class ScoringSystem {
     // Apply B2B
     let points = baseScore * b2bMultiplier;
 
-    // Combo Bonus
+    // Combo Multiplier (new)
+    const comboMultiplier = 1 + (this.combo * 0.3);  // 1.0 → 1.3 → 1.6 → etc.
+    points = Math.floor(points * comboMultiplier);
+
+    // Combo Bonus text (keep for floating score display)
     if (this.combo > 0) {
-        const comboBonus = 50 * this.combo * level;
-        points += comboBonus;
-        text += ` + COMBO x${this.combo}`;
+        text += ` + COMBO x${this.combo} (×${comboMultiplier.toFixed(1)})`;
     }
 
     // All Clear Bonus
