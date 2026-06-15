@@ -9,7 +9,7 @@ describe('buildPlayfieldInstances', () => {
     playfield[5][4] = 2;
     const instances = buildPlayfieldInstances(
       { playfield, activePiece: null },
-      themes.neon,
+      themes.imageSampled,
       0,
       0,
     );

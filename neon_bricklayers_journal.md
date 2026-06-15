@@ -31,4 +31,5 @@
 - "Implemented a massive 'Black Hole' gravitational lensing distortion and cyan event horizon glow in the post-processing pipeline, triggered on Tetris clears, causing the entire board to suck inward into a singularity!"
 - "Reduced MAX_LOCK_RESETS to 15 for tighter Infinity feel."
 - "Enhanced hard-drop shockwave distortion + aberration (WGSL) for juicy impact."
+- "Added subtle chromatic aberration on regular piece locks to ensure every placement feels tactile and weighty, not just hard drops."
 - "Conducted a full pass of the WebGPU rendering and game mechanics. Verified that the engine is fully 'juiced'. The shockwave distortion on Hard Drops, Fresnel Rim Lighting, Bloom, Chromatic Aberration, and Level-reactive background shaders are all active and performing beautifully. Game feel is perfectly tuned with DAS at 100ms and generous Infinity lock delay."
