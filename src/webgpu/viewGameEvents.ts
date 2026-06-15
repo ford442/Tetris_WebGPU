@@ -237,6 +237,8 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
 export function onLock(view: any, isTSpin: boolean = false): void {
   view.visualEffects.triggerLock(0.3);
   view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
+  // JUICE: Chromatic Aberration on regular locks to make every placement tactile
+  view.visualEffects.triggerAberration(isTSpin ? 1.0 : 0.5);
 
   if (view.state?.activePiece) {
     const { x, y } = view.state.activePiece;
