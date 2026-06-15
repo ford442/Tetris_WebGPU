@@ -15,13 +15,54 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 
   if (text.includes("TETRIS")) el.classList.add("tetris");
   if (text.includes("T-SPIN")) el.classList.add("tspin");
-  if (text.includes("COMBO")) el.classList.add("combo");
+
+  if (subText === "OVERDRIVE") {
+      el.classList.add("combo");
+
+      const match = text.match(/COMBO x(\d+)/);
+      let comboCount = match && match[1] ? parseInt(match[1]) : 5;
+
+      if (comboCount >= 2) {
+          const scale = 1 + Math.min(comboCount * 0.15, 2.0);
+          el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+          el.style.color = comboCount >= 5 ? '#ff00ff' : '#00ffff';
+          el.style.textShadow = `0 0 10px #fff, 0 0 20px ${el.style.color}, 0 0 30px ${el.style.color}`;
+          el.style.transition = 'transform 0.1s ease-out, top 1.8s ease-in, opacity 1.8s ease-in';
+
+          // Force reflow
+          void el.offsetWidth;
+
+          setTimeout(() => {
+              el.style.top = '10%'; // Rise up faster
+              el.style.opacity = '0';
+          }, 50);
+      }
+  } else if (text.includes("COMBO")) {
+      el.classList.add("combo");
+  }
 
   container.appendChild(el);
 
   setTimeout(() => {
     el.remove();
   }, 2000);
+}
+
+export function triggerComboOverdrive(view: any, combo: number): void {
+  view.visualEffects.triggerNeonBloomFlash(2.5 + combo * 0.3);
+  view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
+}
+
+export function triggerEnergyWave(view: any, combo: number): void {
+  view.visualEffects.triggerWarpSurge(4.0 + combo * 1.0);
+  view.visualEffects.triggerAberration(1.5 + combo * 0.3);
+  view.visualEffects.triggerHardDropAberrationPulse(1.5);
+}
+
+export function showFloatingComboText(view: any, combo: number): void {
+  // Use existing floating text system but force higher intensity styling via JS injected classes/styles
+  // The system relies on view.showFloatingText which passes to showFloatingText
+  view.showFloatingText(`COMBO x${combo}`, "OVERDRIVE");
 }
 
 export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
@@ -33,6 +74,25 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
 
   const strength = Math.min(base + lineBonus + specialBonus + comboBonus, 0.95);
   view.visualEffects.triggerLineClearFlash(strength);
+
+  // New Combo Celebration System
+  if (combo >= 2) {
+    showFloatingComboText(view, combo);
+  }
+
+  if (combo >= 3) {
+    view.visualEffects.triggerShockwave([0.5, 0.5], 0.4 + combo * 0.05, 0.3 + combo * 0.1, 0.2 + combo * 0.05, 4.0 + combo * 0.5);
+    view.visualEffects.triggerShake(0.8 + 0.4 * combo, 0.6);
+  }
+
+  if (combo >= 4) {
+    triggerEnergyWave(view, combo);
+  }
+
+  if (combo >= 5 || isAllClear) {
+    triggerComboOverdrive(view, combo);
+  }
+
 
   const camY = -20.0;
   const camZ = 75.0;
