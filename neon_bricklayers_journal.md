@@ -33,3 +33,4 @@
 - "Enhanced hard-drop shockwave distortion + aberration (WGSL) for juicy impact."
 - "Added subtle chromatic aberration on regular piece locks to ensure every placement feels tactile and weighty, not just hard drops."
 - "Conducted a full pass of the WebGPU rendering and game mechanics. Verified that the engine is fully 'juiced'. The shockwave distortion on Hard Drops, Fresnel Rim Lighting, Bloom, Chromatic Aberration, and Level-reactive background shaders are all active and performing beautifully. Game feel is perfectly tuned with DAS at 100ms and generous Infinity lock delay."
+- "Boosted particle brightness in particle shader (8.0 base, 15.0 core) to make explosions feel even more incandescent and impactful."
