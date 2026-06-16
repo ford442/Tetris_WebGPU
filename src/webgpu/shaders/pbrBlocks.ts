@@ -211,32 +211,66 @@ export const PBRBlockShaders = () => {
             let textureMetalMask = textureMasks.x;
             let textureGlassMask = textureMasks.y;
 
-            // Geometric frame mask — matches the reference go.1ink.us build.
-            // Gold frame lives on the UV perimeter; stained-glass window is the interior.
-            // Per-pixel warmth detection is unreliable on block.png edge pixels.
+            // Outer ring force in UV space (keeps the authored frame structure solid).
+            // The bulk of metal/glass separation now comes from baked texColor.a.
             let distX = min(vUV.x, 1.0 - vUV.x);
             let distY = min(vUV.y, 1.0 - vUV.y);
             let distEdge = min(distX, distY);
-            let borderThickness = 0.15;
-            let glassMaskGeo = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
-            let metalMaskGeo = 1.0 - glassMaskGeo;
+            let borderThickness = 0.14;
+            let geoGlassMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
+            let geoMetalForce = 1.0 - geoGlassMask;
 
             let textureMix = fUniforms.textureMix;
             // Border frame always samples block.png gold/crystal detail at full strength
             let isBorderBlock = vWorldPos.x < -0.8 || vWorldPos.x > 21.0
                              || vWorldPos.y > 1.5 || vWorldPos.y < -44.5;
-            let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock));
-            let useAuthoredSampling = effectiveTextureMix > 0.45;
+            // Only the extracted authored tile has baked alpha mask semantics.
+            // Procedural/heuristic fallback should avoid treating texColor.a as a mask.
+            let authoredLoaded = textureMix > 0.8;
+            let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock && authoredLoaded));
+            let useAuthoredSampling = effectiveTextureMix > 0.8;
 
-            // Blend geometric frame with texture warmth (gold hinges read from block.png pixels).
-            let combinedMetalMask = clamp(
-                max(metalMaskGeo, textureMetalMask * 0.92),
-                0.0, 1.0
-            );
-            let combinedGlassMask = 1.0 - combinedMetalMask;
+            // Baked mask: extractBlockTileFromImage stores a feathered metal mask into texColor.a.
+            // - metalSoft: used for shading detail.
+            // - metalOpaque: hard-thresholded for opacity to prevent halos / partial metal.
+            let metalSoftBaked0 = clamp(texColor.a, 0.0, 1.0);
 
-            let metalMask = select(textureMetalMask, combinedMetalMask, useAuthoredSampling);
-            let glassMask = select(textureGlassMask, combinedGlassMask, useAuthoredSampling);
+            // Mask sharpen: max-pool a small neighborhood around texColor.a at mip 0.
+            // This prevents fractional boundary pixels from creating halo transparency.
+            var metalSoftBaked = metalSoftBaked0;
+            if (useAuthoredSampling) {
+                let dims = vec2<f32>(textureDimensions(blockTexture, 0));
+                let texel = 1.0 / max(dims, vec2<f32>(1.0));
+                let r = texel * 1.0;
+
+                let a0 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x, -r.y), 0.0).a;
+                let a1 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0, -r.y), 0.0).a;
+                let a2 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x, -r.y), 0.0).a;
+                let a3 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x,  0.0), 0.0).a;
+                let a4 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  0.0), 0.0).a;
+                let a5 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  0.0), 0.0).a;
+                let a6 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x,  r.y), 0.0).a;
+                let a7 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  r.y), 0.0).a;
+                let a8 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  r.y), 0.0).a;
+
+                metalSoftBaked = max(
+                    metalSoftBaked0,
+                    max(a0, max(a1, max(a2, max(a3, max(a4, max(a5, max(a6, max(a7, a8))))))))
+                );
+            }
+
+            let metalOpaqueBaked = smoothstep(0.45, 0.65, metalSoftBaked);
+
+            let metalMaskBakedSoft = max(metalSoftBaked, geoMetalForce);
+            let metalMaskBakedOpaque = max(metalOpaqueBaked, geoMetalForce);
+            let glassMaskBakedSoft = 1.0 - metalMaskBakedSoft;
+            let glassMaskAlpha = 1.0 - metalMaskBakedOpaque;
+
+            // Use baked alpha-derived masks only when the authored extracted tile
+            // is active; otherwise fall back to runtime RGB heuristic masks.
+            let metalMask = select(textureMetalMask, metalMaskBakedSoft, useAuthoredSampling);
+            let metalMaskForAlpha = select(textureMetalMask, metalMaskBakedOpaque, useAuthoredSampling);
+            let glassMask = select(textureGlassMask, glassMaskBakedSoft, useAuthoredSampling);
 
             let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
             let crystalBright = smoothstep(0.15, 0.90, luma);
@@ -245,7 +279,9 @@ export const PBRBlockShaders = () => {
             let glassColor = texColor.rgb * (0.70 + crystalBright * 0.30)
                            + vColor.rgb * 0.22 * crystalBright
                            + vec3f(crystalHi * 0.40);
-            let authoredBase = mix(glassColor, metalColor, combinedMetalMask);
+            // Authored block.png blend: glass interior vs metal frame, driven by baked mask.
+            // (When not using authored sampling, this value is unused.)
+            let authoredBase = mix(glassColor, metalColor, metalMaskBakedSoft);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
@@ -253,6 +289,99 @@ export const PBRBlockShaders = () => {
                 baseColor = authoredBase;
             } else {
                 baseColor = mix(vColor.rgb, textureBase, clamp(effectiveTextureMix, 0.0, 1.0));
+            }
+
+            // === GHOST PIECE - "holographic projection of the real textured block" ===
+            // Must early-return before heavy PBR/lighting to keep ghost rendering cheap.
+            let isGhost = vColor.w < 0.4;
+            if (isGhost) {
+                // Reuse the same metal/glass separation as the authored path.
+                let ghostMetal = metalMask; // shape/hinge fidelity when baked alpha is active
+                let ghostGlass = glassMask;
+
+                // Desaturated + brighter + lower-contrast versions of the same split.
+                let lumaMetal = dot(metalColor, vec3f(0.299, 0.587, 0.114));
+                let ghostMetalColor = mix(vec3f(lumaMetal), metalColor, 0.35) * 1.35;
+                ghostMetalColor = mix(vec3f(dot(ghostMetalColor, vec3f(0.333))), ghostMetalColor, 0.85);
+
+                let lumaGlass = dot(glassColor, vec3f(0.299, 0.587, 0.114));
+                let ghostGlassColor = mix(vec3f(lumaGlass), glassColor, 0.25) * 1.18;
+                ghostGlassColor = mix(vec3f(dot(ghostGlassColor, vec3f(0.333))), ghostGlassColor, 0.82);
+
+                // Geometry-driven wireframe respects hinges via ghostMetal.
+                let scanY = fract(vUV.y * 50.0 - time * 15.0);
+                let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
+                let edgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
+                let wire = smoothstep(0.9, 0.98, edgeDist);
+                let innerWire = smoothstep(0.75, 0.85, edgeDist) * 0.4;
+                let beam = smoothstep(0.7, 0.0, abs(vUV.x - 0.5)) * 1.2;
+
+                // Breathing + tension-reactive variation.
+                let lockPercent = fUniforms.lockPercent;
+                let tension = smoothstep(0.25, 1.0, lockPercent);
+                let pulseFreq = 12.0 + tension * 35.0;
+                let baseAlpha = 0.55 + 0.35 * sin(time * pulseFreq);
+                let breath = sin(time * 2.5) * 0.1 + 0.9;
+
+                // Glass interior should be more transparent than the metal frame.
+                // Premultiplied-alpha convention: RGB must be multiplied by outAlpha.
+                let maskAlphaMul = mix(0.42, 1.0, ghostMetal);
+                let outAlpha = clamp(baseAlpha * breath * maskAlphaMul * (0.85 + scan * 0.55), 0.0, 1.0);
+
+                // Extra hologram color overlays.
+                let fresnel = 1.0 - NdotV;
+                let fresnel3 = fresnel * fresnel * fresnel;
+
+                // Multi-overlay composite (scanlines + glitch + breathing glow).
+                // Keep scanlines/breathing/glitch/tension as overlays instead of replacing base texture.
+                var ghostFinal = vec3f(0.0);
+
+                // Metal wire + glass see-through body.
+                ghostFinal += ghostMetalColor * (wire * 7.0 + innerWire * 4.0) * ghostMetal;
+                ghostFinal += ghostGlassColor * (scan * 1.6 + beam * 0.45) * ghostGlass;
+
+                // Shared scanline treatment across the face.
+                ghostFinal += ghostMetalColor * scan * 2.2 * ghostMetal;
+                ghostFinal += ghostGlassColor * scan * 1.2 * ghostGlass;
+
+                // Cyan rim for holographic projection feel.
+                let cyanRim = vec3f(0.4, 0.85, 1.0) * fresnel3 * 4.0;
+                ghostFinal += cyanRim * (0.6 + 0.7 * ghostMetal);
+
+                // Holographic scan drift.
+                let scanEffect = sin(vUV.y * 70.0 + time * 10.0) * 0.12;
+                let horizontalScan = sin(vUV.x * 40.0 - time * 6.0) * 0.08;
+                ghostFinal += vec3f(0.2, 0.8, 1.0) * (scanEffect + horizontalScan) * 5.0;
+
+                // Grid + glitch.
+                let gridX = step(0.92, fract(vUV.x * 6.0));
+                let gridY = step(0.92, fract(vUV.y * 6.0));
+                let gridPattern = max(gridX, gridY) * 0.6;
+                ghostFinal += vec3f(gridPattern) * mix(ghostGlassColor, ghostMetalColor, ghostMetal) * 0.6;
+
+                let glitchAmp = 0.04 + tension * 0.12;
+                let ghostGlitch = sin(vUV.y * 60.0 + time * (25.0 + tension * 40.0)) * glitchAmp;
+                if (tension > 0.4 && fract(time * 12.0) > 0.85) {
+                    ghostFinal += vec3f(ghostGlitch + 0.15);
+                } else {
+                    ghostFinal += vec3f(ghostGlitch);
+                }
+
+                // Digital sparkle.
+                let sparkleNoise = fract(sin(dot(vUV, vec2f(12.9898, 78.233)) + time * 3.0) * 43758.5453);
+                if (sparkleNoise > 0.96) {
+                    ghostFinal += vec3f(2.0);
+                }
+
+                // Tension warning overlay.
+                if (tension > 0.6) {
+                    let warnOverlay = vec3f(1.0, 0.2, 0.0) * tension * 0.3;
+                    ghostFinal += warnOverlay;
+                }
+
+                // Premultiply for alpha blend (canvas alphaMode='premultiplied').
+                ghostFinal *= outAlpha;
+                return vec4f(ghostFinal, outAlpha);
             }
 
             let materialType = fUniforms.materialType;
@@ -305,24 +434,12 @@ export const PBRBlockShaders = () => {
                 // Opaque gold frame; glass window reveals the video portal underneath.
                 // Fresnel keeps edges solid; center stays translucent but readable.
                 let edgeFresnel = 1.0 - NdotV;
-                let fresnelSq = edgeFresnel * edgeFresnel;
-                var glassMin: f32 = 0.38;
-                var glassMax: f32 = 0.78;
-                if (materialType == 1u) {
-                    // Gold — nearly solid blocks with a soft luminous center
-                    glassMin = 0.72;
-                    glassMax = 0.96;
-                } else if (materialType == 3u) {
-                    // Glass — most translucent so the portal reads clearly
-                    glassMin = 0.28;
-                    glassMax = 0.68;
-                } else if (materialType == 2u) {
-                    // Chrome — bright reflective panels
-                    glassMin = 0.68;
-                    glassMax = 0.94;
-                }
-                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
-                finalAlpha = mix(1.0, glassOpacity, combinedGlassMask);
+                let glassMin: f32 = fUniforms.reserved2.x;
+                let glassMax: f32 = fUniforms.reserved2.y;
+                let glassFresnelPower: f32 = max(fUniforms.reserved2.z, 0.001);
+                let glassFactor = pow(edgeFresnel, glassFresnelPower);
+                let glassOpacity = mix(glassMin, glassMax, glassFactor);
+                finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;
@@ -417,17 +534,7 @@ export const PBRBlockShaders = () => {
                 finalColor = mix(finalColor, warnColor, tension * pulse * pulse * 0.3);
             }
 
-            // Ghost piece - use pre-sampled texture (textureSample called outside conditional for uniform control flow)
-            let isGhost = vColor.w < 0.4;
-            if (isGhost) {
-                let scanY = fract(vUV.y * 50.0 - time * 15.0);
-                let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
-                let wire = smoothstep(0.9, 0.98, max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0);
-                let ghostColor = vColor.rgb * 3.0 * (wire + scan * 0.5);
-                let g1 = 1.0 - NdotV;
-                let ghostColorFinal = ghostColor + vec3f(0.4, 0.7, 1.0) * (g1 * g1 * g1) * 1.5;
-                return vec4f(ghostColorFinal, 0.35 + scan * 0.2);
-            }
+            // (ghost handled by early-return above)
 
             // Gentle emissive pulse (main.ts uses 0.25 scale to avoid washout)
             let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
@@ -496,8 +603,12 @@ export const PBRBlockShaders = () => {
             }
 
             finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));
-            let materialAlpha = mix(finalAlpha, 1.0, metalMask);
-            return vec4f(finalColor, materialAlpha * vColor.w);
+            // Use the hard metal mask for opacity so the frame never becomes semi-transparent.
+            let materialAlpha = mix(finalAlpha, 1.0, metalMaskForAlpha);
+            let outAlpha = materialAlpha * vColor.w;
+            // Premultiply RGB for premultiplied-alpha blending.
+            finalColor *= outAlpha;
+            return vec4f(finalColor, outAlpha);
         }
     `;
 

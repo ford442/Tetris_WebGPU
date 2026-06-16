@@ -310,6 +310,16 @@ export default class Controller {
 
     if (!this.isPlaying || this.isPaused) return;
 
+    // Dev/QA: extreme camera for edge-case transparency verification.
+    // Toggle with 'M'. Persists via localStorage and is polled in viewRenderLoop.
+    if (code === 'KeyM') {
+      if (typeof localStorage !== 'undefined') {
+        const cur = localStorage.getItem('tetris_debug_extreme_camera') === '1';
+        localStorage.setItem('tetris_debug_extreme_camera', cur ? '0' : '1');
+      }
+      return;
+    }
+
     // Map key to action
     const action = this.keyMap[code];
     if (!action) return;

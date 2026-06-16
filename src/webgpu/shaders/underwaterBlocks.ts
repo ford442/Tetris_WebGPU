@@ -436,8 +436,10 @@ export const UnderwaterBlockShaders = () => {
                 if (fUniforms.isUnderwater > 0.5) {
                     ghostColor += vec3f(0.2, 0.8, 1.0) * 0.5;
                 }
-                
-                return vec4f(ghostColor, 0.35 + scan * 0.2);
+
+                let ghostAlpha = 0.35 + scan * 0.2;
+                // Premultiplied alpha output (canvas uses alphaMode='premultiplied')
+                return vec4f(ghostColor * ghostAlpha, ghostAlpha);
             }
             
             // Amplified emissive pulse for more visible pulsing effect
@@ -450,7 +452,10 @@ export const UnderwaterBlockShaders = () => {
             
             // Material alpha
             let materialAlpha = mix(0.85, 0.98, anyMetal);
-            return vec4f(finalColor, materialAlpha * vColor.w);
+            let outAlpha = materialAlpha * vColor.w;
+            // Premultiply RGB for premultiplied-alpha blending.
+            finalColor *= outAlpha;
+            return vec4f(finalColor, outAlpha);
         }
     `;
 

@@ -51,17 +51,20 @@ import {
   createBlockTextureSamplerDescriptor,
   createBlockTextureBindingView,
   setBlockTextureConfig,
+  getBlockTextureConfig,
 } from './webgpu/blockTexture.js';
 import {
   BLOCK_TILE_EXTRACT_SCALE,
   extractBlockTileFromImage,
+  loadBlockTextureImage,
 } from './webgpu/blockTextureExtract.js';
 import { UNIFORM_BUFFER_SIZES } from './config/renderConfig.js';
-import { renderLogger, textureLogger, shaderLogger } from './utils/logger.js';
+import { renderLogger, textureLogger, shaderLogger, isDebugEnabled } from './utils/logger.js';
 import {
   initFrostedGlassBackboard as initFrostedGlassImpl,
   updateFrostedGlassUniforms as updateFrostedGlassUniformsImpl,
 } from './webgpu/viewFrostedGlass.js';
+import { DebugTextureShaders } from './webgpu/debug_shaders.js';
 import {
   BlockRenderer,
 } from './webgpu/renderers/blockRenderer.js';
@@ -566,8 +569,22 @@ export default class View {
           };
         });
 
-        const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE);
+        // Authored tile is uploaded as a SINGLE texture, so the shader uses SINGLE mode.
         setBlockTextureConfig({ samplingMode: 'single' });
+
+        const cfg = getBlockTextureConfig();
+        let maskImg: HTMLImageElement | null = null;
+        if (cfg.maskUrl) {
+          const resolvedMaskUrl = resolveBlockTextureUrl(cfg.maskUrl);
+          try {
+            maskImg = await loadBlockTextureImage(resolvedMaskUrl, textureLoadTimeoutMs);
+          } catch (maskErr) {
+            textureLogger.warn('Failed to load block mask; using heuristic mask bake', maskErr);
+            maskImg = null;
+          }
+        }
+
+        const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
 
         const imageBitmap = await createImageBitmap(extracted.canvas, {
           premultiplyAlpha: 'none',
@@ -601,15 +618,44 @@ export default class View {
         }
     }
 
-    const shader = PBRBlockShaders();
+    const shaderMain = PBRBlockShaders();
+    let vertexCode = shaderMain.vertex;
+    let fragmentCode = shaderMain.fragment;
+
+    if (isDebugEnabled()) {
+      // When debugging, visualize baked mask channels instead of full PBR.
+      const dbg = DebugTextureShaders();
+      const modeRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('tetris_debug_mode') : null;
+      const mode = modeRaw ? Number(modeRaw) : 3;
+
+      // Modes:
+      // 0 raw texture
+      // 1 luminance
+      // 2 simple metal/glass heuristic
+      // 3 baked metal alpha (texColor.a)
+      // 4 glass mask (1-texColor.a)
+      // 5 final alpha approx
+      switch (mode) {
+        case 0: fragmentCode = dbg.fragmentRawTexture; break;
+        case 1: fragmentCode = dbg.fragmentLuminance; break;
+        case 2: fragmentCode = dbg.fragmentMask; break;
+        case 3: fragmentCode = dbg.fragmentBakedMetalAlpha; break;
+        case 4: fragmentCode = dbg.fragmentGlassMask; break;
+        case 5: fragmentCode = dbg.fragmentFinalAlphaApprox; break;
+        default: fragmentCode = dbg.fragmentBakedMetalAlpha; break;
+      }
+      vertexCode = dbg.vertex;
+      textureLogger.info('Debug mode: using texture mask visualization', { mode });
+    }
+
     const cubeData = CubeData();
     this.numberOfVertices = cubeData.positions.length / 3;
     this.vertexBuffer = this.CreateGPUBuffer(this.device, cubeData.positions);
     this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
     this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs);
 
-    const vertexModule = this.device.createShaderModule({ code: shader.vertex });
-    const fragmentModule = this.device.createShaderModule({ code: shader.fragment });
+    const vertexModule = this.device.createShaderModule({ code: vertexCode });
+    const fragmentModule = this.device.createShaderModule({ code: fragmentCode });
     
     vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Vertex:', info.messages); });
     fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Fragment:', info.messages); });
@@ -622,7 +668,9 @@ export default class View {
         { arrayStride: 8, attributes: [{ shaderLocation: 2, format: "float32x2", offset: 0 }] },
       ]},
       fragment: { module: fragmentModule, entryPoint: "main", targets: [{ format: presentationFormat, blend: {
-        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+        // Canvas uses alphaMode='premultiplied', so blocks must output premultiplied RGB.
+        // For premultiplied alpha blending: color = src(=already premul) * 1 + dst * (1-srcA)
+        color: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
         alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
       }}]},
       primitive: { topology: "triangle-list" },

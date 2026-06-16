@@ -55,18 +55,24 @@ it('samples block image detail from explicit mip 0 in the PBR shader', () => {
 it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('var finalAlpha = 1.0;');
-  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
-  expect(fragment).not.toContain('let materialAlpha = mix(0.85, 0.98, metalMask);');
+  // Opacity uses hard metal mask derived from baked texColor.a.
+  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMaskForAlpha);');
 });
 
 it('composes gold frame and tinted glass using geometric UV frame mask', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('composeMaterialBaseColor');
   expect(fragment).toContain('useAuthoredSampling');
-  expect(fragment).toContain('borderThickness = 0.15');
+  // Outer ring force is slightly expanded to reduce halo risk.
+  expect(fragment).toContain('borderThickness = 0.14');
   expect(fragment).toContain('let metalColor = texColor.rgb * 1.38');
   expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
-  expect(fragment).toContain('combinedMetalMask');
+  // Baked mask drives opacity (no square UV metal mask blending anymore).
+  expect(fragment).toContain('let metalSoftBaked0 = clamp(texColor.a, 0.0, 1.0);');
+  expect(fragment).toContain('let metalOpaqueBaked = smoothstep(0.45, 0.65, metalSoftBaked);');
+  expect(fragment).toContain('let glassMaskAlpha = 1.0 - metalMaskBakedOpaque');
+  expect(fragment).toContain('finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);');
+  expect(fragment).not.toContain('combinedMetalMask');
   expect(fragment).toContain('isBorderBlock');
 });
 

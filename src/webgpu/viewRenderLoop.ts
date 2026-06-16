@@ -96,6 +96,13 @@ function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt:
   // Camera updates - Ethereal Floating Panel View
   let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
   let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
+
+  // Dev/QA: force extreme oblique camera for transparency + mask debugging.
+  // Toggle: localStorage.tetris_debug_extreme_camera = '1'
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('tetris_debug_extreme_camera') === '1') {
+    camX = 7.0 + Math.sin(time * 0.15) * 0.25; // shift camera to the side
+    camY = BOARD_WORLD_CENTER_Y + 0.7 + Math.cos(time * 0.12) * 0.15; // flatter angle
+  }
   const shake = view.visualEffects.getShakeOffset();
 
   // Smooth Camera Shake Interpolation using exponential decay

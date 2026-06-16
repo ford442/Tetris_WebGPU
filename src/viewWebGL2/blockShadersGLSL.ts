@@ -41,7 +41,9 @@ in vec3 vWorldPos;
 
 uniform vec3 u_lightPos;
 uniform vec3 u_eyePos;
-uniform int u_materialType;
+uniform float u_glassMin;
+uniform float u_glassMax;
+uniform float u_glassFresnelPower;
 uniform sampler2D u_blockTexture;
 
 out vec4 outColor;
@@ -109,20 +111,9 @@ void main() {
   }
 
   float edgeFresnel = 1.0 - NdotV;
-  float fresnelSq = edgeFresnel * edgeFresnel;
-  float glassMin = 0.38;
-  float glassMax = 0.78;
-  if (u_materialType == 1) {
-    glassMin = 0.72;
-    glassMax = 0.96;
-  } else if (u_materialType == 3) {
-    glassMin = 0.28;
-    glassMax = 0.68;
-  } else if (u_materialType == 2) {
-    glassMin = 0.68;
-    glassMax = 0.94;
-  }
-  float glassOpacity = mix(glassMin, glassMax, fresnelSq);
+  float glassFresnelPower = max(u_glassFresnelPower, 0.001);
+  float glassFactor = pow(edgeFresnel, glassFresnelPower);
+  float glassOpacity = mix(u_glassMin, u_glassMax, glassFactor);
   float alpha = mix(1.0, glassOpacity, glassMask) * vColor.a;
 
   outColor = vec4(clamp(finalColor, 0.0, 1.0), alpha);
