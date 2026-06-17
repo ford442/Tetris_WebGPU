@@ -204,8 +204,37 @@ export const BackgroundShaders = () => {
           let pulseSpeed = 2.0 + levelFactor * 4.0;
           let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
 
-          // Combine all elements
-          var finalColor = deepSpace;
+
+          // Dynamic brick wall background evolution
+          // Create a luxury glowing glass-brick wall grid
+          let brickUV = uv * vec2<f32>(10.0, 20.0);
+          let brickGridX = abs(fract(brickUV.x) - 0.5) * 2.0;
+          let brickGridY = abs(fract(brickUV.y) - 0.5) * 2.0;
+
+          let edgeDist = max(brickGridX, brickGridY);
+          let mortarMask = step(0.9, edgeDist);
+
+          // Crack propagation based on level / combo
+          // Base level factor (0 to 1)
+          let crackIntensity = clamp((level - 1.0) / 10.0 + warpSurge * 0.5, 0.0, 1.0);
+          let crackNoise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+          let crackLine = step(0.95 - crackIntensity * 0.15, crackNoise) * crackIntensity;
+
+          // Mortar and bricks
+          var brickColor = mix(vec3<f32>(0.02, 0.05, 0.1), vec3<f32>(0.15, 0.02, 0.05), levelFactor);
+          // Add glowing cracks
+          brickColor += vec3<f32>(1.0, 0.8, 0.2) * crackLine * (sin(time * 5.0) * 0.5 + 0.5);
+
+          let mortarColor = vec3<f32>(0.8, 0.7, 0.3) * (1.0 + crackIntensity * 2.0 * sin(time * 10.0)); // Gold/silver pulsing hinges
+
+          var wallColor = mix(brickColor, mortarColor, mortarMask);
+
+          // Refraction simulation
+          let glassShine = pow(1.0 - edgeDist, 4.0) * 0.5;
+          wallColor += vec3<f32>(glassShine);
+
+          var finalColor = mix(deepSpace, wallColor, 0.75);
+
           finalColor += vec3<f32>(stars); // NEON BRICKLAYER: Add stars
           finalColor = mix(finalColor, gridColor * pulse, grid * 0.6);
           finalColor += lights;

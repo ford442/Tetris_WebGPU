@@ -645,3 +645,4 @@ export function onMove(view: any, x: number, y: number): void {
   // JUICE: Denser, brighter trail for better feedback
   view.particleSystem.emitParticles(worldX, worldY, 0.0, 10, [0.6, 1.0, 1.0, 1.0]);
 }
+// Add empty export to avoid import errors

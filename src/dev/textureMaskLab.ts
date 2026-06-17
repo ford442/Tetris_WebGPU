@@ -436,10 +436,10 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
       </div>
 
       <div>
-        <div style="font-weight:800; font-size:13px; margin: 8px 0 6px;">Suggested `BlockTextureConfig` (copy/paste)</div>
+        <div style="font-weight:800; font-size:13px; margin: 8px 0 6px;">Suggested BlockTextureConfig (copy/paste)</div>
         <textarea id="masklab-configOut" class="masklab-textarea" spellcheck="false"></textarea>
         <div style="font-size:12px; opacity:0.8; margin-top:6px;">
-          Tip: if you exported a mask PNG, set `maskUrl` to it and use `maskChannel:'alpha'` (or your chosen channel).
+          Tip: if you exported a mask PNG, set maskUrl to it and use maskChannel:'alpha' (or your chosen channel).
         </div>
       </div>
     </div>
