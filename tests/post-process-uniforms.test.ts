@@ -11,7 +11,7 @@ describe('post-process uniform layout', () => {
   });
 
   it('declares explicit alignment padding before vec3/vec4 fields', () => {
-    expect(PostProcessUniformsWGSL).toContain('_padFlashAlign: vec2f');
+    expect(PostProcessUniformsWGSL).toContain('_padFlashAlign: f32');
     expect(PostProcessUniformsWGSL).toContain('_padLaserAlign: vec2f');
     expect(PostProcessUniformsWGSL).toContain('levelUpFlashColor: vec3f');
     expect(PostProcessUniformsWGSL).toContain('lineClearLaserY: vec4f');

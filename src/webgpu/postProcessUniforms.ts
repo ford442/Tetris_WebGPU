@@ -56,7 +56,8 @@ struct PostProcessUniforms {
     // Frame 5-9: Reserved (offset 96+)
     dangerLevel: f32,             // 96
     aberrationPulse: f32,         // 100
-    _padFlashAlign: vec2f,        // 104 (vec3 requires 16-byte alignment)
+    hardDropBoost: f32,           // 104
+    _padFlashAlign: f32,          // 108
     levelUpFlashColor: vec3f,     // 112
     levelUpFlashIntensity: f32,   // 124
     gameOverKaleidoTime: f32,     // 128
@@ -103,6 +104,9 @@ export interface PostProcessUniformData {
   // Hard drop aberration pulse (new for enhanced post-process chromatic spike)
   aberrationPulse?: number;
 
+  // Hard drop explicitly driven shockwave boost (as requested by Neon Bricklayer)
+  hardDropBoost?: number;
+
   // Board danger / fill level (0-1) for contracting red vignette on postProcess
   dangerLevel?: number;
 
@@ -142,6 +146,7 @@ export class PostProcessUniformManager {
     materialAwareBloom: 1.0, // Enable material-aware bloom by default
     screenResolution: [1920, 1080],
     aberrationPulse: 0,
+    hardDropBoost: 0,
     dangerLevel: 0,
     levelUpFlashColor: [0.2, 0.6, 1.0],
     levelUpFlashIntensity: 0,
@@ -196,8 +201,8 @@ export class PostProcessUniformManager {
     // dangerLevel @ 96 (float 24), aberration @ 100 (float 25)
     this.data[24] = (v as any).dangerLevel || 0;
     this.data[25] = (v as any).aberrationPulse || 0;
-    this.data[26] = 0; // _padFlashAlign.x @ 104
-    this.data[27] = 0; // _padFlashAlign.y @ 108
+    this.data[26] = (v as any).hardDropBoost || 0; // hardDropBoost @ 104
+    this.data[27] = 0; // _padFlashAlign @ 108
     const flashCol = (v as any).levelUpFlashColor || [0, 0, 0];
     this.data[28] = flashCol[0] || 0; // levelUpFlashColor @ 112
     this.data[29] = flashCol[1] || 0;

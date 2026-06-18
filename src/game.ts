@@ -21,6 +21,7 @@ export interface GameState {
   lockDelayTime: number;
   effectEvent: string | null;
   effectCounter: number;
+  effectFlag?: boolean;
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
@@ -104,6 +105,7 @@ export default class Game {
     lockDelayTime: 0,
     effectEvent: null,
     effectCounter: 0,
+    effectFlag: false,
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
@@ -214,6 +216,7 @@ export default class Game {
     this._gameStateCache.lockDelayTime = this.lockDelayTime;
     this._gameStateCache.effectEvent = this.effectEvent;
     this._gameStateCache.effectCounter = this.effectCounter;
+    this._gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
     this._gameStateCache.lastDropPos = this.lastDropPos;
     this._gameStateCache.lastDropDistance = this.lastDropDistance;
     this._gameStateCache.scoreEvent = this.scoreEvent;
@@ -246,6 +249,10 @@ export default class Game {
     // === EXPLICIT SHOCKWAVE AS REQUESTED ===
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
+
+    // NEW: Trigger the requested shockwave effect flag
+    this._gameStateCache.effectFlag = true;
+
     if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
         this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
     }

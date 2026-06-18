@@ -262,6 +262,9 @@ export default class View {
     radius: 0.0,
   };
 
+  // NEW: Explicit uniform binding for hard drop shockwave
+  shockwaveParamsUniform: Float32Array = new Float32Array([0, 0, 0, 0]);
+
   // Pre-allocated object for post process parameters to avoid GC
   private _postProcessParams = {
     time: 0,
@@ -280,6 +283,7 @@ export default class View {
     materialAwareBloom: 0,
     screenResolution: [0, 0] as [number, number],
     aberrationPulse: 0,  // hard drop 300ms chromatic spike -> u_aberrationPulse
+    hardDropBoost: 0,    // NEW: hard drop shockwave explicitly driven boost
     dangerLevel: 0,      // board height fill ratio 0-1 for danger vignette (postProcess)
     lineClearLaserY: [0, 0, 0, 0] as [number, number, number, number],
     lineClearLaserIntensity: 0
@@ -465,6 +469,10 @@ export default class View {
       handleImpactEffects(this, worldX, impactY, distance);
   }
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
+      // NEW: Apply hard drop boost for the Neon Bricklayer shockwave effect
+      this.shockwaveParamsUniform[0] = 1.0;
+      setTimeout(() => { this.shockwaveParamsUniform[0] = 0.0; }, 420);
+
       handleHardDrop(this, x, y, distance, colorIdx);
   }
 

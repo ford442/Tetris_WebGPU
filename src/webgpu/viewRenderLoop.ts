@@ -278,6 +278,9 @@ function updatePostProcessUniforms(view: any, time: number) {
   view._postProcessParams.screenResolution[1] = view.canvasWebGPU.height;
   view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;
 
+  // NEW: explicitly driven shockwave boost uniform mapping for Neon Bricklayer implementation
+  view._postProcessParams.hardDropBoost = view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0.0;
+
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.
   let dangerLevel = 0.0;
