@@ -216,7 +216,8 @@ export const EnhancedPostProcessShaders = () => {
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
                 let width = params.x * 1.5; // JUICE: Wider shockwave
-                let strength = params.y * 1.5; // JUICE: Stronger distortion
+                // NEW: explicitly apply the Neon Bricklayer Hard Drop Boost to shockwave intensity!
+                let strength = (params.y * 1.5) * (1.0 + uniforms.hardDropBoost * 0.6);
                 let diff = dist - radius;
 
                 if (abs(diff) < width) {
