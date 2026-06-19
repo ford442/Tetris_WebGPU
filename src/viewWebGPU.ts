@@ -161,6 +161,7 @@ export default class View {
   backgroundVertexBuffer!: GPUBuffer;
   backgroundUniformBuffer!: GPUBuffer;
   backgroundBindGroup!: GPUBindGroup;
+  videoCoverScaleUniformBuffer!: GPUBuffer;
   backgroundRenderer!: BackgroundRenderer;
   startTime: number;
 
@@ -705,7 +706,9 @@ export default class View {
       fragment: { module: this.device.createShaderModule({ code: videoBgShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
       primitive: { topology: 'triangle-list' }
     });
-    
+    this.videoCoverScaleUniformBuffer = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.device.queue.writeBuffer(this.videoCoverScaleUniformBuffer, 0, new Float32Array([1, 1, 0, 0]));
+
     // Initialize Frosted Glass Backboard
     await this.initFrostedGlassBackboard();
     
