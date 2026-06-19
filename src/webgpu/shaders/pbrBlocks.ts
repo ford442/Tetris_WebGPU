@@ -301,7 +301,7 @@ export const PBRBlockShaders = () => {
 
                 // Desaturated + brighter + lower-contrast versions of the same split.
                 let lumaMetal = dot(metalColor, vec3f(0.299, 0.587, 0.114));
-                let ghostMetalColor = mix(vec3f(lumaMetal), metalColor, 0.35) * 1.35;
+                var ghostMetalColor = mix(vec3f(lumaMetal), metalColor, 0.35) * 1.35;
                 ghostMetalColor = mix(vec3f(dot(ghostMetalColor, vec3f(0.333))), ghostMetalColor, 0.85);
 
                 let lumaGlass = dot(glassColor, vec3f(0.299, 0.587, 0.114));
