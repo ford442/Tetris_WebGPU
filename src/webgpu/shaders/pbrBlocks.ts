@@ -305,7 +305,7 @@ export const PBRBlockShaders = () => {
                 ghostMetalColor = mix(vec3f(dot(ghostMetalColor, vec3f(0.333))), ghostMetalColor, 0.85);
 
                 let lumaGlass = dot(glassColor, vec3f(0.299, 0.587, 0.114));
-                let ghostGlassColor = mix(vec3f(lumaGlass), glassColor, 0.25) * 1.18;
+                var ghostGlassColor = mix(vec3f(lumaGlass), glassColor, 0.25) * 1.18;
                 ghostGlassColor = mix(vec3f(dot(ghostGlassColor, vec3f(0.333))), ghostGlassColor, 0.82);
 
                 // Geometry-driven wireframe respects hinges via ghostMetal.
