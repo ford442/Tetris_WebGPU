@@ -394,7 +394,7 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 1.5;      // NEON BRICKLAYER: Faster ripple expansion
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
-  view.visualEffects.warpSurge = 0.5 + Math.min(distance * 0.15, 1.5);
+  view.visualEffects.warpSurge = 1.0 + Math.min(distance * 0.3, 2.0);
   // NEON BRICKLAYER: Slightly heavier camera shake
   view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
 }
