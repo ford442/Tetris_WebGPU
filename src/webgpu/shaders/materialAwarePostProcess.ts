@@ -117,7 +117,10 @@ export const MaterialAwarePostProcessShaders = () => {
             let scanlineY = curvedUV.y * uniforms.screenHeight;
             var scanline = sin(scanlineY * 3.14159) * 0.5 + 0.5;
             scanline = scanline * sqrt(scanline); // pow(scanline, 1.5)
-            scanline = 0.9 + scanline * 0.1;
+
+            // NEON BRICKLAYER: Intense CRT scanline jitter on hard drop boost
+            let crtJitter = sin(scanlineY * 2.0 - uniforms.time * 50.0) * 0.2 * uniforms.hardDropBoost;
+            scanline = 0.9 + scanline * 0.1 - crtJitter;
             
             // RGB pixel separation (mask effect)
             let maskX = curvedUV.x * uniforms.screenWidth;
@@ -378,8 +381,10 @@ export const MaterialAwarePostProcessShaders = () => {
             }
 
             // Subtle scanlines overlay
-            let scanline = sin(finalUV.y * 600.0 + uniforms.time * 10.0) * 0.015;
-            color -= vec3<f32>(scanline);
+            let baseScanline = sin(finalUV.y * 600.0 + uniforms.time * 10.0) * 0.015;
+            // NEON BRICKLAYER: Add intense CRT jitter on hard drop boost
+            let overlayJitter = sin(finalUV.y * 1200.0 - uniforms.time * 50.0) * 0.15 * uniforms.hardDropBoost;
+            color -= vec3<f32>(baseScanline + overlayJitter);
 
             // Fade the kaleido (if active)
             if (uniforms.gameOverKaleidoTime > 0.001) {
