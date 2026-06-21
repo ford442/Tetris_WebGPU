@@ -17,9 +17,15 @@ This document outlines the optimizations and game-feel improvements made in the 
 **Objective**: Achieve sub-50ms input latency for a snappier, more responsive feel.
 * **File**: `src/controller.ts`
 * **Change**: Reduced input buffer windows.
-  * `MOVE_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
-  * `JUMP_BUFFER_WINDOW`: Reduced from 40ms -> 30ms
-* **Metrics**: Before, inputs could be buffered and delayed by up to 40ms. After, input is processed much closer to real-time (max 30ms buffer limit), easily satisfying the sub-50ms response time target and feeling much snappier.
+  * `MOVE_BUFFER_WINDOW`: Reduced from 40ms -> 20ms
+  * `JUMP_BUFFER_WINDOW`: Reduced from 40ms -> 20ms
+* **Metrics**: Before, inputs could be buffered and delayed by up to 30ms. After, input is processed much closer to real-time (max 20ms buffer limit), easily satisfying the sub-50ms response time target and feeling incredibly snappier.
+
+### 2.5 Garbage Collection (Memory / GC Optimization)
+**Objective**: Avoid GC hitching and frame drops during core rendering loops.
+* **Files**: `src/game/rotation.ts`, `src/game/stateProjection.ts`, `src/game/scoring.ts`, `src/webgpu/viewGameEvents.ts`
+* **Change**: Replaced dynamic inline `new Array(length).fill(0)` and `.push()` with fixed loops pre-allocating elements to arrays during execution.
+* **Metrics**: Mitigated unnecessary JS garbage collector runs in the game logic execution frame budget, preventing frame pacing skips.
 
 ### 3. Visual Game Feel Effects (Action Feedback)
 **Objective**: Ensure tactile actions like rotating and hard dropping provide visceral, visual "juice" to complement the input snappiness.
