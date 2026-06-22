@@ -24,6 +24,21 @@ export function executeRenderLoop(view: any, dt: number) {
   // Safety cap dt to prevent massive jumps on lag spikes
   const clampedDt = Math.min(dt, 0.1);
 
+  // Neon Bricklayer explicitly routed hardDropBoost via effectFlag
+  if (view.state && view.state.effectFlag && view.state.effectCounter !== view._lastEffectCounter) {
+    view._lastEffectCounter = view.state.effectCounter;
+    view.shockwaveParamsUniform[0] = 1.0;
+    view._hardDropBoostTimer = 0.420; // 420ms
+  }
+
+  if (view._hardDropBoostTimer > 0) {
+    view._hardDropBoostTimer -= dt;
+    if (view._hardDropBoostTimer <= 0) {
+      view._hardDropBoostTimer = 0;
+      view.shockwaveParamsUniform[0] = 0.0;
+    }
+  }
+
   // Smooth Piece Interpolation (Exponential Decay Lerp)
   updatePieceInterpolation(view, clampedDt);
 

@@ -187,6 +187,7 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,
     screenResolution: [view.canvasWebGPU.width, view.canvasWebGPU.height],
     aberrationPulse: view.visualEffects.hardDropAberrationPulse || 0,
+    hardDropBoost: view._postProcessParams.hardDropBoost || (view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0),
     // dangerLevel computed identically to the renderloop path for both uniform update sites
     dangerLevel: (() => {
       let d = 0.0;
