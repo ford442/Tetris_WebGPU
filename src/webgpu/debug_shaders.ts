@@ -96,11 +96,69 @@ export const DebugTextureShaders = () => {
                 return vec4<f32>(vColor.rgb, 1.0);
             }`;
 
+  // Debug mode 6: Show baked metal-frame alpha (stored in texColor.a)
+  const fragmentBakedMetalAlpha = `
+            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+            @binding(3) @group(0) var blockSampler: sampler;
+
+            @fragment
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
+                return vec4<f32>(vec3<f32>(texColor.a), 1.0);
+            }`;
+
+  // Debug mode 7: Show baked glass mask derived from alpha channel
+  const fragmentGlassMask = `
+            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+            @binding(3) @group(0) var blockSampler: sampler;
+
+            @fragment
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
+                let glass = 1.0 - texColor.a;
+                return vec4<f32>(vec3<f32>(glass), 1.0);
+            }`;
+
+  // Debug mode 8: Approximate final alpha (glass opacity driven by baked glass mask)
+  const fragmentFinalAlphaApprox = `
+            @binding(2) @group(0) var blockTexture: texture_2d<f32>;
+            @binding(3) @group(0) var blockSampler: sampler;
+
+            @fragment
+            fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
+
+                // Match authored path constants (pbrBlocks.ts).
+                let metalOpaque = smoothstep(0.45, 0.65, texColor.a);
+                let glassMaskAlpha = 1.0 - metalOpaque;
+
+                // Approximate NdotV using a fixed camera position (debug only).
+                let N = normalize(vNormal.xyz);
+                let camPos = vec3<f32>(0.0, 0.0, 75.0);
+                let V = normalize(camPos - vPosition.xyz);
+                let NdotV = max(dot(N, V), 0.0);
+                let edgeFresnel = 1.0 - NdotV;
+                let fresnelSq = edgeFresnel * edgeFresnel;
+
+                let glassMin = 0.38;
+                let glassMax = 0.78;
+                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
+
+                let finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
+                return vec4<f32>(vec3<f32>(finalAlpha), 1.0);
+            }`;
+
   return { 
     vertex, 
     fragmentRawTexture, 
     fragmentLuminance, 
     fragmentMask, 
+    fragmentBakedMetalAlpha,
+    fragmentGlassMask,
+    fragmentFinalAlphaApprox,
     fragmentUV,
     fragmentColorOnly
   };

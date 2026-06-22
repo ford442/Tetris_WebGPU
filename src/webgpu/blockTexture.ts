@@ -96,6 +96,67 @@ export interface BlockTextureConfig {
   // Fallback behavior
   /** Whether to use procedural texture if loading fails */
   useProceduralFallback?: boolean;
+
+  /**
+   * Optional companion mask image for metal-vs-glass segmentation.
+   * If provided, we crop this mask identically to the texture tile and
+   * pack it into the extracted tile's alpha channel (white/opaque=metal).
+   *
+   * This enables artist/user-provided textures without shader tweaks.
+   */
+  maskUrl?: string;
+
+  /**
+   * How to interpret the mask image.
+   * - 'auto' uses mask alpha if it's meaningfully non-opaque, otherwise uses red.
+   * - 'alpha' uses mask alpha.
+   * - 'red' uses the red channel.
+   */
+  maskChannel?: 'auto' | 'alpha' | 'red';
+
+  /** If maskChannel is 'red' or 'alpha', threshold used to classify metal. */
+  maskThreshold?: number;
+
+  /** Feather radius (in extracted pixels, before baking). ~1-2px usually enough. */
+  maskFeatherPx?: number;
+
+  /**
+   * Outer-ring force used by the extractor to keep the correct metal component connected
+   * to the border (prevents metal/glass halo/disconnected islands).
+   *
+   * Higher => thicker forced frame region (more conservative "metal stays metal").
+   * Lower  => thinner forced frame region (more aggressive glassing near edges).
+   */
+  maskOuterForce?: number;
+
+  /**
+   * Warmth-based heuristic shaping (used when materialDetectionMode='warmth' and no maskImage).
+   *
+   * Metal "warmth" signal is (r - b) multiplied by a band-pass luma gate:
+   *   lumaBand = smoothstep(lumaBandA0, lumaBandA1, luma) * (1 - smoothstep(lumaBandB0, lumaBandB1, luma))
+   */
+  warmthLumaBandA0?: number;
+  warmthLumaBandA1?: number;
+  warmthLumaBandB0?: number;
+  warmthLumaBandB1?: number;
+
+  /** Optional clamp for the warmth signal (r - b) prior to Otsu thresholding. */
+  warmthSignalClampMin?: number;
+  warmthSignalClampMax?: number;
+
+  /**
+   * Authored sampled-block glass opacity tuning.
+   * These params define the reference translucency curve:
+   *   glassOpacity = mix(glassMin, glassMax, pow(edgeFresnel, glassFresnelPower))
+   * where edgeFresnel = 1 - NdotV.
+   *
+   * Higher glassMax => more visible through-glass at face-on and edges
+   * Higher glassMin => less opaque even at face-on
+   * Higher glassFresnelPower => sharper increase toward grazing angles.
+   */
+  authoredGlassMin?: number;
+  authoredGlassMax?: number;
+  authoredGlassFresnelPower?: number;
 }
 
 /**
@@ -119,6 +180,18 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   metalThresholdLow: 0.80,
   metalThresholdHigh: 1.20,
   useProceduralFallback: true,
+  maskChannel: 'auto',
+  // Reference curve matching block.png gold frame + crystal interior.
+  authoredGlassMin: 0.38,
+  authoredGlassMax: 0.78,
+  authoredGlassFresnelPower: 2.0,
+
+  // Extractor heuristic defaults
+  maskOuterForce: 0.13,
+  warmthLumaBandA0: 0.25,
+  warmthLumaBandA1: 0.55,
+  warmthLumaBandB0: 0.82,
+  warmthLumaBandB1: 0.95,
 };
 
 /** Configuration for single-tile textures (e.g., a single 256x256 block image) */
@@ -129,6 +202,16 @@ export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
   metalThresholdLow: 0.45,
   metalThresholdHigh: 0.55,
   useProceduralFallback: true,
+  authoredGlassMin: 0.38,
+  authoredGlassMax: 0.78,
+  authoredGlassFresnelPower: 2.0,
+
+  // Extractor heuristic defaults
+  maskOuterForce: 0.13,
+  warmthLumaBandA0: 0.25,
+  warmthLumaBandA1: 0.55,
+  warmthLumaBandB0: 0.82,
+  warmthLumaBandB1: 0.95,
 };
 
 /** Current active texture configuration (can be changed at runtime) */

@@ -49,8 +49,8 @@ export default class Controller {
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
   // Movement is tighter (80ms) and rotation is very tight (60ms) to prevent double-rotations and ensure maximum snappiness
-  readonly MOVE_BUFFER_WINDOW: number = 30; // ms - Tighter, snappier movement
-  readonly JUMP_BUFFER_WINDOW: number = 30; // ms - Strict buffer for jump-like actions to prevent double-rotation
+  readonly MOVE_BUFFER_WINDOW: number = 20; // ms - Tighter, snappier movement
+  readonly JUMP_BUFFER_WINDOW: number = 20; // ms - Strict buffer for jump-like actions to prevent double-rotation
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
@@ -309,6 +309,16 @@ export default class Controller {
     }
 
     if (!this.isPlaying || this.isPaused) return;
+
+    // Dev/QA: extreme camera for edge-case transparency verification.
+    // Toggle with 'M'. Persists via localStorage and is polled in viewRenderLoop.
+    if (code === 'KeyM') {
+      if (typeof localStorage !== 'undefined') {
+        const cur = localStorage.getItem('tetris_debug_extreme_camera') === '1';
+        localStorage.setItem('tetris_debug_extreme_camera', cur ? '0' : '1');
+      }
+      return;
+    }
 
     // Map key to action
     const action = this.keyMap[code];

@@ -224,6 +224,36 @@ setBlockTextureConfig({
 });
 ```
 
+## Authored Glass Opacity Curve (imageSampled)
+
+For the `imageSampled` theme, the sampled texture drives the metal-vs-glass *cutout* (via the baked/applied mask stored in `texColor.a`).
+Separately, the glass *opacity* is controlled by a configurable Fresnel ramp defined in `BlockTextureConfig`:
+
+- `glassOpacity = mix(glassMin, glassMax, pow(edgeFresnel, glassFresnelPower))`
+- `edgeFresnel = 1 - NdotV`
+
+Default values (tuned to the reference `block.png` frame+crystal interior):
+
+- `authoredGlassMin: 0.38`
+- `authoredGlassMax: 0.78`
+- `authoredGlassFresnelPower: 2.0`
+
+To retune translucency for a custom texture, update the block texture config:
+
+```ts
+setBlockTextureConfig({
+  url: './my-block.png',
+  samplingMode: 'subregion',
+  // ... subregion settings ...
+  maskUrl: './my-block-mask.png',
+  authoredGlassMin: 0.30,
+  authoredGlassMax: 0.90,
+  authoredGlassFresnelPower: 2.0,
+});
+```
+
+This changes frame solidity vs window translucency without any shader edits.
+
 ### Single Texture Not Working
 
 Make sure to set the mode to `'single'`:

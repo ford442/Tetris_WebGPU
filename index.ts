@@ -4,6 +4,7 @@ import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
+import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
 
 declare global {
   interface Window {
@@ -152,6 +153,14 @@ uiContainer.innerHTML = `
 // Styles are in css/style.css, we should probably update them too.
 
 (async () => {
+  // Dev-only CPU tool for iterating on authored block texture masking.
+  // localhost-only + `localStorage.tetris_texture_mask_lab='1'` (or `?masklab=1`).
+  try {
+    await maybeInitTextureMaskLab(uiContainer);
+  } catch (e) {
+    console.warn('Texture Mask Lab init failed:', e);
+  }
+
   try {
     await WasmCore.init();
   } catch (e) {

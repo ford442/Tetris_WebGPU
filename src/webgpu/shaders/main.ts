@@ -277,8 +277,18 @@ export const Shaders = () => {
                     let wireframe = smoothstep(0.88, 0.98, uvEdgeDist);
                     let innerWire = smoothstep(0.75, 0.85, uvEdgeDist) * 0.4;
 
-                    // Brighten original color further
-                    let ghostColor = vColor.rgb * 3.5;
+                    // Ghost splits from the authored texture at the ghost UVs.
+                    // Desaturate + brighten to create the holographic "projected" look.
+                    let ghostMetal = metalMask;
+                    let ghostGlass = glassMask;
+
+                    let lumaMetal = dot(metalColor, vec3<f32>(0.299, 0.587, 0.114));
+                    var ghostMetalColor = mix(vec3<f32>(lumaMetal), metalColor, 0.35) * 1.35;
+                    ghostMetalColor = mix(vec3<f32>(dot(ghostMetalColor, vec3<f32>(0.333))), ghostMetalColor, 0.85);
+
+                    let lumaGlass = dot(glassColor, vec3<f32>(0.299, 0.587, 0.114));
+                    var ghostGlassColor = mix(vec3<f32>(lumaGlass), glassColor, 0.25) * 1.15;
+                    ghostGlassColor = mix(vec3<f32>(dot(ghostGlassColor, vec3<f32>(0.333))), ghostGlassColor, 0.82);
 
                     // Tension-based pulse (reacts to lockPercent for panic feel)
                     let tension = smoothstep(0.25, 1.0, lockPercent);
@@ -288,6 +298,8 @@ export const Shaders = () => {
                     let baseAlpha = 0.55 + 0.35 * sin(time * pulseFreq);
                     let breath = sin(time * 2.5) * 0.1 + 0.9;
                     var ghostAlpha = baseAlpha * breath;
+                    // Glass interior should be more transparent than the metal frame.
+                    ghostAlpha *= mix(0.45, 1.0, ghostMetal);
 
                     // Holographic scan effect
                     let scanEffect = sin(vUV.y * 70.0 + time * 10.0) * 0.12;
@@ -316,14 +328,16 @@ export const Shaders = () => {
                     }
 
                     // Combine all effects
-                    var ghostFinal = ghostColor * (wireframe + innerWire) * 7.0 // Bright edges
-                                   + ghostColor * scanline * 2.5 // Scanlines
-                                   + ghostColor * beam * 0.8 // Landing Beam
+                    var ghostFinal = ghostMetalColor * (wireframe + innerWire) * 7.0 * ghostMetal // Bright metal edges
+                                   + ghostMetalColor * scanline * 2.5 * ghostMetal // Scanlines on metal
+                                   + ghostGlassColor * scanline * 1.6 * ghostGlass // Scanlines through glass
+                                   + ghostMetalColor * beam * 0.8 * ghostMetal // Landing Beam (metal)
+                                   + ghostGlassColor * beam * 0.45 * ghostGlass // Landing Beam (glass)
                                    + vec3<f32>(0.4, 0.85, 1.0) * fresnelTerm * 4.0; // Cyan/Blue rim
 
                     ghostFinal += vec3<f32>(ghostGlitch); // Glitch
                     ghostFinal += vec3<f32>(0.2, 0.8, 1.0) * (scanEffect + horizontalScan) * 5.0; // NEON BRICKLAYER: Colored, intense scan overlays
-                    ghostFinal += vec3<f32>(gridPattern) * ghostColor * 0.6; // Grid pattern
+                    ghostFinal += vec3<f32>(gridPattern) * mix(ghostGlassColor, ghostMetalColor, ghostMetal) * 0.6; // Grid pattern
 
                     // Digital noise sparkles
                     let sparkleNoise = fract(sin(dot(vUV, vec2<f32>(12.9898, 78.233)) + time * 3.0) * 43758.5453);
@@ -338,6 +352,8 @@ export const Shaders = () => {
                     }
                     
                     ghostFinal *= 4.5; // Boost brightness
+                    // Premultiply for premultiplied-alpha blending.
+                    ghostFinal *= ghostAlpha;
                     return vec4<f32>(ghostFinal, ghostAlpha);
                 }
 

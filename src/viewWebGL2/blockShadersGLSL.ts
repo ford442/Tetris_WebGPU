@@ -41,7 +41,9 @@ in vec3 vWorldPos;
 
 uniform vec3 u_lightPos;
 uniform vec3 u_eyePos;
-uniform int u_materialType;
+uniform float u_glassMin;
+uniform float u_glassMax;
+uniform float u_glassFresnelPower;
 uniform sampler2D u_blockTexture;
 
 out vec4 outColor;

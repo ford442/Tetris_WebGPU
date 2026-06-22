@@ -7,6 +7,7 @@ import {
 } from '../webgpu/blockTextureExtract.js';
 import { createBlockShaderSources } from './blockShadersGLSL.js';
 import { textureLogger } from '../utils/logger.js';
+import { getBlockTextureConfig } from '../webgpu/blockTexture.js';
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -53,7 +54,10 @@ export class GLBlockRenderer {
   private u_color!: WebGLUniformLocation;
   private u_lightPos!: WebGLUniformLocation;
   private u_eyePos!: WebGLUniformLocation;
-  private u_materialType!: WebGLUniformLocation;
+  private u_materialType: WebGLUniformLocation | null = null;
+  private u_glassMin!: WebGLUniformLocation;
+  private u_glassMax!: WebGLUniformLocation;
+  private u_glassFresnelPower!: WebGLUniformLocation;
   private tileWidth = 0;
   private tileHeight = 0;
 
@@ -79,7 +83,10 @@ export class GLBlockRenderer {
     this.u_color = gl.getUniformLocation(this.program, 'u_color')!;
     this.u_lightPos = gl.getUniformLocation(this.program, 'u_lightPos')!;
     this.u_eyePos = gl.getUniformLocation(this.program, 'u_eyePos')!;
-    this.u_materialType = gl.getUniformLocation(this.program, 'u_materialType')!;
+    this.u_materialType = gl.getUniformLocation(this.program, 'u_materialType');
+    this.u_glassMin = gl.getUniformLocation(this.program, 'u_glassMin')!;
+    this.u_glassMax = gl.getUniformLocation(this.program, 'u_glassMax')!;
+    this.u_glassFresnelPower = gl.getUniformLocation(this.program, 'u_glassFresnelPower')!;
 
     const cube = CubeData();
     this.vertexCount = cube.positions.length / 3;
@@ -173,9 +180,18 @@ export class GLBlockRenderer {
     gl.uniformMatrix4fv(this.u_viewProjection, false, viewProjection);
     gl.uniform3f(this.u_lightPos, lightPos[0], lightPos[1], lightPos[2]);
     gl.uniform3f(this.u_eyePos, eyePos[0], eyePos[1], eyePos[2]);
-    gl.uniform1i(this.u_materialType, materialType);
+    if (this.u_materialType) gl.uniform1i(this.u_materialType, materialType);
 
     for (const inst of instances) {
+      // Keep glass opacity curve in sync with current texture config.
+      const cfg = getBlockTextureConfig();
+      const glassMin = cfg.authoredGlassMin ?? 0.38;
+      const glassMax = cfg.authoredGlassMax ?? 0.78;
+      const glassPower = cfg.authoredGlassFresnelPower ?? 2.0;
+      gl.uniform1f(this.u_glassMin, glassMin);
+      gl.uniform1f(this.u_glassMax, glassMax);
+      gl.uniform1f(this.u_glassFresnelPower, glassPower);
+
       gl.uniformMatrix4fv(this.u_model, false, inst.modelMatrix);
       gl.uniformMatrix4fv(this.u_normalMatrix, false, this._identity);
       gl.uniform4f(this.u_color, inst.color[0], inst.color[1], inst.color[2], inst.color[3]);

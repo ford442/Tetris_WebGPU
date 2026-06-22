@@ -16,6 +16,12 @@ export interface Material {
   clearcoat: number;     // Clear coat layer
   anisotropic: number;   // Anisotropic reflection
   dispersion: number;    // Chromatic dispersion (gems)
+
+  // Only used by the authored `imageSampled` path (block.png/frame+glass sampling).
+  // Defines how glassOpacity ramps with Fresnel (edgeFresnel = 1 - NdotV).
+  authoredGlassMin?: number;
+  authoredGlassMax?: number;
+  authoredGlassFresnelPower?: number;
 }
 
 export const Materials: Record<string, Material> = {
@@ -150,6 +156,9 @@ export const Materials: Record<string, Material> = {
     clearcoat: 0.1,
     anisotropic: 0.0,
     dispersion: 0.0,
+    authoredGlassMin: 0.38,
+    authoredGlassMax: 0.78,
+    authoredGlassFresnelPower: 2.0,
   },
 
   // Lava - high emissive red-orange glow, starts smooth/hot, cools (rougher) as piece falls

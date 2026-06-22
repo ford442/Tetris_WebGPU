@@ -5,6 +5,7 @@
 import { themes } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
+import { getBlockTextureConfig } from './blockTexture.js';
 
 export interface MaterialViewLike {
   device: GPUDevice;
@@ -72,6 +73,21 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[2] = authoredLoaded ? 0.94 : 0.55;
 
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
+
+  // Authored imageSampled glass opacity curve params.
+  // Stored in FragmentUniforms.reserved2 (vec4f at byte offset 120).
+  // x=glassMin, y=glassMax, z=glassFresnelPower, w unused.
+  const cfg = getBlockTextureConfig();
+  // Priority:
+  // 1) texture config overrides (artist-friendly per-texture tuning)
+  // 2) material defaults (imageSampled)
+  // 3) hardcoded reference fallback
+  const glassMin = cfg.authoredGlassMin ?? m.authoredGlassMin ?? 0.38;
+  const glassMax = cfg.authoredGlassMax ?? m.authoredGlassMax ?? 0.78;
+  const glassPower = cfg.authoredGlassFresnelPower ?? m.authoredGlassFresnelPower ?? 2.0;
+
+  const glassParams = new Float32Array([glassMin, glassMax, glassPower, 0.0]);
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 120, glassParams);
 }
 
 export function cycleTheme(view: MaterialViewLike) {

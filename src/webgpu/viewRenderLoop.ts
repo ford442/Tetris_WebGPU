@@ -24,6 +24,21 @@ export function executeRenderLoop(view: any, dt: number) {
   // Safety cap dt to prevent massive jumps on lag spikes
   const clampedDt = Math.min(dt, 0.1);
 
+  // Neon Bricklayer explicitly routed hardDropBoost via effectFlag
+  if (view.state && view.state.effectFlag && view.state.effectCounter !== view._lastEffectCounter) {
+    view._lastEffectCounter = view.state.effectCounter;
+    view.shockwaveParamsUniform[0] = 1.0;
+    view._hardDropBoostTimer = 0.420; // 420ms
+  }
+
+  if (view._hardDropBoostTimer > 0) {
+    view._hardDropBoostTimer -= dt;
+    if (view._hardDropBoostTimer <= 0) {
+      view._hardDropBoostTimer = 0;
+      view.shockwaveParamsUniform[0] = 0.0;
+    }
+  }
+
   // Smooth Piece Interpolation (Exponential Decay Lerp)
   updatePieceInterpolation(view, clampedDt);
 
@@ -96,6 +111,13 @@ function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt:
   // Camera updates - Ethereal Floating Panel View
   let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
   let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
+
+  // Dev/QA: force extreme oblique camera for transparency + mask debugging.
+  // Toggle: localStorage.tetris_debug_extreme_camera = '1'
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('tetris_debug_extreme_camera') === '1') {
+    camX = 7.0 + Math.sin(time * 0.15) * 0.25; // shift camera to the side
+    camY = BOARD_WORLD_CENTER_Y + 0.7 + Math.cos(time * 0.12) * 0.15; // flatter angle
+  }
   const shake = view.visualEffects.getShakeOffset();
 
   // Smooth Camera Shake Interpolation using exponential decay
@@ -270,6 +292,9 @@ function updatePostProcessUniforms(view: any, time: number) {
   view._postProcessParams.screenResolution[0] = view.canvasWebGPU.width;
   view._postProcessParams.screenResolution[1] = view.canvasWebGPU.height;
   view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;
+
+  // NEW: explicitly driven shockwave boost uniform mapping for Neon Bricklayer implementation
+  view._postProcessParams.hardDropBoost = view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0.0;
 
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.

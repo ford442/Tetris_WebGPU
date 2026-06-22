@@ -97,7 +97,8 @@ export const PostProcessShaders = () => {
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
                 let width = params.x * 1.5; // JUICE: Wider shockwave
-                let strength = params.y * 1.5; // e.g. 0.05
+                // NEW: explicitly apply the Neon Bricklayer Hard Drop Boost to shockwave intensity!
+                let strength = (params.y * 1.5) * (1.0 + uniforms.hardDropBoost * 0.6);
                 let diff = dist - radius;
 
                 // Pre-calculate direction vector once to eliminate redundant ALU operations
@@ -284,8 +285,10 @@ export const PostProcessShaders = () => {
                 // 6-way mirror fold
                 a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
             // Scanlines
-            let scanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
-            color -= vec3<f32>(scanline);
+            let baseScanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
+            // NEON BRICKLAYER: Add intense CRT jitter on hard drop boost
+            let crtJitter = sin(finalUV.y * 1200.0 - uniforms.time * 50.0) * 0.15 * uniforms.hardDropBoost;
+            color -= vec3<f32>(baseScanline + crtJitter);
 
             // Fade the kaleido (if active) as the 2s timer expires (hands off to HTML overlay)
             if (uniforms.gameOverKaleidoTime > 0.001) {
