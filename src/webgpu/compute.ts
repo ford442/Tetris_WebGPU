@@ -1,39 +1,74 @@
 // ============================================================================
-// CLEAR-DISSOLVE COMPUTE SHADER
-// Maintains a GPU-resident 10x20 f32 field of per-cell "dissolve progress".
-// CPU pushes DOWN which rows cleared this frame (rowClear flags) + dt; the field
-// decays toward 0 over ~300ms and is re-armed to 1.0 for freshly cleared rows.
-// The block fragment shader (pbrBlocks) samples this same storage buffer to glow
-// cleared cells — compute writes, fragment reads, zero round-trip to the CPU.
+// LINE-CLEAR + DISSOLVE COMPUTE SHADER
+// GPU-resident line detection (parallel row scan) + clear-dissolve field decay.
+// CPU pushes board state + optional clearFlags; compute writes dissolve progress
+// and line-clear results (clearedCount + 20-row mask). Block fragment shader
+// samples dissolve — compute writes, fragment reads, no per-frame readback.
 // ============================================================================
-export const DissolveComputeShader = `
-struct DissolveUniforms {
-  dt        : f32,                 // seconds elapsed this frame
-  decayRate : f32,                 // 1.0 / fadeSeconds (e.g. 1/0.3)
+
+/** clearedCount (u32) + mask[20] (u32) — matches LineClearResults WGSL layout */
+export const LINE_CLEAR_RESULTS_BYTE_SIZE = 4 + 20 * 4;
+
+export const LineClearComputeShader = `
+struct LineClearUniforms {
+  dt        : f32,
+  decayRate : f32,
   _pad      : vec2<f32>,
-  rowClear  : array<vec4<f32>, 5>, // 20 row flags (1.0 = cleared this frame)
 };
 
-@group(0) @binding(0) var<storage, read_write> dissolve : array<f32, 200>;
-@group(0) @binding(1) var<uniform> u : DissolveUniforms;
+struct LineClearResults {
+  clearedCount : atomic<u32>,
+  mask         : array<u32, 20>,
+};
+
+@group(0) @binding(0) var<storage, read_write> board      : array<u32, 200>;
+@group(0) @binding(1) var<storage, read_write> dissolve   : array<f32, 200>;
+@group(0) @binding(2) var<storage, read_write> clearFlags : array<u32, 20>;
+@group(0) @binding(3) var<storage, read_write> results    : LineClearResults;
+@group(0) @binding(4) var<uniform> u : LineClearUniforms;
 
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
-  let i = GlobalInvocationID.x;
+fn detect_lines(@builtin(global_invocation_id) gid : vec3<u32>) {
+  let i = gid.x;
   if (i >= 200u) {
     return;
   }
+
   let row = i / 10u;
-  // Decay existing progress toward 0.
+  let col = i % 10u;
+
+  // Line detection — one thread per row (col == 0).
+  if (col == 0u) {
+    var full = true;
+    for (var c = 0u; c < 10u; c = c + 1u) {
+      if (board[row * 10u + c] == 0u) {
+        full = false;
+        break;
+      }
+    }
+    if (full) {
+      atomicAdd(&results.clearedCount, 1u);
+      results.mask[row] = 1u;
+      clearFlags[row] = 1u;
+    } else {
+      results.mask[row] = 0u;
+    }
+  }
+
+  // Dissolve decay + one-shot re-arm from clearFlags storage.
   var v = dissolve[i] - u.dt * u.decayRate;
-  // Re-arm cells in rows cleared this frame.
-  let flag = u.rowClear[row / 4u][row % 4u];
-  if (flag > 0.5) {
+  if (clearFlags[row] == 1u) {
     v = 1.0;
+    if (col == 0u) {
+      clearFlags[row] = 0u;
+    }
   }
   dissolve[i] = clamp(v, 0.0, 1.0);
 }
 `;
+
+/** @deprecated Use LineClearComputeShader — kept for import compatibility */
+export const DissolveComputeShader = LineClearComputeShader;
 
 export const ParticleComputeShader = `
 struct Particle {

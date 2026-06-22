@@ -12,7 +12,7 @@ import {
   Shaders,
   PremiumBlockShaders,
 } from './webgpu/shaders.js';
-import { ParticleComputeShader, DissolveComputeShader } from './webgpu/compute.js';
+import { ParticleComputeShader, LineClearComputeShader, LINE_CLEAR_RESULTS_BYTE_SIZE } from './webgpu/compute.js';
 import { JellyfishParticleSystem } from './webgpu/jellyfishParticles.js';
 import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
@@ -200,15 +200,23 @@ export default class View {
   particleComputePipeline!: GPUComputePipeline;
   particleUniformBuffer!: GPUBuffer; // Added missing declaration
 
-  // Clear-dissolve field (GPU-resident, GPU-consumed). Compute writes a 10x20 f32
-  // progress buffer that the block fragment shader samples to glow cleared cells.
+  // Clear-dissolve + GPU line detection (GPU-resident board, clear flags, results).
   dissolveBuffer!: GPUBuffer;
-  dissolveComputePipeline!: GPUComputePipeline;
-  dissolveComputeBindGroup!: GPUBindGroup;
-  dissolveComputeUniformBuffer!: GPUBuffer;
-  private _dissolveUniform = new Float32Array(24);   // dt, decayRate, pad2, rowClear[20]
-  private _dissolveActiveTimer = 0;                  // seconds remaining of active fade
-  private _dissolveFadeSeconds = 0.3;
+  boardBuffer!: GPUBuffer;
+  clearFlagsBuffer!: GPUBuffer;
+  lineClearResultsBuffer!: GPUBuffer;
+  lineClearResultsStaging!: GPUBuffer;
+  lineClearComputePipeline!: GPUComputePipeline;
+  lineClearComputeBindGroup!: GPUBindGroup;
+  lineClearUniformBuffer!: GPUBuffer;
+  private _lineClearUniform = new Float32Array(4);   // dt, decayRate, pad2
+  private _boardSyncScratch = new Uint32Array(200);
+  private _clearFlagsScratch = new Uint32Array(20);
+  private _lineClearResultsReset = new Uint32Array(21); // clearedCount + mask[20]
+  private _lineClearActiveTimer = 0;                   // seconds remaining of active fade
+  private _lineClearFadeSeconds = 0.3;
+  /** True once line-clear compute pipeline + buffers are initialized */
+  gpuLineClearReady = false;
 
   // Subsystems
   particleSystem: ParticleSystem;
@@ -471,8 +479,8 @@ export default class View {
       // Trigger DOM-based line flash effect
       lineFlashEffect.flashLines(lines);
 
-      // Push cleared rows DOWN to the GPU dissolve field (compute re-arms them to 1.0).
-      this.triggerDissolve(lines);
+      // Push cleared rows to the GPU clearFlags buffer (compute re-arms dissolve to 1.0).
+      this.triggerLineClear(lines);
 
       // Trigger the main line clear effects
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
@@ -870,27 +878,49 @@ export default class View {
     (this as any).postProcessUniforms = (this as any).postProcessUniforms || {};
     (this as any).postProcessUniforms.shockwaveParams = this.shockwaveParams;
 
-    // --- Clear-dissolve field (GPU compute writes, block fragment reads) ---
-    // 10x20 f32 storage buffer, indexed row*10+col (matches the CPU playfield).
+    // --- GPU line-clear + dissolve field (compute writes, block fragment reads) ---
     this.dissolveBuffer = this.device.createBuffer({
       size: 200 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.dissolveComputeUniformBuffer = this.device.createBuffer({
-      size: 96, // dt + decayRate + pad(8) + rowClear array<vec4,5>(80)
+    this.boardBuffer = this.device.createBuffer({
+      size: 200 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+    this.clearFlagsBuffer = this.device.createBuffer({
+      size: 20 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.lineClearResultsBuffer = this.device.createBuffer({
+      size: LINE_CLEAR_RESULTS_BYTE_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    this.lineClearResultsStaging = this.device.createBuffer({
+      size: LINE_CLEAR_RESULTS_BYTE_SIZE,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    this.lineClearUniformBuffer = this.device.createBuffer({
+      size: 16, // dt + decayRate + pad(8)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    this.dissolveComputePipeline = this.device.createComputePipeline({
-      label: 'dissolve compute pipeline', layout: 'auto',
-      compute: { module: this.device.createShaderModule({ code: DissolveComputeShader }), entryPoint: 'main' },
+    this.lineClearComputePipeline = this.device.createComputePipeline({
+      label: 'line-clear compute pipeline', layout: 'auto',
+      compute: {
+        module: this.device.createShaderModule({ code: LineClearComputeShader }),
+        entryPoint: 'detect_lines',
+      },
     });
-    this.dissolveComputeBindGroup = this.device.createBindGroup({
-      layout: this.dissolveComputePipeline.getBindGroupLayout(0),
+    this.lineClearComputeBindGroup = this.device.createBindGroup({
+      layout: this.lineClearComputePipeline.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: { buffer: this.dissolveBuffer } },
-        { binding: 1, resource: { buffer: this.dissolveComputeUniformBuffer } },
+        { binding: 0, resource: { buffer: this.boardBuffer } },
+        { binding: 1, resource: { buffer: this.dissolveBuffer } },
+        { binding: 2, resource: { buffer: this.clearFlagsBuffer } },
+        { binding: 3, resource: { buffer: this.lineClearResultsBuffer } },
+        { binding: 4, resource: { buffer: this.lineClearUniformBuffer } },
       ],
     });
+    this.gpuLineClearReady = true;
 
     this.renderPlayfield_Border_WebGPU();
 
@@ -947,36 +977,98 @@ export default class View {
     executeRenderLoop(this, dt);
   }
 
-  // Flag the cleared rows in the dissolve uniform and arm the fade window. The flags
-  // are consumed (and cleared) by the next dissolve compute dispatch in the render loop.
-  triggerDissolve(lines: number[]) {
-    if (!lines || lines.length === 0) return;
-    for (const row of lines) {
-      if (row >= 0 && row < 20) this._dissolveUniform[4 + row] = 1.0;
+  /** Upload CPU playfield (Int8Array 200) to the GPU-resident board buffer. */
+  syncBoardToGPU(playfield: Int8Array) {
+    if (!this.device || !this.boardBuffer) return;
+    for (let i = 0; i < 200; i++) {
+      this._boardSyncScratch[i] = playfield[i] > 0 ? playfield[i] : 0;
     }
-    this._dissolveActiveTimer = this._dissolveFadeSeconds;
+    this.device.queue.writeBuffer(this.boardBuffer, 0, this._boardSyncScratch);
   }
 
-  // Run the dissolve compute pass while the fade is active. Writes dt + row flags,
-  // dispatches the compute shader, then clears the one-shot flags. CPU only pushes
-  // state down; the field is read back exclusively on the GPU by the block shader.
-  dispatchDissolveCompute(commandEncoder: GPUCommandEncoder, dt: number) {
-    if (!this.device || !this.dissolveComputePipeline) return;
-    if (this._dissolveActiveTimer <= 0) return;
-    this._dissolveActiveTimer = Math.max(0, this._dissolveActiveTimer - dt);
+  private resetLineClearResults() {
+    if (!this.device) return;
+    this._lineClearResultsReset.fill(0);
+    this.device.queue.writeBuffer(this.lineClearResultsBuffer, 0, this._lineClearResultsReset);
+  }
 
-    this._dissolveUniform[0] = dt;
-    this._dissolveUniform[1] = 1.0 / this._dissolveFadeSeconds;
-    this.device.queue.writeBuffer(this.dissolveComputeUniformBuffer, 0, this._dissolveUniform);
+  private writeLineClearUniforms(dt: number) {
+    this._lineClearUniform[0] = dt;
+    this._lineClearUniform[1] = 1.0 / this._lineClearFadeSeconds;
+    this.device.queue.writeBuffer(this.lineClearUniformBuffer, 0, this._lineClearUniform);
+  }
 
-    const pass = commandEncoder.beginComputePass();
-    pass.setPipeline(this.dissolveComputePipeline);
-    pass.setBindGroup(0, this.dissolveComputeBindGroup);
+  /**
+   * GPU line detection after piece lock. Syncs board, dispatches compute, readbacks
+   * the tiny results buffer (clearedCount + 20-row mask). CPU still owns compaction.
+   */
+  async detectLinesGpu(playfield: Int8Array): Promise<number[]> {
+    if (!this.gpuLineClearReady) return [];
+
+    this.syncBoardToGPU(playfield);
+    this.resetLineClearResults();
+    this.writeLineClearUniforms(0);
+
+    const encoder = this.device.createCommandEncoder({ label: 'line-detect encoder' });
+    const pass = encoder.beginComputePass({ label: 'line-detect pass' });
+    pass.setPipeline(this.lineClearComputePipeline);
+    pass.setBindGroup(0, this.lineClearComputeBindGroup);
     pass.dispatchWorkgroups(Math.ceil(200 / 64));
     pass.end();
+    encoder.copyBufferToBuffer(
+      this.lineClearResultsBuffer, 0,
+      this.lineClearResultsStaging, 0,
+      LINE_CLEAR_RESULTS_BYTE_SIZE,
+    );
+    this.device.queue.submit([encoder.finish()]);
 
-    // Row-clear flags are one-shot; clear them so they only re-arm on a new clear.
-    for (let r = 0; r < 20; r++) this._dissolveUniform[4 + r] = 0.0;
+    await this.device.queue.onSubmittedWorkDone();
+    await this.lineClearResultsStaging.mapAsync(GPUMapMode.READ);
+    const mapped = new Uint32Array(this.lineClearResultsStaging.getMappedRange());
+    const lines: number[] = [];
+    for (let r = 0; r < 20; r++) {
+      if (mapped[1 + r]) lines.push(r);
+    }
+    this.lineClearResultsStaging.unmap();
+
+    if (lines.length > 0) {
+      this._lineClearActiveTimer = this._lineClearFadeSeconds;
+    }
+    return lines;
+  }
+
+  // Write cleared-row flags to the GPU storage buffer and arm the fade window.
+  triggerLineClear(lines: number[]) {
+    if (!lines || lines.length === 0 || !this.device || !this.clearFlagsBuffer) return;
+    this._clearFlagsScratch.fill(0);
+    for (const row of lines) {
+      if (row >= 0 && row < 20) this._clearFlagsScratch[row] = 1;
+    }
+    this.device.queue.writeBuffer(this.clearFlagsBuffer, 0, this._clearFlagsScratch);
+    this._lineClearActiveTimer = this._lineClearFadeSeconds;
+  }
+
+  // Run line-clear + dissolve compute while the post-clear fade is active.
+  dispatchLineClearAndDissolve(commandEncoder: GPUCommandEncoder, dt: number) {
+    if (!this.gpuLineClearReady || this._lineClearActiveTimer <= 0) return;
+    this._lineClearActiveTimer = Math.max(0, this._lineClearActiveTimer - dt);
+    this.writeLineClearUniforms(dt);
+
+    const pass = commandEncoder.beginComputePass({ label: 'line-clear dissolve pass' });
+    pass.setPipeline(this.lineClearComputePipeline);
+    pass.setBindGroup(0, this.lineClearComputeBindGroup);
+    pass.dispatchWorkgroups(Math.ceil(200 / 64));
+    pass.end();
+  }
+
+  /** @deprecated Use triggerLineClear */
+  triggerDissolve(lines: number[]) {
+    this.triggerLineClear(lines);
+  }
+
+  /** @deprecated Use dispatchLineClearAndDissolve */
+  dispatchDissolveCompute(commandEncoder: GPUCommandEncoder, dt: number) {
+    this.dispatchLineClearAndDissolve(commandEncoder, dt);
   }
 
   // Pre-allocated buffer for batched uniform updates (max 200 blocks * 64 floats per block)

@@ -67,9 +67,9 @@ export function executeRenderLoop(view: any, dt: number) {
     computePass.end();
   }
 
-  // Clear-dissolve field: GPU compute writes the per-cell fade buffer the block
+  // GPU line-clear + dissolve: compute writes the per-cell fade buffer the block
   // fragment shader samples. Self-gated; only runs during the ~300ms post-clear window.
-  view.dispatchDissolveCompute?.(commandEncoder, clampedDt);
+  view.dispatchLineClearAndDissolve?.(commandEncoder, clampedDt);
 
   // Update render uniforms
   updateRenderUniforms(view, time, result);

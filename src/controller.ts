@@ -499,6 +499,10 @@ export default class Controller {
   }
 
   performHardDrop(): void {
+      void this.performHardDropAsync();
+  }
+
+  async performHardDropAsync(): Promise<void> {
       const ghostY = this.game.getGhostY();
       const dropDist = ghostY - this.game.activPiece.y;
       const currentX = this.game.activPiece.x;
@@ -517,7 +521,7 @@ export default class Controller {
       else if (type === 'T') colorIdx = 6;
       else if (type === 'Z') colorIdx = 7;
 
-      const result = this.game.hardDrop();
+      const result = await this.game.hardDropAsync();
       this.soundManager.playHardDrop();
 
       this.viewWebGPU.onHardDrop(currentX, ghostY, dropDist, colorIdx);
@@ -562,6 +566,21 @@ export default class Controller {
           return;
       }
 
+      void this.runGameFrame(time).then((shouldContinue) => {
+        if (shouldContinue) {
+          this.gameLoopID = requestAnimationFrame(animate);
+        }
+      });
+    };
+
+    this.gameLoopID = requestAnimationFrame(animate);
+  }
+
+  private async runGameFrame(time: number): Promise<boolean> {
+      if (!this.isPlaying || this.isPaused) {
+          return false;
+      }
+
       const dt = time - this.lastTime;
       this.lastTime = time;
 
@@ -604,8 +623,8 @@ export default class Controller {
           this.gravityTimer = 0;
       }
 
-      // Game update (lock delay)
-      const result = this.game.update(dt);
+      // Game update (lock delay) — GPU line detection when pipeline is ready
+      const result = await this.game.updateAsync(dt);
 
       // Check level up
       if (this.game.level > this.lastLevel) {
@@ -655,7 +674,7 @@ export default class Controller {
           if (isNewHigh && this.subliminal) {
             this.subliminal.triggerReinforcement('highScore', 'strong');
           }
-          return;
+          return false;
       }
 
       // 3. Render
@@ -667,10 +686,7 @@ export default class Controller {
       // Pass dt in seconds
       this.viewWebGPU.render(dt / 1000.0);
 
-      this.gameLoopID = requestAnimationFrame(animate);
-    };
-
-    this.gameLoopID = requestAnimationFrame(animate);
+      return true;
   }
 
   updateComboDisplay(combo: number): void {

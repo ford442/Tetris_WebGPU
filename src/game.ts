@@ -2,7 +2,7 @@ import { Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
 import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
-import { clearFullLines, isPlayfieldEmpty } from './game/lineUtils.js';
+import { clearFullLines, compactClearedRows, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import { WasmCore } from './wasm/WasmCore.js';
 import { gameLogger, wasmLogger } from './utils/logger.js';
@@ -235,29 +235,22 @@ export default class Game {
     this._hardDropResult.gameOver = false;
     this._hardDropResult.tSpin = false;
 
-    // Check if hard drop moves the piece
     const ghostY = this.getGhostY();
     if (this.activPiece.y !== ghostY) {
-        // Movement invalidates T-Spin
         this.isTSpin = false;
     }
 
     const distance = ghostY - this.activPiece.y;
     this.activPiece.y = ghostY;
 
-    // Trigger visual effect
-    // === EXPLICIT SHOCKWAVE AS REQUESTED ===
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
-
-    // NEW: Trigger the requested shockwave effect flag
     this._gameStateCache.effectFlag = true;
 
     if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
         this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
     }
 
-    // Reuse existing object if possible to prevent GC
     if (!this.lastDropPos) {
         this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
     } else {
@@ -266,35 +259,82 @@ export default class Game {
     }
     this.lastDropDistance = distance;
 
-    // Force lock
     this.lockPiece();
     this._hardDropResult.locked = true;
 
-    // Capture T-Spin state before updatePieces resets everything
     const wasTSpin = this.isTSpin;
-
     const linesScore = this.clearLine();
-    if (linesScore.length > 0) {
-        const isAllClear = this.isPlayfieldEmpty();
-        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-        this._hardDropResult.linesCleared.length = 0;
-        for (let i = 0; i < linesScore.length; i++) {
-            this._hardDropResult.linesCleared.push(linesScore[i]);
-        }
-        this._hardDropResult.tSpin = wasTSpin;
-        // Trigger reactive event for line clear
-        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-        if (wasTSpin) this.triggerTSpinReactive('normal');
-        if (isAllClear) this.view?.onPerfectClearReactive?.();
-    } else {
-        this.scoringSystem.resetCombo(); // Reset combo if no lines cleared
-        this.scoreEvent = null;
-    }
+    this.applyLineClearScoring(linesScore, wasTSpin, this._hardDropResult);
 
     this.updatePieces();
     if (this.gameOver) this._hardDropResult.gameOver = true;
 
     return this._hardDropResult;
+  }
+
+  async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
+    this._hardDropResult.linesCleared.length = 0;
+    this._hardDropResult.locked = false;
+    this._hardDropResult.gameOver = false;
+    this._hardDropResult.tSpin = false;
+
+    const ghostY = this.getGhostY();
+    if (this.activPiece.y !== ghostY) {
+        this.isTSpin = false;
+    }
+
+    const distance = ghostY - this.activPiece.y;
+    this.activPiece.y = ghostY;
+
+    this.effectEvent = 'hardDrop';
+    this.effectCounter++;
+    this._gameStateCache.effectFlag = true;
+
+    if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
+        this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
+    }
+
+    if (!this.lastDropPos) {
+        this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
+    } else {
+        this.lastDropPos.x = this.activPiece.x;
+        this.lastDropPos.y = this.activPiece.y;
+    }
+    this.lastDropDistance = distance;
+
+    this.lockPiece();
+    this._hardDropResult.locked = true;
+
+    const wasTSpin = this.isTSpin;
+    const linesScore = await this.clearLineAsync();
+    this.applyLineClearScoring(linesScore, wasTSpin, this._hardDropResult);
+
+    this.updatePieces();
+    if (this.gameOver) this._hardDropResult.gameOver = true;
+
+    return this._hardDropResult;
+  }
+
+  private applyLineClearScoring(
+    linesScore: number[],
+    wasTSpin: boolean,
+    result: { linesCleared: number[], tSpin: boolean },
+  ): void {
+    if (linesScore.length > 0) {
+        const isAllClear = this.isPlayfieldEmpty();
+        this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
+        result.linesCleared.length = 0;
+        for (let i = 0; i < linesScore.length; i++) {
+            result.linesCleared.push(linesScore[i]);
+        }
+        result.tSpin = wasTSpin;
+        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+        if (wasTSpin) this.triggerTSpinReactive('normal');
+        if (isAllClear) this.view?.onPerfectClearReactive?.();
+    } else {
+        this.scoringSystem.resetCombo();
+        this.scoreEvent = null;
+    }
   }
 
   reset(): void {
@@ -311,7 +351,7 @@ export default class Game {
     this.nextPiece = this.createPiece();
   }
 
-  // Called every frame
+  // Called every frame (CPU line detection — used by unit tests)
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
       this._updateResult.linesCleared.length = 0;
       this._updateResult.locked = false;
@@ -320,50 +360,80 @@ export default class Game {
 
       if (this.gameOver) return this._updateResult;
 
-      // Check if piece is on the ground
       this.activPiece.y += 1;
       const onGround = this.hasCollision();
       this.activPiece.y -= 1;
 
       if (onGround) {
-          // dt is in milliseconds
           this.lockTimer += dt;
           if (this.lockTimer > this.lockDelayTime + 33) {
-              this.effectCounter++; // Increment visual counter for locking (gravity)
+              this.effectCounter++;
               this.lockPiece();
               this._updateResult.locked = true;
-
               const wasTSpin = this.isTSpin;
-
               const linesScore = this.clearLine();
-              if (linesScore.length > 0) {
-                  const isAllClear = this.isPlayfieldEmpty();
-                  const previousLevel = this.level;
-                  this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-                  this._updateResult.linesCleared.length = 0;
-                  for (let i = 0; i < linesScore.length; i++) {
-                      this._updateResult.linesCleared.push(linesScore[i]);
-                  }
-                  this._updateResult.tSpin = wasTSpin;
-                  // Trigger reactive event for line clear
-                  this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-                  if (wasTSpin) this.view?.onTSpinReactive?.();
-                  // Check for level up and trigger reactive event
-                  if (this.level > previousLevel) {
-                      this.triggerLevelUpReactive(this.level);
-                  }
-              } else {
-                  this.scoringSystem.resetCombo();
-                  this.scoreEvent = null;
-              }
-
-              this.updatePieces();
-              if (this.gameOver) this._updateResult.gameOver = true;
+              this.finishLockUpdate(linesScore, wasTSpin, this._updateResult);
           }
       } else {
           this.lockTimer = 0;
       }
       return this._updateResult;
+  }
+
+  /** Game loop entry — GPU line detection when the view pipeline is ready. */
+  async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
+      this._updateResult.linesCleared.length = 0;
+      this._updateResult.locked = false;
+      this._updateResult.gameOver = false;
+      this._updateResult.tSpin = false;
+
+      if (this.gameOver) return this._updateResult;
+
+      this.activPiece.y += 1;
+      const onGround = this.hasCollision();
+      this.activPiece.y -= 1;
+
+      if (onGround) {
+          this.lockTimer += dt;
+          if (this.lockTimer > this.lockDelayTime + 33) {
+              this.effectCounter++;
+              this.lockPiece();
+              this._updateResult.locked = true;
+              const wasTSpin = this.isTSpin;
+              const linesScore = await this.clearLineAsync();
+              this.finishLockUpdate(linesScore, wasTSpin, this._updateResult);
+          }
+      } else {
+          this.lockTimer = 0;
+      }
+      return this._updateResult;
+  }
+
+  private finishLockUpdate(
+    linesScore: number[],
+    wasTSpin: boolean,
+    result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean },
+  ): void {
+      if (linesScore.length > 0) {
+          const isAllClear = this.isPlayfieldEmpty();
+          const previousLevel = this.level;
+          this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
+          result.linesCleared.length = 0;
+          for (let i = 0; i < linesScore.length; i++) {
+              result.linesCleared.push(linesScore[i]);
+          }
+          result.tSpin = wasTSpin;
+          this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+          if (wasTSpin) this.view?.onTSpinReactive?.();
+          if (this.level > previousLevel) {
+              this.triggerLevelUpReactive(this.level);
+          }
+      } else {
+          this.scoringSystem.resetCombo();
+          this.scoreEvent = null;
+      }
+      this.updatePieces();
+      if (this.gameOver) result.gameOver = true;
   }
 
   movePieceLeft(): void {
@@ -643,6 +713,26 @@ export default class Game {
       this.collisionDetector.updatePlayfield(this.playfield);
     }
     return linesCleared;
+  }
+
+  /** GPU line detection + CPU compaction (falls back to clearLine when GPU unavailable). */
+  async clearLineAsync(): Promise<number[]> {
+    if (this.view?.gpuLineClearReady) {
+      const lines = await this.view.detectLinesGpu(this.playfield);
+      if (lines.length > 0) {
+        compactClearedRows(
+          this.playfield,
+          this.playfieldWidth,
+          this.playfieldHeight,
+          lines,
+          this._linesClearedCache,
+        );
+        this.collisionDetector.updatePlayfield(this.playfield);
+        this.view.syncBoardToGPU(this.playfield);
+      }
+      return lines;
+    }
+    return this.clearLine();
   }
 
   hold(): void {
