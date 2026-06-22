@@ -358,10 +358,11 @@ uiContainer.innerHTML = `
   window.controller = controller;
   window.soundManager = soundManager;
 
-  // Image-sampled blocks from block.png (gold frame + stained-glass crystal)
+  // Image-sampled blocks from block.png — clear any legacy theme/mode localStorage
+  localStorage.removeItem('tetris_theme_class');
+  localStorage.setItem('tetris_theme_class', 'image-sampled-theme');
+  localStorage.setItem('tetris_theme_name', 'imageSampled');
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
-  localStorage.setItem('tetris_theme_class', 'image-sampled-theme');
-  localStorage.setItem('tetris_theme_name', 'imageSampled');
 })();

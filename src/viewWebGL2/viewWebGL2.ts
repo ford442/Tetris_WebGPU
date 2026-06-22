@@ -3,7 +3,6 @@ import type { IView } from '../view/IView.js';
 import { buildPlayfieldInstances } from '../view/playfieldInstances.js';
 import { GLBlockRenderer } from './glBlockRenderer.js';
 import { themes, Themes } from '../webgpu/themes.js';
-import { MaterialThemes } from '../webgpu/materials.js';
 import {
   BOARD_WORLD_CENTER_X,
   BOARD_WORLD_CENTER_Y,
@@ -34,15 +33,6 @@ const noopParticleSystem = {
   maxParticles: 0,
 };
 
-function getMaterialTypeIndex(name: string): number {
-  switch (name) {
-    case 'Gold': return 1;
-    case 'Chrome': return 2;
-    case 'Glass': return 3;
-    default: return 0;
-  }
-}
-
 export default class ViewWebGL2 implements IView {
   readonly rendererName = 'webgl2' as const;
 
@@ -52,8 +42,7 @@ export default class ViewWebGL2 implements IView {
   nextPieceContext: CanvasRenderingContext2D;
   holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
-  currentTheme: any = themes.premium;
-  materialThemeName = 'premium';
+  currentTheme: any = themes.imageSampled;
   state: any;
   visualEffects: VisualEffects;
   reactiveVideoBackground: ReactiveVideoBackground;
@@ -202,15 +191,9 @@ export default class ViewWebGL2 implements IView {
     this.setMaterialTheme(themeName);
   }
 
-  setMaterialTheme(themeName: string, _pieceType = 1): void {
-    const visualTheme = this.themes[themeName as keyof Themes];
-    if (visualTheme) {
-      this.currentTheme = visualTheme;
-      this.materialThemeName = visualTheme.materialTheme || 'classic';
-    } else if (themeName in MaterialThemes) {
-      this.materialThemeName = themeName;
-    }
-    renderLogger.info(`[WebGL2] theme=${themeName} material=${this.materialThemeName}`);
+  setMaterialTheme(_themeName?: string, _pieceType = 1): void {
+    this.currentTheme = themes.imageSampled;
+    renderLogger.info('[WebGL2] imageSampled material (block.png)');
   }
 
   setPremiumVisualsPreset(options: Record<string, unknown> = {}): void {
@@ -307,7 +290,6 @@ export default class ViewWebGL2 implements IView {
       this.visualY,
     );
 
-    const material = MaterialThemes[this.materialThemeName]?.[1] ?? MaterialThemes.classic[1];
     const textureMix = this.authoredBlockTextureLoaded ? 0.94 : 0.55;
 
     this.blockRenderer.draw(
@@ -315,7 +297,7 @@ export default class ViewWebGL2 implements IView {
       [this._camEye[0], this._camEye[1], this._camEye[2]],
       [this._lightPos[0], this._lightPos[1], this._lightPos[2]],
       textureMix,
-      getMaterialTypeIndex(material.name),
+      0,
       instances,
     );
   }

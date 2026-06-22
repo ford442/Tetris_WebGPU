@@ -431,15 +431,11 @@ export const PBRBlockShaders = () => {
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
                 }
 
-                // Opaque gold frame; glass window reveals the video portal underneath.
-                // Fresnel keeps edges solid; center stays translucent but readable.
+                // Opaque gold frame; stained-glass window stays readable over the video portal.
                 let edgeFresnel = 1.0 - NdotV;
-                let glassMin: f32 = fUniforms.reserved2.x;
-                let glassMax: f32 = fUniforms.reserved2.y;
-                let glassFresnelPower: f32 = max(fUniforms.reserved2.z, 0.001);
-                let glassFactor = pow(edgeFresnel, glassFresnelPower);
-                let glassOpacity = mix(glassMin, glassMax, glassFactor);
-                finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
+                let fresnelSq = edgeFresnel * edgeFresnel;
+                let glassOpacity = mix(0.82, 0.97, fresnelSq);
+                finalAlpha = mix(1.0, glassOpacity, combinedGlassMask);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;

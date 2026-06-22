@@ -29,7 +29,7 @@ export function buildPlayfieldInstances(
       if (!value) continue;
 
       const colorIndex = Math.abs(value);
-      const alpha = value < 0 ? 0.3 : 0.9;
+      const alpha = value < 0 ? 0.35 : 1.0;
       const color = currentTheme[colorIndex] || currentTheme[0];
       const rgba: [number, number, number, number] = [color[0], color[1], color[2], alpha];
 

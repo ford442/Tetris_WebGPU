@@ -14,6 +14,6 @@ describe('buildPlayfieldInstances', () => {
       0,
     );
     expect(instances).toHaveLength(2);
-    expect(instances[0].color[3]).toBeCloseTo(0.9);
+    expect(instances[0].color[3]).toBeCloseTo(1.0);
   });
 });
