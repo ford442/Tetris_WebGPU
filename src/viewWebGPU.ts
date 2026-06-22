@@ -265,6 +265,8 @@ export default class View {
 
   // NEW: Explicit uniform binding for hard drop shockwave
   shockwaveParamsUniform: Float32Array = new Float32Array([0, 0, 0, 0]);
+  _lastEffectCounter: number = 0;
+  _hardDropBoostTimer: number = 0;
 
   // Pre-allocated object for post process parameters to avoid GC
   private _postProcessParams = {
@@ -470,10 +472,6 @@ export default class View {
       handleImpactEffects(this, worldX, impactY, distance);
   }
   onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
-      // NEW: Apply hard drop boost for the Neon Bricklayer shockwave effect
-      this.shockwaveParamsUniform[0] = 1.0;
-      setTimeout(() => { this.shockwaveParamsUniform[0] = 0.0; }, 420);
-
       handleHardDrop(this, x, y, distance, colorIdx);
   }
 

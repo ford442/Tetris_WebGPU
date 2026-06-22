@@ -111,9 +111,8 @@ void main() {
   }
 
   float edgeFresnel = 1.0 - NdotV;
-  float glassFresnelPower = max(u_glassFresnelPower, 0.001);
-  float glassFactor = pow(edgeFresnel, glassFresnelPower);
-  float glassOpacity = mix(u_glassMin, u_glassMax, glassFactor);
+  float fresnelSq = edgeFresnel * edgeFresnel;
+  float glassOpacity = mix(0.82, 0.97, fresnelSq);
   float alpha = mix(1.0, glassOpacity, glassMask) * vColor.a;
 
   outColor = vec4(clamp(finalColor, 0.0, 1.0), alpha);

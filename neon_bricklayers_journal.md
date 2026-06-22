@@ -38,3 +38,4 @@
 - "Implemented Next-Level Juice Protocol: Upgraded the WebGPU background shader (`background.ts`) to dynamically evolve into a luxury glowing glass-brick wall. The grid features crack propagation that intensifies with the game level and combo multiplier (`warpSurge`), along with glowing mortar and gold/silver hinges that throb with intensity."
 - "Adding additive blending to the particle shader makes the explosions look like real light."
 - "Screen shake should decay exponentially, not linearly, for a snappier feel."
+- "Added intense CRT scanline jitter that specifically scales with hardDropBoost to make the CRT distortion heavily react to impacts and give hard drops an even punchier Arcade feel."
