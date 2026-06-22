@@ -150,6 +150,9 @@ export const PBRBlockShaders = () => {
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
         @binding(2) @group(0) var blockTexture : texture_2d<f32>;
         @binding(3) @group(0) var blockSampler : sampler;
+        // GPU-resident clear-dissolve field: 10x20 f32 (row*10+col), written by the
+        // dissolve compute pass and read here. Compute writes, fragment reads — no readback.
+        @binding(5) @group(0) var<storage, read> dissolveField : array<f32, 200>;
 
         ${PBRFunctions}
         
@@ -434,8 +437,10 @@ export const PBRBlockShaders = () => {
                 // Opaque gold frame; stained-glass window stays readable over the video portal.
                 let edgeFresnel = 1.0 - NdotV;
                 let fresnelSq = edgeFresnel * edgeFresnel;
-                let glassOpacity = mix(0.82, 0.97, fresnelSq);
-                finalAlpha = mix(1.0, glassOpacity, combinedGlassMask);
+                let glassMin = 0.82;
+                let glassMax = 0.97;
+                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
+                finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
                 let lightFactor = 0.4 + NdotL * 0.6;
@@ -599,6 +604,20 @@ export const PBRBlockShaders = () => {
             }
 
             finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));
+
+            // === GPU CLEAR-DISSOLVE GLOW ===
+            // Sample the compute-written per-cell dissolve field (0..1, decays ~300ms).
+            // Cell index derived from world position (same /BLOCK_WORLD_SIZE mapping as
+            // columnHeights above). Additive post-clamp so the fading glow can bloom.
+            {
+                let dCol = i32(clamp(floor(vWorldPos.x / 2.2 + 0.0001), 0.0, 9.0));
+                let dRow = i32(clamp(floor(-vWorldPos.y / 2.2 + 0.0001), 0.0, 19.0));
+                let dissolveVal = dissolveField[dRow * 10 + dCol];
+                if (dissolveVal > 0.001) {
+                    finalColor += vec3f(0.55, 0.9, 1.0) * dissolveVal * 2.2;
+                }
+            }
+
             // Use the hard metal mask for opacity so the frame never becomes semi-transparent.
             let materialAlpha = mix(finalAlpha, 1.0, metalMaskForAlpha);
             let outAlpha = materialAlpha * vColor.w;
