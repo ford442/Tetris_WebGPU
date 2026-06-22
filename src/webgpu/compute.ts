@@ -1,3 +1,40 @@
+// ============================================================================
+// CLEAR-DISSOLVE COMPUTE SHADER
+// Maintains a GPU-resident 10x20 f32 field of per-cell "dissolve progress".
+// CPU pushes DOWN which rows cleared this frame (rowClear flags) + dt; the field
+// decays toward 0 over ~300ms and is re-armed to 1.0 for freshly cleared rows.
+// The block fragment shader (pbrBlocks) samples this same storage buffer to glow
+// cleared cells — compute writes, fragment reads, zero round-trip to the CPU.
+// ============================================================================
+export const DissolveComputeShader = `
+struct DissolveUniforms {
+  dt        : f32,                 // seconds elapsed this frame
+  decayRate : f32,                 // 1.0 / fadeSeconds (e.g. 1/0.3)
+  _pad      : vec2<f32>,
+  rowClear  : array<vec4<f32>, 5>, // 20 row flags (1.0 = cleared this frame)
+};
+
+@group(0) @binding(0) var<storage, read_write> dissolve : array<f32, 200>;
+@group(0) @binding(1) var<uniform> u : DissolveUniforms;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
+  let i = GlobalInvocationID.x;
+  if (i >= 200u) {
+    return;
+  }
+  let row = i / 10u;
+  // Decay existing progress toward 0.
+  var v = dissolve[i] - u.dt * u.decayRate;
+  // Re-arm cells in rows cleared this frame.
+  let flag = u.rowClear[row / 4u][row % 4u];
+  if (flag > 0.5) {
+    v = 1.0;
+  }
+  dissolve[i] = clamp(v, 0.0, 1.0);
+}
+`;
+
 export const ParticleComputeShader = `
 struct Particle {
   pos : vec3<f32>,       // offset 0

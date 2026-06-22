@@ -267,6 +267,7 @@ export function renderPlayfieldBorder(
   _f32_4: Float32Array,
   MODELMATRIX: Matrix.mat4,
   NORMALMATRIX: Matrix.mat4,
+  dissolveBuffer: GPUBuffer,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
     playfield: [
@@ -292,6 +293,7 @@ export function renderPlayfieldBorder(
           { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
           { binding: 2, resource: createBlockTextureBindingView(blockTexture) },
           { binding: 3, resource: blockSampler },
+          { binding: 5, resource: { buffer: dissolveBuffer } },
         ],
       });
 
