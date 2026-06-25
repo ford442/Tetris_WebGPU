@@ -50,7 +50,7 @@ export const BackgroundShaders = () => {
 
           // Base deep space color - shifts to red as level increases
           // NEON BRICKLAYER: More dramatic shift from Calm Blue to Chaotic Red/Purple
-          let deepSpace = mix(vec3<f32>(0.05, 0.0, 0.15), vec3<f32>(0.25, 0.0, 0.05), levelFactor);
+          let deepSpace = mix(vec3<f32>(0.0, 0.0, 0.5), vec3<f32>(0.5, 0.0, 0.0), levelFactor);
 
           // NEON BRICKLAYER: HYPERSPACE TUNNEL DISTORTION
           // Warps the UVs towards the center as level increases
@@ -221,7 +221,7 @@ export const BackgroundShaders = () => {
           let crackLine = step(0.95 - crackIntensity * 0.15, crackNoise) * crackIntensity;
 
           // Mortar and bricks
-          var brickColor = mix(vec3<f32>(0.02, 0.05, 0.1), vec3<f32>(0.15, 0.02, 0.05), levelFactor);
+          var brickColor = mix(vec3<f32>(0.0, 0.02, 0.2), vec3<f32>(0.3, 0.0, 0.0), levelFactor);
           // Add glowing cracks
           brickColor += vec3<f32>(1.0, 0.8, 0.2) * crackLine * (sin(time * 5.0) * 0.5 + 0.5);
 

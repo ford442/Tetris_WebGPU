@@ -36,6 +36,9 @@
 - "Boosted particle brightness in particle shader (8.0 base, 15.0 core) to make explosions feel even more incandescent and impactful."
 
 - "Implemented Next-Level Juice Protocol: Upgraded the WebGPU background shader (`background.ts`) to dynamically evolve into a luxury glowing glass-brick wall. The grid features crack propagation that intensifies with the game level and combo multiplier (`warpSurge`), along with glowing mortar and gold/silver hinges that throb with intensity."
+
 - "Adding additive blending to the particle shader makes the explosions look like real light."
 - "Screen shake should decay exponentially, not linearly, for a snappier feel."
-- "Added intense CRT scanline jitter that specifically scales with hardDropBoost to make the CRT distortion heavily react to impacts and give hard drops an even punchier Arcade feel."
+- "Added a 'Shockwave' distortion effect on Hard Drops."
+- "Upgraded Block shaders to include Fresnel Rim Lighting and Pulse effects."
+- "Evolved the BackgroundShaders to react to the Game Level (calm blue at Lvl 1, chaotic red at Lvl 10)."

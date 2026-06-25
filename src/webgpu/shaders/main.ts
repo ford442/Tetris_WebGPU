@@ -199,11 +199,13 @@ export const Shaders = () => {
                 let rimFalloff = 1.0 - max(dot(N, V), 0.0);
                 let rimFalloff2 = rimFalloff * rimFalloff;
                 let rimFalloff4 = rimFalloff2 * rimFalloff2;
-                let rimLight = rimFalloff4 * (45.0 + f32(uniforms.level) * 3.0); // Sharper, brighter rim
+                let rimLight = rimFalloff4 * (75.0 + f32(uniforms.level) * 5.0); // Sharper, brighter rim
                
                 // Color the rim based on piece color for glass, white for metal
                 let rimColor = mix(vColor.rgb * 0.8, vec3<f32>(1.0), metalMask);
                 finalColor += rimColor * rimLight * 0.8; // JUICE: Multiplied Fresnel Rim lighting further
+                let pulseBlock = (sin(time * 5.0) * 0.5 + 0.5) * 0.3;
+                finalColor += vColor.rgb * pulseBlock;
                 // Simple fresnel (needed for ghost piece downstream)
                 // dotNV already computed above for iridescence
                 let fresnelBase = 1.0 - dotNV;
