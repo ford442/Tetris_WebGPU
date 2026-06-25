@@ -272,18 +272,6 @@ export const PostProcessShaders = () => {
                 color += fc * (levelUpFlash * 1.05);
             }
 
-            // Game over: 6-triangle kaleidoscope mirror on the (final board state in) myTexture
-            // Spins slowly while gameOverKaleidoTime > 0 (set 2.0 on trigger, decayed in effects + written in renderloop)
-            // Replaces normal distortion path for the duration; board is static at game over so this "captures" it.
-            if (uniforms.gameOverKaleidoTime > 0.001) {
-                let p = finalUV - vec2<f32>(0.5);
-                let r = length(p);
-                var a = atan2(p.y, p.x);
-                let spin = uniforms.gameOverKaleidoTime * 0.7; // slow rad/sec spin
-                let sa = 1.04719755; // PI/3 for 6 segments
-                a = a + spin;
-                // 6-way mirror fold
-                a = abs( (a / sa) % 2.0 - 1.0 ) * sa;
             // Scanlines
             let baseScanline = sin(finalUV.y * 800.0 + uniforms.time * 10.0) * 0.04;
             // NEON BRICKLAYER: Add intense CRT jitter on hard drop boost
