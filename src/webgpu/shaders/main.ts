@@ -128,7 +128,7 @@ export const Shaders = () => {
                 
                 // Use configurable texture sampling
                 let texUV = transformUVForSampling(sampleUV);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
 
                 // ── Crystal-glass material detection ───────────────────────────────────
                 // Gold frame: mid-luminance AND warm hue (R > B).
