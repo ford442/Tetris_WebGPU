@@ -40,6 +40,7 @@ export const MaterialAwarePostProcessShaders = () => {
         @binding(0) @group(0) var<uniform> uniforms : PostProcessUniforms;
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
+        @binding(3) @group(0) var blockTexture: texture_2d<f32>;
 
         // FXAA 3.11 implementation (simplified for performance)
         // Restructured to avoid non-uniform control flow with textureSample
@@ -263,6 +264,7 @@ export const MaterialAwarePostProcessShaders = () => {
             let level = uniforms.level;
 
             var shockwaveAberration = 0.0;
+            var glassOverlay = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dir = normalize(uv - center);
                 let dist = length(uv - center);
@@ -280,6 +282,22 @@ export const MaterialAwarePostProcessShaders = () => {
                     // NEON BRICKLAYER: Increased shockwave intensity + chromatic aberration on hard drops
                     // for maximum "drop impact" feel (per Graphics & Game Feel requirements)
                     shockwaveAberration = params.z * 3.0 * (1.0 - abs(diff)/width) * (1.0 - time);
+
+                    // NEON BRICKLAYER: Add shattered glass overlay near epicenter
+                    if (uniforms.hardDropBoost > 0.0 && time < 0.5) {
+                        // UVs mapped to the glass block texture, centered at the shockwave epicenter
+                        let glassUV = (uv - center) * 4.0 + vec2<f32>(0.5);
+                        let texColor = textureSampleLevel(blockTexture, mySampler, glassUV, 0.0).rgb;
+
+                        if (glassUV.x >= 0.0 && glassUV.x <= 1.0 && glassUV.y >= 0.0 && glassUV.y <= 1.0) {
+                            // Extract 'cracks' or bright highlights from the gold glass texture
+                            let crackIntensity = max(texColor.r, max(texColor.g, texColor.b));
+
+                            // Blend it smoothly based on distance to the shockwave ring
+                            let blend = cos(angle) * strength * (1.0 - time * 2.0) * uniforms.hardDropBoost * 2.0;
+                            glassOverlay = clamp(crackIntensity * blend, 0.0, 1.0);
+                        }
+                    }
                 }
 
                 // Echo rings
@@ -330,6 +348,11 @@ export const MaterialAwarePostProcessShaders = () => {
             var g = baseSample.g;
             var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB, vertAberration + pulseR * 0.4)).b;
             var color = vec3<f32>(r, g, b);
+
+            // Add the shattered glass overlay into the final color
+            var glassOverlayColor = vec3<f32>(0.4, 0.8, 1.0) * glassOverlay;
+            color += glassOverlayColor;
+
             let sampledAlpha = baseSample.a;
 
             // FXAA

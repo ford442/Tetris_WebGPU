@@ -7,6 +7,7 @@ import {
   PROCEDURAL_BLOCK_TEXTURE_SIZE,
   getTextureMipLevelCount,
   paintProceduralBlockTexture,
+  createBlockTextureBindingView,
 } from './blockTexture.js';
 
 /**
@@ -178,6 +179,7 @@ export async function recreateRenderTargets(view: any) {
         { binding: 0, resource: { buffer: view.postProcessUniformBuffer } },
         { binding: 1, resource: view.sampler },
         { binding: 2, resource: view.offscreenTexture.createView() },
+        { binding: 3, resource: createBlockTextureBindingView(view.blockTexture) },
       ],
     });
   }

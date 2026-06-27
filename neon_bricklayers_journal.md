@@ -42,3 +42,4 @@
 - "Added a 'Shockwave' distortion effect on Hard Drops."
 - "Upgraded Block shaders to include Fresnel Rim Lighting and Pulse effects."
 - "Evolved the BackgroundShaders to react to the Game Level (calm blue at Lvl 1, chaotic red at Lvl 10)."
+- "Wired in the gold cracked-glass texture as a subtle dynamic overlay during the hard drop shockwave post-processing effect, extracting bright highlights from the block texture to simulate a shattering impact."
