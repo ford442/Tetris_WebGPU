@@ -328,7 +328,7 @@ export const PremiumBlockShaders = () => {
             
             // Sample base texture (for noise/detail)
             let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-            let texColor = textureSample(blockTexture, blockSampler, texUV);
+            let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
             
             // Material properties from uniforms
             let metallic = fUniforms.metallic;

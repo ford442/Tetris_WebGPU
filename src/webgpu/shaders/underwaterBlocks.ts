@@ -274,7 +274,7 @@ export const UnderwaterBlockShaders = () => {
             }
             
             // Sample texture
-            let texColor = textureSample(blockTexture, blockSampler, texUV);
+            let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
             
             // Get material masks
             let masks = extractUnderwaterMaterialMask(texColor.rgb);

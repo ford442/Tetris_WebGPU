@@ -42,15 +42,23 @@ This document outlines the optimizations and game-feel improvements made in the 
   * Replaced `Math.exp(-dt * factor)` with fast algebraic approximation `1.0 / (1.0 + dt * factor)` for exponential decay effects.
   * Replaced `length()` with a squared distance via `dot(diff, diff)` in `background.ts` for the vignette effect.
   * Replaced `length()` with a squared distance via `dot(diff, diff)` in `main.ts` for the block center glow distance check.
-* **Metrics**: Eliminates expensive `sqrt()` operations and `Math.exp()` calls in tight loops and shaders, improving ALU efficiency and overall framerate stability on lower-end devices.
+* **Metrics**: Eliminates expensive `sqrt()` operations and `Math.exp()` calls in tight loops and shaders, improving ALU efficiency and overall framerate stability on lower-end devices. Included new fast algebraic approximations in `src/webgpu/effects.ts` (`1.0 / (1.0 + dt * x)`) for Line Clear Laser and Hard Drop Aberration Pulse decay loops (cheap approx for exponential decay - acceptable visual error for performance).
 
-### 3. Block Rendering / Material Separation
-**Objective**: Enhance image sampled block rendering and material detection for PBR.
-* **Files**: `src/webgpu/geometry.ts`, `src/webgpu/textureSampling.ts`
+### 2.6 Garbage Collection Optimization (`viewGameEvents.ts`)
+**Objective**: Avoid GC stuttering during explosive Line Clears.
+* **Files**: `src/webgpu/viewGameEvents.ts`
+* **Changes**:
+  * Replaced dynamically allocated `new Array(10).fill(0)` in the Line Clear snapshot generator with a spread static `EMPTY_ROW` array reference.
+* **Metrics**: Preemptively eliminates a minor per-frame allocation bottleneck on intense visual events.
+
+### 3. Block Rendering / Material Separation & Control Flow
+**Objective**: Enhance image sampled block rendering, material detection for PBR, and explicit texture sampling performance.
+* **Files**: `src/webgpu/geometry.ts`, `src/webgpu/textureSampling.ts`, `src/webgpu/shaders/main.ts`, `src/webgpu/shaders/premiumBlocks.ts`, `src/webgpu/shaders/underwaterBlocks.ts`
 * **Changes**:
   * Adjusted `textureScale` to `0.98` in `geometry.ts` for sharper detail and to ensure absolutely no edge bleeding.
   * Updated `goldSignal` threshold to `0.75` and `1.15` in `textureSampling.ts` for a better interpolation and material separation.
-* **Metrics**: Visual fidelity is improved, showing better metal/glass separation on blocks without regressions.
+  * Replaced `textureSample` with `textureSampleLevel(..., 0.0)` in WGSL block shaders.
+* **Metrics**: Visual fidelity is improved, showing better metal/glass separation on blocks without regressions. Uniform control flow from explicit LOD 0 sampling increases WebGPU compiler efficiency and wave predictability.
 
 ## Skipped and Reverted Optimizations
 
