@@ -827,7 +827,12 @@ export default class View {
 
     this.postProcessBindGroup = this.device.createBindGroup({
         layout: this.postProcessPipeline.getBindGroupLayout(0),
-        entries: [{ binding: 0, resource: { buffer: this.postProcessUniformBuffer } }, { binding: 1, resource: this.sampler }, { binding: 2, resource: this.offscreenTexture.createView() }]
+        entries: [
+            { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
+            { binding: 1, resource: this.sampler },
+            { binding: 2, resource: this.offscreenTexture.createView() },
+            { binding: 3, resource: createBlockTextureBindingView(this.blockTexture) }
+        ]
     });
 
     // Initialize multi-pass bloom system

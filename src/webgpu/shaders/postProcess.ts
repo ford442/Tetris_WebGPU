@@ -27,6 +27,7 @@ export const PostProcessShaders = () => {
         @binding(0) @group(0) var<uniform> uniforms : PostProcessUniforms;
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
+        @binding(3) @group(0) var blockTexture: texture_2d<f32>;
 
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
@@ -85,6 +86,7 @@ export const PostProcessShaders = () => {
             // === EXPLICIT SHOCKWAVE EFFECT AS REQUESTED ===
             // Shockwave Logic
             var shockwaveAberration = 0.0;
+            var glassOverlay = 0.0;
 
             // Shockwave distortion effect for hard drops
             if (params.y > 0.0) {
@@ -115,6 +117,22 @@ export const PostProcessShaders = () => {
                     // NEON BRICKLAYER: Increased shockwave intensity + chromatic aberration on hard drops
                     // for maximum "drop impact" feel (per Graphics & Game Feel requirements)
                     shockwaveAberration = params.z * 3.0 * (1.0 - abs(diff)/width) * (1.0 - time);
+
+                    // NEON BRICKLAYER: Add shattered glass overlay near epicenter
+                    if (uniforms.hardDropBoost > 0.0 && time < 0.5) {
+                        // UVs mapped to the glass block texture, centered at the shockwave epicenter
+                        let glassUV = (uv - center) * 4.0 + vec2<f32>(0.5);
+                        let texColor = textureSampleLevel(blockTexture, mySampler, glassUV, 0.0).rgb;
+
+                        if (glassUV.x >= 0.0 && glassUV.x <= 1.0 && glassUV.y >= 0.0 && glassUV.y <= 1.0) {
+                            // Extract 'cracks' or bright highlights from the gold glass texture
+                            let crackIntensity = max(texColor.r, max(texColor.g, texColor.b));
+
+                            // Blend it smoothly based on distance to the shockwave ring
+                            let blend = cos(angle) * strength * (1.0 - time * 2.0) * uniforms.hardDropBoost * 2.0;
+                            glassOverlay = clamp(crackIntensity * blend, 0.0, 1.0);
+                        }
+                    }
                 }
 
                 // Second ring (Echo) - NEON BRICKLAYER
@@ -186,7 +204,7 @@ export const PostProcessShaders = () => {
             let a = baseSample.a;
 
             // Bloom-ish boost (optimized 5-tap tent filter)
-            var color = vec3<f32>(r, g, b);
+            var color = vec3<f32>(r, g, b) + vec3<f32>(0.4, 0.8, 1.0) * glassOverlay;
 
             // OPTIMIZED: 5-tap tent filter (down from 8) with weighted sampling
             // Center + 4 directional samples = better quality, fewer ALU ops
