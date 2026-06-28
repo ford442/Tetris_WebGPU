@@ -283,6 +283,16 @@ export default class View {
 
   // NEW: Explicit uniform binding for hard drop shockwave
   shockwaveParamsUniform: Float32Array = new Float32Array([0, 0, 0, 0]);
+
+  // Fresnel Rim Lighting uniform (new for Neon Bricklayer task)
+  fresnelParamsUniform!: GPUBuffer;
+  fresnelParams = {
+      intensity: 0.65,
+      fresnelPower: 2.8,
+      hardDropBoost: 0,
+      _pad1: 0,
+  };
+
   _lastEffectCounter: number = 0;
   _hardDropBoostTimer: number = 0;
 
@@ -853,6 +863,12 @@ export default class View {
     // 224 bytes — WGSL minBindingSize for FragmentUniforms (audio bands at 184+, struct tail padding)
     this.fragmentUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.FRAGMENT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
+    this.fresnelParamsUniform = this.device.createBuffer({
+        size: 16, // vec4<f32> aligned
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: false,
+    });
+
     let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
     let lightPosition = this._f32_3;
     lightPosition.set([-5.0, 0.0, 0.0]);
@@ -945,6 +961,7 @@ export default class View {
                 { binding: 2, resource: createBlockTextureBindingView(this.blockTexture) },
                 { binding: 3, resource: this.blockSampler },
                 { binding: 5, resource: { buffer: this.dissolveBuffer } },
+                { binding: 6, resource: { buffer: this.fresnelParamsUniform } },
             ],
         });
         this.uniformBindGroup_CACHE.push(bindGroup);
@@ -978,7 +995,28 @@ export default class View {
     );
   }
 
+  public setFresnelBoost(boost: number) {
+      this.fresnelParams.hardDropBoost = boost;
+  }
+
   render(dt: number) {
+    // Decay Fresnel boost if any
+    if (this.fresnelParams.hardDropBoost > 0) {
+      this.fresnelParams.hardDropBoost = Math.max(0, this.fresnelParams.hardDropBoost - dt * 2.0); // Simple decay
+    }
+    if (this.device) {
+      this.device.queue.writeBuffer(
+          this.fresnelParamsUniform,
+          0,
+          new Float32Array([
+              this.fresnelParams.intensity,
+              this.fresnelParams.fresnelPower,
+              this.fresnelParams.hardDropBoost,
+              0
+          ])
+      );
+    }
+
     executeRenderLoop(this, dt);
   }
 
