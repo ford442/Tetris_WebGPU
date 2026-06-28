@@ -154,6 +154,14 @@ export const PBRBlockShaders = () => {
         // dissolve compute pass and read here. Compute writes, fragment reads — no readback.
         @binding(5) @group(0) var<storage, read> dissolveField : array<f32, 200>;
 
+        struct FresnelParams {
+            intensity: f32,
+            fresnelPower: f32,
+            hardDropBoost: f32,
+            _pad1: f32,
+        };
+        @binding(6) @group(0) var<uniform> fresnelParams: FresnelParams;
+
         ${PBRFunctions}
         
         // ============================================================================
@@ -518,13 +526,18 @@ export const PBRBlockShaders = () => {
                 }
             }
 
-            // Rim lighting - Fresnel Schlick approximation (rimPower^4) for brighter edge glow
+            // === FRESNEL RIM LIGHTING (Neon Bricklayer task) ===
+            // Rim lighting - Fresnel Schlick approximation for brighter edge glow
             let rimPower = 1.0 - NdotV;
-            let rimPower2 = rimPower * rimPower;
-            let rimPower4 = rimPower2 * rimPower2;
-            let rimColor = mix(vColor.rgb, vec3f(1.0), metalMask * fUniforms.metallic);
+            let fresnel = pow(rimPower, fresnelParams.fresnelPower);
+
+            // Gold rim color + intensity (boosted during hard drops)
+            let rimColor = mix(vColor.rgb, vec3f(1.0, 0.85, 0.4), metalMask * fUniforms.metallic); // Warm gold on metal
             let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
-            finalColor += rimColor * rimPower4 * dynamicRim; // JUICE: Enhanced Fresnel Rim Lighting + Dynamic Flash
+            let rimIntensity = (fresnelParams.intensity * dynamicRim) * (1.0 + fresnelParams.hardDropBoost * 2.0);
+
+            let fresnelRim = rimColor * rimIntensity * fresnel;
+            finalColor += fresnelRim; // Additive rim — looks great on gold glass
 
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;

@@ -247,6 +247,10 @@ export default class Game {
     this.effectCounter++;
     this._gameStateCache.effectFlag = true;
 
+    // Fresnel rim boost during hard drop (Neon Bricklayer task)
+    if (this.view) {
+        (this.view as any).setFresnelBoost?.(1.0);
+    }
     if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
         this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
     }
@@ -290,6 +294,10 @@ export default class Game {
     this.effectCounter++;
     this._gameStateCache.effectFlag = true;
 
+    // Fresnel rim boost during hard drop (Neon Bricklayer task)
+    if (this.view) {
+        (this.view as any).setFresnelBoost?.(1.0);
+    }
     if (this.view && this.view.visualEffects && this.view.visualEffects.triggerShockwave) {
         this.view.visualEffects.triggerShockwave([0.5, 0.5], 0.8, 0.4, 0.15, 3.5);
     }
