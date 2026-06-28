@@ -216,6 +216,10 @@ uiContainer.innerHTML = `
 
   const controller = new Controller(game, view, view, soundManager);
 
+  // Shared by viewGameEvents (e.g. game-over retry) across all renderer backends.
+  (view as { game?: typeof game; controller?: typeof controller }).game = game;
+  (view as { game?: typeof game; controller?: typeof controller }).controller = controller;
+
   // Wire the subliminal system into the controller for event-driven triggers
   // (line clears, T-spins, level ups, new high scores, background cadence).
   (controller as any).subliminal = subliminal;

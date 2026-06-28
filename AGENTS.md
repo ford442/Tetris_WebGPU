@@ -6,8 +6,8 @@
 
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
 * **Frontend:** TypeScript 4.9 + Vite 4.
-* **Rendering:** WebGPU (WGSL shaders). Not WebGL.
-* **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM).
+* **Rendering:** WebGPU (WGSL shaders) primary; WebGL2 fallback; optional Emscripten C++ (`webgpu-cpp`).
+* **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM) for collision; C++ renderer is rendering-only.
 * **Audio:** Web Audio API (procedural synthesis + sample playback).
 * **Math:** `gl-matrix` 3.4 for 3D transformations.
 * **Testing:** Vitest 1.x.
@@ -17,7 +17,7 @@
 The project follows a classic **MVC** pattern:
 
 * **Model (`src/game.ts` + `src/game/`)**: Manages the 10×20 playfield, piece generation (7-bag randomizer), SRS rotation with wall kicks, collision detection, lock delay (extended placement / Infinity-like behavior with up to 25 resets), T-spin detection, scoring, combos, back-to-backs, and all-clears.
-* **View (`src/viewWebGPU.ts` + `src/webgpu/`)**: Handles the entire WebGPU render loop, shader pipelines, buffer management, particle systems, visual effects, theme switching, premium visuals (FXAA, film grain, CRT, supersampling), reactive video/audio, and DOM synchronization for UI overlays.
+* **View (`src/viewWebGPU.ts` + `src/webgpu/` + `src/view/`)**: Handles render loop selection via `createView()`. Default path is WebGPU; WebGL2 and opt-in C++ (`src/viewCpp/EmscriptenView.ts`) implement the shared `IView` contract.
 * **Controller (`src/controller.ts` + `src/input/`)**: Bridges input and game logic. Runs a `requestAnimationFrame` loop, handles DAS/ARR (Delayed Auto Shift / Auto Repeat Rate), input buffering, SOCD cleaning, and touch controls for mobile devices.
 
 ### TypeScript / WASM Hybrid
@@ -26,6 +26,18 @@ The project follows a classic **MVC** pattern:
 * **Bridge:** `src/wasm/WasmCore.ts` creates a `WebAssembly.Memory` (initial 1 page = 64KB), loads `release.wasm`, and exposes an `Int8Array` view (`playfieldView`) of the first 200 bytes.
 * **Fallback:** If WASM fails to load, the app falls back to a pure-JS collision path so it does not crash. Tests explicitly verify that the WASM path is active.
 * **Playfield storage:** A flat 1D `Int8Array` of 200 cells (10 columns × 20 rows). The game logic uses Y-down coordinates (row 0 is the top).
+
+### C++ Renderer (opt-in, Emscripten)
+
+Parallel to `assembly/` — **not** used for game logic or collision.
+
+* **Source:** `cpp/src/` → `public/cpp/tetris_renderer.{js,wasm}`
+* **Adapter:** `src/viewCpp/EmscriptenView.ts` implements `IView`; `CppRendererLoader.ts` loads wasm (WasmCore-style multi-path fetch)
+* **Factory:** `src/view/createView.ts` dynamic-imports EmscriptenView when preference is `webgpu-cpp`
+* **Switch:** `?renderer=webgpu-cpp` or `localStorage.setItem('tetris_renderer', 'webgpu-cpp')`
+* **Build:** `npm run cpp:release` / `cpp:debug` / `build:cpp` — requires `emcc` on PATH (`source emsdk_env.sh`). **Skips cleanly** when emsdk is absent; `npm test` still passes.
+* **Fallback:** `webgpu-cpp` → TS WebGPU → WebGL2 if wasm missing or init fails
+* **Current state:** Canvas2D bootstrap draw from C++; full WebGPU port in progress. See `cpp/README.md` for roadmap and manual test matrix.
 
 ### Render Pipeline (simplified)
 
@@ -40,6 +52,11 @@ The project follows a classic **MVC** pattern:
 /assembly              # AssemblyScript source (compiles to WASM)
   index.ts             # Collision kernel + shared memory layout
   tsconfig.json        # Extends assemblyscript/std/assembly.json
+
+/cpp                   # Emscripten C++ renderer (opt-in)
+  src/renderer.cpp
+  src/playfield_draw.cpp
+  README.md
 
 /src
   index.ts             # App entry point (UI injection, MVC wiring, theme setup)
@@ -84,6 +101,16 @@ The project follows a classic **MVC** pattern:
     materials.test.ts  # Inline co-located tests
   /wasm
     WasmCore.ts        # WASM loader, memory view, collision API wrapper
+  /view
+    IView.ts           # Shared view interface (all backends)
+    createView.ts      # Renderer factory (dynamic cpp import)
+    rendererPreference.ts
+  /viewCpp
+    EmscriptenView.ts  # C++ renderer IView adapter
+    CppRendererLoader.ts
+    cppPlayfieldSync.ts
+  /viewWebGL2
+    viewWebGL2.ts      # WebGL2 fallback renderer
   /input
     touchControls.ts   # Mobile touch overlay controls
   /effects
@@ -108,7 +135,10 @@ The project follows a classic **MVC** pattern:
   texture-sampling.test.ts
 
 /public                # Static assets served by Vite
-  release.wasm         # Copied here by asbuild:release
+  release.wasm         # Collision WASM (asbuild:release)
+  cpp/                 # C++ renderer glue + wasm (cpp:release)
+    tetris_renderer.js
+    tetris_renderer.wasm
   block.png            # Block texture atlas
   block-2.png
   assets/              # Additional runtime assets (videos, etc.)
@@ -136,20 +166,48 @@ npm run asbuild:debug
 # Compile AssemblyScript to WASM (release) → build/release.wasm + public/release.wasm
 npm run asbuild:release
 
-# Full production build (WASM + Vite frontend)
+# Compile C++ renderer (optional; skips if emcc missing)
+npm run cpp:release
+npm run cpp:debug
+npm run build:cpp      # alias for cpp:release
+
+# Full production build (collision WASM + cpp + Vite frontend)
 npm run build:all
 
-# Run unit tests (Vitest). pretest automatically compiles WASM first.
+# Run unit tests (Vitest). pretest compiles collision WASM only (not cpp).
 npm test
 ```
 
+### Renderer preferences (dev)
+
+| URL / storage | Result |
+|---------------|--------|
+| (default / `auto`) | WebGPU if available, else WebGL2 |
+| `?renderer=webgpu` | Force TS WebGPU |
+| `?renderer=webgl2` | Force WebGL2 |
+| `?renderer=webgpu-cpp` | Emscripten C++ (fallback if no wasm) |
+
+```bash
+npm run dev
+# http://localhost:5173/?renderer=webgpu-cpp   # after npm run cpp:release
+```
+
+See `cpp/README.md` for the full manual test matrix.
+
 ## Key Directives & Conventions
 
-### 1. WASM Build is Manual and Mandatory
+### 1. WASM Build is Manual and Mandatory (Collision)
 **Vite does NOT compile AssemblyScript.**
 * If you edit anything in `/assembly`, you **must** run `npm run asbuild:release` before testing or deploying.
 * The browser loads `public/release.wasm`, not `assembly/index.ts`.
 * `npm test` runs `pretest` which attempts `asbuild:release`, but do not rely on this during iterative dev.
+
+### 1b. C++ Renderer Build is Optional (Rendering)
+**Vite does NOT compile Emscripten C++ either.**
+* Edit `cpp/src/` → run `npm run cpp:release` (requires `emcc` / emsdk).
+* Artifacts: `public/cpp/tetris_renderer.{js,wasm}`.
+* Without artifacts, `?renderer=webgpu-cpp` uses a TS Canvas2D placeholder or falls back to WebGPU/WebGL2.
+* `npm run cpp:release` and `build:cpp` exit 0 when `emcc` is missing — CI-safe.
 
 ### 2. Import Extensions
 All TypeScript files use **`.js` extensions** in their `import` statements, even when importing `.ts` files. This matches the project's `tsconfig.json` (`module: "ESNext"`, `moduleResolution: "Node"`) and Vite's expectations.
@@ -230,6 +288,12 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
 5. **Background video not visible**  
    Check that the WebGPU canvas clear color has `alpha: 0.0` and `alphaMode: 'premultiplied'`. Any opaque clear will hide the video portal.
 
+6. **C++ renderer not loading**  
+   Run `npm run cpp:release` with `source emsdk_env.sh`. Confirm `public/cpp/tetris_renderer.wasm` exists. Without it, `webgpu-cpp` falls back safely. See `cpp/README.md`.
+
+7. **"My cpp changes aren't showing up"**  
+   Re-run `npm run cpp:release` after editing `cpp/src/`. Hard-refresh the browser (Vite does not rebuild wasm).
+
 ## Cursor Cloud specific instructions
 
 This is a **client-only SPA** — no Docker, database, or backend services. One process covers local development.
@@ -241,13 +305,24 @@ This is a **client-only SPA** — no Docker, database, or backend services. One 
 | Vite dev server | `npm run dev -- --host 0.0.0.0 --port 5173` | Serves the app at `http://localhost:5173`. Use tmux for long-running dev. |
 | WebGPU browser | Google Chrome (preinstalled on Cloud VMs) | Required for visual/manual E2E testing. `navigator.gpu` must be available. |
 
-WASM (`public/release.wasm`) is a **build artifact**, not a daemon. Vite does not compile AssemblyScript; run `npm run asbuild:release` after `/assembly` changes (the VM update script handles this on startup).
+WASM (`public/release.wasm`) is a **build artifact**, not a daemon. Vite does not compile AssemblyScript; run `npm run asbuild:release` after `/assembly` changes.
+
+C++ renderer (`public/cpp/`) is also a build artifact. Run `npm run cpp:release` after `/cpp` changes (requires emsdk).
 
 ### Verify the environment
 
 ```bash
-npm test              # 57 Vitest tests (pretest rebuilds WASM)
-npm run build:all     # Production build to /dist
+npm test              # Vitest (pretest rebuilds collision WASM only)
+npm run build:all     # collision WASM + cpp (if emcc) + Vite → /dist
+```
+
+### Try the C++ renderer
+
+```bash
+source /path/to/emsdk/emsdk_env.sh
+npm run cpp:release
+npm run dev -- --host 0.0.0.0 --port 5173
+# http://localhost:5173/?renderer=webgpu-cpp
 ```
 
 There is **no** `npm run lint` script in this repo.

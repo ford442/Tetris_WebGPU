@@ -3,7 +3,7 @@ import type { Themes } from '../webgpu/themes.js';
 /** Shared surface area used by Controller and index.ts for either renderer backend. */
 export interface IView {
   state: any;
-  rendererName: 'webgpu' | 'webgl2';
+  rendererName: 'webgpu' | 'webgl2' | 'webgpu-cpp';
   canvasWebGPU: HTMLCanvasElement;
   currentTheme: any;
   useGlitch?: boolean;

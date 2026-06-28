@@ -703,7 +703,7 @@ export default class Game {
     if (this.hasCollision()) {
         this.gameOver = true;
         // NEW: Trigger reactive game over
-        if (this.view) {
+        if (this.view?.onGameOverReactive) {
             this.view.onGameOverReactive();
         }
     }
@@ -736,7 +736,7 @@ export default class Game {
           this._linesClearedCache,
         );
         this.collisionDetector.updatePlayfield(this.playfield);
-        this.view.syncBoardToGPU(this.playfield);
+        this.view?.syncBoardToGPU?.(this.playfield);
       }
       return lines;
     }

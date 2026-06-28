@@ -10,6 +10,7 @@ A high-performance Tetris implementation using WebGPU for rendering, WebAssembly
 - **Vite** - Build tool and dev server
 - **WebGPU** - GPU rendering (Chrome with `--enable-unsafe-webgpu`)
 - **AssemblyScript** - WASM collision detection (`assembly/index.ts`)
+- **Emscripten (C++)** - Opt-in renderer (`cpp/`, `?renderer=webgpu-cpp`)
 - **Web Audio API** - Procedural audio synthesis
 - **gl-matrix** - Matrix math for 3D transforms
 - **Vitest/Mocha/Chai** - Testing
@@ -31,6 +32,14 @@ src/
 │   └── stateProjection.ts   # Game state projection helpers
 ├── wasm/
 │   └── WasmCore.ts          # WASM loader and collision API wrapper
+├── view/
+│   ├── IView.ts             # Shared view contract (all renderers)
+│   ├── createView.ts        # Factory + dynamic cpp import
+│   └── rendererPreference.ts
+├── viewCpp/
+│   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
+│   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
+├── viewWebGL2/              # WebGL2 fallback renderer
 └── webgpu/                  # WebGPU rendering subsystem
     ├── shaders/             # WGSL shader modules (split by purpose)
     │   ├── index.ts         # Re-exports all shader functions
@@ -51,6 +60,10 @@ src/
 assembly/
 ├── index.ts                 # AssemblyScript collision detection (compiled to WASM)
 └── tsconfig.json
+cpp/                         # Emscripten C++ renderer (opt-in, parallel to assembly/)
+├── src/renderer.cpp
+├── src/playfield_draw.cpp
+└── README.md                # emsdk setup, build commands, test matrix
 index.ts                     # App entry point (UI creation, wiring)
 index.html                   # HTML bootstrap
 ```
@@ -59,8 +72,15 @@ index.html                   # HTML bootstrap
 
 ### MVC Pattern
 - **Model**: `Game` class manages playfield, pieces, scoring, lock delay, T-spin detection
-- **View**: `viewWebGPU.ts` + `webgpu/` modules handle all rendering
+- **View**: `createView()` selects WebGPU (TS), WebGL2, or Emscripten C++ (`EmscriptenView`); each implements `IView`
 - **Controller**: `controller.ts` handles input polling, game loop, and synchronization
+
+### C++ Renderer (opt-in)
+- **Switch:** `?renderer=webgpu-cpp` or `localStorage.tetris_renderer=webgpu-cpp`
+- **Build:** `npm run cpp:release` (requires [emsdk](https://emscripten.org/) — `source emsdk_env.sh`)
+- **Artifacts:** `public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`)
+- **Fallback:** cpp → TS WebGPU → WebGL2 if wasm missing or init fails
+- **Docs:** `cpp/README.md`
 
 ### Data Flow
 ```
@@ -93,11 +113,16 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 ## Development Commands
 
 ```bash
-npm run dev          # Start dev server (Vite)
-npm run build        # Production build
-npm run test         # Run tests (Vitest)
-npm run asbuild      # Compile AssemblyScript to WASM
+npm run dev              # Start dev server (Vite)
+npm run build            # Production build (Vite only)
+npm run build:all        # AS WASM + cpp + Vite
+npm run test             # Run tests (Vitest)
+npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
+npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc)
+npm run cpp:debug        # Debug Emscripten build
 ```
+
+**Try C++ renderer:** `npm run cpp:release` then open `?renderer=webgpu-cpp`
 
 ## File Size Guidelines
 
@@ -123,3 +148,4 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `game.test.ts` — Core game logic
 - `game-utils.test.ts` — Utility functions
 - `render-metrics.test.ts` — Render coordinate math
+- `renderer-preference.test.ts` — `webgpu-cpp` preference parsing

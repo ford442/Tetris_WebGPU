@@ -1,15 +1,19 @@
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
+import { withRendererParam, VALID_RENDERERS } from './rendererUrl.mjs';
 
 const baseUrl = process.argv[2] || 'http://127.0.0.1:4173/tetris-webgpu/';
 const outDir = process.argv[3] || '/opt/cursor/artifacts/screenshots';
-const renderer = process.argv[4] || 'webgl2';
+const renderer = process.argv[4] || process.env.RENDERER || 'webgl2';
 const theme = process.argv[5] || 'imageSampled';
+
+if (!VALID_RENDERERS.includes(renderer) && renderer !== 'auto') {
+  console.warn(`Unknown renderer "${renderer}". Valid: ${VALID_RENDERERS.join(', ')}`);
+}
 
 await mkdir(outDir, { recursive: true });
 
-const sep = baseUrl.includes('?') ? '&' : '?';
-const url = `${baseUrl}${sep}renderer=${renderer}`;
+const url = withRendererParam(baseUrl, renderer === 'auto' ? undefined : renderer);
 
 const browser = await chromium.launch({
   headless: true,

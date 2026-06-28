@@ -1,5 +1,10 @@
 const fs = require('fs');
 const { chromium } = require('playwright');
+const { withRendererParam } = require('./rendererUrl.cjs');
+
+const renderer = process.env.RENDERER || 'auto';
+const baseUrl = process.env.BASE_URL || 'http://[::1]:5173/';
+const startUrl = withRendererParam(baseUrl, renderer === 'auto' ? undefined : renderer);
 
 (async () => {
   if (!fs.existsSync('screenshots')) fs.mkdirSync('screenshots');
@@ -8,9 +13,8 @@ const { chromium } = require('playwright');
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await context.newPage();
 
-  console.log('Opening page...');
-  // Use IPv6 loopback where Vite is listening in this environment
-  await page.goto('http://[::1]:5173/', { waitUntil: 'networkidle' });
+  console.log('Opening page...', startUrl, `(renderer=${renderer})`);
+  await page.goto(startUrl, { waitUntil: 'networkidle' });
 
   // Wait for canvas to be ready
   await page.waitForSelector('#canvaswebgpu', { timeout: 10000 });

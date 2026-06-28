@@ -1,8 +1,12 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
+import { resolveGameUrl } from './scripts/rendererUrl.mjs';
 
-const URL = process.argv[2] || 'http://localhost:4174/tetris-webgpu/';
+const URL = resolveGameUrl({
+  argvUrl: process.argv[2],
+  defaultBase: 'http://localhost:4174/tetris-webgpu/',
+});
 const OUT = process.argv[3] || '/content/tetris_webgpu/screenshots/screenshot.png';
 
 const chromeArgs = [
