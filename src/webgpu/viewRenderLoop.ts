@@ -29,6 +29,9 @@ export function executeRenderLoop(view: any, dt: number) {
     view._lastEffectCounter = view.state.effectCounter;
     view.shockwaveParamsUniform[0] = 1.0;
     view._hardDropBoostTimer = 0.420; // 420ms
+    if (typeof view.setFresnelBoost === 'function') {
+      view.setFresnelBoost(1.0);
+    }
   }
 
   if (view._hardDropBoostTimer > 0) {
