@@ -268,6 +268,7 @@ export function renderPlayfieldBorder(
   MODELMATRIX: Matrix.mat4,
   NORMALMATRIX: Matrix.mat4,
   dissolveBuffer: GPUBuffer,
+  fresnelParamsUniform: GPUBuffer,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
     playfield: [
@@ -294,6 +295,7 @@ export function renderPlayfieldBorder(
           { binding: 2, resource: createBlockTextureBindingView(blockTexture) },
           { binding: 3, resource: blockSampler },
           { binding: 5, resource: { buffer: dissolveBuffer } },
+          { binding: 6, resource: { buffer: fresnelParamsUniform } },
         ],
       });
 
