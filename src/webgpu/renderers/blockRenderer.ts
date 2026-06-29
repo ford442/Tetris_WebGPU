@@ -27,6 +27,7 @@ type BlockView = {
   uniformBindGroup_ARRAY_border: GPUBindGroup[];
   vertexUniformBuffer_border: GPUBuffer;
   dissolveBuffer: GPUBuffer;
+  fresnelParamsUniform: GPUBuffer;
 };
 
 export class BlockRenderer {
@@ -50,7 +51,7 @@ export class BlockRenderer {
       this.view.blockTexture, this.view.blockSampler,
       this.view.vpMatrix as Float32Array, this.view.currentTheme,
       this.view._f32_3, this.view._f32_4, this.view.MODELMATRIX, this.view.NORMALMATRIX,
-      this.view.dissolveBuffer,
+      this.view.dissolveBuffer, this.view.fresnelParamsUniform,
     );
     this.view.vertexUniformBuffer_border = result.vertexUniformBuffer;
     this.view.uniformBindGroup_ARRAY_border = result.bindGroups;
