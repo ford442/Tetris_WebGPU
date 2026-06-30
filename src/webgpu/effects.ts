@@ -28,6 +28,9 @@ export class VisualEffects {
     neonBloomIntensity: number = 0;
     neonBloomBaseIntensity: number = 1.0;
 
+    // Resonant Glass Fracture state
+    backgroundResonance: number = 0;
+
     // Block Emissive state
     movementFlashTimer: number = 0;
     lineClearFlashTimer: number = 0;
@@ -117,6 +120,10 @@ export class VisualEffects {
         // Neon Bloom decay
         this.neonBloomIntensity *= Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
+
+        // Background Resonance decay
+        this.backgroundResonance *= Math.exp(-dt * 6.0);
+        if (this.backgroundResonance < 0.01) this.backgroundResonance = 0;
 
         // Block Emissive decay
         this.movementFlashTimer *= 1.0 / (1.0 + dt * 8.0);
@@ -236,6 +243,11 @@ export class VisualEffects {
     triggerNeonBloomFlash(strength: number = 1.0): void {
         this.neonBloomIntensity += strength;
         this.neonBloomIntensity = Math.min(this.neonBloomIntensity, 3.0); // Cap max bloom explosion
+    }
+
+    triggerBackgroundResonance(intensity: number): void {
+        this.backgroundResonance += intensity;
+        this.backgroundResonance = Math.min(this.backgroundResonance, 2.0); // Cap max resonance
     }
 
     triggerLineClearLaser(lines: number[], strength: number = 1.0): void {

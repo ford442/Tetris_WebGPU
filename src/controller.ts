@@ -545,7 +545,6 @@ export default class Controller {
           this.updateHighScoreDisplay();
           if (isNewHigh && this.subliminal) {
             this.subliminal.triggerReinforcement('highScore', 'strong');
-            this.viewWebGPU.triggerNeonBloomFlashEffects?.(0.5);
           }
       }
   }
@@ -632,7 +631,6 @@ export default class Controller {
           this.lastLevel = this.game.level;
           // Experimental subliminal reinforcement (strong on level up)
           this.subliminal?.triggerReinforcement('levelUp', 'strong');
-          this.viewWebGPU.triggerNeonBloomFlashEffects?.(0.5);
       }
 
       if (result.linesCleared.length > 0) {

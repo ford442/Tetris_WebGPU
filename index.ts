@@ -211,7 +211,13 @@ uiContainer.innerHTML = `
   // The pause menu toggle (injected above) syncs this live.
   // ===================================================================
   const subliminalEnabled = localStorage.getItem('tetris_subliminal_enabled') !== 'false';
-  const subliminal = new SubliminalReinforcement({ enabled: subliminalEnabled });
+  const subliminal = new SubliminalReinforcement({
+    enabled: subliminalEnabled,
+    onStrongCue: () => {
+      view.triggerNeonBloomFlashEffects?.(0.42);
+      view.triggerBackgroundResonance?.(0.85, 280);
+    }
+  });
   window.subliminalReinforcement = subliminal;
 
   const controller = new Controller(game, view, view, soundManager);

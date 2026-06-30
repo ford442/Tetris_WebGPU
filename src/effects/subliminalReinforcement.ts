@@ -41,6 +41,7 @@ export interface SubliminalOptions {
   flashDurationMin?: number;
   flashDurationMax?: number;
   minIntervalMs?: number;
+  onStrongCue?: () => void;
 }
 
 const STORAGE_KEY = 'tetris_subliminal_enabled';
@@ -97,6 +98,7 @@ export class SubliminalReinforcement {
   private readonly minIntervalMs: number;
   private readonly backgroundMin: number = 45_000;
   private readonly backgroundMax: number = 90_000;
+  private readonly onStrongCue?: () => void;
 
   constructor(options: SubliminalOptions = {}) {
     // Default ON for the experimental phase (user can disable immediately via pause menu).
@@ -110,6 +112,7 @@ export class SubliminalReinforcement {
     this.flashDurationMin = options.flashDurationMin ?? 25;
     this.flashDurationMax = options.flashDurationMax ?? 45;
     this.minIntervalMs = options.minIntervalMs ?? 8500;
+    this.onStrongCue = options.onStrongCue;
 
     // Create (or re-use) the overlay on construction
     this.ensureOverlay();
@@ -289,6 +292,9 @@ export class SubliminalReinforcement {
     // Gentle extra "pop" on strong moments (still extremely brief)
     if (intensity === 'strong' && !debug) {
       this.overlay.style.transform = 'translate(-50%, -50%) scale(1.15)';
+      if (this.onStrongCue) {
+        this.onStrongCue();
+      }
     } else {
       this.overlay.style.transform = 'translate(-50%, -50%) scale(1.05)';
     }

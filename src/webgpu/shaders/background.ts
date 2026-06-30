@@ -31,6 +31,10 @@ export const BackgroundShaders = () => {
             warpSurge: f32, // Offset 68
             ghostX: f32, // Offset 72 (UV space)
             ghostWidth: f32, // Offset 76 (UV width)
+            resonance: f32, // Offset 80
+            _pad1: f32,     // Offset 84
+            _pad2: f32,     // Offset 88
+            _pad3: f32,     // Offset 92
         };
         @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -40,6 +44,7 @@ export const BackgroundShaders = () => {
           let level = uniforms.level;
           let lockPercent = uniforms.lockPercent;
           let warpSurge = uniforms.warpSurge;
+          let resonance = uniforms.resonance;
           var uv = vUV;
 
           // Modify parameters based on level
@@ -216,16 +221,28 @@ export const BackgroundShaders = () => {
 
           // Crack propagation based on level / combo
           // Base level factor (0 to 1)
-          let crackIntensity = clamp((level - 1.0) / 10.0 + warpSurge * 0.5, 0.0, 1.0);
-          let crackNoise = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-          let crackLine = step(0.95 - crackIntensity * 0.15, crackNoise) * crackIntensity;
+          let crackIntensity = clamp((level - 1.0) / 10.0 + warpSurge * 0.5 + resonance * 0.5, 0.0, 1.0);
+
+          // Add slight chromatic offset on cracks when resonance is high
+          let crackOffset = resonance * 0.02;
+          let crackNoiseR = fract(sin(dot(uv + vec2<f32>(crackOffset, 0.0), vec2<f32>(12.9898, 78.233))) * 43758.5453);
+          let crackNoiseG = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+          let crackNoiseB = fract(sin(dot(uv - vec2<f32>(crackOffset, 0.0), vec2<f32>(12.9898, 78.233))) * 43758.5453);
+
+          let crackLineR = step(0.95 - crackIntensity * 0.15, crackNoiseR) * crackIntensity;
+          let crackLineG = step(0.95 - crackIntensity * 0.15, crackNoiseG) * crackIntensity;
+          let crackLineB = step(0.95 - crackIntensity * 0.15, crackNoiseB) * crackIntensity;
+
+          let crackColor = vec3<f32>(crackLineR, crackLineG, crackLineB) * vec3<f32>(1.0, 0.8, 0.2);
 
           // Mortar and bricks
           var brickColor = mix(vec3<f32>(0.0, 0.02, 0.2), vec3<f32>(0.3, 0.0, 0.0), levelFactor);
-          // Add glowing cracks
-          brickColor += vec3<f32>(1.0, 0.8, 0.2) * crackLine * (sin(time * 5.0) * 0.5 + 0.5);
+          // Add glowing cracks, boosted by resonance
+          brickColor += crackColor * (sin(time * 5.0) * 0.5 + 0.5 + resonance * 1.5);
 
-          let mortarColor = vec3<f32>(0.8, 0.7, 0.3) * (1.0 + crackIntensity * 2.0 * sin(time * 10.0)); // Gold/silver pulsing hinges
+          // Light fresnel rim pulse on gold hinges using resonance
+          let hingePulse = sin(time * 10.0) + resonance * 2.0;
+          let mortarColor = vec3<f32>(0.8, 0.7, 0.3) * (1.0 + crackIntensity * 2.0 * hingePulse); // Gold/silver pulsing hinges
 
           var wallColor = mix(brickColor, mortarColor, mortarMask);
 
