@@ -534,6 +534,10 @@ export default class View {
   triggerNeonBloomFlashEffects(strength: number = 1.0) {
     this.visualEffects.triggerNeonBloomFlash(strength);
   }
+
+  triggerBackgroundResonance(intensity: number, durationMs: number = 280) {
+    this.visualEffects.triggerBackgroundResonance(intensity);
+  }
   renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
   renderEndScreen(state: any) { handleRenderEndScreen(this, state); }
   renderPauseScreen() { handleRenderPauseScreen(this); }
@@ -725,7 +729,7 @@ export default class View {
         primitive: { topology: 'triangle-list' }
     });
 
-    this.backgroundUniformBuffer = this.device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.backgroundUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.backgroundBindGroup = this.device.createBindGroup({ layout: this.backgroundPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.backgroundUniformBuffer } }] });
 
     const videoBgShader = VideoBackgroundShaders();

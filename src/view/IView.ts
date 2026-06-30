@@ -35,4 +35,5 @@ export interface IView {
   onRotate?(): void;
   onHold?(): void;
   triggerNeonBloomFlashEffects?(intensity: number): void;
+  triggerBackgroundResonance?(intensity: number, durationMs?: number): void;
 }

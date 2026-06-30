@@ -245,6 +245,8 @@ function updateRenderUniforms(view: any, time: number, result: any) {
   view.device.queue.writeBuffer(view.backgroundUniformBuffer, 72, view._f32_1);
   view._f32_1[0] = ghostUVW;
   view.device.queue.writeBuffer(view.backgroundUniformBuffer, 76, view._f32_1);
+  view._f32_1[0] = view.visualEffects.backgroundResonance || 0.0;
+  view.device.queue.writeBuffer(view.backgroundUniformBuffer, 80, view._f32_1);
 
   // Fragment block uniforms (time@32, glitch@36, movementFlash@96, magnet@104, etc.)
   // are written in viewUniforms.updateFrameUniforms with pbrBlocks.ts layout.
