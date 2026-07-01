@@ -28,6 +28,7 @@ export const PostProcessShaders = () => {
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
         @binding(3) @group(0) var blockTexture: texture_2d<f32>;
+        @binding(4) @group(0) var<uniform> shockwaveParamsUniform: vec4<f32>;
 
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
@@ -81,6 +82,7 @@ export const PostProcessShaders = () => {
             let time = uniforms.shockwaveTime;
             let glitchStrength = uniforms.useGlitch; // Treated as intensity
             let params = uniforms.shockwaveParams;
+            let hardDropBoostFromBuffer = shockwaveParamsUniform.x; // Use binding 4
             let level = uniforms.level;
 
             // === EXPLICIT SHOCKWAVE EFFECT AS REQUESTED ===
@@ -100,7 +102,7 @@ export const PostProcessShaders = () => {
                 let radius = time * speed;
                 let width = params.x * 1.5; // JUICE: Wider shockwave
                 // NEW: explicitly apply the Neon Bricklayer Hard Drop Boost to shockwave intensity!
-                let strength = (params.y * 1.5) * (1.0 + uniforms.hardDropBoost * 0.6);
+                let strength = (params.y * 1.55) * (1.0 + hardDropBoostFromBuffer * 0.6);
                 let diff = dist - radius;
 
                 // Pre-calculate direction vector once to eliminate redundant ALU operations
@@ -119,7 +121,7 @@ export const PostProcessShaders = () => {
                     shockwaveAberration = params.z * 3.0 * (1.0 - abs(diff)/width) * (1.0 - time);
 
                     // NEON BRICKLAYER: Add shattered glass overlay near epicenter
-                    if (uniforms.hardDropBoost > 0.0 && time < 0.5) {
+                    if (hardDropBoostFromBuffer > 0.0 && time < 0.5) {
                         // UVs mapped to the glass block texture, centered at the shockwave epicenter
                         let glassUV = (uv - center) * 4.0 + vec2<f32>(0.5);
                         let texColor = textureSampleLevel(blockTexture, mySampler, glassUV, 0.0).rgb;
@@ -129,7 +131,7 @@ export const PostProcessShaders = () => {
                             let crackIntensity = max(texColor.r, max(texColor.g, texColor.b));
 
                             // Blend it smoothly based on distance to the shockwave ring
-                            let blend = cos(angle) * strength * (1.0 - time * 2.0) * uniforms.hardDropBoost * 2.0;
+                            let blend = cos(angle) * strength * (1.0 - time * 2.0) * hardDropBoostFromBuffer * 2.0;
                             glassOverlay = clamp(crackIntensity * blend, 0.0, 1.0);
                         }
                     }
