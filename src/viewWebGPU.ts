@@ -506,27 +506,8 @@ export default class View {
       handleHardDrop(this, x, y, distance, colorIdx);
   }
 
-  setBloomIntensityWithDuration(intensity: number, durationMs: number = 0) {
-    if (!this.bloomSystem) return;
-
-    this.bloomSystem.setParameters({
-      intensity: Math.max(0, intensity),
-    });
-    this.bloomIntensity = intensity;
-
-    if (durationMs > 0) {
-      setTimeout(() => {
-        if (this.bloomSystem) {
-          this.bloomSystem.setParameters({ intensity: 1.0 });
-          this.bloomIntensity = 1.0;
-        }
-      }, durationMs);
-    }
-  }
-
   triggerNeonBloomFlash(strength: number = 1.0) {
-    const peak = 1.8 + strength * 1.2;
-    this.setBloomIntensityWithDuration(peak, 280);
+    this.visualEffects.triggerNeonBloomFlash(strength);
   }
 
   // We added neonBloomFlash to visualEffects for smooth exponential decay per frame.
@@ -535,7 +516,7 @@ export default class View {
     this.visualEffects.triggerNeonBloomFlash(strength);
   }
 
-  triggerBackgroundResonance(intensity: number, durationMs: number = 280) {
+  triggerBackgroundResonance(intensity: number, _durationMs: number = 280) {
     this.visualEffects.triggerBackgroundResonance(intensity);
   }
   renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
