@@ -44,3 +44,4 @@
 - "Evolved the BackgroundShaders to react to the Game Level (calm blue at Lvl 1, chaotic red at Lvl 10)."
 - "Wired in the gold cracked-glass texture as a subtle dynamic overlay during the hard drop shockwave post-processing effect, extracting bright highlights from the block texture to simulate a shattering impact."
 - "Implemented explicit Fresnel Rim Lighting on the gold glass blocks! Added a `fresnelParams` uniform in `viewWebGPU.ts` and updated the PBR fragment shader (`pbrBlocks.ts`) to compute a Fresnel term based on the view direction. Wired a `setFresnelBoost()` hook in `game.ts` to dramatically intensify the gold edges when a Hard Drop occurs, creating an awesome additive rim flare during impacts."
+- "Implemented a 'Neon Burst' Radial Distortion & Glow effect on Hard Drops, giving the screen a crunchy cyan/magenta hit and satisfying visual decay."
