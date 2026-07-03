@@ -375,73 +375,12 @@ export class VisualEffects {
         renderLogger.info('Reactive music:', enabled ? 'enabled' : 'disabled');
     }
 
-    triggerReactiveVideo(eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', intensity: number, data?: any): void {
-        if (!this.reactiveVideoEnabled) return;
-
-        switch (eventType) {
-            case 'lineClear':
-                // Speed up video on line clears
-                this.videoPlaybackRate = 1.0 + (intensity * 2.0);
-                this.videoElement.playbackRate = Math.min(this.videoPlaybackRate, 4.0);
-                
-                // Glitch effect for big clears
-                if (intensity > 0.5) {
-                    this.triggerGlitch(intensity * 0.5);
-                }
-                break;
-                
-            case 'levelUp':
-                // Reverse video momentarily on level up
-                this.videoElement.playbackRate = -2.0;
-                setTimeout(() => {
-                    if (this.videoElement) {
-                        this.videoElement.playbackRate = 1.0;
-                    }
-                }, 300);
-                this.triggerWarpSurge(1.0);
-                break;
-                
-            case 'tSpin':
-                // Slow motion for T-Spin
-                this.videoElement.playbackRate = 0.3;
-                setTimeout(() => {
-                    if (this.videoElement) {
-                        this.videoElement.playbackRate = 1.0;
-                    }
-                }, 500);
-                break;
-                
-            case 'gameOver':
-                // Freeze frame
-                this.videoElement.pause();
-                break;
-        }
+    triggerReactiveVideo(_eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', _intensity: number, _data?: any): void {
+        // Handled by ReactiveVideoBackground
     }
 
-    triggerReactiveMusic(eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', intensity: number, data?: any): void {
-        if (!this.reactiveMusicEnabled) return;
-
-        // These are hooks for music system integration
-        // The actual music manipulation would be handled by the SoundManager
-        // We just log for now - the real implementation would emit events
-        switch (eventType) {
-            case 'lineClear':
-                // Music would: pitch shift up, add filter sweep
-                audioLogger.debug('Line clear - intensity:', intensity.toFixed(2));
-                break;
-            case 'levelUp':
-                // Music would: transition to next section, add layer
-                audioLogger.debug('Level up - new section');
-                break;
-            case 'tSpin':
-                // Music would: accent hit, stutter effect
-                audioLogger.debug('T-Spin - accent');
-                break;
-            case 'gameOver':
-                // Music would: slow down, fade out
-                audioLogger.debug('Game over - fade');
-                break;
-        }
+    triggerReactiveMusic(_eventType: 'lineClear' | 'levelUp' | 'tSpin' | 'gameOver', _intensity: number, _data?: any): void {
+        // Handled by SoundManager
     }
 
     triggerWarpSurge(intensity: number = 1.0): void {
