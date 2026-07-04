@@ -32,6 +32,16 @@ export function executeRenderLoop(view: any, dt: number) {
     if (typeof view.setFresnelBoost === 'function') {
       view.setFresnelBoost(1.0);
     }
+
+    // NEW: Trigger Neon Burst on hard drops
+    if (view.state.neonBurstFlag && view.neonBurstUniform) {
+      view.neonBurstUniform[0] = 1.0;
+    }
+  }
+
+  // Decay the neon burst (3x speed decay)
+  if (view.neonBurstUniform && view.neonBurstUniform[0] > 0) {
+    view.neonBurstUniform[0] = Math.max(0, view.neonBurstUniform[0] - dt * 3.0);
   }
 
   if (view._hardDropBoostTimer > 0) {
@@ -304,6 +314,8 @@ function updatePostProcessUniforms(view: any, time: number) {
 
   // NEW: explicitly driven shockwave boost uniform mapping for Neon Bricklayer implementation
   view._postProcessParams.hardDropBoost = view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0.0;
+
+  view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
 
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.

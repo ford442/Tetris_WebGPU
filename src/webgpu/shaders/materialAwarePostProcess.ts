@@ -415,6 +415,16 @@ export const MaterialAwarePostProcessShaders = () => {
                 color *= kaleidoFade;
             }
 
+            // NEW NEON BRICKLAYER: Neon Burst Radial Distortion & Glow (Hard Drop Crunch)
+            let burst = uniforms.neonBurst;
+            if (burst > 0.001) {
+                let distCenter = length(uv - vec2<f32>(0.5, 0.5));
+                let burstRing = smoothstep(0.1, 0.0, abs(distCenter - (1.0 - burst) * 0.8));
+                let burstColor = vec3<f32>(0.2, 0.8, 1.0) * burst + vec3<f32>(1.0, 0.2, 0.8) * (1.0 - burst);
+                color += burstColor * burstRing * burst * 1.5;
+                color += burstColor * burst * 0.2;
+            }
+
             // JUICE: Supernova Line Clear Laser
             let laserIntensity = uniforms.lineClearLaserIntensity;
             if (laserIntensity > 0.01) {

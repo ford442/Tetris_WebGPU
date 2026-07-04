@@ -284,6 +284,9 @@ export default class View {
   // NEW: Explicit uniform binding for hard drop shockwave
   shockwaveParamsUniform: Float32Array = new Float32Array([0, 0, 0, 0]);
 
+  // NEW: Explicit uniform binding for Neon Burst (Neon Bricklayer)
+  neonBurstUniform: Float32Array = new Float32Array([0]);
+
   // Fresnel Rim Lighting uniform (new for Neon Bricklayer task)
   fresnelParamsUniform!: GPUBuffer;
   fresnelParams = {
