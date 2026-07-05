@@ -12,6 +12,7 @@
  * 64-79:  materialAwareBloom, padding(3)
  * 80-95:  aberrationPulse (hard drop)
  * 96-143: reserved (dangerLevel at 96, aberration at 100, levelUpFlash at 104/116, gameOverKaleidoTime at 120 for 2s board kaleidoscope)
+ * 176:    neonBurst (hard-drop radial glow/distortion)
  */
 
 // ============================================================================
@@ -67,7 +68,10 @@ struct PostProcessUniforms {
     lineClearLaserIntensity: f32, // 160
     blackHoleTime: f32,           // 164
     blackHoleCenter: vec2f,       // 168
-    // struct tail-padded to 192B by WGSL
+    neonBurst: f32,               // 176 - hard-drop radial glow/distortion
+    _padTail0: f32,               // 180
+    _padTail1: f32,               // 184
+    _padTail2: f32,               // 188
 };
 `;
 
@@ -122,6 +126,9 @@ export interface PostProcessUniformData {
   lineClearLaserIntensity?: number;
   blackHoleTime?: number;
   blackHoleCenter?: [number, number];
+
+  // Hard-drop neon burst radial glow (Neon Bricklayer)
+  neonBurst?: number;
 }
 
 export class PostProcessUniformManager {
@@ -155,6 +162,7 @@ export class PostProcessUniformManager {
     lineClearLaserIntensity: 0,
     blackHoleTime: 0,
     blackHoleCenter: [0.5, 0.5],
+    neonBurst: 0,
   };
 
   /**
@@ -223,7 +231,8 @@ export class PostProcessUniformManager {
     const bhCenter = (v as any).blackHoleCenter || [0.5, 0.5];
     this.data[42] = bhCenter[0]; // blackHoleCenter @ 168
     this.data[43] = bhCenter[1];
-    // floats 44-47: WGSL struct tail padding (192B)
+    this.data[44] = v.neonBurst ?? 0; // neonBurst @ 176
+    // floats 45-47: WGSL struct tail padding (192B)
 
     return this.data;
   }

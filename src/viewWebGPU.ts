@@ -320,7 +320,8 @@ export default class View {
     hardDropBoost: 0,    // NEW: hard drop shockwave explicitly driven boost
     dangerLevel: 0,      // board height fill ratio 0-1 for danger vignette (postProcess)
     lineClearLaserY: [0, 0, 0, 0] as [number, number, number, number],
-    lineClearLaserIntensity: 0
+    lineClearLaserIntensity: 0,
+    neonBurst: 0,        // hard-drop radial glow/distortion (Neon Bricklayer)
   };
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {
