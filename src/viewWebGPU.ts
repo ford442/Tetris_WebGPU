@@ -82,6 +82,7 @@ import {
   createSolidFallbackTexture,
   createProceduralFallbackTexture,
   recreateRenderTargets as recreateRenderTargetsImpl,
+  createPostProcessBindGroupEntries,
 } from './webgpu/viewTextures.js';
 import {
   onHardDrop as handleHardDrop,
@@ -178,6 +179,7 @@ export default class View {
   postProcessPipeline!: GPURenderPipeline;
   postProcessBindGroup!: GPUBindGroup;
   postProcessUniformBuffer!: GPUBuffer;
+  shockwaveParamsUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
   depthTexture!: GPUTexture;
   _bloomInputTexture: GPUTexture | null = null;
@@ -797,6 +799,11 @@ export default class View {
     });
 
     this.postProcessUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.POST_PROCESS, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.shockwaveParamsUniformBuffer = this.device.createBuffer({
+      size: UNIFORM_BUFFER_SIZES.SHOCKWAVE_PARAMS,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.shockwaveParamsUniformBuffer, 0, this.shockwaveParamsUniform);
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
     this.offscreenTexture = this.device.createTexture({
@@ -826,12 +833,7 @@ export default class View {
 
     this.postProcessBindGroup = this.device.createBindGroup({
         layout: this.postProcessPipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: { buffer: this.postProcessUniformBuffer } },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: this.offscreenTexture.createView() },
-            { binding: 3, resource: createBlockTextureBindingView(this.blockTexture) }
-        ]
+        entries: createPostProcessBindGroupEntries(this),
     });
 
     // Initialize multi-pass bloom system
