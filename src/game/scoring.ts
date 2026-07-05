@@ -21,10 +21,73 @@ export interface HighScoreEntry {
   date: string;
 }
 
+/** Compact localStorage representation (minimizes quota usage). */
+interface StoredHighScoreEntry {
+  s: number;
+  l: number;
+  v: number;
+  d: number;
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' || error.code === 22)
+  );
+}
+
+function normalizeStoredEntry(raw: unknown): HighScoreEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+
+  const score =
+    typeof record.score === 'number' ? record.score :
+    typeof record.s === 'number' ? record.s : NaN;
+  const lines =
+    typeof record.lines === 'number' ? record.lines :
+    typeof record.l === 'number' ? record.l : NaN;
+  const level =
+    typeof record.level === 'number' ? record.level :
+    typeof record.v === 'number' ? record.v : NaN;
+
+  if (!Number.isFinite(score) || !Number.isFinite(lines) || !Number.isFinite(level)) {
+    return null;
+  }
+
+  if (score < 0 || lines < 0 || level < 1) return null;
+
+  let date = '';
+  if (typeof record.date === 'string' && record.date.length > 0 && record.date.length <= 32) {
+    date = record.date;
+  } else if (typeof record.d === 'number' && Number.isFinite(record.d)) {
+    date = new Date(record.d).toLocaleDateString();
+  } else {
+    date = new Date().toLocaleDateString();
+  }
+
+  return {
+    score: Math.floor(score),
+    lines: Math.floor(lines),
+    level: Math.floor(level),
+    date,
+  };
+}
+
+function toStoredEntry(entry: HighScoreEntry): StoredHighScoreEntry {
+  const parsed = Date.parse(entry.date);
+  return {
+    s: entry.score,
+    l: entry.lines,
+    v: entry.level,
+    d: Number.isFinite(parsed) ? parsed : Date.now(),
+  };
+}
+
 export class HighScoreManager {
   private readonly STORAGE_KEY = 'tetris_highscores';
   private readonly MAX_ENTRIES = 5;
   private highScores: HighScoreEntry[] = [];
+  private lastSerializedPayload: string | null = null;
 
   constructor() {
     this.loadFromStorage();
@@ -32,25 +95,93 @@ export class HighScoreManager {
 
   private loadFromStorage(): void {
     try {
-      const stored = typeof window !== "undefined" && window.localStorage ? window.localStorage.getItem(this.STORAGE_KEY) : null;
-      if (stored) {
-        this.highScores = JSON.parse(stored);
+      const stored = typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem(this.STORAGE_KEY)
+        : null;
+      if (!stored) {
+        this.highScores = [];
+        return;
+      }
+
+      const parsed: unknown = JSON.parse(stored);
+      const source = Array.isArray(parsed) ? parsed : [];
+      const normalized: HighScoreEntry[] = [];
+      for (const item of source) {
+        const entry = normalizeStoredEntry(item);
+        if (entry) normalized.push(entry);
+      }
+
+      normalized.sort((a, b) => b.score - a.score);
+      this.highScores = normalized.slice(0, this.MAX_ENTRIES);
+      this.lastSerializedPayload = this.serialize(this.highScores);
+
+      // Rewrite bloated/legacy payloads with the compact format.
+      if (stored.length > this.lastSerializedPayload.length + 16) {
+        this.saveToStorage();
       }
     } catch (e) {
       gameLogger.warn('Failed to load high scores from localStorage:', e);
       this.highScores = [];
+      this.lastSerializedPayload = null;
     }
   }
 
+  private serialize(entries: HighScoreEntry[]): string {
+    return JSON.stringify(entries.map(toStoredEntry));
+  }
+
+  private writePayload(payload: string): void {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(this.STORAGE_KEY, payload);
+    this.lastSerializedPayload = payload;
+  }
+
   private saveToStorage(): void {
+    const payload = this.serialize(this.highScores);
+    if (payload === this.lastSerializedPayload) return;
+
     try {
-      if (typeof window !== "undefined" && window.localStorage) window.localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.highScores));
+      this.writePayload(payload);
+      return;
+    } catch (e) {
+      if (!isQuotaExceededError(e)) {
+        gameLogger.warn('Failed to save high scores to localStorage:', e);
+        return;
+      }
+    }
+
+    // Quota recovery: drop our key (may be bloated) and retry compact payload.
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(this.STORAGE_KEY);
+        this.writePayload(payload);
+        gameLogger.warn('High scores recovered after localStorage quota error.');
+      }
+      return;
+    } catch (e) {
+      if (!isQuotaExceededError(e)) {
+        gameLogger.warn('Failed to save high scores to localStorage:', e);
+        return;
+      }
+    }
+
+    // Last resort: persist only the top score.
+    try {
+      const minimal = this.serialize(this.highScores.slice(0, 1));
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(this.STORAGE_KEY);
+        this.writePayload(minimal);
+        this.highScores = this.highScores.slice(0, 1);
+        gameLogger.warn('High scores reduced to top entry due to localStorage quota.');
+      }
     } catch (e) {
       gameLogger.warn('Failed to save high scores to localStorage:', e);
     }
   }
 
   addScore(score: number, lines: number, level: number): boolean {
+    if (score <= 0) return false;
+
     const entry: HighScoreEntry = {
       score,
       lines,
@@ -58,15 +189,18 @@ export class HighScoreManager {
       date: new Date().toLocaleDateString()
     };
 
-    // Check if this score qualifies for top scores
-    if (this.highScores.length < this.MAX_ENTRIES || score > this.highScores[this.highScores.length - 1].score) {
-      this.highScores.push(entry);
-      this.highScores.sort((a, b) => b.score - a.score);
-      this.highScores = this.highScores.slice(0, this.MAX_ENTRIES);
-      this.saveToStorage();
-      return true;
-    }
-    return false;
+    const lowestQualifying =
+      this.highScores.length < this.MAX_ENTRIES
+        ? -1
+        : this.highScores[this.highScores.length - 1].score;
+
+    if (score <= lowestQualifying) return false;
+
+    this.highScores.push(entry);
+    this.highScores.sort((a, b) => b.score - a.score);
+    this.highScores = this.highScores.slice(0, this.MAX_ENTRIES);
+    this.saveToStorage();
+    return true;
   }
 
   getHighScores(): HighScoreEntry[] {
@@ -89,6 +223,7 @@ export class ScoringSystem {
   combo: number = -1; // -1 means no combo
   backToBack: boolean = false;
   private highScoreManager: HighScoreManager;
+  private highScoreSavedThisGame = false;
 
   constructor() {
     this.highScoreManager = new HighScoreManager();
@@ -227,10 +362,13 @@ export class ScoringSystem {
     this.lines = 0;
     this.combo = -1;
     this.backToBack = false;
+    this.highScoreSavedThisGame = false;
   }
 
-  // Save current score to high scores
+  // Save current score to high scores (once per game)
   saveHighScore(): boolean {
+    if (this.highScoreSavedThisGame) return false;
+    this.highScoreSavedThisGame = true;
     return this.highScoreManager.addScore(this.score, this.lines, this.level);
   }
 }
