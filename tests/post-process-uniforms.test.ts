@@ -15,5 +15,6 @@ describe('post-process uniform layout', () => {
     expect(PostProcessUniformsWGSL).toContain('_padLaserAlign: vec2f');
     expect(PostProcessUniformsWGSL).toContain('levelUpFlashColor: vec3f');
     expect(PostProcessUniformsWGSL).toContain('lineClearLaserY: vec4f');
+    expect(PostProcessUniformsWGSL).toContain('neonBurst: f32');
   });
 });
