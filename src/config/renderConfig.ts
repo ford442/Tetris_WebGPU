@@ -82,6 +82,8 @@ export const PARTICLES_CONFIG = {
 export const UNIFORM_BUFFER_SIZES = {
   /** PostProcessUniforms — vec3/vec4 alignment pads struct to 192B */
   POST_PROCESS: 192,
+  /** shockwaveParamsUniform vec4 — hard-drop boost (binding 4) */
+  SHOCKWAVE_PARAMS: 16,
   /** PBR FragmentUniforms — array tail padding to 224B */
   FRAGMENT: 224,
   /** PBR VertexUniforms — 3×mat4 + vec4 = 208B */

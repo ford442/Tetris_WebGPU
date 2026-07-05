@@ -380,6 +380,10 @@ function updatePostProcessUniforms(view: any, time: number) {
 
   const ppUniforms = postProcessUniforms.pack(view._postProcessParams);
   view.device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
+
+  if (view.shockwaveParamsUniformBuffer && view.shockwaveParamsUniform) {
+    view.device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
+  }
 }
 
 /**

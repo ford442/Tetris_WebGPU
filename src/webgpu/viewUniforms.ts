@@ -207,6 +207,9 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     levelUpFlashIntensity: view.visualEffects.levelUpFlashIntensity || 0,
   });
   device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
+  if (view.shockwaveParamsUniformBuffer && view.shockwaveParamsUniform) {
+    device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
+  }
 
   return { lockPercent, ghostUVX, ghostUVW, hasActiveParticles, commandEncoder };
 }

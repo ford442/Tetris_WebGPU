@@ -175,12 +175,7 @@ export async function recreateRenderTargets(view: any) {
   if (view.postProcessPipeline) {
     view.postProcessBindGroup = device.createBindGroup({
       layout: view.postProcessPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: view.postProcessUniformBuffer } },
-        { binding: 1, resource: view.sampler },
-        { binding: 2, resource: view.offscreenTexture.createView() },
-        { binding: 3, resource: createBlockTextureBindingView(view.blockTexture) },
-      ],
+      entries: createPostProcessBindGroupEntries(view),
     });
   }
 
@@ -191,4 +186,23 @@ export async function recreateRenderTargets(view: any) {
     format: presentationFormat,
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
+}
+
+export interface PostProcessBindGroupView {
+  postProcessUniformBuffer: GPUBuffer;
+  shockwaveParamsUniformBuffer: GPUBuffer;
+  sampler: GPUSampler;
+  offscreenTexture: GPUTexture;
+  blockTexture: GPUTexture;
+}
+
+/** Bind group entries for post-process shaders (bindings 0–4). */
+export function createPostProcessBindGroupEntries(view: PostProcessBindGroupView): GPUBindGroupEntry[] {
+  return [
+    { binding: 0, resource: { buffer: view.postProcessUniformBuffer } },
+    { binding: 1, resource: view.sampler },
+    { binding: 2, resource: view.offscreenTexture.createView() },
+    { binding: 3, resource: createBlockTextureBindingView(view.blockTexture) },
+    { binding: 4, resource: { buffer: view.shockwaveParamsUniformBuffer } },
+  ];
 }
