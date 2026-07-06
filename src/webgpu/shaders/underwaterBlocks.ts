@@ -207,7 +207,18 @@ export const UnderwaterBlockShaders = () => {
         
         @binding(1) @group(0) var<uniform> fUniforms : FragmentUniforms;
         @binding(2) @group(0) var blockTexture : texture_2d<f32>;
-        @binding(3) @group(0) var blockSampler : sampler;
+                @binding(3) @group(0) var blockSampler : sampler;
+
+        // Dummy bindings to match pbrBlocks layout
+        @binding(5) @group(0) var<storage, read> dissolveField : array<f32, 200>;
+
+        struct FresnelParams {
+            intensity: f32,
+            fresnelPower: f32,
+            hardDropBoost: f32,
+            _pad1: f32,
+        };
+        @binding(6) @group(0) var<uniform> fresnelParams: FresnelParams;
 
         ${UnderwaterPBRFunctions}
         
