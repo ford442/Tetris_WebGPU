@@ -22,6 +22,7 @@ export interface GameState {
   effectEvent: string | null;
   effectCounter: number;
   effectFlag?: boolean;
+  neonBurstFlag?: boolean;
   lastDropPos: { x: number, y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
@@ -106,6 +107,7 @@ export default class Game {
     effectEvent: null,
     effectCounter: 0,
     effectFlag: false,
+    neonBurstFlag: false,
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
@@ -217,6 +219,7 @@ export default class Game {
     this._gameStateCache.effectEvent = this.effectEvent;
     this._gameStateCache.effectCounter = this.effectCounter;
     this._gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
+    this._gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
     this._gameStateCache.lastDropPos = this.lastDropPos;
     this._gameStateCache.lastDropDistance = this.lastDropDistance;
     this._gameStateCache.scoreEvent = this.scoreEvent;

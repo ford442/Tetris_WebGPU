@@ -77,7 +77,18 @@ export const Shaders = () => {
                 transmission: f32,
                 padding: f32
             };
-            @binding(4) @group(0) var<uniform> materialUniforms : MaterialUniforms;
+                    @binding(4) @group(0) var<uniform> materialUniforms : MaterialUniforms;
+
+        // Dummy bindings to match pbrBlocks layout
+        @binding(5) @group(0) var<storage, read> dissolveField : array<f32, 200>;
+
+        struct FresnelParams {
+            intensity: f32,
+            fresnelPower: f32,
+            hardDropBoost: f32,
+            _pad1: f32,
+        };
+        @binding(6) @group(0) var<uniform> fresnelParams: FresnelParams;
             
             // ============================================================================
             // CONFIGURABLE TEXTURE SAMPLING
