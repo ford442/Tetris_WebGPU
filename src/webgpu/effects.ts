@@ -32,6 +32,7 @@ export class VisualEffects {
     backgroundResonance: number = 0;
 
     // Block Emissive state
+    particleHitTimer: number = 0;
     movementFlashTimer: number = 0;
     lineClearFlashTimer: number = 0;
 
@@ -125,7 +126,13 @@ export class VisualEffects {
         this.backgroundResonance *= Math.exp(-dt * 6.0);
         if (this.backgroundResonance < 0.01) this.backgroundResonance = 0;
 
+
         // Block Emissive decay
+        if (this.particleHitTimer > 0) {
+            this.particleHitTimer *= Math.exp(-dt * 8.0); // Fast decay for snappy hits
+            if (this.particleHitTimer < 0.01) this.particleHitTimer = 0;
+        }
+
         this.movementFlashTimer *= 1.0 / (1.0 + dt * 8.0);
         if (this.movementFlashTimer < 0.01) this.movementFlashTimer = 0;
 
@@ -181,6 +188,12 @@ export class VisualEffects {
 
     triggerRotate(duration: number = 0.2): void {
         this.rotationFlashTimer = duration;
+    }
+
+
+    triggerParticleHit(strength: number = 1.0): void {
+        this.particleHitTimer += strength;
+        this.particleHitTimer = Math.min(this.particleHitTimer, 2.0); // Cap
     }
 
     triggerMovementFlash(duration: number = 1.0): void {

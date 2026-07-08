@@ -60,6 +60,16 @@ This document outlines the optimizations and game-feel improvements made in the 
   * Replaced `textureSample` with `textureSampleLevel(..., 0.0)` in WGSL block shaders.
 * **Metrics**: Visual fidelity is improved, showing better metal/glass separation on blocks without regressions. Uniform control flow from explicit LOD 0 sampling increases WebGPU compiler efficiency and wave predictability.
 
+### 4. Particle-Material Interaction (Neon Bricklayer)
+**Objective**: Enhance visual feedback during hard drops and line clears by integrating particle intensity into block shaders for material-aware interactions.
+* **Files**: `src/webgpu/shaders/particleMaterialInteraction.ts`, `src/webgpu/shaders/pbrBlocks.ts`, `src/webgpu/shaders/premiumBlocks.ts`, `src/webgpu/effects.ts`, `src/webgpu/viewGameEvents.ts`, `src/webgpu/viewUniforms.ts`
+* **Changes**:
+  * Extracted particle interaction logic into a shared WGSL module `particleMaterialInteraction.ts` and injected it into `pbrBlocks.ts` and `premiumBlocks.ts`.
+  * Added `particleHitTimer` to `VisualEffects` with an exponential decay, triggered on hard drops and line clears.
+  * Passed `particleHitTimer` (as `particleIntensity`) to the fragment shaders via `viewUniforms.ts` at byte offset 84.
+  * Applied `applyParticleInteraction` in the PBR fragment shader based on `materialType`.
+* **Metrics**: Provides spectacular, material-aware visual responses (e.g., refraction on glass, specular flashes on gold/chrome, neon bursts on cyber) when particles hit the blocks.
+
 ## Skipped and Reverted Optimizations
 
 During our exploration, we identified and attempted several optimizations that were ultimately reverted to preserve correctness or because they pessimized performance:
