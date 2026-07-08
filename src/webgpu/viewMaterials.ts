@@ -74,6 +74,10 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
 
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
 
+  // Write particleMaterialType to offset 116 (previously pad2)
+  const particleMaterialScratch = new Uint32Array([getMaterialTypeIndex()]);
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 116, particleMaterialScratch);
+
   // Authored imageSampled glass opacity curve params.
   // Stored in FragmentUniforms.reserved2 (vec4f at byte offset 120).
   // x=glassMin, y=glassMax, z=glassFresnelPower, w unused.
