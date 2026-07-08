@@ -139,7 +139,7 @@ export const PBRBlockShaders = () => {
             magnetWorldX  : f32,        // 104 (for subtle placed-block UV lean toward active piece)
             magnetWorldY  : f32,        // 108
             magnetStrength: f32,        // 112 (first of reserved2; 1.0 when active, 0 on lock)
-            pad2          : f32,        // 116
+            particleMaterialType: u32,  // 116 (replaces pad2)
             reserved2     : vec4f,      // 120-127 (remaining)
             padHeights    : vec4f,      // 128-143 (preserve 128/132 for underwater flash timers)
             columnHeights : array<f32, 10>, // 144 (10*4=40B; per-col top row for depth shadows)
@@ -171,6 +171,15 @@ export const PBRBlockShaders = () => {
         // CONFIGURABLE TEXTURE SAMPLING
         // ============================================================================
         ${textureSamplingCode}
+
+        // ============================================================================
+        // PARTICLE MATERIAL INTERACTION
+        // ============================================================================
+        // MaterialProperties dummy struct for interface matching
+        struct MaterialProperties {
+           metallic: f32,
+        };
+        ${ParticleMaterialInteractionWGSL}
 
         fn acesToneMapping(color: vec3f) -> vec3f {
             let a = 2.51; let b = 0.03; let c = 2.43; let d = 0.59; let e = 0.14;
@@ -634,6 +643,22 @@ export const PBRBlockShaders = () => {
                     borderBoost = fUniforms.midLevel * 0.55; // bottom
                 }
                 finalColor += vec3f(borderBoost);
+            }
+
+            // NEW: Apply particle-material interaction
+            let matType = fUniforms.particleMaterialType;
+            let particleIntensity = fUniforms.particleIntensity;
+            if (matType > 0u && particleIntensity > 0.0) {
+                // Determine interaction color based on material
+                var interactionColor = vec3f(1.0);
+                if (matType == 2u) { interactionColor = vec3f(1.0, 0.84, 0.0); } // Gold
+                else if (matType == 3u) { interactionColor = vec3f(0.9, 0.95, 1.0); } // Chrome
+                else if (matType == 4u) { interactionColor = vec3f(0.0, 1.0, 1.0); } // Cyber
+
+                var dummyMat: MaterialProperties;
+                dummyMat.metallic = fUniforms.metallic;
+
+                finalColor = applyMaterialParticleInteraction(dummyMat, finalColor, N, V, L, matType, particleIntensity, interactionColor);
             }
 
             finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));

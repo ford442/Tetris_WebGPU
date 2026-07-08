@@ -421,6 +421,7 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   view.visualEffects.triggerHardDropAberrationPulse(1.2); // NEW: 300ms exp decay spike -> u_aberrationPulse uniform (separate RGB offsets in enhancedPostProcess)
   view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
   view.visualEffects.triggerParticleHit(2.0);
+  if (view.neonBurstUniform) view.neonBurstUniform[0] = 1.0;
 
   // JUICE: Multiplied particle speeds and counts by 3.0x for heavier impact
   for (let i = 0; i < 450; i++) {

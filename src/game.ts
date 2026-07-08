@@ -249,6 +249,7 @@ export default class Game {
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this._gameStateCache.effectFlag = true;
+    this._gameStateCache.neonBurstFlag = true;
 
     if (!this.lastDropPos) {
         this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
@@ -288,6 +289,7 @@ export default class Game {
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
     this._gameStateCache.effectFlag = true;
+    this._gameStateCache.neonBurstFlag = true;
 
     if (!this.lastDropPos) {
         this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
