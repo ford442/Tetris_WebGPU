@@ -117,6 +117,9 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
   // 144: columnHeights[10] (depth soft shadows); 184-192: bass/mid/treble audio bands (for border glow per side)
   view._f32_1[0] = time;
   device.queue.writeBuffer(view.fragmentUniformBuffer, 32, view._f32_1);
+  view._f32_1[0] = view.visualEffects.particleHitTimer || 0.0;
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._f32_1);
+
   view._f32_1[0] = view.useGlitch ? 1.0 : 0.0;
   device.queue.writeBuffer(view.fragmentUniformBuffer, 36, view._f32_1);
   view._f32_1[0] = lockPercent;

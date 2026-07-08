@@ -147,6 +147,7 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
     bloomIntensity = 1.3;
   }
   view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
+  view.visualEffects.triggerParticleHit(1.0 + lines.length * 0.5);
 
   // JUICE: Supernova Line Clear Laser
   // Trigger a localized horizontal laser/plasma beam exactly on the cleared rows
@@ -419,6 +420,7 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
   view.visualEffects.triggerAberration(1.5); // JUICE: Heavy chromatic aberration on hard drop
   view.visualEffects.triggerHardDropAberrationPulse(1.2); // NEW: 300ms exp decay spike -> u_aberrationPulse uniform (separate RGB offsets in enhancedPostProcess)
   view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
+  view.visualEffects.triggerParticleHit(2.0);
 
   // JUICE: Multiplied particle speeds and counts by 3.0x for heavier impact
   for (let i = 0; i < 450; i++) {

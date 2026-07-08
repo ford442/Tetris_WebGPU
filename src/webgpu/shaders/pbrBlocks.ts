@@ -18,6 +18,8 @@
  */
 
 import { getSimpleTextureSamplingWGSL } from '../textureSampling.js';
+import { ParticleMaterialInteractionWGSL } from './particleMaterialInteraction.js';
+
 
 // PBR Functions shared with premiumBlocks.ts
 export const PBRFunctions = `
@@ -163,6 +165,7 @@ export const PBRBlockShaders = () => {
         @binding(6) @group(0) var<uniform> fresnelParams: FresnelParams;
 
         ${PBRFunctions}
+        ${ParticleMaterialInteractionWGSL}
         
         // ============================================================================
         // CONFIGURABLE TEXTURE SAMPLING
@@ -549,6 +552,23 @@ export const PBRBlockShaders = () => {
             }
 
             // (ghost handled by early-return above)
+
+            // NEW: Apply particle-material interaction
+            let particleIntensity = fUniforms.particleIntensity;
+            if (particleIntensity > 0.0) {
+                var pMatType = materialType;
+                // If using authored PBR texture (type 0), infer from masks
+                if (pMatType == 0u && fUniforms.enablePBR > 0.5) {
+                    if (glassMask > 0.5) {
+                        pMatType = 1u; // Glass
+                    } else if (metalMask > 0.5) {
+                        pMatType = 2u; // Gold
+                    }
+                }
+                if (pMatType > 0u) {
+                    finalColor = applyParticleInteraction(pMatType, finalColor, N, L, V, particleIntensity, time);
+                }
+            }
 
             // Gentle emissive pulse (main.ts uses 0.25 scale to avoid washout)
             let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
