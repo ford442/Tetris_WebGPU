@@ -58,8 +58,8 @@ struct PostProcessUniforms {
     dangerLevel: f32,             // 96
     aberrationPulse: f32,         // 100
     hardDropBoost: f32,           // 104
-    neonBurst: f32,               // 108
-    //_padFlashAlign: f32,          // 108
+    _padFlashAlign: f32,          // 108
+
     levelUpFlashColor: vec3f,     // 112
     levelUpFlashIntensity: f32,   // 124
     gameOverKaleidoTime: f32,     // 128
@@ -165,7 +165,6 @@ export class PostProcessUniformManager {
     lineClearLaserIntensity: 0,
     blackHoleTime: 0,
     blackHoleCenter: [0.5, 0.5],
-    neonBurst: 0,
   };
 
   /**
@@ -213,7 +212,7 @@ export class PostProcessUniformManager {
     this.data[24] = (v as any).dangerLevel || 0;
     this.data[25] = (v as any).aberrationPulse || 0;
     this.data[26] = (v as any).hardDropBoost || 0; // hardDropBoost @ 104
-    this.data[27] = (v as any).neonBurst || 0; // neonBurst @ 108
+    this.data[27] = 0; // removed duplicate neonBurst @ 108
     const flashCol = (v as any).levelUpFlashColor || [0, 0, 0];
     this.data[28] = flashCol[0] || 0; // levelUpFlashColor @ 112
     this.data[29] = flashCol[1] || 0;
