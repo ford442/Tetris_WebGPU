@@ -6,15 +6,15 @@
 // Input timing (milliseconds)
 export const INPUT_CONFIG = {
   /** Delayed Auto Shift - initial delay before auto-repeat */
-  DAS: 120,
+  DAS: 100,
   /** Auto Repeat Rate - speed of repeated movement */
-  ARR: 10,
+  ARR: 0,
   /** Soft drop speed (sonic drop) */
   SOFT_DROP_SPEED: 1,
   /** Input buffer window for movement (ms) */
-  MOVE_BUFFER_WINDOW: 80,
+  MOVE_BUFFER_WINDOW: 20,
   /** Input buffer window for rotation (ms) - tighter to prevent double-rotations */
-  ROTATE_BUFFER_WINDOW: 60,
+  ROTATE_BUFFER_WINDOW: 20,
 } as const;
 
 // Lock delay mechanics (milliseconds)

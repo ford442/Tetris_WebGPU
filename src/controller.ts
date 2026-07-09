@@ -3,10 +3,11 @@ import type { IView } from "./view/IView.js";
 import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
+import { INPUT_CONFIG } from "./config/gameConfig.js";
 
-const DAS = 100; // Delayed Auto Shift (ms) - Faster for improved responsiveness and top-level play
-const ARR = 0;  // Auto Repeat Rate (ms) - Instant piece movement when holding left or right
-const SOFT_DROP_SPEED = 1; // Sonic Drop: Even faster soft drop for instant tactile feedback
+const DAS = INPUT_CONFIG.DAS; // Delayed Auto Shift (ms) - Faster for improved responsiveness and top-level play
+const ARR = INPUT_CONFIG.ARR;  // Auto Repeat Rate (ms) - Instant piece movement when holding left or right
+const SOFT_DROP_SPEED = INPUT_CONFIG.SOFT_DROP_SPEED; // Sonic Drop: Even faster soft drop for instant tactile feedback
 
 // Logical actions
 type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
@@ -49,8 +50,8 @@ export default class Controller {
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
   // Movement is tighter (80ms) and rotation is very tight (60ms) to prevent double-rotations and ensure maximum snappiness
-  readonly MOVE_BUFFER_WINDOW: number = 20; // ms - Tighter, snappier movement
-  readonly JUMP_BUFFER_WINDOW: number = 20; // ms - Strict buffer for jump-like actions to prevent double-rotation
+  readonly MOVE_BUFFER_WINDOW: number = INPUT_CONFIG.MOVE_BUFFER_WINDOW; // ms - Tighter, snappier movement
+  readonly JUMP_BUFFER_WINDOW: number = INPUT_CONFIG.ROTATE_BUFFER_WINDOW; // ms - Strict buffer for jump-like actions to prevent double-rotation
 
   // Mapping from physical key codes to logical actions
   keyMap: { [key: string]: Action } = {
