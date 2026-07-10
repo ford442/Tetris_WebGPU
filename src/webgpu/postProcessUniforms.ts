@@ -70,7 +70,7 @@ struct PostProcessUniforms {
     blackHoleTime: f32,           // 164
     blackHoleCenter: vec2f,       // 168
     neonBurst: f32,               // 176 - hard-drop radial glow/distortion
-    _padTail0: f32,               // 180
+    saturationBoost: f32,         // 180 - Line Clear Escalation
     _padTail1: f32,               // 184
     _padTail2: f32,               // 188
 };
@@ -131,6 +131,7 @@ export interface PostProcessUniformData {
 
   // Hard-drop neon burst radial glow (Neon Bricklayer)
   neonBurst?: number;
+  saturationBoost?: number;
 }
 
 export class PostProcessUniformManager {
@@ -165,6 +166,7 @@ export class PostProcessUniformManager {
     lineClearLaserIntensity: 0,
     blackHoleTime: 0,
     blackHoleCenter: [0.5, 0.5],
+    saturationBoost: 0,
   };
 
   /**
