@@ -50,11 +50,13 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 
 export function triggerComboOverdrive(view: any, combo: number): void {
   view.visualEffects.triggerNeonBloomFlash(2.5 + combo * 0.3);
+  view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
 }
 
 export function triggerEnergyWave(view: any, combo: number): void {
   view.visualEffects.triggerWarpSurge(4.0 + combo * 1.0);
+  view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerAberration(1.5 + combo * 0.3);
   view.visualEffects.triggerHardDropAberrationPulse(1.5);
 }
@@ -148,6 +150,11 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   }
   view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
   view.visualEffects.triggerParticleHit(1.0 + lines.length * 0.5);
+
+  if (lines.length >= 4 || tSpin) {
+    view.visualEffects.triggerSaturationBoost(1.5);
+    view.visualEffects.triggerHardDropAberrationPulse(1.5);
+  }
 
   // JUICE: Supernova Line Clear Laser
   // Trigger a localized horizontal laser/plasma beam exactly on the cleared rows
@@ -344,6 +351,10 @@ export function onLock(view: any, isTSpin: boolean = false): void {
 }
 
 export function onHold(view: any): void {
+  // Emits a particle burst at the top left to represent the hold piece swapping
+  if (view.particleSystem) {
+      view.particleSystem.emitParticlesRadial(-5.0, 20.0, 0.0, Math.PI / 4, 25.0, [1.0, 0.8, 0.2, 1.0]);
+  }
   view.visualEffects.triggerFlash(0.3);
   // Add a subtle warp/aberration glitch to simulate "teleportation"
   view.visualEffects.triggerAberration(0.3);
@@ -505,6 +516,9 @@ export function renderMainScreen(view: any, state: any): void {
 
     // WebGPU-side fullscreen additive color-burn flash (400ms, theme backgroundColors[0])
     levelUpCelebration.triggerLevelUpWebGPUFlash(view.visualEffects, view.currentTheme?.backgroundColors);
+    view.visualEffects.triggerWarpSurge(5.0); // Epic background distortion
+    view.visualEffects.triggerAberration(2.0); // Epic chromatic aberration
+    view.visualEffects.triggerShake(5.0, 1.0); // Big screen shake
     
     // Show floating text with level color
     showFloatingText(view, `LEVEL ${state.level}!`, "WARP SPEED");
@@ -540,6 +554,17 @@ export function renderMainScreen(view: any, state: any): void {
       view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, primaryColor);
     }
     
+    // Epic radial speed lines for Level Up
+    for (let i = 0; i < config.particleCount * 0.5; i++) {
+      const isPrimary = Math.random() > 0.5;
+      const rgb = isPrimary ? primaryColor : secondaryColor;
+      const particleColor = rgb ? [...rgb] : [1.0, 1.0, 1.0, 1.0];
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 50.0 + Math.random() * 50.0; // Much faster for speed lines
+      view.particleSystem.emitParticlesRadial(centerX, centerY, 0.0, angle, speed, particleColor);
+    }
+
     // Secondary color burst (offset)
     for (let i = 0; i < config.particleCount / 2; i++) {
       const angle = Math.random() * Math.PI * 2;

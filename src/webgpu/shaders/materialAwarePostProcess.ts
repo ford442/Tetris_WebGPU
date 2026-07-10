@@ -445,6 +445,13 @@ export const MaterialAwarePostProcessShaders = () => {
                 color += laserColor * laserGlow;
             }
 
+            // NEON BRICKLAYER: Line Clear Escalation Saturation Boost
+            let satBoost = uniforms.saturationBoost;
+            if (satBoost > 0.001) {
+                let luma = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+                color = mix(vec3<f32>(luma), color, 1.0 + satBoost);
+            }
+
             // HDR tone mapping
             color = color / (color + vec3<f32>(1.0));
             color = sqrt(color); // Fast gamma approx
