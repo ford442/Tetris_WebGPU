@@ -101,12 +101,12 @@ export class VisualEffects {
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
         const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity *= Math.exp(-dt * 15.0);
+        this.shakeIntensity *= 1.0 / (1.0 + dt * 15.0);
         this.aberrationIntensity *= aberrationDecay;
 
         // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)
         if (this.lineClearLaserIntensity > 0) {
-            this.lineClearLaserIntensity *= Math.exp(-dt / 0.06);
+            this.lineClearLaserIntensity *= 1.0 / (1.0 + dt / 0.06);
             if (this.lineClearLaserIntensity < 0.005) {
                 this.lineClearLaserIntensity = 0;
                 this.lineClearLaserY.fill(0);
@@ -118,7 +118,7 @@ export class VisualEffects {
         if (this.warpSurge < 0.01) this.warpSurge = 0;
 
         // Saturation Boost decay
-        this.saturationBoost *= Math.exp(-dt * 2.0);
+        this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
         // Glitch decay
@@ -126,17 +126,17 @@ export class VisualEffects {
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         // Neon Bloom decay
-        this.neonBloomIntensity *= Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
+        this.neonBloomIntensity *= 1.0 / (1.0 + dt * 10.0); // NEON BRICKLAYER: Fast algebraic decay approximation for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         // Background Resonance decay
-        this.backgroundResonance *= Math.exp(-dt * 6.0);
+        this.backgroundResonance *= 1.0 / (1.0 + dt * 6.0);
         if (this.backgroundResonance < 0.01) this.backgroundResonance = 0;
 
 
         // Block Emissive decay
         if (this.particleHitTimer > 0) {
-            this.particleHitTimer *= Math.exp(-dt * 8.0); // Fast decay for snappy hits
+            this.particleHitTimer *= 1.0 / (1.0 + dt * 8.0); // Fast decay for snappy hits
             if (this.particleHitTimer < 0.01) this.particleHitTimer = 0;
         }
 
@@ -152,7 +152,7 @@ export class VisualEffects {
 
         // Hard drop chromatic aberration pulse: exponential decay targeting ~300ms
         // (e^(-dt/0.08) gives strong initial dropoff, effectively gone after 0.3s)
-        this.hardDropAberrationPulse *= Math.exp(-dt / 0.08);
+        this.hardDropAberrationPulse *= 1.0 / (1.0 + dt / 0.08);
         if (this.hardDropAberrationPulse < 0.005) this.hardDropAberrationPulse = 0;
 
         // Grid ripple decay (age the wave; render loop / shader handles visual fade at 500ms)
