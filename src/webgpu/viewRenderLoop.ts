@@ -319,6 +319,7 @@ function updatePostProcessUniforms(view: any, time: number) {
 
   view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
   view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
+  view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
 
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.

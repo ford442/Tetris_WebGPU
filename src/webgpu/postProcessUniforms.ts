@@ -236,7 +236,8 @@ export class PostProcessUniformManager {
     this.data[42] = bhCenter[0]; // blackHoleCenter @ 168
     this.data[43] = bhCenter[1];
     this.data[44] = v.neonBurst ?? 0; // neonBurst @ 176
-    // floats 45-47: WGSL struct tail padding (192B)
+    this.data[45] = v.saturationBoost ?? 0; // saturationBoost @ 180
+    // floats 46-47: WGSL struct tail padding (192B)
 
     return this.data;
   }
