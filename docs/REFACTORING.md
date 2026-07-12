@@ -1,141 +1,124 @@
 # Code Structure After Refactoring
 
 ## Overview
-This document describes the modular structure after breaking up the large `viewWebGPU.ts` and `game.ts` files.
+This document describes the modular structure that keeps large files (notably
+`viewWebGPU.ts`, `controller.ts`, `sound.ts`, and `game.ts`) manageable. The
+project guideline is **keep every source file under 1000 lines (prefer <800)**.
+
+The `View` class in `viewWebGPU.ts` is a thin orchestrator: it owns the GPU
+resource fields and the `IView` surface, but delegates device/canvas lifecycle,
+pipeline construction, texture work, per-frame rendering, materials, premium
+visuals, and game-event effects to focused helper modules.
 
 ## Directory Structure
 
 ```
 src/
-├── webgpu/              # WebGPU rendering subsystems
-│   ├── shaders.ts       # Shader definitions (519 lines)
-│   ├── geometry.ts      # 3D geometry generators (87 lines)
-│   ├── themes.ts        # Color themes (83 lines)
-│   ├── particles.ts     # Particle system (104 lines)
-│   └── effects.ts       # Visual effects (166 lines)
-├── game/                # Game logic subsystems
-│   ├── pieces.ts        # Tetromino pieces (106 lines)
-│   ├── rotation.ts      # SRS rotation system (65 lines)
-│   ├── collision.ts     # Collision detection (52 lines)
-│   └── scoring.ts       # Scoring system (55 lines)
-├── viewWebGPU.ts        # Main renderer (1251 lines, down from 2167)
-├── game.ts              # Main game logic (437 lines, down from 622)
-├── controller.ts        # Input handling
-└── sound.ts             # Sound effects
+├── viewWebGPU.ts            # Thin View orchestrator implementing IView (~670 lines)
+├── controller.ts           # Input handling, DAS/ARR timers, game loop
+├── sound.ts                # Procedural audio (Web Audio API)
+├── game.ts                 # Core game engine (state, mechanics, scoring)
+├── webgpu/                 # WebGPU rendering subsystem
+│   ├── gpuContext.ts       # Device/canvas acquisition + resize lifecycle
+│   ├── viewPipelines.ts    # Block-texture load + pipeline/buffer/bind-group setup
+│   ├── viewTextures.ts     # Texture helpers, mipmaps, render-target recreation
+│   ├── viewFrostedGlass.ts # Frosted-glass backboard pipeline + uniforms
+│   ├── viewMaterials.ts    # Material/theme management, piece render, wireframe
+│   ├── viewPremium.ts      # Premium presets, reactive hooks, bloom/FXAA/CRT toggles
+│   ├── viewGameEvents.ts   # Game event → visual effect handlers
+│   ├── viewRenderLoop.ts   # Per-frame render pass execution
+│   ├── viewPlayfield.ts    # Playfield block uniform updates
+│   ├── viewUniforms.ts     # Uniform packing helpers
+│   ├── renderers/          # blockRenderer, backgroundRenderer, postProcessor
+│   ├── shaders/            # WGSL shader modules split by category (see below)
+│   ├── shaders.ts          # Barrel re-export of shaders/ (import compatibility)
+│   ├── compute.ts          # GPU compute shaders (particle physics, line detect)
+│   ├── particles.ts        # GPU-driven particle system
+│   ├── jellyfishParticles.ts # Bioluminescent jellyfish particle system
+│   ├── bloomSystem.ts      # Multi-pass bloom
+│   ├── effects.ts          # Effect parameter wrappers (shockwave, glitch, …)
+│   ├── geometry.ts         # 3D mesh data (cube, quad, grid)
+│   ├── themes.ts           # Color palette definitions
+│   ├── blockTexture*.ts    # Block texture config + tile extraction
+│   ├── reactiveVideo.ts    # Reactive video background
+│   ├── reactiveMusic.ts    # Reactive music system
+│   └── renderMetrics.ts    # Render coordinate constants
+├── game/                   # Game logic modules
+│   ├── pieces.ts           # Tetromino definitions and bag randomizer
+│   ├── collision.ts        # Collision detection (CPU fallback)
+│   ├── rotation.ts         # SRS rotation + wall kicks
+│   ├── scoring.ts          # Score, combos, back-to-back, all-clear
+│   ├── lineUtils.ts        # Line clear and playfield shifting
+│   └── stateProjection.ts  # Game state projection helpers
+├── input/                  # Input helpers (touchControls, …)
+├── view/                   # IView contract + createView factory
+├── viewCpp/                # Emscripten C++ renderer adapter (opt-in)
+└── viewWebGL2/             # WebGL2 fallback renderer
 ```
 
-## Module Descriptions
+## viewWebGPU orchestration split
 
-### WebGPU Modules
+`viewWebGPU.ts` no longer performs device init or pipeline construction inline.
 
-#### `webgpu/shaders.ts`
-Exports all WGSL shader code:
-- `PostProcessShaders()` - Post-processing effects (chromatic aberration, shockwave)
-- `ParticleShaders()` - Particle rendering shaders
-- `GridShader()` - Grid overlay shader
-- `BackgroundShaders()` - Animated background shader
-- `Shaders()` - Main block rendering shader with lighting
+### `webgpu/gpuContext.ts`
+Device and canvas lifecycle, plus adapter/device policy and resilience.
+- `acquireGpuContext(view)` — requests the adapter with a resolved
+  `powerPreference` (`?gpu=low|high` / `tetris_gpu`), logs `adapter.info`,
+  requests a labeled device with feature-detected optional features
+  (`shader-f16`, `timestamp-query`, texture-compression, …; never hard-required),
+  configures the canvas, and attaches lifecycle handlers. Returns the preferred
+  presentation format (or `null` if no adapter/device is available).
+- `resolvePowerPreference()` / `selectOptionalFeatures()` — pure, unit-tested
+  policy helpers (see `tests/gpu-context.test.ts`).
+- `attachDeviceLifecycleHandlers(view)` — wires `device.lost` recovery (overlay
+  + single `preRender` re-init, then fatal overlay + `tetris-webgpu-device-lost`
+  event) and an `uncapturederror` logger.
+- `pushGpuErrorScopes` / `popGpuErrorScopes` — validation/OOM error scopes around
+  pipeline creation for actionable WGSL failures.
+- `resizeGpuContext(view)` — recomputes canvas backing size (with render scale),
+  reconfigures the context, and resizes the post-processor and bloom system.
 
-#### `webgpu/geometry.ts`
-Exports geometry data generators:
-- `CubeData()` - Cube mesh (positions, normals, UVs)
-- `FullScreenQuadData()` - Full-screen quad for post-processing
-- `GridData()` - Grid line positions
+### `webgpu/viewPipelines.ts`
+GPU resource construction, invoked once from `View.preRender()`.
+- `loadBlockTexture(view)` — loads the authored `block.png` tile, generates
+  mipmaps, and falls back to a procedural then solid texture on error.
+- `initGpuResources(view, presentationFormat)` — builds every render/compute
+  pipeline (main block, background, video, grid, particle, post-process,
+  line-clear), their GPU buffers, render targets, pass descriptors, the bloom
+  system, camera matrices, and the per-block bind-group cache.
 
-#### `webgpu/themes.ts`
-Exports theme system:
-- `ThemeColors` interface - Theme color definition
-- `Themes` interface - Collection of themes
-- `themes` - Theme configurations (pastel, neon, future)
+`View.preRender()` is now just:
+```ts
+const presentationFormat = await acquireGpuContext(this);
+if (!presentationFormat) return;
+await loadBlockTexture(this);
+await initGpuResources(this, presentationFormat);
+```
 
-#### `webgpu/particles.ts`
-Exports particle system:
-- `Particle` interface - Single particle definition
-- `ParticleSystem` class - Manages particle lifecycle
-  - `emitParticles()` - Emit particles with random velocities
-  - `emitParticlesRadial()` - Emit particles in specific direction
-  - `updateParticles()` - Update all particles (physics, lifetime)
-  - `getParticleData()` - Generate GPU buffer data
+## Shaders
 
-#### `webgpu/effects.ts`
-Exports visual effects system:
-- `VisualEffects` class - Manages screen effects and video backgrounds
-  - `updateEffects()` - Update effect timers
-  - `triggerFlash()` - Flash effect for line clears
-  - `triggerShake()` - Screen shake effect
-  - `triggerShockwave()` - Shockwave ripple effect
-  - `updateVideoForLevel()` - Switch background video
-  - `getClearColors()` - Get current screen clear color
-  - `getShakeOffset()` - Get camera shake offset
+WGSL shaders live in `src/webgpu/shaders/`, split by category, and are
+re-exported through `src/webgpu/shaders.ts` (a barrel kept for import
+compatibility):
+- `postProcess.ts` — lens distortion, shockwave, bloom, glitch, chromatic aberration
+- `particle.ts` — particle vertex/fragment shaders
+- `grid.ts` — Tetris grid block renderer
+- `background.ts` — procedural/video background shaders
+- `main.ts` — primary 3D block shader (lighting, texture atlas, PBR)
 
-### Game Modules
+Add a new shader category as a new file and re-export it from `shaders/index.ts`.
 
-#### `game/pieces.ts`
-Exports piece management:
-- `Piece` interface - Tetromino piece definition
-- `PieceGenerator` class - Creates and manages pieces
-  - `createPieceByType()` - Create specific piece type
-  - `createPiece()` - Create next piece from bag
-  - `generateBag()` - Shuffle piece bag (7-bag system)
-  - `resetPiecePosition()` - Reset piece to spawn position
+## Game modules
 
-#### `game/rotation.ts`
-Exports SRS rotation system:
-- `SRS_KICKS_JLSTZ` - Wall kick data for J, L, S, T, Z pieces
-- `SRS_KICKS_I` - Wall kick data for I piece
-- `rotatePieceBlocks()` - Rotate piece blocks matrix
-- `getWallKicks()` - Get wall kick offsets for rotation
+`Game` (game.ts) composes `game/` subsystems: `pieces.ts` (bag randomizer),
+`collision.ts` (CPU fallback), `rotation.ts` (SRS + wall kicks), `scoring.ts`,
+`lineUtils.ts`, and `stateProjection.ts`. Collision runs in WASM when available
+(`wasm/WasmCore.ts`), with `game/collision.ts` as the JS fallback.
 
-#### `game/collision.ts`
-Exports collision detection:
-- `CollisionDetector` class - Handles collision checks
-  - `hasCollision()` - Check if piece collides
-  - `getGhostY()` - Calculate ghost piece Y position
-  - `updatePlayfield()` - Update playfield reference
+## Benefits
 
-#### `game/scoring.ts`
-Exports scoring system:
-- `ScoringSystem` class - Manages score and line clearing
-  - `clearLines()` - Clear completed lines
-  - `updateScore()` - Update score based on lines cleared
-  - `level` property - Current level (calculated from lines)
-  - `reset()` - Reset score and lines
-
-## Integration
-
-### Main Classes
-
-#### `View` class (viewWebGPU.ts)
-Uses subsystems:
-- `particleSystem: ParticleSystem` - Particle effects
-- `visualEffects: VisualEffects` - Screen effects and video
-- Imports `themes` from `webgpu/themes.ts`
-- Imports shader functions from `webgpu/shaders.ts`
-- Imports geometry functions from `webgpu/geometry.ts`
-
-#### `Game` class (game.ts)
-Uses subsystems:
-- `pieceGenerator: PieceGenerator` - Piece creation
-- `collisionDetector: CollisionDetector` - Collision checks
-- `scoringSystem: ScoringSystem` - Score and line management
-- Imports rotation functions from `game/rotation.ts`
-
-## Benefits of This Structure
-
-1. **Separation of Concerns**: Each module has a single, clear responsibility
-2. **Easier Testing**: Modules can be tested independently
-3. **Better Maintainability**: Smaller files are easier to understand
-4. **Reusability**: Subsystems can be reused in other contexts
-5. **Expandability**: New features can be added without bloating existing files
-6. **Type Safety**: Interfaces clearly define contracts between modules
-
-## Future Expansion Possibilities
-
-With this modular structure, it's now easier to:
-- Add new visual effects (extend `VisualEffects` class)
-- Add new particle effects (extend `ParticleSystem` class)
-- Add new piece types (extend `PieceGenerator` class)
-- Add new themes (add to `themes` object)
-- Add new shaders (add to `webgpu/shaders.ts`)
-- Implement different rotation systems (create new rotation module)
-- Add different scoring systems (create new scoring module)
+1. **Separation of concerns** — each module has a single, clear responsibility.
+2. **Smaller blast radius** — GPU setup, rendering, and effects change
+   independently, reducing merge conflicts.
+3. **Easier testing** — modules are exercised independently (see `tests/`).
+4. **Maintainability** — no file exceeds the 1000-line guideline.

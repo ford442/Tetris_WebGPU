@@ -177,7 +177,7 @@ Run `npm run dev` (or preview build) and exercise each row. Check console for er
 node scripts/capture-screenshot.mjs http://127.0.0.1:5173/ ./screenshots webgpu-cpp
 
 # Puppeteer — pass full URL or use RENDERER env
-RENDERER=webgpu-cpp node screenshot_playing.js
+RENDERER=webgpu-cpp node scripts/screenshot.js
 ```
 
 ## Roadmap (post-scaffolding)
