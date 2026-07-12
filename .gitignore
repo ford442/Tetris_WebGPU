@@ -6,3 +6,19 @@ dist/
 *.mp4
 design/
 verification/
+
+# Screenshot / diagnostic capture output (scripts/*.mjs write here)
+screenshots/
+
+# OS / editor junk
+desktop.ini
+.DS_Store
+Thumbs.db
+
+# NOTE on *.wasm: compiled WASM (public/release.wasm, public/cpp/*.wasm,
+# build/cpp/*.wasm) is committed *intentionally* so the game and tests run
+# without an emsdk/asc toolchain. Do not add a blanket *.wasm ignore.
+
+# Python bytecode
+__pycache__/
+*.pyc

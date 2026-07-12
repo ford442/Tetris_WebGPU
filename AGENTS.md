@@ -263,12 +263,12 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
 
 * **Script:** `deploy.py`
 * **Prerequisite:** Run `npm run build:all` first to populate `/dist`.
-* **Target:** Uploads `/dist` via SFTP to `test.1ink.us/tetris-webgpu`.
-* **Security note:** `deploy.py` contains a hardcoded password. Treat this file as sensitive and do not expose it in public repositories.
+* **Target:** Uploads `/dist` (zipped) to the Contabo storage manager.
+* **Secrets:** `deploy.py` reads `DEPLOY_TOKEN` from the environment only — no credentials are hardcoded. See the *Continuous Integration & Deployment* section above.
 
 ## Security Considerations
 
-* **Hardcoded credentials:** `deploy.py` contains a plaintext SFTP password (`GoogleBez12!`). Do not commit this file to public repositories without sanitizing it.
+* **Credentials via env only:** `deploy.py` reads `DEPLOY_TOKEN` from the environment; never hardcode secrets in tracked files. The old `deploy_old.py` held a plaintext SFTP password and has been removed — that credential remains in git history and **must be rotated**.
 * **LocalStorage:** High scores are stored in `localStorage` (`tetris_highscores`). No sensitive data is persisted.
 * **WASM fetch:** The app fetches `./release.wasm` or `/release.wasm` from the same origin. Ensure the server serves the correct MIME type (`application/wasm`).
 * **Debug mode:** Developers can enable verbose logging by setting `localStorage.setItem('tetris_debug', 'true')` and refreshing.
@@ -307,6 +307,19 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
    `uncapturederror` listener stay in one place. Pipeline creation is wrapped in
    `pushGpuErrorScopes`/`popGpuErrorScopes` so WGSL/allocation failures log with
    context — keep new pipeline setup inside that scope.
+
+## Continuous Integration & Deployment
+
+- **CI:** `.github/workflows/ci.yml` runs on every pull request and on pushes to
+  `main` — `npm ci` → `npm run asbuild:release` → `npm test` → `npm run build`
+  across Node 20 and 22. Keep PRs green before merge. (`copilot-setup-steps.yml`
+  is a separate setup-only workflow, not the test gate.)
+- **Deploy:** `deploy.py` uploads `dist/` to the Contabo storage manager and
+  reads secrets **from the environment only** (`DEPLOY_TOKEN`). Never hardcode
+  credentials in tracked files; use env vars or a secret store. The legacy
+  `deploy_old.py` (which contained a plaintext SFTP password) has been removed —
+  that password lives in git history and **must be rotated**.
+- **No `npm run lint` script exists yet** (eslint/typescript-eslint not set up).
 
 ## Cursor Cloud specific instructions
 
