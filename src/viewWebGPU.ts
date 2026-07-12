@@ -1,22 +1,7 @@
 import * as Matrix from "gl-matrix";
-import {
-  PostProcessShaders,
-  EnhancedPostProcessShaders,
-  MaterialAwarePostProcessShaders,
-  PBRBlockShaders,
-  UnderwaterBlockShaders,
-  ParticleShaders,
-  GridShader,
-  BackgroundShaders,
-  VideoBackgroundShaders,
-  Shaders,
-  PremiumBlockShaders,
-} from './webgpu/shaders.js';
-import { ParticleComputeShader, LineClearComputeShader, LINE_CLEAR_RESULTS_BYTE_SIZE } from './webgpu/compute.js';
+import { LINE_CLEAR_RESULTS_BYTE_SIZE } from './webgpu/compute.js';
 import { JellyfishParticleSystem } from './webgpu/jellyfishParticles.js';
-import { CubeData, FullScreenQuadData, GridData } from './webgpu/geometry.js';
 import {
-  BLOCK_WORLD_SIZE,
   BOARD_WORLD_CENTER_X,
   BOARD_WORLD_CENTER_Y,
 } from './webgpu/renderMetrics.js';
@@ -45,26 +30,11 @@ import {
   toggleMultiPassBloom as toggleMultiPassBloomImpl,
   setBloomParameters as setBloomParametersImpl,
 } from './webgpu/viewPremium.js';
-import {
-  resolveBlockTextureUrl,
-  getTextureMipLevelCount,
-  createBlockTextureSamplerDescriptor,
-  createBlockTextureBindingView,
-  setBlockTextureConfig,
-  getBlockTextureConfig,
-} from './webgpu/blockTexture.js';
-import {
-  BLOCK_TILE_EXTRACT_SCALE,
-  extractBlockTileFromImage,
-  loadBlockTextureImage,
-} from './webgpu/blockTextureExtract.js';
-import { UNIFORM_BUFFER_SIZES } from './config/renderConfig.js';
-import { renderLogger, textureLogger, shaderLogger, isDebugEnabled } from './utils/logger.js';
+import { renderLogger } from './utils/logger.js';
 import {
   initFrostedGlassBackboard as initFrostedGlassImpl,
   updateFrostedGlassUniforms as updateFrostedGlassUniformsImpl,
 } from './webgpu/viewFrostedGlass.js';
-import { DebugTextureShaders } from './webgpu/debug_shaders.js';
 import {
   BlockRenderer,
 } from './webgpu/renderers/blockRenderer.js';
@@ -79,10 +49,7 @@ import {
 } from './webgpu/viewMaterials.js';
 import {
   generateMipmaps as generateMipmapsUtil,
-  createSolidFallbackTexture,
-  createProceduralFallbackTexture,
   recreateRenderTargets as recreateRenderTargetsImpl,
-  createPostProcessBindGroupEntries,
 } from './webgpu/viewTextures.js';
 import {
   onHardDrop as handleHardDrop,
@@ -98,8 +65,8 @@ import {
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
 import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
-
-const glMatrix = Matrix;
+import { acquireGpuContext, resizeGpuContext } from './webgpu/gpuContext.js';
+import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
 
 export default class View {
   readonly rendererName = 'webgpu' as const;
@@ -409,48 +376,7 @@ export default class View {
     return view;
   }
 
-  resize() {
-    if (!this.device) return;
-    const dpr = window.devicePixelRatio || 1;
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-
-    // NEW: Apply render scale for supersampling
-    const scaledWidth = Math.floor(this.width * dpr * this.renderScale);
-    const scaledHeight = Math.floor(this.height * dpr * this.renderScale);
-
-    this.canvasWebGPU.width = scaledWidth;
-    this.canvasWebGPU.height = scaledHeight;
-    // CSS keeps it at screen size, internal resolution is higher
-    this.canvasWebGPU.style.width = `${this.width}px`;
-    this.canvasWebGPU.style.height = `${this.height}px`;
-
-    this.playfildWidth = (this.width * 2) / 3;
-    this.playfildHeight = this.height;
-    this.playfildInnerWidth = this.playfildWidth - this.playfildBorderWidth * 2;
-    this.playfildInnerHeight = this.playfildHeight - this.playfildBorderWidth * 2 - 2;
-
-    this.visualEffects.updateVideoPosition(this.width, this.height);
-
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-
-    this.ctxWebGPU.configure({
-      device: this.device,
-      format: presentationFormat,
-      alphaMode: 'premultiplied',
-    });
-
-    this.postProcessor.resize(scaledWidth, scaledHeight);
-
-    // Resize bloom system (async - GPU syncs before destroying old textures)
-    if (this.bloomSystem) {
-      const dpr = window.devicePixelRatio || 1;
-      this.bloomSystem.resize(
-        Math.floor(this.width * dpr * this.renderScale),
-        Math.floor(this.height * dpr * this.renderScale)
-      ).catch(() => {});
-    }
-  }
+  resize() { resizeGpuContext(this); }
 
   recreateRenderTargets() { recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
 
@@ -534,429 +460,12 @@ export default class View {
     generateMipmapsUtil(this.device, texture, width, height, mipLevelCount);
   }
 
-  private createSolidFallbackTexture(): GPUTexture {
-    return createSolidFallbackTexture(this.device);
-  }
-
-  private createProceduralFallbackTexture(): GPUTexture {
-    return createProceduralFallbackTexture(this.device);
-  }
-
-  private createVideoBindGroup(videoTexture: GPUExternalTexture): GPUBindGroup {
-    return this.device.createBindGroup({
-      layout: this.videoBackgroundPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: videoTexture }
-      ]
-    });
-  }
-
   async preRender() {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return;
-    this.device = await adapter.requestDevice();
+    const presentationFormat = await acquireGpuContext(this);
+    if (!presentationFormat) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    this.canvasWebGPU.width = this.width * dpr;
-    this.canvasWebGPU.height = this.height * dpr;
-
-    const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    this.ctxWebGPU.configure({ device: this.device, format: presentationFormat, alphaMode: 'premultiplied' });
-
-    this.reactiveVideoBackground.setWebGPUDevice(this.device);
-
-    this.blockSampler = this.device.createSampler(createBlockTextureSamplerDescriptor());
-
-    try {
-        const textureUrl = resolveBlockTextureUrl(import.meta.url);
-        textureLogger.info('Loading from:', textureUrl);
-        const textureLoadTimeoutMs = 10000;
-
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = textureUrl;
-
-        await new Promise<void>((resolve, reject) => {
-          let timeoutId = 0;
-          const cleanup = () => {
-            window.clearTimeout(timeoutId);
-            img.onload = null;
-            img.onerror = null;
-          };
-          timeoutId = window.setTimeout(() => {
-            cleanup();
-            reject(new Error(`Timed out loading ${textureUrl} after ${textureLoadTimeoutMs}ms`));
-          }, textureLoadTimeoutMs);
-          img.onload = () => {
-            cleanup();
-            resolve();
-          };
-          img.onerror = () => {
-            cleanup();
-            reject(new Error(`Failed to load ${textureUrl}`));
-          };
-        });
-
-        // Authored tile is uploaded as a SINGLE texture, so the shader uses SINGLE mode.
-        setBlockTextureConfig({ samplingMode: 'single' });
-
-        const cfg = getBlockTextureConfig();
-        let maskImg: HTMLImageElement | null = null;
-        if (cfg.maskUrl) {
-          const resolvedMaskUrl = resolveBlockTextureUrl(cfg.maskUrl);
-          try {
-            maskImg = await loadBlockTextureImage(resolvedMaskUrl, textureLoadTimeoutMs);
-          } catch (maskErr) {
-            textureLogger.warn('Failed to load block mask; using heuristic mask bake', maskErr);
-            maskImg = null;
-          }
-        }
-
-        const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
-
-        const imageBitmap = await createImageBitmap(extracted.canvas, {
-          premultiplyAlpha: 'none',
-          colorSpaceConversion: 'none',
-        });
-        this.blockTexture = this.device.createTexture({
-          size: [imageBitmap.width, imageBitmap.height, 1],
-          format: 'rgba8unorm',
-          mipLevelCount: getTextureMipLevelCount(imageBitmap.width, imageBitmap.height),
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-        });
-        this.device.queue.copyExternalImageToTexture({ source: imageBitmap }, { texture: this.blockTexture }, [imageBitmap.width, imageBitmap.height]);
-        generateMipmapsUtil(this.device, this.blockTexture, imageBitmap.width, imageBitmap.height, this.blockTexture.mipLevelCount);
-        await this.device.queue.onSubmittedWorkDone();
-        this.authoredBlockTextureLoaded = true;
-        textureLogger.info(
-          'Loaded extracted tile:',
-          Math.round(extracted.sourceWidth), 'x', Math.round(extracted.sourceHeight),
-          '→', imageBitmap.width, 'x', imageBitmap.height,
-          `(${extracted.scale}×) with`, this.blockTexture.mipLevelCount, 'mips',
-        );
-    } catch (e) {
-        this.authoredBlockTextureLoaded = false;
-        textureLogger.error('Failed to load block texture:', e);
-        try {
-          this.blockTexture = this.createProceduralFallbackTexture();
-          textureLogger.warn('Using procedural fallback texture');
-        } catch (fallbackError) {
-          textureLogger.error('Procedural fallback failed, using solid texture:', fallbackError);
-          this.blockTexture = this.createSolidFallbackTexture();
-        }
-    }
-
-    const shaderMain = PBRBlockShaders();
-    let vertexCode = shaderMain.vertex;
-    let fragmentCode = shaderMain.fragment;
-
-    if (isDebugEnabled()) {
-      // When debugging, visualize baked mask channels instead of full PBR.
-      const dbg = DebugTextureShaders();
-      const modeRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('tetris_debug_mode') : null;
-      const mode = modeRaw ? Number(modeRaw) : 3;
-
-      // Modes:
-      // 0 raw texture
-      // 1 luminance
-      // 2 simple metal/glass heuristic
-      // 3 baked metal alpha (texColor.a)
-      // 4 glass mask (1-texColor.a)
-      // 5 final alpha approx
-      switch (mode) {
-        case 0: fragmentCode = dbg.fragmentRawTexture; break;
-        case 1: fragmentCode = dbg.fragmentLuminance; break;
-        case 2: fragmentCode = dbg.fragmentMask; break;
-        case 3: fragmentCode = dbg.fragmentBakedMetalAlpha; break;
-        case 4: fragmentCode = dbg.fragmentGlassMask; break;
-        case 5: fragmentCode = dbg.fragmentFinalAlphaApprox; break;
-        default: fragmentCode = dbg.fragmentBakedMetalAlpha; break;
-      }
-      vertexCode = dbg.vertex;
-      textureLogger.info('Debug mode: using texture mask visualization', { mode });
-    }
-
-    const cubeData = CubeData();
-    this.numberOfVertices = cubeData.positions.length / 3;
-    this.vertexBuffer = this.CreateGPUBuffer(this.device, cubeData.positions);
-    this.normalBuffer = this.CreateGPUBuffer(this.device, cubeData.normals);
-    this.uvBuffer = this.CreateGPUBuffer(this.device, cubeData.uvs);
-
-    const vertexModule = this.device.createShaderModule({ code: vertexCode });
-    const fragmentModule = this.device.createShaderModule({ code: fragmentCode });
-    
-    vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Vertex:', info.messages); });
-    fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Fragment:', info.messages); });
-    
-    this.pipeline = this.device.createRenderPipeline({
-      label: 'main pipeline', layout: "auto",
-      vertex: { module: vertexModule, entryPoint: "main", buffers: [
-        { arrayStride: 12, attributes: [{ shaderLocation: 0, format: "float32x3", offset: 0 }] },
-        { arrayStride: 12, attributes: [{ shaderLocation: 1, format: "float32x3", offset: 0 }] },
-        { arrayStride: 8, attributes: [{ shaderLocation: 2, format: "float32x2", offset: 0 }] },
-      ]},
-      fragment: { module: fragmentModule, entryPoint: "main", targets: [{ format: presentationFormat, blend: {
-        // Canvas uses alphaMode='premultiplied', so blocks must output premultiplied RGB.
-        // For premultiplied alpha blending: color = src(=already premul) * 1 + dst * (1-srcA)
-        color: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
-        alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
-      }}]},
-      primitive: { topology: "triangle-list" },
-      depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
-    });
-
-    const backgroundShader = BackgroundShaders();
-    const bgData = FullScreenQuadData();
-    this.backgroundVertexBuffer = this.CreateGPUBuffer(this.device, bgData.positions);
-    this.backgroundPipeline = this.device.createRenderPipeline({
-        label: 'background pipeline', layout: 'auto',
-        vertex: { module: this.device.createShaderModule({ code: backgroundShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-        fragment: { module: this.device.createShaderModule({ code: backgroundShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
-        primitive: { topology: 'triangle-list' }
-    });
-
-    this.backgroundUniformBuffer = this.device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.backgroundBindGroup = this.device.createBindGroup({ layout: this.backgroundPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.backgroundUniformBuffer } }] });
-
-    const videoBgShader = VideoBackgroundShaders();
-    this.videoBackgroundPipeline = this.device.createRenderPipeline({
-      label: 'video background pipeline', layout: 'auto',
-      vertex: { module: this.device.createShaderModule({ code: videoBgShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-      fragment: { module: this.device.createShaderModule({ code: videoBgShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
-      primitive: { topology: 'triangle-list' }
-    });
-    this.videoCoverScaleUniformBuffer = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.device.queue.writeBuffer(this.videoCoverScaleUniformBuffer, 0, new Float32Array([1, 1, 0, 0]));
-
-    // Initialize Frosted Glass Backboard
-    await this.initFrostedGlassBackboard();
-    
-    const bgColors = this.currentTheme.backgroundColors;
-    this.backgroundRenderer.setThemeColors(bgColors);
-
-    const gridShader = GridShader();
-    const gridData = GridData();
-    this.gridVertexCount = gridData.length / 3;
-    this.gridVertexBuffer = this.CreateGPUBuffer(this.device, gridData);
-    this.gridPipeline = this.device.createRenderPipeline({
-        label: 'grid pipeline', layout: 'auto',
-        vertex: { module: this.device.createShaderModule({ code: gridShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-        fragment: { module: this.device.createShaderModule({ code: gridShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
-            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-        }}]},
-        primitive: { topology: 'line-list' },
-        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" }
-    });
-
-    this.particleStorageBuffer = this.device.createBuffer({
-        size: 64 * this.particleSystem.maxParticles,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.particleComputeUniformBuffer = this.device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.particleComputePipeline = this.device.createComputePipeline({
-        label: 'particle compute pipeline', layout: 'auto',
-        compute: { module: this.device.createShaderModule({ code: ParticleComputeShader }), entryPoint: 'main' },
-    });
-    this.particleComputeBindGroup = this.device.createBindGroup({
-        layout: this.particleComputePipeline.getBindGroupLayout(0),
-        entries: [{ binding: 0, resource: { buffer: this.particleStorageBuffer } }, { binding: 1, resource: { buffer: this.particleComputeUniformBuffer } }]
-    });
-
-    const particleShader = ParticleShaders();
-    this.particlePipeline = this.device.createRenderPipeline({
-        label: 'particle pipeline', layout: 'auto',
-        vertex: { module: this.device.createShaderModule({ code: particleShader.vertex }), entryPoint: 'main', buffers: [{
-            arrayStride: 64, stepMode: 'instance',
-            attributes: [
-                { shaderLocation: 0, format: 'float32x3', offset: 0 },
-                { shaderLocation: 1, format: 'float32x4', offset: 32 },
-                { shaderLocation: 2, format: 'float32', offset: 48 },
-                { shaderLocation: 3, format: 'float32', offset: 52 },
-                { shaderLocation: 4, format: 'float32', offset: 56 },
-                { shaderLocation: 5, format: 'float32x3', offset: 16 },
-            ]
-        }]},
-        fragment: { module: this.device.createShaderModule({ code: particleShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-        }}]},
-        primitive: { topology: 'triangle-list' },
-        depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' }
-    });
-
-    this.particleUniformBuffer = this.device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.particleRenderBindGroup = this.device.createBindGroup({ layout: this.particlePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
-    this.gridBindGroup = this.device.createBindGroup({ layout: this.gridPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.particleUniformBuffer } }] });
-
-    const ppShader = this.useEnhancedPostProcess ? MaterialAwarePostProcessShaders() : PostProcessShaders();
-    this.postProcessPipeline = this.device.createRenderPipeline({
-        label: 'post process pipeline', layout: 'auto',
-        vertex: { module: this.device.createShaderModule({ code: ppShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-        fragment: { module: this.device.createShaderModule({ code: ppShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
-        primitive: { topology: 'triangle-list' }
-    });
-
-    this.postProcessUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.POST_PROCESS, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this.shockwaveParamsUniformBuffer = this.device.createBuffer({
-      size: UNIFORM_BUFFER_SIZES.SHOCKWAVE_PARAMS,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(this.shockwaveParamsUniformBuffer, 0, this.shockwaveParamsUniform);
-    this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
-
-    this.offscreenTexture = this.device.createTexture({
-        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    });
-    this._offscreenTextureView = this.offscreenTexture.createView();
-    this.depthTexture = this.device.createTexture({ size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT });
-    this._bloomInputTexture = this.device.createTexture({
-        size: [this.canvasWebGPU.width, this.canvasWebGPU.height, 1],
-        format: presentationFormat,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    });
-    this._depthTextureView = this.depthTexture.createView();
-
-    // Initialize Pass Descriptors once - GC optimized
-    this._backgroundPassDescriptor = {
-        colorAttachments: [{ view: this._offscreenTextureView, clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, loadOp: 'clear', storeOp: 'store' }]
-    };
-    this._mainPassDescriptor = {
-      colorAttachments: [{ view: this._offscreenTextureView, loadOp: 'load', storeOp: "store" }],
-      depthStencilAttachment: { view: this._depthTextureView, depthClearValue: 1.0, depthLoadOp: 'clear', depthStoreOp: 'store' },
-    };
-    this._ppPassDescriptor = {
-        colorAttachments: [{ view: undefined as any, clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, loadOp: 'clear', storeOp: 'store' }]
-    };
-
-    this.postProcessBindGroup = this.device.createBindGroup({
-        layout: this.postProcessPipeline.getBindGroupLayout(0),
-        entries: createPostProcessBindGroupEntries(this),
-    });
-
-    // Initialize multi-pass bloom system
-    this.bloomSystem = new BloomSystem(
-      this.device, 
-      this.canvasWebGPU.width, 
-      this.canvasWebGPU.height
-    );
-    // Set initial parameters — conservative values to prevent block washout
-    this.bloomSystem.setParameters({
-      threshold: 0.72,
-      intensity: this.bloomIntensity,
-      scatter: 0.52,
-      clamp: 65472,
-      knee: 0.1
-    });
-
-    // 224 bytes — WGSL minBindingSize for FragmentUniforms (audio bands at 184+, struct tail padding)
-    this.fragmentUniformBuffer = this.device.createBuffer({ size: UNIFORM_BUFFER_SIZES.FRAGMENT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-
-    this.fresnelParamsUniform = this.device.createBuffer({
-        size: 16, // vec4<f32> aligned
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        mappedAtCreation: false,
-    });
-
-    let eyePosition = [0.0, BOARD_WORLD_CENTER_Y, 75.0];
-    let lightPosition = this._f32_3;
-    lightPosition.set([-5.0, 0.0, 0.0]);
-
-    Matrix.mat4.identity(this.VIEWMATRIX);
-    Matrix.mat4.lookAt(this.VIEWMATRIX, eyePosition, [BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0], [0.0, 1.0, 0.0]);
-    Matrix.mat4.identity(this.PROJMATRIX);
-    // Increased FOV (42° vs 35°) for more dramatic depth on floating panel
-    Matrix.mat4.perspective(this.PROJMATRIX, (42 * Math.PI) / 180, this.canvasWebGPU.width / this.canvasWebGPU.height, 1, 150);
-    Matrix.mat4.identity(this.vpMatrix);
-    Matrix.mat4.multiply(this.vpMatrix, this.PROJMATRIX, this.VIEWMATRIX);
-
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 0, lightPosition);
-    this._f32_3.set(eyePosition);
-    this.device.queue.writeBuffer(this.fragmentUniformBuffer, 16, this._f32_3);
-    // Bytes 32-47 are time/useGlitch/lockPercent/level — zeroed here, updated each frame
-
-    // Create material uniform buffer for PBR (binding 4) - MUST be before renderPlayfield_Border_WebGPU
-    this.materialUniformBuffer = this.device.createBuffer({
-      size: 16, // 4 floats: metallic, roughness, transmission, padding
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    // Initialize with default material values
-    const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]); // metallic, roughness, transmission, padding
-    this.device.queue.writeBuffer(this.materialUniformBuffer, 0, materialDefaults);
-
-    // Pass it explicitly to the post-process pipeline
-    (this as any).postProcessUniforms = (this as any).postProcessUniforms || {};
-    (this as any).postProcessUniforms.shockwaveParams = this.shockwaveParams;
-
-    // --- GPU line-clear + dissolve field (compute writes, block fragment reads) ---
-    this.dissolveBuffer = this.device.createBuffer({
-      size: 200 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.boardBuffer = this.device.createBuffer({
-      size: 200 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-    });
-    this.clearFlagsBuffer = this.device.createBuffer({
-      size: 20 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.lineClearResultsBuffer = this.device.createBuffer({
-      size: LINE_CLEAR_RESULTS_BYTE_SIZE,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-    });
-    this.lineClearResultsStaging = this.device.createBuffer({
-      size: LINE_CLEAR_RESULTS_BYTE_SIZE,
-      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-    });
-    this.lineClearUniformBuffer = this.device.createBuffer({
-      size: 16, // dt + decayRate + pad(8)
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this.lineClearComputePipeline = this.device.createComputePipeline({
-      label: 'line-clear compute pipeline', layout: 'auto',
-      compute: {
-        module: this.device.createShaderModule({ code: LineClearComputeShader }),
-        entryPoint: 'detect_lines',
-      },
-    });
-    this.lineClearComputeBindGroup = this.device.createBindGroup({
-      layout: this.lineClearComputePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.boardBuffer } },
-        { binding: 1, resource: { buffer: this.dissolveBuffer } },
-        { binding: 2, resource: { buffer: this.clearFlagsBuffer } },
-        { binding: 3, resource: { buffer: this.lineClearResultsBuffer } },
-        { binding: 4, resource: { buffer: this.lineClearUniformBuffer } },
-      ],
-    });
-    this.gpuLineClearReady = true;
-
-    this.renderPlayfield_Border_WebGPU();
-
-    this.vertexUniformBuffer = this.device.createBuffer({
-      size: this.state.playfield.length * 10 * 256,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const maxBlocks = 200;
-    this.uniformBindGroup_CACHE = [];
-    for (let i = 0; i < maxBlocks; i++) {
-        const bindGroup = this.device.createBindGroup({
-            label: `block_bindgroup_${i}`, layout: this.pipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: this.vertexUniformBuffer, offset: i * 256, size: 208 } },
-                { binding: 1, resource: { buffer: this.fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
-                { binding: 2, resource: createBlockTextureBindingView(this.blockTexture) },
-                { binding: 3, resource: this.blockSampler },
-                { binding: 5, resource: { buffer: this.dissolveBuffer } },
-                { binding: 6, resource: { buffer: this.fresnelParamsUniform } },
-            ],
-        });
-        this.uniformBindGroup_CACHE.push(bindGroup);
-    }
+    await loadBlockTexture(this);
+    await initGpuResources(this, presentationFormat);
   }
 
   CreateGPUBuffer(device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) {

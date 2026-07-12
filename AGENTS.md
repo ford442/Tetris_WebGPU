@@ -61,8 +61,8 @@ Parallel to `assembly/` — **not** used for game logic or collision.
 /src
   index.ts             # App entry point (UI injection, MVC wiring, theme setup)
   game.ts              # Main game engine (~650 lines)
-  controller.ts        # Input + game loop (~860 lines)
-  viewWebGPU.ts        # Main WebGPU renderer (~1160 lines)
+  controller.ts        # Input + game loop (~980 lines)
+  viewWebGPU.ts        # Thin WebGPU View orchestrator implementing IView (~670 lines)
   sound.ts             # Sound manager + music manager (Web Audio API, procedural music)
   /game                # Game logic modules
     pieces.ts          # Tetromino definitions, 7-bag randomizer
@@ -72,6 +72,8 @@ Parallel to `assembly/` — **not** used for game logic or collision.
     lineUtils.ts       # Line clearing + playfield shifting
     stateProjection.ts # Ghost piece / playfield projection helpers
   /webgpu              # Rendering subsystem
+    gpuContext.ts      # Device/canvas acquisition + resize lifecycle
+    viewPipelines.ts   # Block-texture load + pipeline/buffer/bind-group setup
     shaders/           # WGSL shader modules (~3,000 lines) split by purpose
     shaders.ts         # Barrel re-export for backward compatibility
     geometry.ts        # Cube, full-screen quad, grid line meshes
