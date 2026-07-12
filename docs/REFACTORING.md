@@ -61,10 +61,20 @@ src/
 `viewWebGPU.ts` no longer performs device init or pipeline construction inline.
 
 ### `webgpu/gpuContext.ts`
-Device and canvas lifecycle.
-- `acquireGpuContext(view)` — requests the GPU adapter/device, sizes the canvas
-  to the device pixel ratio, configures the canvas context, and returns the
-  preferred presentation format (or `null` if no adapter is available).
+Device and canvas lifecycle, plus adapter/device policy and resilience.
+- `acquireGpuContext(view)` — requests the adapter with a resolved
+  `powerPreference` (`?gpu=low|high` / `tetris_gpu`), logs `adapter.info`,
+  requests a labeled device with feature-detected optional features
+  (`shader-f16`, `timestamp-query`, texture-compression, …; never hard-required),
+  configures the canvas, and attaches lifecycle handlers. Returns the preferred
+  presentation format (or `null` if no adapter/device is available).
+- `resolvePowerPreference()` / `selectOptionalFeatures()` — pure, unit-tested
+  policy helpers (see `tests/gpu-context.test.ts`).
+- `attachDeviceLifecycleHandlers(view)` — wires `device.lost` recovery (overlay
+  + single `preRender` re-init, then fatal overlay + `tetris-webgpu-device-lost`
+  event) and an `uncapturederror` logger.
+- `pushGpuErrorScopes` / `popGpuErrorScopes` — validation/OOM error scopes around
+  pipeline creation for actionable WGSL failures.
 - `resizeGpuContext(view)` — recomputes canvas backing size (with render scale),
   reconfigures the context, and resizes the post-processor and bloom system.
 

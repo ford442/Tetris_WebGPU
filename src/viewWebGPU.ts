@@ -65,7 +65,7 @@ import {
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
 import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
-import { acquireGpuContext, resizeGpuContext } from './webgpu/gpuContext.js';
+import { acquireGpuContext, resizeGpuContext, pushGpuErrorScopes, popGpuErrorScopes } from './webgpu/gpuContext.js';
 import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
 
 export default class View {
@@ -465,7 +465,15 @@ export default class View {
     if (!presentationFormat) return;
 
     await loadBlockTexture(this);
-    await initGpuResources(this, presentationFormat);
+
+    // Scope pipeline/buffer creation so WGSL + allocation failures are logged
+    // with actionable context instead of surfacing as opaque uncaptured errors.
+    pushGpuErrorScopes(this, 'GPU resource setup');
+    try {
+      await initGpuResources(this, presentationFormat);
+    } finally {
+      await popGpuErrorScopes(this);
+    }
   }
 
   CreateGPUBuffer(device: any, data: any, usageFlag = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) {

@@ -296,6 +296,18 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
 7. **"My cpp changes aren't showing up"**  
    Re-run `npm run cpp:release` after editing `cpp/src/`. Hard-refresh the browser (Vite does not rebuild wasm).
 
+8. **Device loss / dead canvas after tab backgrounding or GPU reset**  
+   Device lifecycle is centralized in `src/webgpu/gpuContext.ts`. On unexpected
+   `device.lost` (reason ≠ `'destroyed'`) it shows a recovery overlay and re-runs
+   `View.preRender()` once on a fresh device; a second failure surfaces a
+   permanent overlay and dispatches a `tetris-webgpu-device-lost` window event.
+   Do **not** re-add ad-hoc `requestAdapter`/`requestDevice` calls in
+   `viewWebGPU.ts` — go through `acquireGpuContext` so power-preference
+   (`?gpu=low|high`), optional-feature detection, labels, `device.lost`, and the
+   `uncapturederror` listener stay in one place. Pipeline creation is wrapped in
+   `pushGpuErrorScopes`/`popGpuErrorScopes` so WGSL/allocation failures log with
+   context — keep new pipeline setup inside that scope.
+
 ## Cursor Cloud specific instructions
 
 This is a **client-only SPA** — no Docker, database, or backend services. One process covers local development.
