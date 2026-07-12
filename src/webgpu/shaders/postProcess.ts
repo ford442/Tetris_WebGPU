@@ -347,6 +347,13 @@ export const PostProcessShaders = () => {
                 return vec4<f32>(0.0, 0.0, 0.0, 0.0);
             }
 
+            // NEON BRICKLAYER: Line Clear Escalation Saturation Boost
+            let satBoost = uniforms.saturationBoost;
+            if (satBoost > 0.001) {
+                let luma = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+                color = mix(vec3<f32>(luma), color, 1.0 + satBoost);
+            }
+
             // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
             return vec4<f32>(color * a, a);
         }

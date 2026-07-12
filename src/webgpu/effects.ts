@@ -31,6 +31,9 @@ export class VisualEffects {
     // Line Clear Escalation state
     saturationBoost: number = 0;
 
+    // Line Clear Escalation state
+    saturationBoost: number = 0;
+
     // Resonant Glass Fracture state
     backgroundResonance: number = 0;
 
@@ -119,6 +122,10 @@ export class VisualEffects {
 
         // Saturation Boost decay
         this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
+        if (this.saturationBoost < 0.01) this.saturationBoost = 0;
+
+        // Saturation Boost decay
+        this.saturationBoost *= Math.exp(-dt * 2.0);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
         // Glitch decay
@@ -258,6 +265,11 @@ export class VisualEffects {
     triggerLevelUpColorFlash(color: [number, number, number], duration: number = 0.4): void {
         this.levelUpFlashColor = color && color.length >= 3 ? [color[0], color[1], color[2]] : [0.3, 0.7, 1.0];
         this.levelUpFlashIntensity = 1.0; // start at high opacity for burn
+    }
+
+    triggerSaturationBoost(strength: number = 1.0): void {
+        this.saturationBoost += strength;
+        this.saturationBoost = Math.min(this.saturationBoost, 3.0);
     }
 
     triggerSaturationBoost(strength: number = 1.0): void {

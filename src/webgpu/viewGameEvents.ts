@@ -51,11 +51,13 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
 export function triggerComboOverdrive(view: any, combo: number): void {
   view.visualEffects.triggerNeonBloomFlash(2.5 + combo * 0.3);
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
+  view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
 }
 
 export function triggerEnergyWave(view: any, combo: number): void {
   view.visualEffects.triggerWarpSurge(4.0 + combo * 1.0);
+  view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerAberration(1.5 + combo * 0.3);
   view.visualEffects.triggerHardDropAberrationPulse(1.5);
@@ -150,6 +152,11 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   }
   view.visualEffects.triggerNeonBloomFlash(bloomIntensity);
   view.visualEffects.triggerParticleHit(1.0 + lines.length * 0.5);
+
+  if (lines.length >= 4 || tSpin) {
+    view.visualEffects.triggerSaturationBoost(1.5);
+    view.visualEffects.triggerHardDropAberrationPulse(1.5);
+  }
 
   if (lines.length >= 4 || tSpin) {
     view.visualEffects.triggerSaturationBoost(1.5);
