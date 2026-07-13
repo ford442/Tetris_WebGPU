@@ -6,6 +6,8 @@ import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.j
 import { initSettingsUI } from './src/settings/settingsUI.js';
 import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSettings.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
+import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
+import { setBlockTextureConfig } from "./src/webgpu/blockTexture.js";
 import { parseGameModeId } from './src/game/modes/createGameMode.js';
 import type { GameModeId } from './src/game/modes/types.js';
 
@@ -437,4 +439,5 @@ uiContainer.innerHTML = `
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
+  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 })();

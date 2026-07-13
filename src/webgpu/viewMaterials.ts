@@ -63,17 +63,9 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[5] = m.clearcoat;
   view._materialUniforms[6] = m.anisotropic;
   view._materialUniforms[7] = m.dispersion;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._materialUniforms.subarray(0, 8));
-
-  const u32Scratch = new Uint32Array([getMaterialTypeIndex()]);
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 80, u32Scratch);
-
-  view._materialUniforms[0] = view.particleInteractionUniforms.particleInfluence;
-  view._materialUniforms[1] = 1.0;
-  const authoredLoaded = view.authoredBlockTextureLoaded !== false;
-  view._materialUniforms[2] = authoredLoaded ? 0.94 : 0.55;
-
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 84, view._materialUniforms.subarray(0, 3));
+  view._materialUniforms[8] = getMaterialTypeIndex();
+  view._materialUniforms[9] = 0.0;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._materialUniforms.subarray(0, 10));
 
   // Write particleMaterialType to offset 116 (previously pad2)
   const particleMaterialScratch = new Uint32Array([getMaterialTypeIndex()]);

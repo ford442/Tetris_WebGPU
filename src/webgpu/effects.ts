@@ -121,10 +121,6 @@ export class VisualEffects {
         this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
-        // Saturation Boost decay
-        this.saturationBoost *= Math.exp(-dt * 2.0);
-        if (this.saturationBoost < 0.01) this.saturationBoost = 0;
-
         // Glitch decay
         this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;

@@ -391,6 +391,7 @@ export default class Game implements ModeGameHooks {
 
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
+    this.effectFlag = true;
     this._gameStateCache.effectFlag = true;
     this._gameStateCache.neonBurstFlag = true;
 
@@ -432,6 +433,7 @@ export default class Game implements ModeGameHooks {
 
     this.effectEvent = 'hardDrop';
     this.effectCounter++;
+    this.effectFlag = true;
     this._gameStateCache.effectFlag = true;
     this._gameStateCache.neonBurstFlag = true;
 
