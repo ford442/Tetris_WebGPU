@@ -130,7 +130,6 @@ export interface PostProcessUniformData {
   blackHoleCenter?: [number, number];
 
   // Hard-drop neon burst radial glow (Neon Bricklayer)
-  neonBurst?: number;
   saturationBoost?: number;
 }
 

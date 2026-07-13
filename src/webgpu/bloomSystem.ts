@@ -1,4 +1,4 @@
-interface BloomSystem {
+interface BloomSystemScratch {
   _thresholdData?: Float32Array;
   _blurData?: Float32Array;
   _upsampleData?: Float32Array;
@@ -68,7 +68,12 @@ const BLOOM_MIP_LEVELS = 3;
 // BLOOM SYSTEM CLASS
 // ============================================================================
 
-export class BloomSystem {
+export class BloomSystem implements BloomSystemScratch {
+  _thresholdData?: Float32Array;
+  _blurData?: Float32Array;
+  _upsampleData?: Float32Array;
+  _compositeData?: Float32Array;
+
   private device: GPUDevice;
   private width: number;
   private height: number;
@@ -99,13 +104,7 @@ export class BloomSystem {
   private upsampleUniformBuffers: GPUBuffer[] = [];
   private compositeUniformBuffer!: GPUBuffer;
   
-  // Bind groups
-  private thresholdBindGroup!: GPUBindGroup;
-  private downsampleBindGroups: GPUBindGroup[] = [];
-  private blurHorizontalBindGroups: GPUBindGroup[] = [];
-  private blurVerticalBindGroups: GPUBindGroup[] = [];
-  private upsampleCombineBindGroups: GPUBindGroup[] = [];
-  private compositeBindGroup!: GPUBindGroup;
+  // Bind groups created per-pass in render methods (not cached on the instance).
   
   // Samplers
   private linearSampler!: GPUSampler;

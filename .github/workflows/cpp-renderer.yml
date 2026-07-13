@@ -1,0 +1,85 @@
+name: C++ Renderer (Emscripten)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'cpp/**'
+      - 'scripts/build-cpp.mjs'
+      - '.emsdk-version'
+      - '.github/workflows/cpp-renderer.yml'
+  pull_request:
+    paths:
+      - 'cpp/**'
+      - 'scripts/build-cpp.mjs'
+      - '.emsdk-version'
+      - '.github/workflows/cpp-renderer.yml'
+
+jobs:
+  cpp-renderer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Read pinned emsdk version
+        id: emsdk
+        run: echo "version=$(tr -d '[:space:]' < .emsdk-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache emsdk
+        id: emsdk-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            emsdk
+            ~/.emscripten_cache
+          key: emsdk-${{ steps.emsdk.outputs.version }}-ubuntu-22.04
+
+      - name: Install emsdk
+        run: |
+          if [ ! -d emsdk ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
+          fi
+          cd emsdk
+          ./emsdk install "${{ steps.emsdk.outputs.version }}"
+          ./emsdk activate "${{ steps.emsdk.outputs.version }}"
+
+      - name: Build C++ renderer (release)
+        run: |
+          source emsdk/emsdk_env.sh
+          npm run cpp:release
+
+      - name: Build C++ renderer (debug + sanitizer matrix)
+        run: |
+          source emsdk/emsdk_env.sh
+          TETRIS_CPP_SANITIZE=1 npm run cpp:debug
+        continue-on-error: true
+
+      - name: Verify artifacts
+        run: |
+          test -f public/cpp/tetris_renderer.js
+          test -f public/cpp/tetris_renderer.wasm
+          test -f public/cpp/build-info.json
+          test -f build/cpp/compile_commands.json
+          node -e "const i=require('./public/cpp/build-info.json'); if(!i.emccVersion) process.exit(1); console.log(i.webGpuBackend)"
+
+      - name: Upload C++ renderer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tetris-cpp-renderer
+          path: |
+            public/cpp/tetris_renderer.js
+            public/cpp/tetris_renderer.wasm
+            public/cpp/build-info.json
+            build/cpp/compile_commands.json
+          if-no-files-found: error

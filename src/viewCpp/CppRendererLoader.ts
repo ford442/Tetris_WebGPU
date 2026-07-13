@@ -3,9 +3,24 @@
  * Pattern mirrors src/wasm/WasmCore.ts (multi-path fetch, magic check, HEAP view).
  */
 import { renderLogger } from '../utils/logger.js';
-import { flattenPlayfieldGrid } from './cppPlayfieldSync.js';
+import {
+  flattenPlayfieldGrid,
+  packPieceState,
+  PIECE_STATE_BYTES,
+  PLAYFIELD_CELL_COUNT,
+} from './cppPlayfieldSync.js';
+import type { GameState } from '../game/gameState.js';
 
-export const PLAYFIELD_BYTES = 200;
+export const PLAYFIELD_BYTES = PLAYFIELD_CELL_COUNT;
+
+/** Matches cpp/src/renderer_backend.h — get_renderer_backend() return values. */
+export const RendererBackend = {
+  NONE: 0,
+  CANVAS2D: 1,
+  WEBGPU: 2,
+} as const;
+
+export type RendererBackendId = (typeof RendererBackend)[keyof typeof RendererBackend];
 
 export const JS_CANDIDATES = [
   './cpp/tetris_renderer.js',
@@ -30,6 +45,7 @@ export interface CppRendererModule {
   HEAP8: Int8Array;
   HEAPU8: Uint8Array;
   canvas?: HTMLCanvasElement;
+  preinitializedWebGPUDevice?: GPUDevice;
   _malloc?: (size: number) => number;
   _free?: (ptr: number) => void;
 }
@@ -78,21 +94,55 @@ async function importCreateModule(): Promise<{ create: CreateModuleFn; jsUrl: st
   return null;
 }
 
+async function createWebGpuDevice(): Promise<GPUDevice | null> {
+  if (typeof navigator === 'undefined' || !navigator.gpu) return null;
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return null;
+    return adapter.requestDevice();
+  } catch (err) {
+    renderLogger.warn('[cpp] WebGPU device request failed:', err);
+    return null;
+  }
+}
+
 export class CppRendererLoader {
   private static module: CppRendererModule | null = null;
   private static playfieldView: Int8Array | null = null;
+  private static pieceStateView: Int8Array | null = null;
   private static playfieldPtr = 0;
+  private static pieceStatePtr = 0;
   private static loadedUrl = '';
   private static loaded = false;
+  private static backend: RendererBackendId = RendererBackend.NONE;
 
   private static initFn: ((w: number, h: number) => number) | null = null;
   private static resizeFn: ((w: number, h: number) => void) | null = null;
   private static renderFn: ((dt: number) => void) | null = null;
   private static getPlayfieldPtrFn: (() => number) | null = null;
+  private static getPieceStatePtrFn: (() => number) | null = null;
   private static updatePlayfieldFn: ((ptr: number, len: number) => void) | null = null;
+  private static updatePieceStateFn: ((
+    pieceType: number,
+    rotation: number,
+    x: number,
+    y: number,
+    ghostY: number,
+    lockFlash: number,
+  ) => void) | null = null;
+  private static isGpuActiveFn: (() => number) | null = null;
+  private static getBackendFn: (() => number) | null = null;
 
   static isLoaded(): boolean {
     return this.loaded;
+  }
+
+  static isGpuActive(): boolean {
+    return this.backend === RendererBackend.WEBGPU;
+  }
+
+  static getRendererBackend(): RendererBackendId {
+    return this.backend;
   }
 
   static getLoadedUrl(): string {
@@ -119,8 +169,13 @@ export class CppRendererLoader {
       return false;
     }
 
+    const webgpuDevice = await createWebGpuDevice();
+
     try {
-      const instance = await imported.create({ canvas });
+      const instance = await imported.create({
+        canvas,
+        preinitializedWebGPUDevice: webgpuDevice ?? undefined,
+      });
       this.module = instance;
       this.loadedUrl = `${imported.jsUrl} (wasm from ${wasmProbe.url})`;
 
@@ -134,20 +189,38 @@ export class CppRendererLoader {
       ) => void;
       this.renderFn = instance.cwrap('render_frame', null, ['number']) as (dt: number) => void;
       this.getPlayfieldPtrFn = instance.cwrap('get_playfield_ptr', 'number', []) as () => number;
+      this.getPieceStatePtrFn = instance.cwrap('get_piece_state_ptr', 'number', []) as () => number;
       this.updatePlayfieldFn = instance.cwrap('update_playfield', null, ['number', 'number']) as (
         ptr: number,
         len: number,
       ) => void;
+      this.updatePieceStateFn = instance.cwrap('update_piece_state', null, [
+        'number', 'number', 'number', 'number', 'number', 'number',
+      ]) as (
+        pieceType: number,
+        rotation: number,
+        x: number,
+        y: number,
+        ghostY: number,
+        lockFlash: number,
+      ) => void;
+      this.isGpuActiveFn = instance.cwrap('is_gpu_renderer_active', 'number', []) as () => number;
+      this.getBackendFn = instance.cwrap('get_renderer_backend', 'number', []) as () => number;
 
       const ok = this.initFn(width, height);
       if (ok !== 1) {
         throw new Error(`init_renderer returned ${ok}`);
       }
 
-      this.bindPlayfieldView();
+      this.bindHeapViews();
+      this.backend = (this.getBackendFn?.() ?? this.isGpuActiveFn?.() ?? 0) as RendererBackendId;
 
       this.loaded = true;
-      renderLogger.info(`[cpp] module ready from ${this.loadedUrl}`);
+      const backendLabel =
+        this.backend === RendererBackend.WEBGPU ? 'WebGPU'
+          : this.backend === RendererBackend.CANVAS2D ? 'Canvas2D fallback'
+            : 'none';
+      renderLogger.info(`[cpp] module ready (backend=${backendLabel}, id=${this.backend}) from ${this.loadedUrl}`);
       return true;
     } catch (err) {
       renderLogger.warn('[cpp] init failed:', err);
@@ -165,13 +238,38 @@ export class CppRendererLoader {
   }
 
   /**
+   * Sync projected playfield + extended piece state into wasm memory.
+   */
+  static syncFromGameState(state: GameState | null | undefined, ghostY = 0): void {
+    if (!this.loaded || !state) return;
+
+    this.ensureHeapViews();
+    this.syncPlayfieldFromGrid(state.playfield);
+
+    const packed = packPieceState(state, ghostY);
+    if (this.pieceStateView) {
+      this.pieceStateView.set(packed);
+      return;
+    }
+
+    this.updatePieceStateFn?.(
+      packed[0],
+      packed[1],
+      packed[2],
+      packed[3],
+      packed[4],
+      new DataView(packed.buffer).getFloat32(8, true),
+    );
+  }
+
+  /**
    * Copy projected playfield grid into wasm memory.
    * Uses zero-copy HEAP view when available; falls back to update_playfield + temp buffer.
    */
   static syncPlayfieldFromGrid(playfield: number[][] | undefined): void {
     if (!this.loaded || !playfield) return;
 
-    this.ensurePlayfieldView();
+    this.ensureHeapViews();
     const flat = flattenPlayfieldGrid(playfield);
 
     if (this.playfieldView) {
@@ -190,30 +288,45 @@ export class CppRendererLoader {
     }
   }
 
-  private static bindPlayfieldView(): void {
-    if (!this.module || !this.getPlayfieldPtrFn) return;
-    this.playfieldPtr = this.getPlayfieldPtrFn();
-    this.playfieldView = new Int8Array(this.module.HEAP8.buffer, this.playfieldPtr, PLAYFIELD_BYTES);
+  private static bindHeapViews(): void {
+    if (!this.module) return;
+
+    if (this.getPlayfieldPtrFn) {
+      this.playfieldPtr = this.getPlayfieldPtrFn();
+      this.playfieldView = new Int8Array(this.module.HEAP8.buffer, this.playfieldPtr, PLAYFIELD_BYTES);
+    }
+
+    if (this.getPieceStatePtrFn) {
+      this.pieceStatePtr = this.getPieceStatePtrFn();
+      this.pieceStateView = new Int8Array(this.module.HEAP8.buffer, this.pieceStatePtr, PIECE_STATE_BYTES);
+    }
   }
 
   /** Re-bind after ALLOW_MEMORY_GROWTH replaces the ArrayBuffer. */
-  private static ensurePlayfieldView(): void {
-    if (!this.module || !this.getPlayfieldPtrFn) return;
+  private static ensureHeapViews(): void {
+    if (!this.module) return;
     if (!this.playfieldView || this.playfieldView.buffer !== this.module.HEAP8.buffer) {
-      this.bindPlayfieldView();
+      this.bindHeapViews();
     }
   }
 
   private static reset(): void {
     this.module = null;
     this.playfieldView = null;
+    this.pieceStateView = null;
     this.playfieldPtr = 0;
+    this.pieceStatePtr = 0;
     this.loadedUrl = '';
     this.initFn = null;
     this.resizeFn = null;
     this.renderFn = null;
     this.getPlayfieldPtrFn = null;
+    this.getPieceStatePtrFn = null;
     this.updatePlayfieldFn = null;
+    this.updatePieceStateFn = null;
+    this.isGpuActiveFn = null;
+    this.getBackendFn = null;
+    this.backend = RendererBackend.NONE;
     this.loaded = false;
   }
 }

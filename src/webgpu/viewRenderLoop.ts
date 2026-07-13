@@ -10,6 +10,7 @@ import { postProcessUniforms } from './postProcessUniforms.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
 import { BLOCK_WORLD_SIZE, BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
 import { updateBorderAudioGlow } from './viewPlayfield.js';
+import type { WebGPUViewHost } from '../view/viewTypes.js';
 
 const glMatrix = Matrix;
 
@@ -18,15 +19,15 @@ const glMatrix = Matrix;
  * @param view - The View instance containing all GPU state
  * @param dt - Delta time in seconds
  */
-export function executeRenderLoop(view: any, dt: number) {
+export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   if (!view.device) return;
 
   // Safety cap dt to prevent massive jumps on lag spikes
   const clampedDt = Math.min(dt, 0.1);
 
   // Neon Bricklayer explicitly routed hardDropBoost via effectFlag
-  if (view.state && view.state.effectFlag && view.state.effectCounter !== view._lastEffectCounter) {
-    view._lastEffectCounter = view.state.effectCounter;
+  if (view.state && view.state.effectFlag && view.state.effectCounter !== view.lastEffectCounter) {
+    view.lastEffectCounter = view.state.effectCounter;
     view.shockwaveParamsUniform[0] = 1.0;
     view._hardDropBoostTimer = 0.420; // 420ms
     if (typeof view.setFresnelBoost === 'function') {
@@ -278,9 +279,10 @@ function updateRenderUniforms(view: any, time: number, result: any) {
 function updatePostProcessUniforms(view: any, time: number) {
   view._postProcessParams.time = time;
   view._postProcessParams.useGlitch = Math.max(view.useGlitch ? 1.0 : 0.0, view.visualEffects.glitchIntensity);
+  const shockwaveActive = view.useShockwave !== false;
   view._postProcessParams.shockwaveCenter[0] = view.visualEffects.shockwaveCenter[0];
   view._postProcessParams.shockwaveCenter[1] = view.visualEffects.shockwaveCenter[1];
-  view._postProcessParams.shockwaveTime = view.visualEffects.shockwaveTimer;
+  view._postProcessParams.shockwaveTime = shockwaveActive ? view.visualEffects.shockwaveTimer : 0;
   
   const currentShockwaveParams = view.visualEffects.getShockwaveParams();
   view._postProcessParams.shockwaveParams[0] = currentShockwaveParams[0];
@@ -290,7 +292,7 @@ function updatePostProcessUniforms(view: any, time: number) {
   
   view._postProcessParams.level = view.visualEffects.currentLevel;
   view._postProcessParams.warpSurge = view.visualEffects.warpSurge;
-  view._postProcessParams.enableFXAA = view.useEnhancedPostProcess ? 1.0 : 0.0;
+  view._postProcessParams.enableFXAA = view.useFXAA !== false ? 1.0 : 0.0;
   
   // Update Bloom System with dynamic neon flash intensity
   if (view.bloomSystem && view.visualEffects.neonBloomIntensity > 0) {
@@ -305,8 +307,8 @@ function updatePostProcessUniforms(view: any, time: number) {
 
   const inShaderBloom = view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom;
   view._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
-  view._postProcessParams.enableFilmGrain = 1.0;
-  view._postProcessParams.enableCRT = 0.0;
+  view._postProcessParams.enableFilmGrain = view.useFilmGrain !== false ? 1.0 : 0.0;
+  view._postProcessParams.enableCRT = view.useCRT ? 1.0 : 0.0;
   view._postProcessParams.bloomIntensity = view.bloomIntensity + view.visualEffects.neonBloomIntensity;
   view._postProcessParams.bloomThreshold = 0.72;
   view._postProcessParams.materialAwareBloom = (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0;
@@ -467,8 +469,8 @@ function renderMainPass(view: any, commandEncoder: any, result: any) {
 
   view.blockRenderer.draw(passEncoder);
 
-  // Particles (only if active)
-  if (result.hasActiveParticles) {
+  // Particles (only if active and enabled)
+  if (view.useParticles !== false && result.hasActiveParticles) {
     passEncoder.setPipeline(view.particlePipeline);
     passEncoder.setBindGroup(0, view.particleRenderBindGroup);
     passEncoder.setVertexBuffer(0, view.particleStorageBuffer);

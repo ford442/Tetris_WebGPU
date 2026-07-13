@@ -1,5 +1,7 @@
 import * as Matrix from 'gl-matrix';
 import { boardWorldX, boardWorldY } from '../webgpu/renderMetrics.js';
+import type { GameState } from '../game/gameState.js';
+import type { ThemeColors } from '../webgpu/themes.js';
 
 export interface BlockInstance {
   modelMatrix: Float32Array;
@@ -14,8 +16,8 @@ const _model = Matrix.mat4.create();
  * Shared by WebGPU and WebGL2 renderers.
  */
 export function buildPlayfieldInstances(
-  state: any,
-  currentTheme: any,
+  state: GameState,
+  currentTheme: ThemeColors,
   visualX: number,
   visualY: number,
 ): BlockInstance[] {

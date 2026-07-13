@@ -2,14 +2,15 @@
  * Material and theme management for the View renderer.
  */
 
-import { themes } from './themes.js';
+import type { Piece } from '../game/pieces.js';
+import { themes, type ThemeColors } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
 import { getBlockTextureConfig } from './blockTexture.js';
 
 export interface MaterialViewLike {
   device: GPUDevice;
-  currentTheme: any;
+  currentTheme: ThemeColors;
   usePremiumMaterials: boolean;
   currentMaterial: any;
   fragmentUniformBuffer: GPUBuffer;
@@ -100,8 +101,8 @@ export function setWireframe(view: MaterialViewLike, enabled: boolean) {
 
 export function renderPiece(
   ctx: CanvasRenderingContext2D,
-  piece: any,
-  currentTheme: any,
+  piece: Piece | null,
+  currentTheme: ThemeColors,
   blockSize: number = 20
 ) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);

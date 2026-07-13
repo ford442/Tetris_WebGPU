@@ -3,6 +3,8 @@
  * Hybrid: MP3/FLAC base + procedural synth layer that reacts to gameplay
  */
 
+import { audioLogger } from '../utils/logger.js';
+
 export interface MusicLayer {
   oscillators: OscillatorNode[];
   gainNodes: GainNode[];

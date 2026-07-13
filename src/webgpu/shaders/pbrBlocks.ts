@@ -1,25 +1,11 @@
 /**
- * PBR Block Shader with Configurable Texture Sampling
- *
- * Features:
- * - Full PBR material model (metallic, roughness, transmission, etc.)
- * - Configurable texture sampling supporting single textures, atlases, or subregions
- * - Material-aware lighting that preserves metal frame + glass detail
- * - Per-piece material variation support
- * - Integration with particle-material interaction system
- *
- * Material Types:
- * 0: Classic (basic lighting, no PBR)
- * 1: Gold (anisotropic metal, warm reflections)
- * 2: Chrome (mirror-like, cool reflections)
- * 3: Glass (transmission, refraction, dispersion)
- * 4: Cyber (emissive, neon edges)
- * 5: Gem (subsurface scattering, faceted)
+ * @deprecated Import from ./block/blockShader.js — thin compatibility re-export.
+ * NOTE: Currently holding custom PBR texture sampling and alpha transparency logic 
+ * until it is safely migrated into the new /block/ directory structure.
  */
 
 import { getSimpleTextureSamplingWGSL } from '../textureSampling.js';
 import { ParticleMaterialInteractionWGSL } from './particleMaterialInteraction.js';
-
 
 // PBR Functions shared with premiumBlocks.ts
 export const PBRFunctions = `
@@ -177,7 +163,7 @@ export const PBRBlockShaders = () => {
         // ============================================================================
         // MaterialProperties dummy struct for interface matching
         struct MaterialProperties {
-           metallic: f32,
+            metallic: f32,
         };
         ${ParticleMaterialInteractionWGSL}
 
@@ -645,7 +631,6 @@ export const PBRBlockShaders = () => {
 
             // NEW: Apply particle-material interaction
             let matType = fUniforms.particleMaterialType;
-            let particleIntensity = fUniforms.particleIntensity;
             if (matType > 0u && particleIntensity > 0.0) {
                 // Determine interaction color based on material
                 var interactionColor = vec3f(1.0);
@@ -686,4 +671,5 @@ export const PBRBlockShaders = () => {
     return { vertex, fragment };
 };
 
+export const createBlockShaders = PBRBlockShaders;
 export default PBRBlockShaders;

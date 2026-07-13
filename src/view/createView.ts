@@ -19,7 +19,7 @@ type ViewFactoryArgs = [
 async function createCppView(...args: ViewFactoryArgs): Promise<IView | null> {
   try {
     const mod = await import('../viewCpp/EmscriptenView.js');
-    const EmscriptenView = mod.default ?? mod.EmscriptenView;
+    const EmscriptenView = mod.default;
     if (!EmscriptenView?.create) {
       console.warn('EmscriptenView module loaded but create() is missing');
       return null;

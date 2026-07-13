@@ -1,0 +1,22 @@
+{
+  "mode": "debug",
+  "builtAt": "2026-07-13T02:11:43.894Z",
+  "emccVersion": "5.0.7",
+  "pinnedEmsdkVersion": "4.0.10",
+  "webGpuBackend": "emdawnwebgpu (--use-port=emdawnwebgpu)",
+  "webGpuBackendId": "emdawn",
+  "webGpuEnv": "auto",
+  "optFlags": [
+    "-O0",
+    "-g",
+    "-s",
+    "ASSERTIONS=2",
+    "-s",
+    "SAFE_HEAP=1"
+  ],
+  "sources": [
+    "cpp/src/renderer.cpp",
+    "cpp/src/playfield_draw.cpp",
+    "cpp/src/gpu_renderer.cpp"
+  ]
+}

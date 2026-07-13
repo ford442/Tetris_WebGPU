@@ -8,6 +8,8 @@
 import type { BloomParameters } from './bloomSystem.js';
 import { ReactiveMusicSystem } from './reactiveMusic.js';
 import { renderLogger, audioLogger } from '../utils/logger.js';
+import type { GameSettings } from '../config/gameSettings.js';
+import { QUALITY_PRESET_VALUES } from '../config/renderConfig.js';
 
 /** The subset of View that these helpers need. */
 export interface ViewLike {
@@ -21,6 +23,12 @@ export interface ViewLike {
   bloomEnabled: boolean;
   bloomIntensity: number;
   useMultiPassBloom: boolean;
+  useParticles: boolean;
+  useShockwave: boolean;
+  useFilmGrain: boolean;
+  useCRT: boolean;
+  useFXAA: boolean;
+  useGlitch: boolean;
   currentTheme: any;
   reactiveVideoBackground: any;
   reactiveMusicSystem: any;
@@ -199,9 +207,45 @@ export function initReactiveMusic(view: ViewLike, audioContext: AudioContext, ma
   audioLogger.info('Reactive music system initialized');
 }
 
-export function toggleFXAA(view: ViewLike, enabled: boolean) { view.useEnhancedPostProcess = enabled; }
-export function toggleFilmGrain(_view: ViewLike, _enabled: boolean) { /* Future: add granular control */ }
-export function toggleCRT(_view: ViewLike, _enabled: boolean) { /* Future: add granular control */ }
+export function toggleFXAA(view: ViewLike, enabled: boolean) { view.useFXAA = enabled; }
+export function toggleFilmGrain(view: ViewLike, enabled: boolean) { view.useFilmGrain = enabled; }
+export function toggleCRT(view: ViewLike, enabled: boolean) { view.useCRT = enabled; }
+
+export function applyGameSettings(view: ViewLike, settings: GameSettings): void {
+  view.setRenderScale(settings.renderScale);
+
+  view.useMultiPassBloom = settings.bloom;
+  toggleBloom(view, settings.bloom);
+
+  let bloomIntensity = 0.35;
+  if (settings.quality !== 'custom' && settings.quality in QUALITY_PRESET_VALUES) {
+    bloomIntensity = QUALITY_PRESET_VALUES[settings.quality as keyof typeof QUALITY_PRESET_VALUES].bloomIntensity;
+  } else if (!settings.bloom) {
+    bloomIntensity = 0;
+  }
+  setBloomIntensity(view, bloomIntensity);
+
+  view.useParticles = settings.particles;
+  view.useShockwave = settings.shockwave;
+  view.useFilmGrain = settings.filmGrain;
+  view.useCRT = settings.crt;
+  view.useFXAA = settings.fxaa;
+  view.useGlitch = settings.glitch;
+
+  view.useReactiveVideo = settings.reactiveVideo;
+  if (settings.reactiveVideo && view.currentTheme.levelVideos) {
+    view.reactiveVideoBackground.setVideoSources(view.currentTheme.levelVideos);
+    view.reactiveVideoBackground.updateForLevel(view.visualEffects.currentLevel || 0, true);
+  } else if (!settings.reactiveVideo && view.reactiveVideoBackground) {
+    view.reactiveVideoBackground.isVideoPlaying = false;
+  }
+
+  view.useParticleInteraction = settings.particles;
+
+  renderLogger.info(
+    `Settings applied: quality=${settings.quality}, scale=${settings.renderScale}, bloom=${settings.bloom}, particles=${settings.particles}`,
+  );
+}
 
 export function toggleBloom(view: ViewLike, enabled?: boolean) {
   if (enabled !== undefined) {

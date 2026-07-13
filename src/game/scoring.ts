@@ -224,13 +224,19 @@ export class ScoringSystem {
   backToBack: boolean = false;
   private highScoreManager: HighScoreManager;
   private highScoreSavedThisGame = false;
+  private fixedLevel: number | null = null;
 
   constructor() {
     this.highScoreManager = new HighScoreManager();
   }
 
   get level(): number {
+    if (this.fixedLevel !== null) return this.fixedLevel;
     return Math.floor(this.lines / 10) + 1;
+  }
+
+  setFixedLevel(level: number | null): void {
+    this.fixedLevel = level;
   }
 
   getHighScoreManager(): HighScoreManager {
@@ -363,6 +369,7 @@ export class ScoringSystem {
     this.combo = -1;
     this.backToBack = false;
     this.highScoreSavedThisGame = false;
+    this.fixedLevel = null;
   }
 
   // Save current score to high scores (once per game)

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { flattenPlayfieldGrid, PLAYFIELD_CELL_COUNT } from '../src/viewCpp/cppPlayfieldSync.js';
+import {
+  flattenPlayfieldGrid,
+  packPieceState,
+  PLAYFIELD_CELL_COUNT,
+  PIECE_STATE_BYTES,
+} from '../src/viewCpp/cppPlayfieldSync.js';
 
 describe('flattenPlayfieldGrid', () => {
   it('returns 200 zero bytes for empty input', () => {
@@ -30,5 +35,27 @@ describe('flattenPlayfieldGrid', () => {
     expect(flat[10 * 10 + 3]).toBe(-6);
     expect(flat[11 * 10 + 3]).toBe(-6);
     expect(flat[10 * 10 + 4]).toBe(6);
+  });
+
+  it('packs piece state with lock flash into 12 bytes', () => {
+    const packed = packPieceState({
+      activePiece: {
+        blocks: [[0, 6, 0], [6, 6, 6], [0, 0, 0]],
+        x: 3,
+        y: 5,
+        rotation: 1,
+      },
+      isGameOver: false,
+      lockTimer: 250,
+      lockDelayTime: 500,
+    }, 18);
+
+    expect(packed.length).toBe(PIECE_STATE_BYTES);
+    expect(packed[0]).toBe(6);
+    expect(packed[1]).toBe(1);
+    expect(packed[2]).toBe(3);
+    expect(packed[3]).toBe(5);
+    expect(packed[4]).toBe(18);
+    expect(new DataView(packed.buffer).getFloat32(8, true)).toBeCloseTo(0.5, 2);
   });
 });

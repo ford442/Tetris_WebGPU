@@ -561,6 +561,131 @@ canvas {
     padding-left: 24px;
 }
 
+/* Pause menu — graphics settings */
+.pause-settings-section {
+    width: 100%;
+    padding: 14px 15px;
+    background: rgba(0, 12, 24, 0.45);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 255, 255, 0.22);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pause-settings-section h3 {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #00cccc;
+    letter-spacing: 3px;
+    text-align: center;
+}
+
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-label {
+    font-size: 0.72rem;
+    color: #888;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.settings-quality-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+}
+
+.settings-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.35);
+    color: #aaa;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-pill:has(input:checked) {
+    background: rgba(0, 255, 255, 0.15);
+    border-color: rgba(0, 255, 255, 0.55);
+    color: #00ffff;
+}
+
+.settings-pill input {
+    accent-color: #00ffff;
+    margin: 0;
+}
+
+.settings-toggles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+}
+
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #bbb;
+    cursor: pointer;
+}
+
+.settings-toggle input {
+    accent-color: #00ffff;
+}
+
+.settings-gpu-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.settings-select {
+    flex: 1;
+    max-width: 180px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.5);
+    color: #ccc;
+    font-family: inherit;
+    font-size: 0.78rem;
+}
+
+.settings-renderer-row .settings-renderer-text {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #9ad;
+    line-height: 1.35;
+}
+
+.settings-hint {
+    margin: 0;
+    font-size: 0.65rem;
+    color: #667;
+    line-height: 1.4;
+}
+
+.settings-hint code {
+    font-size: 0.62rem;
+    color: #8ac;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
 /* Controls Reference */
 .pause-controls {
     width: 100%;
@@ -678,4 +803,44 @@ canvas {
     color: #64c8ff;
     border-radius: 0;
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+/* Game mode selector + mode HUD */
+.mode-select {
+    width: 100%;
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.mode-current-label {
+    margin: 0.35rem 0 0;
+    font-size: 0.75rem;
+    opacity: 0.75;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.mode-hud-secondary {
+    margin-top: 0.5rem;
+}
+
+.victory-title .victory-text {
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #7dffb3;
+    text-shadow: 0 0 18px rgba(125, 255, 179, 0.55);
+}
+
+.game-over-mode {
+    margin: 0.25rem 0 0.75rem;
+    opacity: 0.85;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
 }

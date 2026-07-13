@@ -11,6 +11,7 @@ import {
   BOARD_WORLD_CENTER_X,
 } from './renderMetrics.js';
 import { postProcessUniforms } from './postProcessUniforms.js';
+import type { WebGPUViewHost } from '../view/viewTypes.js';
 
 export interface FrameUniforms {
   lockPercent: number;
@@ -22,15 +23,16 @@ export interface FrameUniforms {
 
 /**
  * Write all per-frame uniform buffers and return derived frame values.
- * `view` is cast as `any` to avoid a circular import with viewWebGPU.ts.
+ * `view` uses WebGPUViewHost to type shared GPU scratch buffers without a circular import.
  */
-export function updateFrameUniforms(view: any, dt: number, time: number): FrameUniforms {
+export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: number): FrameUniforms {
   const device: GPUDevice = view.device;
 
   // Compute uniforms
-  const swParams = view.visualEffects.getShockwaveParams();
+  const shockwaveActive = view.useShockwave !== false;
+  const swParams = shockwaveActive ? view.visualEffects.getShockwaveParams() : [0, 0, 0, 0];
   const swCenter = view.visualEffects.shockwaveCenter;
-  const swTimer  = view.visualEffects.shockwaveTimer;
+  const swTimer  = shockwaveActive ? view.visualEffects.shockwaveTimer : 0;
   view._f32_12[0] = dt;           view._f32_12[1] = time;
   view._f32_12[2] = swTimer;      view._f32_12[3] = 0.0;
   view._f32_12[4] = swCenter[0];  view._f32_12[5] = swCenter[1];
@@ -43,8 +45,10 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
 
   // Dispatch compute only when particles are active
   const timeSinceLastEmit = time - (view.particleSystem.lastEmitTime || 0);
-  const hasActiveParticles =
-    view.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0;
+  const particlesEnabled = view.useParticles !== false;
+  const hasActiveParticles = particlesEnabled && (
+    view.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0
+  );
   if (hasActiveParticles) {
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(view.particleComputePipeline);
@@ -176,15 +180,15 @@ export function updateFrameUniforms(view: any, dt: number, time: number): FrameU
     time,
     useGlitch: Math.max(view.useGlitch ? 1.0 : 0.0, view.visualEffects.glitchIntensity),
     shockwaveCenter: view.visualEffects.shockwaveCenter as [number, number],
-    shockwaveTime: view.visualEffects.shockwaveTimer,
-    shockwaveParams: view.visualEffects.getShockwaveParams() as [number, number, number, number],
+    shockwaveTime: shockwaveActive ? view.visualEffects.shockwaveTimer : 0,
+    shockwaveParams: swParams as [number, number, number, number],
     level: view.visualEffects.currentLevel,
     warpSurge: view.visualEffects.warpSurge,
-    enableFXAA: view.useEnhancedPostProcess ? 1.0 : 0.0,
+    enableFXAA: view.useFXAA !== false ? 1.0 : 0.0,
     // Disable in-shader bloom when multi-pass bloom handles it (avoids double-bloom washout)
     enableBloom: (view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom) ? 1.0 : 0.0,
-    enableFilmGrain: 1.0,
-    enableCRT: 0.0,
+    enableFilmGrain: view.useFilmGrain !== false ? 1.0 : 0.0,
+    enableCRT: view.useCRT ? 1.0 : 0.0,
     bloomIntensity: view.bloomIntensity,
     bloomThreshold: 0.35,
     materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,

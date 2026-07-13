@@ -274,7 +274,7 @@ function bakeMetalFrameMaskIntoAlpha(
           const rawWarmth = r - b;
           const warmthMin = config.warmthSignalClampMin ?? -Infinity;
           const warmthMax = config.warmthSignalClampMax ?? Infinity;
-          const warmth = clamp(rawWarmth, warmthMin, warmthMax);
+          const warmth = Math.min(warmthMax, Math.max(warmthMin, rawWarmth));
 
           // Approximate luma band that the shader uses to avoid shadow noise.
           const a0 = config.warmthLumaBandA0 ?? 0.25;

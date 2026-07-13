@@ -3,22 +3,24 @@
  * Barrel re-export — shader code lives in ./shaders/ split by category.
  */
 
-export { 
-  PostProcessShaders, 
-  EnhancedPostProcessShaders, 
+export {
+  PostProcessShaders,
+  EnhancedPostProcessShaders,
   MaterialAwarePostProcessShaders,
+  createBlockShaders,
   PBRBlockShaders,
-  UnderwaterBlockShaders,
-  ParticleShaders 
+  createBlockBindGroupEntries,
+  BLOCK_PIPELINE_BINDINGS,
+  assertBlockShaderBindings,
+  ParticleShaders,
 } from './shaders/index.js';
 
 export {
-  GridShader, 
+  GridShader,
   BackgroundShaders,
   VideoBackgroundShaders,
   Shaders,
-  PremiumBlockShaders,
-  FrostedGlassShaders
+  FrostedGlassShaders,
 } from './shaders/index.js';
 
 // Re-export texture sampling utilities for external use

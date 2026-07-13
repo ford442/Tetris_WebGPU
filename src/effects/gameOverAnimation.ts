@@ -3,14 +3,17 @@
  * Creates dramatic visual effects for game over screen
  */
 
-import { HighScoreEntry } from '../features/highScore.js';
-
 export interface GameOverStats {
   score: number;
   lines: number;
   level: number;
   highScore: number;
   isNewHighScore: boolean;
+  isVictory?: boolean;
+  modeLabel?: string;
+  modeHighScoreLabel?: string;
+  elapsedMs?: number;
+  metric?: 'score' | 'time';
 }
 
 export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
@@ -22,18 +25,10 @@ export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
   overlay.id = 'game-over-overlay';
   overlay.className = 'game-over-overlay';
   
-  const newHighScoreBadge = stats.isNewHighScore 
-    ? '<div class="new-high-badge">🏆 NEW HIGH SCORE!</div>' 
-    : '';
-  
-  const highScoreText = stats.isNewHighScore 
-    ? `<div class="final-high-score new">${stats.score.toLocaleString()}</div>`
-    : `<div class="final-high-score">${stats.score.toLocaleString()}</div>
-       <div class="high-score-label">High Score: ${stats.highScore.toLocaleString()}</div>`;
-
-  overlay.innerHTML = `
-    <div class="game-over-content">
-      <div class="game-over-title">
+  const isVictory = stats.isVictory === true;
+  const titleHtml = isVictory
+    ? '<div class="game-over-title victory-title"><span class="victory-text">COMPLETE!</span></div>'
+    : `<div class="game-over-title">
         <span class="game-over-g">G</span>
         <span class="game-over-a">A</span>
         <span class="game-over-m">M</span>
@@ -43,7 +38,30 @@ export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
         <span class="game-over-v">V</span>
         <span class="game-over-e2">E</span>
         <span class="game-over-r">R</span>
-      </div>
+      </div>`;
+
+  const newHighScoreBadge = stats.isNewHighScore
+    ? `<div class="new-high-badge">${isVictory ? '🏆 NEW BEST!' : '🏆 NEW HIGH SCORE!'}</div>`
+    : '';
+
+  const displayValue = stats.metric === 'time' && stats.elapsedMs !== undefined
+    ? formatRunTime(stats.elapsedMs)
+    : stats.score.toLocaleString();
+
+  const bestLabel = stats.modeHighScoreLabel || 'High Score';
+  const bestDisplay = stats.metric === 'time'
+    ? formatRunTime(stats.highScore)
+    : stats.highScore.toLocaleString();
+
+  const highScoreText = stats.isNewHighScore
+    ? `<div class="final-high-score new">${displayValue}</div>`
+    : `<div class="final-high-score">${displayValue}</div>
+       <div class="high-score-label">${bestLabel}: ${bestDisplay}</div>`;
+
+  overlay.innerHTML = `
+    <div class="game-over-content">
+      ${titleHtml}
+      ${stats.modeLabel ? `<p class="game-over-mode">${stats.modeLabel}</p>` : ''}
       ${newHighScoreBadge}
       <div class="final-stats">
         ${highScoreText}
@@ -74,6 +92,14 @@ export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
   });
 
   return overlay;
+}
+
+function formatRunTime(ms: number): string {
+  const totalCs = Math.floor(ms / 10);
+  const cs = totalCs % 100;
+  const sec = Math.floor(totalCs / 100) % 60;
+  const min = Math.floor(totalCs / 6000);
+  return `${min}:${sec.toString().padStart(2, '0')}.${cs.toString().padStart(2, '0')}`;
 }
 
 export function addGameOverStyles(): void {

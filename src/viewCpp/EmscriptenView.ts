@@ -5,7 +5,11 @@
  * to render_frame. Falls back to TS Canvas2D placeholder when wasm is absent.
  */
 import type { IView } from '../view/IView.js';
-import { themes, Themes } from '../webgpu/themes.js';
+import type { ViewEventHost } from '../view/viewTypes.js';
+import type { GameState } from '../game/gameState.js';
+import { createEmptyGameState } from '../game/gameState.js';
+import type { Piece } from '../game/pieces.js';
+import { themes, type ThemeColors, type Themes } from '../webgpu/themes.js';
 import { VisualEffects } from '../webgpu/effects.js';
 import { ReactiveVideoBackground } from '../webgpu/reactiveVideo.js';
 import {
@@ -29,7 +33,7 @@ import {
 } from '../webgpu/viewPremium.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
-import { CppRendererLoader } from './CppRendererLoader.js';
+import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
 import { drawPlayfield2D, drawWipBanner } from './placeholderDraw.js';
 
 const noopParticleSystem = {
@@ -41,7 +45,7 @@ const noopParticleSystem = {
   maxParticles: 0,
 };
 
-export default class EmscriptenView implements IView {
+export default class EmscriptenView implements IView, ViewEventHost {
   readonly rendererName = 'webgpu-cpp' as const;
 
   element: HTMLElement;
@@ -50,8 +54,8 @@ export default class EmscriptenView implements IView {
   nextPieceContext: CanvasRenderingContext2D;
   holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
-  currentTheme: any = themes.imageSampled;
-  state: any;
+  currentTheme: ThemeColors = themes.imageSampled;
+  state: GameState = createEmptyGameState();
   visualEffects: VisualEffects;
   reactiveVideoBackground: ReactiveVideoBackground;
   particleSystem = noopParticleSystem;
@@ -67,6 +71,7 @@ export default class EmscriptenView implements IView {
   private ctx2d: CanvasRenderingContext2D | null = null;
   private ready = false;
   private cppModuleReady = false;
+  private gpuDrawActive = false;
 
   private themes = themes;
 
@@ -97,11 +102,7 @@ export default class EmscriptenView implements IView {
     this.canvasWebGPU.style.pointerEvents = 'none';
     this.applyCanvasSize(width, height);
 
-    this.state = {
-      playfield: Array(20).fill(null).map(() => Array(10).fill(0)),
-      lockTimer: 0,
-      lockDelayTime: 500,
-    };
+    this.state = createEmptyGameState();
 
     this.element.appendChild(this.canvasWebGPU);
     window.addEventListener('resize', this.resize.bind(this));
@@ -122,30 +123,41 @@ export default class EmscriptenView implements IView {
   }
 
   private async init(): Promise<void> {
-    this.ctx2d = this.canvasWebGPU.getContext('2d', { alpha: true });
-    if (!this.ctx2d) {
-      throw new Error('Canvas2D is not available for EmscriptenView placeholder.');
-    }
-
     this.cppModuleReady = await CppRendererLoader.init(
       this.canvasWebGPU.width,
       this.canvasWebGPU.height,
       this.canvasWebGPU,
     );
 
+    this.gpuDrawActive = this.cppModuleReady &&
+      CppRendererLoader.getRendererBackend() === RendererBackend.WEBGPU;
+
+    if (!this.gpuDrawActive) {
+      this.ctx2d = this.canvasWebGPU.getContext('2d', { alpha: true });
+      if (!this.cppModuleReady && !this.ctx2d) {
+        throw new Error('Canvas2D is not available for EmscriptenView placeholder.');
+      }
+    }
+
     this.ready = true;
     this.showRendererBadge();
     renderLogger.info(
-      this.cppModuleReady
-        ? `EmscriptenView: wasm draw active (${CppRendererLoader.getLoadedUrl()})`
-        : 'EmscriptenView: TS Canvas2D placeholder (wasm not built)',
+      this.gpuDrawActive
+        ? `EmscriptenView: C++ WebGPU draw active (${CppRendererLoader.getLoadedUrl()})`
+        : this.cppModuleReady
+          ? `EmscriptenView: C++ Canvas2D fallback (${CppRendererLoader.getLoadedUrl()})`
+          : 'EmscriptenView: TS Canvas2D placeholder (wasm not built)',
     );
   }
 
   private showRendererBadge(): void {
     const badge = document.createElement('div');
     badge.id = 'renderer-badge';
-    badge.textContent = this.cppModuleReady ? 'C++ wasm' : 'C++ WIP';
+    badge.textContent = this.gpuDrawActive
+      ? 'C++ GPU'
+      : this.cppModuleReady
+        ? 'C++ wasm'
+        : 'C++ WIP';
     badge.style.cssText =
       'position:fixed;bottom:8px;right:8px;z-index:9999;padding:4px 8px;' +
       'font:12px monospace;background:rgba(0,0,0,0.55);color:#f8c;border-radius:4px;pointer-events:none;';
@@ -170,21 +182,16 @@ export default class EmscriptenView implements IView {
     }
   }
 
-  /** Push latest projected playfield into wasm (HEAP view or update_playfield). */
+  /** Push latest projected playfield + piece state into wasm HEAP. */
   private syncPlayfieldToCpp(): void {
     if (!this.cppModuleReady) return;
-    CppRendererLoader.syncPlayfieldFromGrid(this.state?.playfield);
+    const ghostY = (this as { game?: { getGhostY?: () => number } }).game?.getGhostY?.() ?? 0;
+    CppRendererLoader.syncFromGameState(this.state, ghostY);
   }
 
   private cppRender(dt: number): void {
     this.syncPlayfieldToCpp();
     CppRendererLoader.render(dt);
-    // Thin TS overlay so testers still see the WIP banner above wasm output.
-    if (this.ctx2d) {
-      const w = this.canvasWebGPU.width;
-      const h = this.canvasWebGPU.height;
-      drawWipBanner(this.ctx2d, w, h, true);
-    }
   }
 
   private placeholderRender(): void {
@@ -241,7 +248,7 @@ export default class EmscriptenView implements IView {
 
   setWireframe(_enabled: boolean): void {}
 
-  renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize = 20): void {
+  renderPiece(ctx: CanvasRenderingContext2D, piece: Piece | null, blockSize = 20): void {
     renderPieceImpl(ctx, piece, this.currentTheme, blockSize);
   }
 
@@ -249,14 +256,14 @@ export default class EmscriptenView implements IView {
     handleShowFloatingText(this, text, subText);
   }
 
-  renderMainScreen(state: any): void {
+  renderMainScreen(state: GameState): void {
     handleRenderMainScreen(this, state);
     this.syncPlayfieldToCpp();
   }
 
-  renderPlayfield_WebGPU(_state: any): void {}
+  renderPlayfield_WebGPU(_state: GameState): void {}
 
-  renderEndScreen(state: any): void {
+  renderEndScreen(state: GameState): void {
     handleRenderEndScreen(this, state);
   }
 

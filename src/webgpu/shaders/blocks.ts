@@ -1,1 +1,2 @@
-export { Shaders as BlockShaders, Shaders } from './main.js';
+/** @deprecated Use createBlockShaders from ./block/blockShader.js */
+export { createBlockShaders as BlockShaders, createBlockShaders as Shaders } from './block/blockShader.js';

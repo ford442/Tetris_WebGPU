@@ -7,6 +7,8 @@
  * Standard Chaos: Cyberpunk overload - glitch, extreme bloom, chromatic aberration
  */
 
+import { renderLogger } from '../utils/logger.js';
+
 export interface ChaosModeState {
   enabled: boolean;
   intensity: number; // 0.0 - 1.0

@@ -80,7 +80,6 @@ export default class Controller {
 
   private lastTime: number = 0;
   private lastLevel: number = 1;
-  private touchControls: TouchControls | null = null;
 
   constructor(game: Game, view: IView, viewWebGPU: IView, soundManager: SoundManager) {
     this.game = game;
@@ -97,7 +96,7 @@ export default class Controller {
 
     // Initialize touch controls
     addTouchControlStyles();
-    this.touchControls = new TouchControls(this.handleTouchAction.bind(this));
+    new TouchControls(this.handleTouchAction.bind(this));
 
     this.play();
   }
@@ -172,6 +171,7 @@ export default class Controller {
     }
 
     this.hidePauseMenu();
+    this.updateModeHud();
     this.gameLoop();
   }
 
@@ -215,7 +215,7 @@ export default class Controller {
   }
 
   togglePause(): void {
-    if (this.game.gameOver) {
+    if (this.game.isRunEnded) {
       this.reset();
     } else if (this.isPaused) {
       this.resume();
@@ -262,8 +262,8 @@ export default class Controller {
   updateView(): void {
     const state = this.game.getState();
 
-    // Check game over
-    if (state.isGameOver) {
+    // Check run end (top-out defeat or mode victory)
+    if (state.isGameOver || state.isVictory) {
       this.view.renderEndScreen(state);
       this.isPlaying = false;
       this.isPaused = false;
@@ -579,10 +579,10 @@ export default class Controller {
           this.soundManager.playLock();
           this.viewWebGPU.onLock(result.tSpin);
       }
-      if (result.gameOver) {
+      if (result.gameOver || this.game.victory) {
           this.soundManager.playGameOver();
-          // Save high score on game over (returns true if this is a new personal record)
-          const isNewHigh = this.game.saveHighScore();
+          // Save leaderboard on run end
+          const isNewHigh = this.game.saveModeLeaderboard();
           this.updateHighScoreDisplay();
           if (isNewHigh && this.subliminal) {
             this.subliminal.triggerReinforcement('highScore', 'strong');
@@ -592,11 +592,40 @@ export default class Controller {
 
   updateHighScoreDisplay(): void {
     const highScoreElement = document.getElementById('high-score');
+    const highScoreLabel = document.getElementById('high-score-label');
+    const state = this.game.getState();
+    if (highScoreLabel) {
+      highScoreLabel.textContent = state.modeHighScoreLabel;
+    }
     if (highScoreElement) {
-      const highestScore = this.game.getHighScoreManager().getHighestScore();
-      if (highestScore) {
-        highScoreElement.textContent = highestScore.score.toLocaleString();
+      highScoreElement.textContent = this.game.getModeLeaderboardDisplay();
+    }
+  }
+
+  updateModeHud(state = this.game.getState()): void {
+    const modeLabel = document.getElementById('mode-label');
+    const primaryLabel = document.getElementById('mode-hud-primary-label');
+    const primaryValue = document.getElementById('mode-hud-primary-value');
+    const secondaryLabel = document.getElementById('mode-hud-secondary-label');
+    const secondaryValue = document.getElementById('mode-hud-secondary-value');
+    const levelBox = document.getElementById('level-panel-box');
+
+    if (modeLabel) modeLabel.textContent = state.modeLabel;
+    if (primaryLabel) primaryLabel.textContent = state.modePrimaryLabel;
+    if (primaryValue) primaryValue.textContent = state.modePrimaryValue;
+
+    if (secondaryLabel && secondaryValue) {
+      const show = state.modeShowSecondary;
+      secondaryLabel.style.display = show ? '' : 'none';
+      secondaryValue.style.display = show ? '' : 'none';
+      if (show) {
+        secondaryLabel.textContent = state.modeSecondaryLabel;
+        secondaryValue.textContent = state.modeSecondaryValue;
       }
+    }
+
+    if (levelBox) {
+      levelBox.style.display = state.modeShowLevel ? '' : 'none';
     }
   }
 
@@ -628,6 +657,7 @@ export default class Controller {
       if (this.isPlaying && !this.isPaused) {
         this.playTimeMs += dt;
         this.subliminal?.checkBackgroundReinforcement(this.playTimeMs);
+        this.game.tickMode(dt);
       }
 
       // 0. Process Buffered Actions
@@ -637,7 +667,7 @@ export default class Controller {
       this.handleInput(dt);
 
       // 2. Update Game Logic (Gravity, Locking)
-      const level = this.game.getState().level;
+      const level = this.game.getEffectiveLevel();
       // NEON BRICKLAYER: Exponential gravity for better curve (Standard Tetris-ish)
       // Tuned for better playability: 0.85 base makes it slightly faster
       // Clamp to prevent infinite loop at extreme levels
@@ -703,12 +733,11 @@ export default class Controller {
             this.subliminal.triggerReinforcement('tspin', 'strong');
           }
       }
-      if (result.gameOver) {
+      if (result.gameOver || this.game.victory) {
           this.soundManager.playGameOver();
           this.isPlaying = false;
           this.view.renderEndScreen(this.game.getState());
-          // Save high score on game over (returns true if this is a new personal record)
-          const isNewHigh = this.game.saveHighScore();
+          const isNewHigh = this.game.saveModeLeaderboard();
           this.updateHighScoreDisplay();
           if (isNewHigh && this.subliminal) {
             this.subliminal.triggerReinforcement('highScore', 'strong');
@@ -718,6 +747,7 @@ export default class Controller {
 
       // 3. Render
       const state = this.game.getState();
+      this.updateModeHud(state);
       this.view.renderMainScreen(state);
       this.viewWebGPU.state = state;
 

@@ -6,7 +6,10 @@
  * - Cyber blocks: emit small neon bursts
  */
 
-import { MaterialProperties } from './materials.js';
+
+export interface MaterialProperties {
+  metallic: number;
+}
 
 export interface ParticleHit {
   blockX: number;

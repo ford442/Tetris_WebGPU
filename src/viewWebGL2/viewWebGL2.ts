@@ -1,8 +1,12 @@
 import * as Matrix from 'gl-matrix';
+import type { GameState } from '../game/gameState.js';
+import { createEmptyGameState } from '../game/gameState.js';
+import type { Piece } from '../game/pieces.js';
 import type { IView } from '../view/IView.js';
+import type { ViewEventHost } from '../view/viewTypes.js';
 import { buildPlayfieldInstances } from '../view/playfieldInstances.js';
 import { GLBlockRenderer } from './glBlockRenderer.js';
-import { themes, Themes } from '../webgpu/themes.js';
+import { themes, type ThemeColors, type Themes } from '../webgpu/themes.js';
 import {
   BOARD_WORLD_CENTER_X,
   BOARD_WORLD_CENTER_Y,
@@ -33,7 +37,7 @@ const noopParticleSystem = {
   maxParticles: 0,
 };
 
-export default class ViewWebGL2 implements IView {
+export default class ViewWebGL2 implements IView, ViewEventHost {
   readonly rendererName = 'webgl2' as const;
 
   element: HTMLElement;
@@ -42,8 +46,8 @@ export default class ViewWebGL2 implements IView {
   nextPieceContext: CanvasRenderingContext2D;
   holdPieceContext: CanvasRenderingContext2D;
   canvasWebGPU: HTMLCanvasElement;
-  currentTheme: any = themes.imageSampled;
-  state: any;
+  currentTheme: ThemeColors = themes.imageSampled;
+  state: GameState = createEmptyGameState();
   visualEffects: VisualEffects;
   reactiveVideoBackground: ReactiveVideoBackground;
   particleSystem = noopParticleSystem;
@@ -64,7 +68,7 @@ export default class ViewWebGL2 implements IView {
 
   private visualX = 0;
   private visualY = 0;
-  private _previousActivePiece: any = null;
+  private _previousActivePiece: Piece | null = null;
   private _shakeOffsetSmoothed = { x: 0, y: 0 };
 
   private VIEWMATRIX = glMatrix.mat4.create();
@@ -105,11 +109,7 @@ export default class ViewWebGL2 implements IView {
     this.canvasWebGPU.width = width;
     this.canvasWebGPU.height = height;
 
-    this.state = {
-      playfield: Array(20).fill(null).map(() => Array(10).fill(0)),
-      lockTimer: 0,
-      lockDelayTime: 500,
-    };
+    this.state = createEmptyGameState();
 
     this.element.appendChild(this.canvasWebGPU);
     window.addEventListener('resize', this.resize.bind(this));
@@ -220,7 +220,7 @@ export default class ViewWebGL2 implements IView {
 
   setWireframe(_enabled: boolean): void {}
 
-  renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize = 20): void {
+  renderPiece(ctx: CanvasRenderingContext2D, piece: Piece | null, blockSize = 20): void {
     renderPieceImpl(ctx, piece, this.currentTheme, blockSize);
   }
 
@@ -228,14 +228,14 @@ export default class ViewWebGL2 implements IView {
     handleShowFloatingText(this, text, subText);
   }
 
-  renderMainScreen(state: any): void {
+  renderMainScreen(state: GameState): void {
     handleRenderMainScreen(this, state);
   }
 
   /** No-op for WebGL2 — playfield instances are built during render(). */
-  renderPlayfield_WebGPU(_state: any): void {}
+  renderPlayfield_WebGPU(_state: GameState): void {}
 
-  renderEndScreen(state: any): void {
+  renderEndScreen(state: GameState): void {
     handleRenderEndScreen(this, state);
   }
 
@@ -293,7 +293,7 @@ export default class ViewWebGL2 implements IView {
     const textureMix = this.authoredBlockTextureLoaded ? 0.94 : 0.55;
 
     this.blockRenderer.draw(
-      this.vpMatrix,
+      this.vpMatrix as unknown as Float32Array,
       [this._camEye[0], this._camEye[1], this._camEye[2]],
       [this._lightPos[0], this._lightPos[1], this._lightPos[2]],
       textureMix,

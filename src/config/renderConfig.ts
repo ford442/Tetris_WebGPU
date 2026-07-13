@@ -78,17 +78,86 @@ export const PARTICLES_CONFIG = {
   SIZE_MULTIPLIER: 1.0,
 } as const;
 
+/** Named quality tiers — maps to render scale and effect toggles. */
+export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
+
+export interface QualityPresetValues {
+  renderScale: number;
+  bloom: boolean;
+  bloomIntensity: number;
+  useMultiPassBloom: boolean;
+  particles: boolean;
+  filmGrain: boolean;
+  crt: boolean;
+  fxaa: boolean;
+  shockwave: boolean;
+}
+
+export const QUALITY_PRESET_VALUES: Record<QualityPreset, QualityPresetValues> = {
+  low: {
+    renderScale: 0.75,
+    bloom: false,
+    bloomIntensity: 0,
+    useMultiPassBloom: false,
+    particles: false,
+    filmGrain: false,
+    crt: false,
+    fxaa: false,
+    shockwave: false,
+  },
+  medium: {
+    renderScale: 1.0,
+    bloom: true,
+    bloomIntensity: 0.25,
+    useMultiPassBloom: true,
+    particles: true,
+    filmGrain: false,
+    crt: false,
+    fxaa: true,
+    shockwave: true,
+  },
+  high: {
+    renderScale: 1.25,
+    bloom: true,
+    bloomIntensity: 0.35,
+    useMultiPassBloom: true,
+    particles: true,
+    filmGrain: true,
+    crt: false,
+    fxaa: true,
+    shockwave: true,
+  },
+  ultra: {
+    renderScale: RENDER_SCALE_CONFIG.PREMIUM,
+    bloom: true,
+    bloomIntensity: 0.35,
+    useMultiPassBloom: true,
+    particles: true,
+    filmGrain: true,
+    crt: true,
+    fxaa: true,
+    shockwave: true,
+  },
+} as const;
+
+import {
+  BLOCK_FRAGMENT_UNIFORM_SIZE,
+  BLOCK_VERTEX_UNIFORM_SIZE,
+} from '../webgpu/shaders/block/uniforms.js';
+
 // WebGPU uniform buffer sizes (must match WGSL struct layout / minBindingSize)
 export const UNIFORM_BUFFER_SIZES = {
   /** PostProcessUniforms — vec3/vec4 alignment pads struct to 192B */
   POST_PROCESS: 192,
   /** shockwaveParamsUniform vec4 — hard-drop boost (binding 4) */
   SHOCKWAVE_PARAMS: 16,
-  /** PBR FragmentUniforms — array tail padding to 224B */
-  FRAGMENT: 224,
-  /** PBR VertexUniforms — 3×mat4 + vec4 = 208B */
-  VERTEX_BLOCK: 208,
+  /** Block FragmentUniforms — see block/uniforms.ts */
+  FRAGMENT: BLOCK_FRAGMENT_UNIFORM_SIZE,
+  /** Block VertexUniforms — 3×mat4 + vec4 */
+  VERTEX_BLOCK: BLOCK_VERTEX_UNIFORM_SIZE,
 } as const;
+
+export { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from '../webgpu/shaders/block/uniforms.js';
 
 // Default exports
 export default {
