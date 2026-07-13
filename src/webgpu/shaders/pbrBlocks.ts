@@ -502,15 +502,13 @@ export const PBRBlockShaders = () => {
                 if (transmission > 0.0 && glassMask > 0.1) {
                     let f1 = 1.0 - NdotV;
                     let fresnel = f1 * f1 * f1;
-                    let glassOpacity = mix(0.12, 0.92, fresnel);
+                    let glassOpacity = mix(0.15, 0.85, fresnel);
                     finalAlpha = mix(1.0, glassOpacity, transmission * glassMask);
 
                     let refractDir = refract(-V, N, 1.0 / max(fUniforms.ior, 1.01));
-                    let refractEnv = proceduralEnvReflect(refractDir, time);
                     let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
-                    let refractedColor = refractEnv * glassTint;
                     let glassReflect = envColor * fresnel * 0.28 * glassMask;
-                    let glassBody = mix(refractedColor, finalColor, 0.38 * glassMask);
+                    let glassBody = finalColor * glassTint * 0.38;
                     finalColor = mix(finalColor, glassBody + glassReflect, transmission * glassMask);
 
                     if (fUniforms.dispersion > 0.0) {

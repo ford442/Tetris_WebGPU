@@ -5,6 +5,7 @@ import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
 import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
+import { setBlockTextureConfig } from "./src/webgpu/blockTexture.js";
 
 declare global {
   interface Window {
@@ -375,4 +376,5 @@ uiContainer.innerHTML = `
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
+  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 })();
