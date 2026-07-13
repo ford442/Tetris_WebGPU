@@ -5,11 +5,15 @@
  * All functions accept a View instance as the first argument.
  */
 
+import { applyReactiveVideoSources } from './reactiveVideo.js';
 import type { BloomParameters } from './bloomSystem.js';
 import { ReactiveMusicSystem } from './reactiveMusic.js';
 import { renderLogger, audioLogger } from '../utils/logger.js';
 import type { GameSettings } from '../config/gameSettings.js';
 import { QUALITY_PRESET_VALUES } from '../config/renderConfig.js';
+import { applyAccessibilitySettings } from '../a11y/applyAccessibility.js';
+import { isReducedMotionActive } from '../a11y/accessibility.js';
+import { particleBudgetForQuality } from './particles/layout.js';
 
 /** The subset of View that these helpers need. */
 export interface ViewLike {
@@ -77,8 +81,12 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
 
   view.useReactiveVideo = reactiveVideo;
   if (reactiveVideo && view.currentTheme.levelVideos) {
-    view.reactiveVideoBackground.setVideoSources(view.currentTheme.levelVideos);
-    view.reactiveVideoBackground.updateForLevel(view.visualEffects.currentLevel || 0, true);
+    applyReactiveVideoSources(
+      view.reactiveVideoBackground,
+      view.currentTheme.levelVideos,
+      view.visualEffects.currentLevel || 0,
+      true,
+    );
   }
 
   view.useReactiveMusic = reactiveMusic;
@@ -212,38 +220,55 @@ export function toggleFilmGrain(view: ViewLike, enabled: boolean) { view.useFilm
 export function toggleCRT(view: ViewLike, enabled: boolean) { view.useCRT = enabled; }
 
 export function applyGameSettings(view: ViewLike, settings: GameSettings): void {
-  view.setRenderScale(settings.renderScale);
+  const safe = applyAccessibilitySettings(view as Parameters<typeof applyAccessibilitySettings>[0], settings);
+  const reduced = isReducedMotionActive(settings);
 
-  view.useMultiPassBloom = settings.bloom;
-  toggleBloom(view, settings.bloom);
+  view.setRenderScale(safe.renderScale);
+
+  view.useMultiPassBloom = safe.bloom;
+  toggleBloom(view, safe.bloom);
 
   let bloomIntensity = 0.35;
-  if (settings.quality !== 'custom' && settings.quality in QUALITY_PRESET_VALUES) {
-    bloomIntensity = QUALITY_PRESET_VALUES[settings.quality as keyof typeof QUALITY_PRESET_VALUES].bloomIntensity;
-  } else if (!settings.bloom) {
+  if (safe.quality !== 'custom' && safe.quality in QUALITY_PRESET_VALUES) {
+    bloomIntensity = QUALITY_PRESET_VALUES[safe.quality as keyof typeof QUALITY_PRESET_VALUES].bloomIntensity;
+  } else if (!safe.bloom) {
     bloomIntensity = 0;
   }
-  setBloomIntensity(view, bloomIntensity);
+  setBloomIntensity(view, reduced ? bloomIntensity * 0.5 : bloomIntensity);
 
-  view.useParticles = settings.particles;
-  view.useShockwave = settings.shockwave;
-  view.useFilmGrain = settings.filmGrain;
-  view.useCRT = settings.crt;
-  view.useFXAA = settings.fxaa;
-  view.useGlitch = settings.glitch;
+  view.useParticles = safe.particles;
+  view.useShockwave = safe.shockwave && !reduced;
+  view.useFilmGrain = safe.filmGrain;
+  view.useCRT = safe.crt;
+  view.useFXAA = safe.fxaa;
+  view.useGlitch = safe.glitch;
 
-  view.useReactiveVideo = settings.reactiveVideo;
-  if (settings.reactiveVideo && view.currentTheme.levelVideos) {
-    view.reactiveVideoBackground.setVideoSources(view.currentTheme.levelVideos);
-    view.reactiveVideoBackground.updateForLevel(view.visualEffects.currentLevel || 0, true);
-  } else if (!settings.reactiveVideo && view.reactiveVideoBackground) {
+  view.useReactiveVideo = safe.reactiveVideo;
+  if (safe.reactiveVideo && view.currentTheme.levelVideos) {
+    applyReactiveVideoSources(
+      view.reactiveVideoBackground,
+      view.currentTheme.levelVideos,
+      view.visualEffects.currentLevel || 0,
+      true,
+    );
+  } else if (!safe.reactiveVideo && view.reactiveVideoBackground) {
     view.reactiveVideoBackground.isVideoPlaying = false;
   }
 
-  view.useParticleInteraction = settings.particles;
+  view.useParticleInteraction = safe.particles;
+
+  if (view.particleSystem) {
+    if ('applyQualityBudget' in view.particleSystem) {
+      (view.particleSystem as { applyQualityBudget(q: typeof safe.quality): void }).applyQualityBudget(safe.quality);
+    } else if ('setMaxParticles' in view.particleSystem) {
+      (view.particleSystem as { setMaxParticles(n: number): void }).setMaxParticles(
+        particleBudgetForQuality(safe.quality),
+      );
+    }
+  }
 
   renderLogger.info(
-    `Settings applied: quality=${settings.quality}, scale=${settings.renderScale}, bloom=${settings.bloom}, particles=${settings.particles}`,
+    `Settings applied: quality=${safe.quality}, scale=${safe.renderScale}, bloom=${safe.bloom}, particles=${safe.particles}, reducedMotion=${reduced}`,
   );
 }
 

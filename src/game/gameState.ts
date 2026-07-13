@@ -6,6 +6,7 @@
 import type { Piece } from './pieces.js';
 import type { ScoreEvent } from './scoring.js';
 import type { GameModeId } from './modes/types.js';
+import type { RunStatsSnapshot } from './runStats.js';
 
 /** 10×20 playfield with ghost cells as negative piece color indices. */
 export type ProjectedPlayfield = number[][];
@@ -19,6 +20,8 @@ export interface GameState {
   level: number;
   lines: number;
   nextPiece: Piece;
+  /** Upcoming pieces (7-bag order), length ≤ configured preview depth. */
+  nextQueue: Piece[];
   holdPiece: Piece | null;
   activePiece: Piece;
   isGameOver: boolean;
@@ -44,6 +47,7 @@ export interface GameState {
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
   isTSpinReady: boolean;
+  runStats: RunStatsSnapshot;
 }
 
 /** Alias emphasizing the playfield projection step (buildPlayfieldProjection). */
@@ -57,6 +61,7 @@ export function createEmptyGameState(): GameState {
     level: 1,
     lines: 0,
     nextPiece: emptyPiece,
+    nextQueue: [],
     holdPiece: null,
     activePiece: emptyPiece,
     isGameOver: false,
@@ -80,5 +85,17 @@ export function createEmptyGameState(): GameState {
     lastDropDistance: 0,
     scoreEvent: null,
     isTSpinReady: false,
+    runStats: {
+      piecesPlaced: 0,
+      moves: 0,
+      rotations: 0,
+      hardDrops: 0,
+      finesseFaults: 0,
+      peakCombo: 0,
+      peakB2BChain: 0,
+      elapsedMs: 0,
+      pps: 0,
+      apm: 0,
+    },
   };
 }

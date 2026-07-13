@@ -23,6 +23,15 @@ export const MUSIC_CONFIG = {
   CROSSFADE_DURATION: 2.0,
 } as const;
 
+/** Optional streamed stem paths (404 → procedural fallback). */
+export const MUSIC_STEMS = {
+  intro: './assets/music/intro.mp3',
+  build: './assets/music/build.mp3',
+  peak: './assets/music/peak.mp3',
+} as const;
+
+export type MusicStemId = keyof typeof MUSIC_STEMS;
+
 // Sound effect categories
 export const SFX_CATEGORIES = {
   /** Movement sounds (left/right/down) */

@@ -33,6 +33,34 @@ npm run build            # production bundle (dist/)
 npm run build:all        # AssemblyScript WASM + C++ renderer + Vite build
 ```
 
+### Level background videos
+
+Reactive video portals load `./assets/video/bg1.mp4` … `bg15.mp4` by level. **MP4 files are gitignored**; fresh clones use the **procedural GPU background** automatically.
+
+```bash
+npm run video:validate      # refresh public/assets/video/manifest.json
+npm run video:placeholders  # generate solid-color loops via ffmpeg (optional)
+```
+
+Authoring spec, CDN config, and how to add a new clip: [`assets/video/README.md`](assets/video/README.md).
+
+Optional CDN (Vite): set `VITE_VIDEO_CDN_BASE=https://your-cdn.example/tetris-webgpu` in `.env.local`.
+
+### Progressive Web App (mobile / offline)
+
+Installable on Chromium with a versioned service worker (shell, WASM, textures). Offline marathon uses procedural backgrounds when video assets are unavailable.
+
+```bash
+npm run build:all    # includes pwa icons (prebuild) + sw.js (postbuild)
+npm run preview      # test offline in DevTools Network → Offline
+```
+
+Touch controls, safe-area layout, swipe gestures, and fullscreen: see [`docs/MOBILE_PWA.md`](docs/MOBILE_PWA.md).
+
+### Local 2P versus
+
+Split-screen on one keyboard with garbage attacks. Select **Local 2P** → **START**. See [`docs/VERSUS.md`](docs/VERSUS.md).
+
 ### Continuous Integration
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`.

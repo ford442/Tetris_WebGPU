@@ -26,19 +26,19 @@ export class BackgroundRenderer {
   }
 
   draw(passEncoder: GPURenderPassEncoder, isVideoPlaying: boolean, videoTexture: GPUExternalTexture | null) {
+    // Procedural underlay — always visible so missing/slow MP4s never flash black
+    passEncoder.setPipeline(this.view.backgroundPipeline);
+    passEncoder.setVertexBuffer(0, this.view.backgroundVertexBuffer);
+    passEncoder.setBindGroup(0, this.view.backgroundBindGroup);
+    passEncoder.draw(6);
+
     if (isVideoPlaying && videoTexture && this.view.useReactiveVideo) {
       this.updateCoverScale();
       passEncoder.setPipeline(this.view.videoBackgroundPipeline);
       passEncoder.setVertexBuffer(0, this.view.backgroundVertexBuffer);
       passEncoder.setBindGroup(0, this.createVideoBindGroup(videoTexture));
       passEncoder.draw(6);
-      return;
     }
-
-    passEncoder.setPipeline(this.view.backgroundPipeline);
-    passEncoder.setVertexBuffer(0, this.view.backgroundVertexBuffer);
-    passEncoder.setBindGroup(0, this.view.backgroundBindGroup);
-    passEncoder.draw(6);
   }
 
   /** Computes an object-fit:cover UV scale so the video fills the canvas without stretching. */

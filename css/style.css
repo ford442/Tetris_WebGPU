@@ -844,3 +844,68 @@ canvas {
     text-transform: uppercase;
     font-size: 0.85rem;
 }
+
+/* Replay scrubber panel */
+.replay-panel {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: min(92vw, 420px);
+  padding: 0.75rem 1rem;
+  background: rgba(8, 12, 28, 0.92);
+  border: 1px solid rgba(120, 180, 255, 0.35);
+  border-radius: 8px;
+  pointer-events: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.replay-controls,
+.replay-io {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.replay-panel button {
+  pointer-events: auto;
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  background: rgba(40, 60, 120, 0.8);
+  border: 1px solid rgba(120, 180, 255, 0.4);
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.replay-panel button:hover {
+  background: rgba(60, 90, 160, 0.9);
+}
+
+.replay-panel input[type="range"] {
+  width: 100%;
+  pointer-events: auto;
+}
+
+.replay-panel #replay-share-code {
+  width: 100%;
+  pointer-events: auto;
+  font-size: 0.7rem;
+  padding: 0.35rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(120, 180, 255, 0.25);
+  color: #cde;
+  border-radius: 4px;
+}
+
+.replay-frame-label {
+  margin: 0;
+  font-size: 0.72rem;
+  opacity: 0.85;
+  text-align: center;
+}

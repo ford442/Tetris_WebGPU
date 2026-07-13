@@ -1,32 +1,28 @@
 #!/bin/bash
-# Script to create placeholder video files for testing
-# Requires ffmpeg to be installed: sudo apt-get install ffmpeg
+# Generate placeholder MP4 loops for all 15 level backgrounds.
+# Requires ffmpeg. Output goes to public/assets/video/ (served by Vite).
+#
+# Prefer: npm run video:placeholders  (also refreshes manifest.json)
 
-echo "Creating placeholder video files for Tetris background..."
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OUT="$ROOT/public/assets/video"
+mkdir -p "$OUT"
 
-# Create 7 videos with different colors for each level
-# Level 0 - Dark blue/purple
-ffmpeg -f lavfi -i color=c=0x1a0a3a:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg1.mp4
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ffmpeg not found. Install ffmpeg or use: npm run video:placeholders"
+  exit 1
+fi
 
-# Level 1 - Blue
-ffmpeg -f lavfi -i color=c=0x0033cc:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg2.mp4
+colors=(0x1a0a3a 0x0033cc 0x00cccc 0x00cc00 0xcccc00 0xcc6600 0xcc0000 0x9900cc 0x3366ff 0xff6600 0x00ff99 0x6633ff 0xff3399 0x33ffcc 0x1a0033)
 
-# Level 2 - Cyan
-ffmpeg -f lavfi -i color=c=0x00cccc:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg3.mp4
+for i in $(seq 1 15); do
+  idx=$((i - 1))
+  color=${colors[$idx]}
+  out="$OUT/bg${i}.mp4"
+  echo "Creating $out ..."
+  ffmpeg -y -f lavfi -i "color=c=${color}:s=720x1280:d=10" \
+    -c:v libx264 -t 10 -pix_fmt yuv420p -movflags +faststart -b:v 800k "$out"
+done
 
-# Level 3 - Green
-ffmpeg -f lavfi -i color=c=0x00cc00:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg4.mp4
-
-# Level 4 - Yellow
-ffmpeg -f lavfi -i color=c=0xcccc00:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg5.mp4
-
-# Level 5 - Orange
-ffmpeg -f lavfi -i color=c=0xcc6600:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg6.mp4
-
-# Level 6+ - Red
-ffmpeg -f lavfi -i color=c=0xcc0000:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg7.mp4
-ffmpeg -f lavfi -i color=c=0x9900cc:s=640x480:d=5 -c:v libx264 -t 5 -pix_fmt yuv420p -y bg8.mp4
-
-echo "Done! Created 8 placeholder videos (bg1.mp4 through bg8.mp4)"
-echo "These are simple solid color videos for demonstration."
-echo "Replace them with your actual video content for production."
+echo "Done — run: npm run video:validate"

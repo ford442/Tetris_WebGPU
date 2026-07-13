@@ -12,7 +12,7 @@ import {
   BOARD_WORLD_CENTER_Y,
 } from '../webgpu/renderMetrics.js';
 import { VisualEffects } from '../webgpu/effects.js';
-import { ReactiveVideoBackground } from '../webgpu/reactiveVideo.js';
+import { ReactiveVideoBackground, applyReactiveVideoSources } from '../webgpu/reactiveVideo.js';
 import {
   renderEndScreen as handleRenderEndScreen,
   renderMainScreen as handleRenderMainScreen,
@@ -185,8 +185,7 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     this.currentTheme = this.themes[themeName];
     this.visualEffects.currentLevel = 0;
     if (this.useReactiveVideo && this.currentTheme.levelVideos) {
-      this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
-      this.reactiveVideoBackground.updateForLevel(0, true);
+      applyReactiveVideoSources(this.reactiveVideoBackground, this.currentTheme.levelVideos, 0, true);
     }
     this.setMaterialTheme(themeName);
   }
@@ -200,8 +199,12 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     if (typeof options.reactiveVideo === 'boolean') {
       this.useReactiveVideo = options.reactiveVideo;
       if (this.useReactiveVideo && this.currentTheme?.levelVideos) {
-        this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
-        this.reactiveVideoBackground.updateForLevel(this.state?.level ?? 0, true);
+        applyReactiveVideoSources(
+          this.reactiveVideoBackground,
+          this.currentTheme.levelVideos,
+          this.state?.level ?? 0,
+          true,
+        );
       }
     }
   }

@@ -1,187 +1,29 @@
 /**
- * Particle System
- * Handles particle effects for line clears, hard drops, and other game events
- * Now GPU-driven via Compute Shader
+ * Gameplay particle system — extends unified GPU emitter with Tetris-specific bursts.
+ * Simulation: compute.ts ParticleComputeShader. Render: particle billboards in viewRenderLoop.
  */
 
+import { ParticleEmitter } from './particles/ParticleEmitter.js';
+
+export type { ParticleMetricsSnapshot } from './particles/metrics.js';
+export { particleBudgetForQuality } from './particles/layout.js';
+
+/** @deprecated legacy interface — GPU pool has no per-particle CPU objects */
 export interface Particle {
-    position: Float32Array; // x, y, z
-    velocity: Float32Array; // vx, vy, vz
-    color: Float32Array;    // r, g, b, a
-    scale: number;
-    life: number;           // remaining life (0-1)
-    maxLife: number;
+  position: Float32Array;
+  velocity: Float32Array;
+  color: Float32Array;
+  scale: number;
+  life: number;
+  maxLife: number;
 }
 
-export class ParticleSystem {
-    particles: Particle[] = [];
-    maxParticles: number = 5000; // Capped to 5000 for Neon Bricklayer intensity
+export class ParticleSystem extends ParticleEmitter {
+  /** Legacy field — unused (GPU-resident pool). */
+  particles: Particle[] = [];
 
-    // Ring Buffer strategy for emissions
-    private emitIndex: number = 0;
-
-    // Pending uploads for the View to handle
-    public pendingUploads: Float32Array;
-    public pendingUploadCount: number = 0;
-    public pendingUploadIndices: Uint32Array;
-    
-    // Track last emission time for compute skip optimization
-    public lastEmitTime: number = 0;
-
-    // Continuous low-rate droplet emitter (bottom of active piece)
-    private dropletEnabled: boolean = false;
-    private dropletAccumulator: number = 0;
-
-    constructor() {
-        // Pre-allocate buffer for a reasonable maximum number of emissions per frame
-        // Assuming max 1000 emissions per frame (which is very high)
-        const maxPerFrame = 1000;
-        this.pendingUploads = new Float32Array(maxPerFrame * 16);
-        this.pendingUploadIndices = new Uint32Array(maxPerFrame);
-    }
-
-    // Helper to get random float
-    private rand(min: number, max: number) {
-        return Math.random() * (max - min) + min;
-    }
-
-    // Standard omni-directional burst
-    emitParticles(x: number, y: number, z: number, count: number, color: number[]): void {
-        for(let i=0; i<count; i++) {
-             const angle = Math.random() * Math.PI * 2;
-             const phi = Math.random() * Math.PI; // 3D spread
-             const speed = this.rand(5.0, 20.0); // JUICE: Faster particles
-
-             this.addParticle(
-                 x, y, z,
-                 Math.cos(angle) * Math.sin(phi) * speed,
-                 Math.cos(phi) * speed + 10.0, // Upward bias
-                 Math.sin(angle) * Math.sin(phi) * speed,
-                 color,
-                 0.5 + Math.random() * 0.5,
-                 Math.random() * 0.3 + 0.2
-             );
-        }
-    }
-
-    // Radial ring explosion (for hard drops / impacts)
-    emitParticlesRadial(x: number, y: number, z: number, count: number, speed: number, color: number[]): void {
-        const radius = 1.0; // Default radius for particle spread
-        for (let i = 0; i < count; i++) {
-            const angle = (i / count) * Math.PI * 2;
-            // Velocity purely horizontal
-            const vx = Math.cos(angle) * speed;
-            const vz = Math.sin(angle) * speed;
-
-            this.addParticle(
-                x + Math.cos(angle) * radius,
-                y,
-                z + Math.sin(angle) * radius,
-                vx,
-                this.rand(0.0, 5.0), // Slight upward pop
-                vz,
-                color,
-                0.8 + Math.random() * 0.4,
-                0.3 // Uniform scale
-            );
-        }
-    }
-
-    // Directional stream (for movement trails)
-    emitStream(x: number, y: number, z: number, count: number, dirX: number, dirY: number, color: number[]): void {
-        for (let i = 0; i < count; i++) {
-            const speed = this.rand(2.0, 5.0);
-            this.addParticle(
-                x + this.rand(-0.5, 0.5),
-                y + this.rand(-0.5, 0.5),
-                z,
-                dirX * speed * -0.5, // Trail behind
-                dirY * speed * -0.5,
-                0.0,
-                color,
-                0.4 + Math.random() * 0.3,
-                0.15 + Math.random() * 0.1
-            );
-        }
-    }
-
-    // Massive Explosion (Line Clears)
-    emitExplosion(x: number, y: number, z: number, count: number, color: number[]): void {
-        for (let i = 0; i < count; i++) {
-            // Sphere sampling
-            const theta = Math.random() * 2.0 * Math.PI;
-            const phi = Math.acos(2.0 * Math.random() - 1.0);
-            const speed = this.rand(10.0, 35.0); // High speed
-
-            const vx = Math.sin(phi) * Math.cos(theta) * speed;
-            const vy = Math.sin(phi) * Math.sin(theta) * speed;
-            const vz = Math.cos(phi) * speed;
-
-            this.addParticle(
-                x, y, z,
-                vx, vy, vz,
-                color,
-                1.0 + Math.random() * 0.5, // Longer life
-                0.3 + Math.random() * 0.3  // Larger scale
-            );
-        }
-    }
-
-    public addParticle(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number[], life: number, scale: number) {
-        // Track emission time for compute skip optimization
-        this.lastEmitTime = performance.now() / 1000.0;
-        
-        // GPU Layout: 16 floats (64 bytes)
-        // 0-2: Pos
-        // 3: pad
-        // 4-6: Vel
-        // 7: pad
-        // 8-11: Color
-        // 12: Scale
-        // 13: Life
-        // 14: MaxLife
-        // 15: Pad1
-
-        if (this.pendingUploadCount < this.pendingUploadIndices.length) {
-            const offset = this.pendingUploadCount * 16;
-            this.pendingUploads[offset + 0] = x;
-            this.pendingUploads[offset + 1] = y;
-            this.pendingUploads[offset + 2] = z;
-            this.pendingUploads[offset + 3] = 0.0;
-            this.pendingUploads[offset + 4] = vx;
-            this.pendingUploads[offset + 5] = vy;
-            this.pendingUploads[offset + 6] = vz;
-            this.pendingUploads[offset + 7] = 0.0;
-            this.pendingUploads[offset + 8] = color[0];
-            this.pendingUploads[offset + 9] = color[1];
-            this.pendingUploads[offset + 10] = color[2];
-            this.pendingUploads[offset + 11] = color[3];
-            this.pendingUploads[offset + 12] = scale;
-            this.pendingUploads[offset + 13] = life;
-            this.pendingUploads[offset + 14] = life; // maxLife
-            this.pendingUploads[offset + 15] = 0.0;
-
-            this.pendingUploadIndices[this.pendingUploadCount] = this.emitIndex;
-            this.pendingUploadCount++;
-        }
-
-        // Advance ring buffer
-        this.emitIndex = (this.emitIndex + 1) % this.maxParticles;
-    }
-
-    // Clear pending after upload
-    clearPending() {
-        this.pendingUploadCount = 0;
-    }
-
-    updateParticles(dt: number): void {
-        // CPU Update logic REMOVED.
-        // Now handled by Compute Shader.
-    }
-
-    // Legacy support removal
-    getParticleData(): Float32Array { return new Float32Array(0); }
-
+  private dropletEnabled = false;
+  private dropletAccumulator = 0;
     /**
      * Emit a brief "crown" sprite for T-Spin: ring of 6 spike-shaped (velocity-stretched) quads
      * that expand outward and fade over ~800ms. Spikes alternate between the two provided
@@ -210,7 +52,7 @@ export class ParticleSystem {
             const vz = Math.sin(angle) * expandSpeed;
             const vy = 3.5 + this.rand(-1.0, 1.0);
 
-            this.addParticle(px, py, pz, vx, vy, vz, col4, life, scale);
+            this.enqueue(px, py, pz, vx, vy, vz, col4, life, scale);
         }
     }
 
@@ -272,7 +114,7 @@ export class ParticleSystem {
                 const ox = this.rand(-0.6, 0.6);
                 const oy = this.rand(-0.3, 0.3);
 
-                this.addParticle(
+                this.enqueue(
                     worldX + ox, worldY + oy, 0.0,
                     vx, vy, vz,
                     color,
@@ -371,7 +213,7 @@ export class ParticleSystem {
                     a
                 ];
 
-                this.addParticle(x, y, z, vx, vy, vz, col, life, scale);
+                this.enqueue(x, y, z, vx, vy, vz, col, life, scale);
             }
         }
     }
@@ -482,7 +324,7 @@ export class ParticleSystem {
             const life = 2.35 + this.rand(0, 0.55); // flight time + ~1.5s linger near letters
             const sc = 0.11 + this.rand(0.0, 0.07);
 
-            this.addParticle(sx, sy, 0.0, vx, vy, vz, baseCol, life, sc);
+            this.enqueue(sx, sy, 0.0, vx, vy, vz, baseCol, life, sc);
         }
 
         // Schedule the scatter phase (1.5s hold then outward burst from the letter positions)
@@ -518,7 +360,7 @@ export class ParticleSystem {
                 const ox = this.rand(-0.15, 0.15);
                 const oy = this.rand(-0.1, 0.1);
 
-                this.addParticle(t.x + ox, t.y + oy, 0.0, vx, vy, vz, baseCol, life, sc);
+                this.enqueue(t.x + ox, t.y + oy, 0.0, vx, vy, vz, baseCol, life, sc);
             }
         }
     }

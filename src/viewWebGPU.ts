@@ -13,7 +13,7 @@ import { createEmptyGameState } from './game/gameState.js';
 import type { Piece } from './game/pieces.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
-import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
+import { ReactiveVideoBackground, applyReactiveVideoSources } from './webgpu/reactiveVideo.js';
 import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
 import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
@@ -100,6 +100,13 @@ export default class View implements IView, ViewEventHost {
   panelHeight: number;
   visualX: number = 0;
   visualY: number = 0;
+  visualX2: number = 0;
+  visualY2: number = 0;
+  splitScreen: { active: boolean; stateB: GameState | null; previousActivePieceB: Piece | null } = {
+    active: false,
+    stateB: null,
+    previousActivePieceB: null,
+  };
   _previousActivePiece: Piece | null = null;
   state: GameState = createEmptyGameState();
   device!: GPUDevice;
@@ -405,8 +412,12 @@ export default class View implements IView, ViewEventHost {
     this.visualEffects.currentLevel = 0;
 
     if (this.useReactiveVideo && this.reactiveVideoBackground && this.currentTheme.levelVideos) {
-        this.reactiveVideoBackground.setVideoSources(this.currentTheme.levelVideos);
-        this.reactiveVideoBackground.updateForLevel(0, true);
+        applyReactiveVideoSources(
+          this.reactiveVideoBackground,
+          this.currentTheme.levelVideos,
+          0,
+          true,
+        );
     }
 
     if (this.device) {

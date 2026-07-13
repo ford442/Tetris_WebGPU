@@ -15,6 +15,7 @@ export class ProceduralMusicGenerator {
   private readonly secondsPerBeat: number;
   private musicGain: GainNode;
   private enabled: boolean = true;
+  private intensity = 0.35;
 
   // Synthwave chord progression (Cm - Gm - Eb - Bb)
   private readonly chords: number[][] = [
@@ -52,6 +53,11 @@ export class ProceduralMusicGenerator {
 
   setVolume(volume: number): void {
     this.musicGain.gain.value = Math.max(0, Math.min(1, volume));
+  }
+
+  setIntensity(intensity: number): void {
+    this.intensity = Math.max(0, Math.min(1, intensity));
+    this.currentArpPattern = this.intensity > 0.65 ? 1 : 0;
   }
 
   getVolume(): number {
@@ -165,7 +171,7 @@ export class ProceduralMusicGenerator {
     filter.Q.value = 2;
 
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.08, time + 0.01);
+    gain.gain.linearRampToValueAtTime(0.08 * (0.7 + this.intensity * 0.3), time + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
 
     osc.connect(filter);

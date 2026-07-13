@@ -9,6 +9,7 @@ import { updateFrameUniforms } from './viewUniforms.js';
 import { postProcessUniforms } from './postProcessUniforms.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
 import { BLOCK_WORLD_SIZE, BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
+import { SPLIT_BOARD_OFFSETS } from '../versus/splitScreen.js';
 import { updateBorderAudioGlow } from './viewPlayfield.js';
 import type { WebGPUViewHost } from '../view/viewTypes.js';
 
@@ -75,12 +76,17 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   const commandEncoder = result.commandEncoder;
   
   // Execute compute pass if particles are active
+  const ps = view.particleSystem;
+  if (ps.metrics) ps.metrics.beginDispatch();
   if (result.hasActiveParticles) {
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(view.particleComputePipeline);
     computePass.setBindGroup(0, view.particleComputeBindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(view.particleSystem.maxParticles / 64));
+    computePass.dispatchWorkgroups(Math.ceil(ps.maxParticles / 64));
     computePass.end();
+    if (ps.metrics) ps.metrics.endDispatch(true, ps.pendingUploadCount);
+  } else if (ps.metrics) {
+    ps.metrics.endDispatch(false, ps.pendingUploadCount);
   }
 
   // GPU line-clear + dissolve: compute writes the per-cell fade buffer the block
@@ -104,23 +110,51 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
  * Update piece visual interpolation for smooth movement
  */
 function updatePieceInterpolation(view: any, clampedDt: number) {
-  if (view.state && view.state.activePiece) {
-    const targetX = view.state.activePiece.x;
-    const targetY = view.state.activePiece.y;
-
-    // If the active piece object reference changed (e.g. piece spawned or held), snap instantly
-    if (view._previousActivePiece !== view.state.activePiece) {
-      view.visualX = targetX;
-      view.visualY = targetY;
-      view._previousActivePiece = view.state.activePiece;
-    } else {
-      const smoothingFactor = 25.0; // Higher = Snappier, Lower = Smoother
-      const expDecayPiece = 1.0 / (1.0 + clampedDt * smoothingFactor);
-      view.visualX = targetX + (view.visualX - targetX) * expDecayPiece;
-      view.visualY = targetY + (view.visualY - targetY) * expDecayPiece;
+  const smooth = (targetX: number, targetY: number, currentX: number, currentY: number, prevPiece: unknown, activePiece: unknown) => {
+    if (!activePiece) return { x: currentX, y: currentY, prev: null };
+    if (prevPiece !== activePiece) {
+      return { x: targetX, y: targetY, prev: activePiece };
     }
+    const smoothingFactor = 25.0;
+    const expDecayPiece = 1.0 / (1.0 + clampedDt * smoothingFactor);
+    return {
+      x: targetX + (currentX - targetX) * expDecayPiece,
+      y: targetY + (currentY - targetY) * expDecayPiece,
+      prev: activePiece,
+    };
+  };
+
+  if (view.state?.activePiece) {
+    const r = smooth(
+      view.state.activePiece.x,
+      view.state.activePiece.y,
+      view.visualX,
+      view.visualY,
+      view._previousActivePiece,
+      view.state.activePiece,
+    );
+    view.visualX = r.x;
+    view.visualY = r.y;
+    view._previousActivePiece = r.prev;
   } else {
     view._previousActivePiece = null;
+  }
+
+  const stateB = view.splitScreen?.active ? view.splitScreen.stateB : null;
+  if (stateB?.activePiece) {
+    const r2 = smooth(
+      stateB.activePiece.x,
+      stateB.activePiece.y,
+      view.visualX2 ?? 0,
+      view.visualY2 ?? 0,
+      view.splitScreen.previousActivePieceB,
+      stateB.activePiece,
+    );
+    view.visualX2 = r2.x;
+    view.visualY2 = r2.y;
+    view.splitScreen.previousActivePieceB = r2.prev;
+  } else if (view.splitScreen) {
+    view.splitScreen.previousActivePieceB = null;
   }
 }
 
@@ -150,7 +184,7 @@ function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt:
 
   view._camEye[0] = camX; 
   view._camEye[1] = camY; 
-  view._camEye[2] = 75.0;
+  view._camEye[2] = view.splitScreen?.active ? 98.0 : 75.0;
   
   glMatrix.mat4.lookAt(view.VIEWMATRIX, view._camEye, view._camTarget, view._camUp);
   glMatrix.mat4.multiply(view.vpMatrix, view.PROJMATRIX, view.VIEWMATRIX);
@@ -458,16 +492,28 @@ function renderFrostedGlassPass(view: any, commandEncoder: any) {
  * Render main scene pass (blocks, grid, particles)
  */
 function renderMainPass(view: any, commandEncoder: any, result: any) {
-  view.blockRenderer.updateUniforms(view.state);
   const passEncoder = commandEncoder.beginRenderPass(view._mainPassDescriptor);
-  
-  // Grid
-  passEncoder.setPipeline(view.gridPipeline);
-  passEncoder.setBindGroup(0, view.gridBindGroup);
-  passEncoder.setVertexBuffer(0, view.gridVertexBuffer);
-  passEncoder.draw(view.gridVertexCount);
 
-  view.blockRenderer.draw(passEncoder);
+  const split = view.splitScreen?.active && view.splitScreen.stateB;
+  if (!split) {
+    passEncoder.setPipeline(view.gridPipeline);
+    passEncoder.setBindGroup(0, view.gridBindGroup);
+    passEncoder.setVertexBuffer(0, view.gridVertexBuffer);
+    passEncoder.draw(view.gridVertexCount);
+
+    view.blockRenderer.updateUniforms(view.state);
+    view.blockRenderer.draw(passEncoder);
+  } else {
+    const boards = [
+      { state: view.state, vx: view.visualX, vy: view.visualY, offset: SPLIT_BOARD_OFFSETS.left },
+      { state: view.splitScreen.stateB, vx: view.visualX2, vy: view.visualY2, offset: SPLIT_BOARD_OFFSETS.right },
+    ];
+    for (const b of boards) {
+      if (!b.state) continue;
+      view.blockRenderer.updateUniforms(b.state, b.vx, b.vy, b.offset);
+      view.blockRenderer.draw(passEncoder);
+    }
+  }
 
   // Particles (only if active and enabled)
   if (view.useParticles !== false && result.hasActiveParticles) {

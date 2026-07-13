@@ -14,6 +14,11 @@
     "build:cpp": "npm run cpp:release",
     "build:all": "npm run asbuild:release && npm run build:cpp && npm run build",
     "pretest": "npm run asbuild:release || true",
+    "prebuild": "node scripts/validate-video-assets.mjs && node scripts/generate-pwa-icons.mjs",
+    "postbuild": "node scripts/generate-sw.mjs",
+    "pwa:icons": "node scripts/generate-pwa-icons.mjs",
+    "video:validate": "node scripts/validate-video-assets.mjs",
+    "video:placeholders": "node scripts/validate-video-assets.mjs --placeholders",
     "test": "vitest run"
   },
   "dependencies": {

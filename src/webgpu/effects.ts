@@ -6,6 +6,9 @@
 import { videoLogger, renderLogger, audioLogger } from '../utils/logger.js';
 
 export class VisualEffects {
+    /** When true, skip shake / shockwave / flash / heavy FX (a11y). */
+    reducedMotion = false;
+
     // Visual effect timers
     flashTimer: number = 0;
     rotationFlashTimer: number = 0;
@@ -47,6 +50,18 @@ export class VisualEffects {
     ghostTrailTimer: number = 0;
     private _lastActiveY: number = -999;
     private _lastActiveRot: number = -999;
+
+    /** Vertical trail along hard-drop path (optional, ~350ms). */
+    hardDropTrail = {
+      active: false,
+      startRow: 0,
+      endRow: 0,
+      pieceX: 0,
+      blocks: null as number[][] | null,
+      colorIdx: 4,
+      timer: 0,
+      duration: 0.35,
+    };
 
     // Dedicated short-lived (300ms exp decay) chromatic aberration pulse for hard drops
     // (separate from general aberrationIntensity; fed to u_aberrationPulse uniform in enhanced post-process)
@@ -150,6 +165,14 @@ export class VisualEffects {
         if (this.ghostTrailTimer > 0) this.ghostTrailTimer -= dt;
         if (this.ghostTrailTimer < 0) this.ghostTrailTimer = 0;
 
+        if (this.hardDropTrail.active) {
+          this.hardDropTrail.timer -= dt;
+          if (this.hardDropTrail.timer <= 0) {
+            this.hardDropTrail.active = false;
+            this.hardDropTrail.timer = 0;
+          }
+        }
+
         // Hard drop chromatic aberration pulse: exponential decay targeting ~300ms
         // (e^(-dt/0.08) gives strong initial dropoff, effectively gone after 0.3s)
         this.hardDropAberrationPulse *= 1.0 / (1.0 + dt / 0.08);
@@ -190,6 +213,7 @@ export class VisualEffects {
     }
 
     triggerFlash(duration: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.flashTimer = duration;
     }
 
@@ -208,6 +232,7 @@ export class VisualEffects {
     }
 
     triggerLineClearFlash(duration: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.lineClearFlashTimer = duration;
     }
 
@@ -222,13 +247,35 @@ export class VisualEffects {
         this.ghostTrailTimer = duration;
     }
 
+    triggerHardDropTrail(
+      startRow: number,
+      endRow: number,
+      pieceX: number,
+      blocks: number[][],
+      colorIdx: number,
+      duration = 0.35,
+    ): void {
+      if (this.reducedMotion) return;
+      this.hardDropTrail.active = true;
+      this.hardDropTrail.startRow = startRow;
+      this.hardDropTrail.endRow = endRow;
+      this.hardDropTrail.pieceX = pieceX;
+      this.hardDropTrail.blocks = blocks;
+      this.hardDropTrail.colorIdx = colorIdx;
+      this.hardDropTrail.duration = duration;
+      this.hardDropTrail.timer = duration;
+      this.triggerGhostTrail(Math.min(0.45, duration + 0.1));
+    }
+
     triggerShake(magnitude: number, duration: number): void {
+        if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
         this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // JUICE: Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
+        if (this.reducedMotion) return;
         this.aberrationIntensity += magnitude;
         this.aberrationIntensity = Math.min(this.aberrationIntensity, 3.0); // JUICE: Increased max aberration
     }
@@ -238,6 +285,7 @@ export class VisualEffects {
      * This feeds the u_aberrationPulse uniform for a sharp RGB channel spike in enhanced post-process.
      */
     triggerHardDropAberrationPulse(strength: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.hardDropAberrationPulse = Math.max(this.hardDropAberrationPulse, strength);
     }
 
@@ -246,6 +294,7 @@ export class VisualEffects {
      * Epicenter in world coords; render loop passes to grid uniforms + shader does distortion + fade.
      */
     triggerGridRipple(x: number, y: number): void {
+        if (this.reducedMotion) return;
         this.gridRippleCenter[0] = x;
         this.gridRippleCenter[1] = y;
         this.gridRippleTime = 0.001; // start the outward wave
@@ -256,6 +305,7 @@ export class VisualEffects {
      * Color comes from the new level's theme.backgroundColors[0]; fades over 400ms at high opacity.
      */
     triggerLevelUpColorFlash(color: [number, number, number], duration: number = 0.4): void {
+        if (this.reducedMotion) return;
         this.levelUpFlashColor = color && color.length >= 3 ? [color[0], color[1], color[2]] : [0.3, 0.7, 1.0];
         this.levelUpFlashIntensity = 1.0; // start at high opacity for burn
     }
@@ -266,6 +316,7 @@ export class VisualEffects {
     }
 
     triggerNeonBloomFlash(strength: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.neonBloomIntensity += strength;
         this.neonBloomIntensity = Math.min(this.neonBloomIntensity, 3.0); // Cap max bloom explosion
     }
@@ -276,6 +327,7 @@ export class VisualEffects {
     }
 
     triggerLineClearLaser(lines: number[], strength: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.lineClearLaserIntensity = strength;
         this.lineClearLaserY.fill(0); // Clear previous
 
@@ -297,6 +349,7 @@ export class VisualEffects {
     }
 
     triggerLevelUp(level: number = 1): void {
+        if (this.reducedMotion) return;
         // Scale effects with level
         const intensity = Math.min(1.0 + (level * 0.1), 2.0);
         
@@ -314,6 +367,7 @@ export class VisualEffects {
     }
 
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
+        if (this.reducedMotion) return;
         // NEON BRICKLAYER: Prevent weaker shockwaves from overwriting massive ones
         if (this.shockwaveTimer > 0 && this.shockwaveParams[1] > strength) {
             return;
