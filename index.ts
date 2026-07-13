@@ -228,6 +228,9 @@ uiContainer.innerHTML = `
     console.warn("WASM failed to initialize in index.ts (continuing with JS fallback):", e);
   }
 
+  // Must run before createView → preRender → loadBlockTexture (mask bake + shader defines).
+  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
+
   const game = new Game();
   const soundManager = new SoundManager();
   const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
@@ -439,5 +442,4 @@ uiContainer.innerHTML = `
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
-  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 })();

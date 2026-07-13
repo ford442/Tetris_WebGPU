@@ -7,6 +7,7 @@ import { themes, type ThemeColors } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
 import { getBlockTextureConfig } from './blockTexture.js';
+import { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from './shaders/block/bindings.js';
 
 export interface MaterialViewLike {
   device: GPUDevice;
@@ -54,6 +55,7 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   if (!view.device || !view.currentMaterial) return;
 
   const m = view.currentMaterial;
+  const offs = BLOCK_FRAGMENT_UNIFORM_OFFSETS;
 
   view._materialUniforms[0] = m.metallic;
   view._materialUniforms[1] = m.roughness;
@@ -63,13 +65,36 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   view._materialUniforms[5] = m.clearcoat;
   view._materialUniforms[6] = m.anisotropic;
   view._materialUniforms[7] = m.dispersion;
-  view._materialUniforms[8] = getMaterialTypeIndex();
-  view._materialUniforms[9] = 0.0;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 48, view._materialUniforms.subarray(0, 10));
+  view.device.queue.writeBuffer(
+    view.fragmentUniformBuffer,
+    offs.metallic,
+    view._materialUniforms.subarray(0, 8),
+  );
+
+  const materialTypeIndex = getMaterialTypeIndex();
+  view.device.queue.writeBuffer(
+    view.fragmentUniformBuffer,
+    offs.materialType,
+    new Uint32Array([materialTypeIndex]),
+  );
+
+  // Authored block.png path: shader gates on textureMix > 0.8 (see fragmentMain.wgsl.ts).
+  const textureMix = view.authoredBlockTextureLoaded ? 0.94 : 0.55;
+  const enablePBR = view.usePremiumMaterials ? 1.0 : 0.0;
+  const scratch = new Float32Array(1);
+  scratch[0] = 0.0;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.particleIntensity, scratch);
+  scratch[0] = enablePBR;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.enablePBR, scratch);
+  scratch[0] = textureMix;
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.textureMix, scratch);
 
   // Write particleMaterialType to offset 116 (previously pad2)
-  const particleMaterialScratch = new Uint32Array([getMaterialTypeIndex()]);
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 116, particleMaterialScratch);
+  view.device.queue.writeBuffer(
+    view.fragmentUniformBuffer,
+    offs.particleMaterialType,
+    new Uint32Array([materialTypeIndex]),
+  );
 
   // Authored imageSampled glass opacity curve params.
   // Stored in FragmentUniforms.reserved2 (vec4f at byte offset 120).
