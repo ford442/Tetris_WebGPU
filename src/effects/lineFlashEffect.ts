@@ -33,6 +33,9 @@ export class LineFlashEffect {
   }
 
   flashLine(row: number, totalRows: number, delay: number = 0): void {
+    if (typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion')) {
+      return;
+    }
     this.ensureContainer();
     if (!this.container) return;
 

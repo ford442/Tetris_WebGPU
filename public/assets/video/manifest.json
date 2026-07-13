@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "basePath": "./assets/video/",
+  "files": [
+    "bg1.mp4",
+    "bg3.mp4"
+  ],
+  "generated": false,
+  "builtAt": "2026-07-13T06:50:34.053Z"
+}

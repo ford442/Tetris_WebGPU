@@ -49,13 +49,6 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
   const hasActiveParticles = particlesEnabled && (
     view.particleSystem.pendingUploadCount > 0 || swTimer > 0.0 || timeSinceLastEmit < 3.0
   );
-  if (hasActiveParticles) {
-    const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(view.particleComputePipeline);
-    computePass.setBindGroup(0, view.particleComputeBindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(view.particleSystem.maxParticles / 64));
-    computePass.end();
-  }
 
   // Particle render uniforms
   device.queue.writeBuffer(view.particleUniformBuffer, 0, view.vpMatrix);

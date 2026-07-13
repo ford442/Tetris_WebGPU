@@ -3,12 +3,22 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Tetris</title>
+    <meta name="theme-color" content="#1a0a3a">
+    <meta name="description" content="High-performance Tetris with WebGPU, offline marathon, and procedural backgrounds.">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Tetris WebGPU</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/themes.css">
+    <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/versus.css">
+    <link rel="stylesheet" href="css/a11y.css">
     <style>
         html {
             overflow-y: hidden;
@@ -17,6 +27,8 @@
 </head>
 
 <body>
+    <div id="game-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <button type="button" id="fullscreen-button" aria-label="Toggle fullscreen">FULLSCREEN</button>
     <div id="ui-container"></div>
     <script src='./index.ts' type='module'></script>
 </body>

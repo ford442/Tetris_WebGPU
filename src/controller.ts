@@ -4,6 +4,11 @@ import SoundManager from "./sound.js";
 import { TouchControls, TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 import { INPUT_CONFIG } from "./config/gameConfig.js";
+import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
+import type { ReplayActionName } from "./replay/actions.js";
+import type { ReplayFile } from "./replay/format.js";
+import { announce, announceGameOver, announceLevelUp, announceLineClear } from "./a11y/announcer.js";
+import { onPauseMenuClose, onPauseMenuOpen } from "./a11y/keyboardNav.js";
 
 const DAS = INPUT_CONFIG.DAS; // Delayed Auto Shift (ms) - Faster for improved responsiveness and top-level play
 const ARR = INPUT_CONFIG.ARR;  // Auto Repeat Rate (ms) - Instant piece movement when holding left or right
@@ -81,6 +86,11 @@ export default class Controller {
   private lastTime: number = 0;
   private lastLevel: number = 1;
 
+  /** Replay capture for the current run. */
+  readonly replayRecorder = new ReplayRecorder();
+  lastReplayFile: ReplayFile | null = null;
+  onReplayFinished: ((file: ReplayFile) => void) | null = null;
+
   constructor(game: Game, view: IView, viewWebGPU: IView, soundManager: SoundManager) {
     this.game = game;
     this.view = view;
@@ -96,9 +106,52 @@ export default class Controller {
 
     // Initialize touch controls
     addTouchControlStyles();
-    new TouchControls(this.handleTouchAction.bind(this));
+    new TouchControls(
+      this.handleTouchAction.bind(this),
+      {},
+      () => {
+        void this.soundManager.unlockAudio();
+      },
+    );
 
     this.play();
+  }
+
+  private audioColumn(): number {
+    return this.game.activPiece?.x ?? 4;
+  }
+
+  private audioPieceType(): string {
+    return this.game.activPiece?.type ?? 'T';
+  }
+
+  private playMoveSound(direction: 'left' | 'right' | 'down'): void {
+    this.game.runStats.recordMove();
+    this.soundManager.playMove(direction, this.audioColumn());
+  }
+
+  private recordFinesseFault(): void {
+    this.game.runStats.recordFinesseFault();
+  }
+
+  private playScoringAudio(
+    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    pieceType: string,
+    pieceCol: number,
+  ): void {
+    if (result.linesCleared.length > 0) {
+      const scoreEvent = this.game.scoreEvent;
+      const combo = scoreEvent?.combo ?? 0;
+      const b2b = scoreEvent?.backToBack ?? false;
+      this.soundManager.playLineClear(result.linesCleared.length, combo, b2b, pieceCol);
+      if (result.tSpin) this.soundManager.playTSpin();
+      this.soundManager.musicManager.setGameplayIntensity(this.game.level, combo);
+      return;
+    }
+    if (result.locked) {
+      this.soundManager.playLock(pieceType, pieceCol);
+      if (result.tSpin) this.soundManager.playTSpin();
+    }
   }
 
   private handleTouchAction(action: TouchAction): void {
@@ -146,8 +199,13 @@ export default class Controller {
 
   play(): void {
     if (this.isPlaying) return;
+    void this.soundManager.unlockAudio();
     this.isPlaying = true;
     this.isPaused = false;
+
+    if (!this.replayRecorder.isRecording) {
+      this.beginReplaySession();
+    }
 
     // Stop gravity timer - now handled in gameLoop
     this.stopTimer();
@@ -195,6 +253,7 @@ export default class Controller {
 
   resume(): void {
     if (!this.isPaused) return;
+    void this.soundManager.unlockAudio();
     this.isPaused = false;
     this.isPlaying = true;
 
@@ -239,6 +298,7 @@ export default class Controller {
       
       pauseMenu.style.display = 'flex';
     }
+    onPauseMenuOpen();
   }
 
   private hidePauseMenu(): void {
@@ -246,6 +306,7 @@ export default class Controller {
     if (pauseMenu) {
       pauseMenu.style.display = 'none';
     }
+    onPauseMenuClose();
   }
 
   startTimer(): void {
@@ -279,7 +340,7 @@ export default class Controller {
   }
 
   reset(): void {
-    this.game.reset();
+    this.beginReplaySession();
 
     // Reset timers
     this.gravityTimer = 0;
@@ -296,6 +357,66 @@ export default class Controller {
     this.soundManager.musicManager.play();
 
     this.play();
+  }
+
+  private beginReplaySession(): void {
+    const seed = generateReplaySeed();
+    this.game.reset({ seed });
+    this.replayRecorder.start(seed, this.game.modeId);
+    this.lastReplayFile = null;
+  }
+
+  private recordReplay(action: ReplayActionName): void {
+    this.replayRecorder.recordAction(action);
+  }
+
+  /** Touch controls entry point (also used for replay hooks). */
+  executeAction(action: Action): void {
+    if (!this.isPlaying || this.isPaused) return;
+    switch (action) {
+      case 'left':
+        this.game.movePieceLeft();
+        this.recordReplay('left');
+        this.playMoveSound('left');
+        this.actionTimers.left = 0;
+        break;
+      case 'right':
+        this.game.movePieceRight();
+        this.recordReplay('right');
+        this.playMoveSound('right');
+        this.actionTimers.right = 0;
+        break;
+      case 'down':
+        this.game.movePieceDown();
+        this.recordReplay('down');
+        this.playMoveSound('down');
+        this.actionTimers.down = 0;
+        break;
+      case 'rotateCW':
+        this.game.rotatePiece(true);
+        this.recordReplay('rotateCW');
+        this.soundManager.playRotate();
+        this.viewWebGPU.onRotate();
+        break;
+      case 'rotateCCW':
+        this.game.rotatePiece(false);
+        this.recordReplay('rotateCCW');
+        this.soundManager.playRotate();
+        this.viewWebGPU.onRotate();
+        break;
+      case 'hardDrop':
+        this.recordReplay('hardDrop');
+        void this.performHardDropAsync();
+        break;
+      case 'hold':
+        if (this.game.canHold) {
+          this.game.hold();
+          this.recordReplay('hold');
+          this.soundManager.playHold();
+          this.viewWebGPU.onHold();
+        }
+        break;
+    }
   }
 
   handleKeyDown(event: KeyboardEvent): void {
@@ -337,8 +458,10 @@ export default class Controller {
                 if (this.game.activPiece.x === pxBefore) {
                     this.bufferedMoveAction = 'left';
                     this.bufferedMoveActionTime = performance.now();
+                    this.recordFinesseFault();
                 } else {
-                    this.soundManager.playMove();
+                    this.recordReplay('left');
+                    this.playMoveSound('left');
                 }
             }
             this.actionTimers.left = 0;
@@ -351,15 +474,18 @@ export default class Controller {
                 if (this.game.activPiece.x === pxBefore) {
                     this.bufferedMoveAction = 'right';
                     this.bufferedMoveActionTime = performance.now();
+                    this.recordFinesseFault();
                 } else {
-                    this.soundManager.playMove();
+                    this.recordReplay('right');
+                    this.playMoveSound('right');
                 }
             }
             this.actionTimers.right = 0;
             break;
         case 'down':
             this.game.movePieceDown();
-            this.soundManager.playMove();
+            this.recordReplay('down');
+            this.playMoveSound('down');
             this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
             this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
             if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
@@ -383,11 +509,13 @@ export default class Controller {
                 const rBefore = this.game.activPiece.rotation;
                 this.game.rotatePiece(true);
                 if (this.game.activPiece.rotation !== rBefore) {
+                     this.recordReplay('rotateCW');
+                     this.game.runStats.recordRotate();
                      this.viewWebGPU.onRotate();
                 } else {
-                     // Jump buffer: if rotation failed, buffer it
                      this.bufferedAction = 'rotateCW';
                      this.bufferedActionTime = performance.now();
+                     this.recordFinesseFault();
                 }
                 this.soundManager.playRotate();
             }
@@ -397,6 +525,7 @@ export default class Controller {
                 const rBefore = this.game.activPiece.rotation;
                 this.game.rotatePiece(false);
                 if (this.game.activPiece.rotation !== rBefore) {
+                     this.recordReplay('rotateCCW');
                      this.viewWebGPU.onRotate();
                 } else {
                      // Jump buffer: if rotation failed, buffer it
@@ -409,6 +538,7 @@ export default class Controller {
         case 'hardDrop':
             {
                 const yBefore = this.game.activPiece?.y;
+                this.recordReplay('hardDrop');
                 this.performHardDrop();
                 if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
                     this.bufferedAction = 'hardDrop';
@@ -419,13 +549,14 @@ export default class Controller {
         case 'hold':
             if (this.game.canHold) {
                 this.game.hold();
+                this.recordReplay('hold');
               const holdEl = document.querySelector('.hold-piece-container');
               if (holdEl) {
                   holdEl.classList.remove('swap-whoosh-active');
                   void (holdEl as HTMLElement).offsetWidth; // trigger reflow
                   holdEl.classList.add('swap-whoosh-active');
               }
-                this.soundManager.playMove();
+                this.soundManager.playHold();
                 this.viewWebGPU.onHold();
             } else {
                 this.bufferedAction = 'hold';
@@ -463,17 +594,20 @@ export default class Controller {
       switch (action) {
           case 'left':
               this.game.movePieceLeft();
-              this.soundManager.playMove();
+              this.recordReplay('left');
+              this.playMoveSound('left');
               this.actionTimers.left = 0;
               break;
           case 'right':
               this.game.movePieceRight();
-              this.soundManager.playMove();
+              this.recordReplay('right');
+              this.playMoveSound('right');
               this.actionTimers.right = 0;
               break;
           case 'down':
               this.game.movePieceDown();
-              this.soundManager.playMove();
+              this.recordReplay('down');
+              this.playMoveSound('down');
               this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
               this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
             if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
@@ -497,6 +631,7 @@ export default class Controller {
                 const rBefore = this.game.activPiece.rotation;
                 this.game.rotatePiece(true);
                 if (this.game.activPiece.rotation !== rBefore) {
+                     this.recordReplay('rotateCW');
                      this.viewWebGPU.onRotate();
                 }
                 this.soundManager.playRotate();
@@ -507,6 +642,7 @@ export default class Controller {
                 const rBefore = this.game.activPiece.rotation;
                 this.game.rotatePiece(false);
                 if (this.game.activPiece.rotation !== rBefore) {
+                     this.recordReplay('rotateCCW');
                      this.viewWebGPU.onRotate();
                 }
                 this.soundManager.playRotate();
@@ -515,6 +651,7 @@ export default class Controller {
           case 'hardDrop':
               {
                   const yBefore = this.game.activPiece?.y;
+                  this.recordReplay('hardDrop');
                   this.performHardDrop();
                   if (this.game.activPiece?.y !== yBefore) {
                       // Successfully dropped
@@ -524,13 +661,14 @@ export default class Controller {
           case 'hold':
               if (this.game.canHold) {
                   this.game.hold();
+                  this.recordReplay('hold');
               const holdEl = document.querySelector('.hold-piece-container');
               if (holdEl) {
                   holdEl.classList.remove('swap-whoosh-active');
                   void (holdEl as HTMLElement).offsetWidth; // trigger reflow
                   holdEl.classList.add('swap-whoosh-active');
               }
-                  this.soundManager.playMove();
+                  this.soundManager.playHold();
               } else {
                   this.bufferedAction = 'hold';
                   this.bufferedActionTime = performance.now();
@@ -562,6 +700,9 @@ export default class Controller {
       else if (type === 'T') colorIdx = 6;
       else if (type === 'Z') colorIdx = 7;
 
+      const pieceType = this.audioPieceType();
+      const pieceCol = this.audioColumn();
+
       const result = await this.game.hardDropAsync();
       this.soundManager.playHardDrop();
 
@@ -573,10 +714,11 @@ export default class Controller {
           const b2b = scoreEvent ? scoreEvent.backToBack : false;
           const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
-          this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
+          this.playScoringAudio(result, pieceType, pieceCol);
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
+          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
       } else if (result.locked) {
-          this.soundManager.playLock();
+          this.playScoringAudio(result, pieceType, pieceCol);
           this.viewWebGPU.onLock(result.tSpin);
       }
       if (result.gameOver || this.game.victory) {
@@ -652,6 +794,7 @@ export default class Controller {
 
       const dt = time - this.lastTime;
       this.lastTime = time;
+      this.replayRecorder.advanceClock(dt);
 
       // Experimental subliminal: accumulate active play time (paused games don't count)
       if (this.isPlaying && !this.isPaused) {
@@ -694,15 +837,21 @@ export default class Controller {
       }
 
       // Game update (lock delay) — GPU line detection when pipeline is ready
+      const lockPieceType = this.audioPieceType();
+      const lockPieceCol = this.audioColumn();
       const result = await this.game.updateAsync(dt);
 
       // Check level up
       if (this.game.level > this.lastLevel) {
-          this.soundManager.playLevelUp();
+          this.soundManager.playLevelUp(this.game.level);
+          announceLevelUp(this.game.level);
           this.lastLevel = this.game.level;
           // Experimental subliminal reinforcement (strong on level up)
           this.subliminal?.triggerReinforcement('levelUp', 'strong');
       }
+
+      const pieceType = lockPieceType;
+      const pieceCol = lockPieceCol;
 
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;
@@ -710,8 +859,9 @@ export default class Controller {
           const b2b = scoreEvent ? scoreEvent.backToBack : false;
           const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
-          this.soundManager.playLineClear(result.linesCleared.length, combo, b2b);
+          this.playScoringAudio(result, pieceType, pieceCol);
           this.viewWebGPU.onLineClear(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
+          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
           
           // Update combo display
           this.updateComboDisplay(combo);
@@ -722,7 +872,7 @@ export default class Controller {
             this.subliminal.triggerReinforcement('lineClear', intensity);
           }
       } else if (result.locked) {
-          this.soundManager.playLock();
+          this.playScoringAudio(result, pieceType, pieceCol);
           this.viewWebGPU.onLock(result.tSpin);
           // Reset combo display when piece locks without clearing
           if (this.game.scoringSystem.combo < 0) {
@@ -734,9 +884,12 @@ export default class Controller {
           }
       }
       if (result.gameOver || this.game.victory) {
+          this.finishReplayRecording();
           this.soundManager.playGameOver();
           this.isPlaying = false;
-          this.view.renderEndScreen(this.game.getState());
+          const endState = this.game.getState();
+          announceGameOver(endState.score, endState.isVictory);
+          this.view.renderEndScreen(endState);
           const isNewHigh = this.game.saveModeLeaderboard();
           this.updateHighScoreDisplay();
           if (isNewHigh && this.subliminal) {
@@ -848,7 +1001,8 @@ export default class Controller {
                   if (this.game.activPiece.x !== pxBefore) moveSuccess = true;
               }
               if (moveSuccess) {
-                  this.soundManager.playMove();
+                  this.recordReplay(this.bufferedMoveAction === 'left' ? 'left' : 'right');
+                  this.playMoveSound(this.bufferedMoveAction === 'left' ? 'left' : 'right');
                   this.bufferedMoveAction = null;
               }
           }
@@ -872,6 +1026,7 @@ export default class Controller {
           const rBefore = this.game.activPiece.rotation;
           this.game.rotatePiece(true);
           if (this.game.activPiece.rotation !== rBefore) {
+              this.recordReplay('rotateCW');
               this.viewWebGPU.onRotate();
               success = true;
           }
@@ -879,24 +1034,27 @@ export default class Controller {
           const rBefore = this.game.activPiece.rotation;
           this.game.rotatePiece(false);
           if (this.game.activPiece.rotation !== rBefore) {
+              this.recordReplay('rotateCCW');
               this.viewWebGPU.onRotate();
               success = true;
           }
       } else if (this.bufferedAction === 'hold') {
           if (this.game.canHold) {
               this.game.hold();
+              this.recordReplay('hold');
               const holdEl = document.querySelector('.hold-piece-container');
               if (holdEl) {
                   holdEl.classList.remove('swap-whoosh-active');
                   void (holdEl as HTMLElement).offsetWidth; // trigger reflow
                   holdEl.classList.add('swap-whoosh-active');
               }
-              this.soundManager.playMove();
+              this.soundManager.playHold();
               this.viewWebGPU.onHold();
               success = true;
           }
       } else if (this.bufferedAction === 'hardDrop') {
           const yBefore = this.game.activPiece?.y;
+          this.recordReplay('hardDrop');
           this.performHardDrop();
           if (this.game.activPiece?.y !== yBefore) {
               success = true;
@@ -906,6 +1064,12 @@ export default class Controller {
       if (success) {
           this.bufferedAction = null;
       }
+  }
+
+  private finishReplayRecording(): void {
+    if (!this.replayRecorder.isRecording) return;
+    this.lastReplayFile = this.replayRecorder.stop();
+    this.onReplayFinished?.(this.lastReplayFile);
   }
 
   private gravityTimer: number = 0;
@@ -938,14 +1102,16 @@ export default class Controller {
           if (this.actionTimers.left > DAS) {
               if (ARR === 0) {
                   this.game.movePieceLeft();
-                  this.soundManager.playMove();
+                  this.recordReplay('left');
+                  this.playMoveSound('left');
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                   this.actionTimers.left = DAS;
               } else {
                   while (this.actionTimers.left > DAS + ARR) {
                       this.game.movePieceLeft();
-                      this.soundManager.playMove();
+                      this.recordReplay('left');
+                      this.playMoveSound('left');
                       // NEON BRICKLAYER: DAS Trail
                       this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                       this.actionTimers.left -= ARR;
@@ -957,14 +1123,16 @@ export default class Controller {
           if (this.actionTimers.right > DAS) {
               if (ARR === 0) {
                   this.game.movePieceRight();
-                  this.soundManager.playMove();
+                  this.recordReplay('right');
+                  this.playMoveSound('right');
                   // NEON BRICKLAYER: DAS Trail
                   this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                   this.actionTimers.right = DAS;
               } else {
                   while (this.actionTimers.right > DAS + ARR) {
                       this.game.movePieceRight();
-                      this.soundManager.playMove();
+                      this.recordReplay('right');
+                      this.playMoveSound('right');
                       // NEON BRICKLAYER: DAS Trail
                       this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
                       this.actionTimers.right -= ARR;
@@ -996,6 +1164,9 @@ export default class Controller {
              for (let i = 0; i < steps; i++) {
                  const prevY = this.game.activPiece.y;
                  this.game.movePieceDown();
+                 if (prevY !== this.game.activPiece.y) {
+                   this.recordReplay('down');
+                 }
                  // NEON BRICKLAYER: Soft Drop Trail
                  this.viewWebGPU.onMove(this.game.activPiece.x, this.game.activPiece.y);
 

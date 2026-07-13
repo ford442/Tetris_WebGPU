@@ -1,5 +1,7 @@
 import type { GameState } from '../game/gameState.js';
 import type { ViewEventHost } from '../view/viewTypes.js';
+import { renderNextQueue } from './viewMaterials.js';
+import { formatShareScoreString } from '../game/runStats.js';
 
 export function showFloatingText(_view: ViewEventHost, text: string, subText: string = ""): void {
   const container = document.getElementById('ui-container');
@@ -422,9 +424,25 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
 }
 
+import { loadGameSettings } from '../config/gameSettings.js';
+
 export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0): void {
   const worldX = x * 2.2;
   const startRow = y - distance;
+
+  if (loadGameSettings().ghostDropTrail && view.visualEffects && distance > 0) {
+    const snap = view.game?.getHardDropSnapshot?.();
+    if (snap) {
+      view.visualEffects.triggerHardDropTrail(
+        startRow,
+        y,
+        snap.x,
+        snap.blocks,
+        colorIdx,
+        0.35 + Math.min(distance * 0.02, 0.25),
+      );
+    }
+  }
 
   const themeColors = view.currentTheme[colorIdx] || [0.4, 0.8, 1.0];
   const trailColor = [...themeColors, 0.8];
@@ -613,7 +631,12 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
   }
 
   view.renderPlayfield_WebGPU(state);
-  view.renderPiece(view.nextPieceContext, state.nextPiece, 30);
+  const queue = state.nextQueue?.length ? state.nextQueue : [state.nextPiece];
+  if (queue.length > 1) {
+    renderNextQueue(view.nextPieceContext, queue, view.currentTheme, queue.length <= 3 ? 20 : 16);
+  } else {
+    view.renderPiece(view.nextPieceContext, state.nextPiece, 22);
+  }
   view.renderPiece(view.holdPieceContext, state.holdPiece, 20);
 
   const scoreEl = document.getElementById('score');
@@ -660,6 +683,7 @@ export function renderEndScreen(view: ViewEventHost, state: GameState): void {
       modeHighScoreLabel: state.modeHighScoreLabel,
       elapsedMs: state.elapsedMs,
       metric,
+      runStats: state.runStats,
     });
     
     // Wire up buttons
@@ -676,8 +700,28 @@ export function renderEndScreen(view: ViewEventHost, state: GameState): void {
     if (menuBtn) {
       menuBtn.addEventListener('click', () => {
         overlay.remove();
-        // Could navigate to menu here
         location.reload();
+      });
+    }
+
+    const shareBtn = document.getElementById('game-over-share');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', async () => {
+        const text = formatShareScoreString({
+          modeLabel: state.modeLabel,
+          score: state.score,
+          lines: state.lines,
+          level: state.level,
+          stats: state.runStats,
+          isVictory: state.isVictory,
+        });
+        try {
+          await navigator.clipboard.writeText(text);
+          shareBtn.textContent = 'COPIED!';
+          setTimeout(() => { shareBtn.textContent = 'SHARE SCORE'; }, 2000);
+        } catch {
+          window.prompt('Copy score:', text);
+        }
       });
     }
   }, 800); // Delay to let effects play

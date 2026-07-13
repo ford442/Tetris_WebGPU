@@ -30,6 +30,10 @@ export interface ParticleSystemLike {
   maxParticles: number;
   lastEmitTime?: number;
   pendingUploadCount?: number;
+  metrics?: {
+    beginDispatch(): void;
+    endDispatch(ran: boolean, pendingAfter: number): void;
+  };
 }
 
 /**
@@ -59,6 +63,13 @@ export interface WebGPUViewHost extends ViewEventHost {
   device: GPUDevice;
   visualX: number;
   visualY: number;
+  visualX2?: number;
+  visualY2?: number;
+  splitScreen?: {
+    active: boolean;
+    stateB: GameState | null;
+    previousActivePieceB: Piece | null;
+  };
   _previousActivePiece: Piece | null;
   _f32_1: Float32Array;
   _f32_2: Float32Array;
@@ -99,7 +110,11 @@ export interface WebGPUViewHost extends ViewEventHost {
   _mainPassDescriptor: GPURenderPassDescriptor;
   _ppPassDescriptor: GPURenderPassDescriptor;
   _depthTextureView: GPUTextureView;
-  blockRenderer: { updateUniforms(state: GameState): void; draw(encoder: GPURenderPassEncoder): void };
+  blockRenderer: {
+    updateUniforms(state: GameState, visualX?: number, visualY?: number, worldOffsetX?: number): void;
+    refreshBorder(worldOffsetX?: number): void;
+    draw(encoder: GPURenderPassEncoder): void;
+  };
   backgroundRenderer: { render(encoder: GPURenderPassEncoder, time: number): void };
   postProcessor: { render(encoder: GPURenderPassEncoder): void };
   gridPipeline: GPURenderPipeline;

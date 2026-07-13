@@ -35,18 +35,21 @@ type BlockView = {
 export class BlockRenderer {
   constructor(private readonly view: BlockView) {}
 
-  updateUniforms(state: GameState) {
+  updateUniforms(state: GameState, visualX?: number, visualY?: number, worldOffsetX = 0) {
     if (!this.view.device || !this.view.blockTexture) return;
+    const vx = visualX ?? this.view.visualX;
+    const vy = visualY ?? this.view.visualY;
     renderPlayfieldBlocks(
       this.view.device, state, this.view.currentTheme, this.view.visualEffects,
-      this.view.visualX, this.view.visualY, this.view.vpMatrix as Float32Array,
+      vx, vy, this.view.vpMatrix as Float32Array,
       this.view.uniformBindGroup_CACHE, this.view.uniformBindGroup_ARRAY,
       this.view.vertexUniformBuffer, this.view._uniformBatchBuffer,
       this.view._f32_3, this.view._f32_4, this.view.MODELMATRIX, this.view.NORMALMATRIX,
+      worldOffsetX,
     );
   }
 
-  refreshBorder() {
+  refreshBorder(worldOffsetX = 0) {
     if (!this.view.device) return;
     const result = renderPlayfieldBorder(
       this.view.device, this.view.pipeline, this.view.fragmentUniformBuffer,
@@ -54,6 +57,7 @@ export class BlockRenderer {
       this.view.vpMatrix as Float32Array, this.view.currentTheme,
       this.view._f32_3, this.view._f32_4, this.view.MODELMATRIX, this.view.NORMALMATRIX,
       this.view.dissolveBuffer, this.view.fresnelParamsUniform,
+      worldOffsetX,
     );
     this.view.vertexUniformBuffer_border = result.vertexUniformBuffer;
     this.view.uniformBindGroup_ARRAY_border = result.bindGroups;

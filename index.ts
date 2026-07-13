@@ -8,6 +8,14 @@ import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSett
 import { WasmCore } from './src/wasm/WasmCore.js';
 import { parseGameModeId } from './src/game/modes/createGameMode.js';
 import type { GameModeId } from './src/game/modes/types.js';
+import { initReplayUI } from './src/replay/replayUI.js';
+import { registerServiceWorker, detectDisplayMode } from './src/pwa/registerServiceWorker.js';
+import { initOfflineBanner } from './src/pwa/offlineBanner.js';
+import { initFullscreenButton } from './src/pwa/fullscreen.js';
+import VersusController from './src/versus/VersusController.js';
+import { initAnnouncer } from './src/a11y/announcer.js';
+import { initKeyboardNavigation, enhanceControlAccessibility } from './src/a11y/keyboardNav.js';
+import { watchReducedMotion } from './src/a11y/accessibility.js';
 
 declare global {
   interface Window {
@@ -42,6 +50,7 @@ uiContainer.innerHTML = `
               <option value="marathon">Marathon</option>
               <option value="sprint">Sprint 40L</option>
               <option value="ultra">Ultra 2:00</option>
+              <option value="versus">Local 2P</option>
             </select>
             <p id="mode-label" class="mode-current-label">Marathon</p>
           </div>
@@ -76,9 +85,27 @@ uiContainer.innerHTML = `
             <canvas id="next-piece-canvas" width="120" height="120"></canvas>
           </div>
 
+          <div class="panel-box p2-panel hold-piece-container" style="display:none">
+            <p class="panel-label">P2 HOLD</p>
+            <canvas id="hold-piece-canvas-p2" width="80" height="80"></canvas>
+          </div>
+          <div class="panel-box p2-panel score-box" style="display:none">
+            <p class="panel-label">P2 SCORE</p>
+            <p id="score-p2" class="panel-value">0</p>
+          </div>
+          <div class="panel-box p2-panel" style="display:none">
+            <p class="panel-label">P2 LINES</p>
+            <p id="lines-p2" class="panel-value">0</p>
+          </div>
+          <div class="panel-box p2-panel next-piece-container" style="display:none">
+            <p class="panel-label">P2 NEXT</p>
+            <canvas id="next-piece-canvas-p2" width="120" height="120"></canvas>
+          </div>
+
           <div class="control-buttons panel-box">
             <button id="start-button">START</button>
             <button id="pause-button">PAUSE</button>
+            <button id="replay-open-btn">REPLAY</button>
             <button id="glitch-button">FX: OFF</button>
             <button id="bloom-button">BLOOM: ON</button>
             <button id="wire-button">WIRE: OFF</button>
@@ -125,6 +152,9 @@ uiContainer.innerHTML = `
       <div class="pause-volume-section">
         <h3>AUDIO</h3>
         <div class="pause-volume-controls">
+          <label class="settings-toggle pause-mute-toggle">
+            <input type="checkbox" id="pause-audio-mute"> Mute all
+          </label>
           <div class="volume-row">
             <label>🎵 Music:</label>
             <input type="range" id="pause-music-volume" min="0" max="100" value="30">
@@ -181,6 +211,25 @@ uiContainer.innerHTML = `
           </select>
         </div>
 
+        <div class="settings-group settings-a11y-row">
+          <label class="settings-label" for="settings-color-palette">Piece colors</label>
+          <select id="settings-color-palette" class="settings-select" aria-label="Color vision palette">
+            <option value="default">Default (neon glass)</option>
+            <option value="deuteranopia">Deuteranopia-friendly</option>
+            <option value="protanopia">Protanopia-friendly</option>
+            <option value="highContrast">High contrast</option>
+          </select>
+        </div>
+
+        <div class="settings-group settings-a11y-row">
+          <label class="settings-label" for="settings-reduced-motion">Reduced motion</label>
+          <select id="settings-reduced-motion" class="settings-select" aria-label="Reduced motion preference">
+            <option value="auto">Auto (system)</option>
+            <option value="on">Always on</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+
         <div class="settings-group settings-renderer-row">
           <span class="settings-label">Renderer</span>
           <p id="settings-renderer-display" class="settings-renderer-text">—</p>
@@ -198,10 +247,13 @@ uiContainer.innerHTML = `
           <div class="control-item"><span class="key">SPACE</span> Hard Drop</div>
           <div class="control-item"><span class="key">C</span> Hold Piece</div>
           <div class="control-item"><span class="key">ESC</span> Pause</div>
+          <div class="control-item versus-controls-hint"><span class="key">P1</span> Arrows + Space/C/X/Z</div>
+          <div class="control-item versus-controls-hint"><span class="key">P2</span> WASD + Q/E/Tab</div>
         </div>
       </div>
       
-      <p class="pause-hint">Press Enter or Escape to resume</p>
+      <p class="pause-hint">Press <kbd>Esc</kbd> or <kbd>Enter</kbd> to resume · <kbd>S</kbd> resume · <kbd>R</kbd> restart</p>
+      <p class="a11y-keyboard-hint">Tab through settings; all controls are keyboard reachable.</p>
     </div>
   </div>
   
@@ -248,6 +300,41 @@ uiContainer.innerHTML = `
 
   const settingsUI = initSettingsUI(view);
 
+  initAnnouncer();
+  initKeyboardNavigation();
+  enhanceControlAccessibility();
+  watchReducedMotion(settingsUI.settings, () => {
+    settingsUI.applyCurrent();
+    settingsUI.syncControls();
+  });
+
+  const applyAudioFromSettings = () => {
+    const s = settingsUI.settings;
+    soundManager.applyAudioSettings({
+      mute: s.mute,
+      sfxVolume: s.sfxVolume,
+      musicVolume: s.musicVolume,
+    });
+    const musicSlider = document.getElementById('music-volume') as HTMLInputElement | null;
+    const pauseMusicSlider = document.getElementById('pause-music-volume') as HTMLInputElement | null;
+    const pauseSfxSlider = document.getElementById('pause-sfx-volume') as HTMLInputElement | null;
+    const muteToggle = document.getElementById('pause-audio-mute') as HTMLInputElement | null;
+    const musicVal = String(Math.round(s.musicVolume * 100));
+    const sfxVal = String(Math.round(s.sfxVolume * 100));
+    if (musicSlider) musicSlider.value = musicVal;
+    if (pauseMusicSlider) pauseMusicSlider.value = musicVal;
+    if (pauseSfxSlider) pauseSfxSlider.value = sfxVal;
+    if (muteToggle) muteToggle.checked = s.mute;
+  };
+  applyAudioFromSettings();
+
+  const persistAudioSettings = (patch: Partial<{ mute: boolean; sfxVolume: number; musicVolume: number }>) => {
+    const next = { ...settingsUI.settings, ...patch };
+    saveGameSettings(next);
+    settingsUI.syncControls();
+    soundManager.applyAudioSettings(patch);
+  };
+
   // Initialize reactive music when sound manager is ready
   soundManager.onReady = () => {
     if (soundManager.audioContext && soundManager.masterGain) {
@@ -271,6 +358,27 @@ uiContainer.innerHTML = `
   window.subliminalReinforcement = subliminal;
 
   const controller = new Controller(game, view, view, soundManager);
+  let versusController: VersusController | null = null;
+
+  const activeController = () =>
+    versusController?.isPlaying || versusController?.isPaused ? versusController : controller;
+
+  const replayUI = initReplayUI({
+    viewWebGPU: view,
+    getCanvas: () => document.getElementById('canvas-webgpu') as HTMLCanvasElement | null,
+  });
+
+  controller.onReplayFinished = (file) => {
+    replayUI.load(file);
+  };
+
+  document.getElementById('replay-open-btn')?.addEventListener('click', () => {
+    if (controller.lastReplayFile) {
+      replayUI.load(controller.lastReplayFile);
+    } else if (!replayUI.loadFromStorage()) {
+      console.warn('[Replay] no recording available yet — finish a run first');
+    }
+  });
 
   // Shared by viewGameEvents (e.g. game-over retry) across all renderer backends.
   (view as { game?: typeof game; controller?: typeof controller }).game = game;
@@ -296,18 +404,43 @@ uiContainer.innerHTML = `
   controller.updateModeHud();
 
   document.getElementById('start-button')!.addEventListener('click', () => {
-      if (!controller.isPlaying) {
-        game.setMode((modeSelect?.value || savedMode) as GameModeId);
-        controller.updateHighScoreDisplay();
-        controller.updateModeHud();
+      const mode = (modeSelect?.value || savedMode) as GameModeId;
+      if (mode === 'versus') {
+        if (controller.isPlaying) {
+          controller.pause();
+          controller.isPlaying = false;
+        }
+        if (!versusController) {
+          const holdP2 = document.getElementById('hold-piece-canvas-p2') as HTMLCanvasElement;
+          const nextP2 = document.getElementById('next-piece-canvas-p2') as HTMLCanvasElement;
+          versusController = new VersusController(
+            view,
+            soundManager,
+            holdPieceCtx,
+            nextPieceCtx,
+            holdP2.getContext('2d')!,
+            nextP2.getContext('2d')!,
+          );
+          (view as { controller?: VersusController }).controller = versusController;
+          window.controller = versusController as unknown as Controller;
+          versusController.updateModeHud();
+        }
+        versusController.play();
+      } else {
+        if (!controller.isPlaying) {
+          game.setMode(mode);
+          controller.updateHighScoreDisplay();
+          controller.updateModeHud();
+        }
+        controller.play();
       }
-      controller.play();
       (document.getElementById('start-button') as HTMLButtonElement).blur();
   });
 
   document.getElementById('pause-button')!.addEventListener('click', () => {
-      controller.togglePause();
+      activeController().togglePause();
       settingsUI.syncControls();
+      applyAudioFromSettings();
       (document.getElementById('pause-button') as HTMLButtonElement).blur();
   });
 
@@ -383,7 +516,8 @@ uiContainer.innerHTML = `
   
   musicVolumeSlider?.addEventListener('input', (e) => {
     const volume = parseInt((e.target as HTMLInputElement).value) / 100;
-    soundManager.musicManager.setVolume(volume);
+    void soundManager.unlockAudio();
+    persistAudioSettings({ musicVolume: volume });
     if (pauseMusicVolumeSlider) {
       pauseMusicVolumeSlider.value = (volume * 100).toString();
     }
@@ -391,7 +525,8 @@ uiContainer.innerHTML = `
 
   pauseMusicVolumeSlider?.addEventListener('input', (e) => {
     const volume = parseInt((e.target as HTMLInputElement).value) / 100;
-    soundManager.musicManager.setVolume(volume);
+    void soundManager.unlockAudio();
+    persistAudioSettings({ musicVolume: volume });
     if (musicVolumeSlider) {
       musicVolumeSlider.value = (volume * 100).toString();
     }
@@ -400,29 +535,38 @@ uiContainer.innerHTML = `
   // Music toggle
   const musicToggleBtn = document.getElementById('music-toggle');
   musicToggleBtn?.addEventListener('click', () => {
-    if (soundManager.musicManager.isMusicPlaying()) {
-      soundManager.musicManager.pause();
-      musicToggleBtn.textContent = 'PLAY MUSIC';
-    } else {
-      soundManager.musicManager.play();
-      musicToggleBtn.textContent = 'PAUSE MUSIC';
-    }
+    void soundManager.unlockAudio().then(() => {
+      if (soundManager.musicManager.isMusicPlaying()) {
+        soundManager.musicManager.pause();
+        musicToggleBtn.textContent = 'PLAY MUSIC';
+      } else {
+        soundManager.musicManager.play();
+        musicToggleBtn.textContent = 'PAUSE MUSIC';
+      }
+    });
   });
 
   // SFX volume control
   const pauseSfxVolumeSlider = document.getElementById('pause-sfx-volume') as HTMLInputElement;
   pauseSfxVolumeSlider?.addEventListener('input', (e) => {
     const volume = parseInt((e.target as HTMLInputElement).value) / 100;
-    soundManager.setSfxVolume(volume);
+    void soundManager.unlockAudio();
+    persistAudioSettings({ sfxVolume: volume });
+  });
+
+  const pauseMuteToggle = document.getElementById('pause-audio-mute') as HTMLInputElement | null;
+  pauseMuteToggle?.addEventListener('change', () => {
+    void soundManager.unlockAudio();
+    persistAudioSettings({ mute: pauseMuteToggle.checked });
   });
 
   // Pause menu buttons
   document.getElementById('resume-button')?.addEventListener('click', () => {
-    controller.resume();
+    activeController().resume();
   });
 
   document.getElementById('restart-button')?.addEventListener('click', () => {
-    controller.reset();
+    activeController().reset();
   });
 
   window.game = game;
@@ -437,4 +581,9 @@ uiContainer.innerHTML = `
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
+
+  detectDisplayMode();
+  initOfflineBanner();
+  initFullscreenButton();
+  registerServiceWorker();
 })();

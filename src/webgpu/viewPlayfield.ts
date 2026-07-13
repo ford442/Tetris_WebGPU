@@ -35,7 +35,9 @@ export function renderPlayfieldBlocks(
   _f32_4: Float32Array,
   MODELMATRIX: Matrix.mat4,
   NORMALMATRIX: Matrix.mat4,
+  worldOffsetX = 0,
 ): number {
+  const worldX = (col: number) => boardWorldX(col) + worldOffsetX;
   const { playfield, activePiece } = state;
   let arrayLength = 0;
   let blockIndex = 0;
@@ -51,7 +53,7 @@ export function renderPlayfieldBlocks(
       const ph = (activePiece.blocks) ? activePiece.blocks.length : 1;
       const centerLX = (typeof activePiece.x === 'number' ? activePiece.x : 0) + pw * 0.5;
       const centerLY = (typeof activePiece.y === 'number' ? activePiece.y : 0) + ph * 0.5;
-      visualEffects.magnetWorldX = boardWorldX(visualX + (centerLX - (activePiece.x || 0)));
+      visualEffects.magnetWorldX = worldX(visualX + (centerLX - (activePiece.x || 0)));
       visualEffects.magnetWorldY = boardWorldY(visualY + (centerLY - (activePiece.y || 0)));
       visualEffects.magnetStrength = 1.0;
     } else {
@@ -98,11 +100,11 @@ export function renderPlayfieldBlocks(
       if (isSolidActivePieceBlock) {
         const relX = colom - activePiece.x;
         const relY = row - activePiece.y;
-        _f32_3[0] = boardWorldX(visualX + relX);
+        _f32_3[0] = worldX(visualX + relX);
         _f32_3[1] = boardWorldY(visualY + relY);
         _f32_3[2] = 0.0;
       } else {
-        _f32_3[0] = boardWorldX(colom);
+        _f32_3[0] = worldX(colom);
         _f32_3[1] = boardWorldY(row);
         _f32_3[2] = 0.0;
       }
@@ -221,7 +223,7 @@ export function renderPlayfieldBlocks(
 
             Matrix.mat4.identity(MODELMATRIX);
             Matrix.mat4.identity(NORMALMATRIX);
-            _f32_3[0] = boardWorldX(startX + lx);
+            _f32_3[0] = worldX(startX + lx);
             _f32_3[1] = boardWorldY(baseRow + ly);
             _f32_3[2] = 0.0;
             Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
@@ -243,6 +245,57 @@ export function renderPlayfieldBlocks(
             blockIndex++;
             batchOffset += 64;
           }
+        }
+      }
+    }
+  }
+
+  // Hard-drop path trail (optional setting)
+  const hdt = visualEffects?.hardDropTrail;
+  if (hdt?.active && hdt.blocks && hdt.timer > 0 && blockIndex < uniformBindGroup_CACHE.length - 8) {
+    const progress = Math.max(0, hdt.timer / hdt.duration);
+    const gap = hdt.endRow - hdt.startRow;
+    const pieceH = hdt.blocks.length;
+    const pieceW = hdt.blocks[0]?.length ?? 0;
+    const colorIdx = hdt.colorIdx || 4;
+    const baseCol = currentTheme[colorIdx] || currentTheme[1] || [0.9, 0.9, 0.9];
+    const numSamples = Math.min(8, Math.max(2, Math.floor(gap * 0.5)));
+
+    for (let s = 0; s < numSamples; s++) {
+      const t = numSamples <= 1 ? 0.5 : s / (numSamples - 1);
+      const fade = 1 - t * 0.85;
+      const alpha = (0.35 + fade * 0.4) * progress;
+      const brightness = 1 + fade * 1.8;
+      const r = Math.min(2, baseCol[0] * brightness);
+      const g = Math.min(2, baseCol[1] * brightness);
+      const b = Math.min(2, baseCol[2] * brightness);
+      const baseRow = hdt.startRow + t * gap;
+
+      for (let ly = 0; ly < pieceH; ly++) {
+        for (let lx = 0; lx < pieceW; lx++) {
+          if (hdt.blocks[ly][lx] === 0) continue;
+          if (blockIndex >= uniformBindGroup_CACHE.length) break;
+          _f32_4[0] = r; _f32_4[1] = g; _f32_4[2] = b; _f32_4[3] = alpha;
+          Matrix.mat4.identity(MODELMATRIX);
+          Matrix.mat4.identity(NORMALMATRIX);
+          _f32_3[0] = worldX(hdt.pieceX + lx);
+          _f32_3[1] = boardWorldY(baseRow + ly);
+          _f32_3[2] = 0;
+          Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
+          const trailBindGroup = uniformBindGroup_CACHE[blockIndex];
+          batchBuffer.set(vpMatrix as Float32Array, batchOffset);
+          batchBuffer.set(MODELMATRIX as Float32Array, batchOffset + 16);
+          batchBuffer.set(NORMALMATRIX as Float32Array, batchOffset + 32);
+          batchBuffer.set(_f32_4, batchOffset + 48);
+          batchBuffer[batchOffset + 52] = 0; batchBuffer[batchOffset + 53] = 0;
+          batchBuffer[batchOffset + 54] = 0; batchBuffer[batchOffset + 55] = 0;
+          batchBuffer[batchOffset + 56] = 0; batchBuffer[batchOffset + 57] = 0;
+          batchBuffer[batchOffset + 58] = 0; batchBuffer[batchOffset + 59] = 0;
+          batchBuffer[batchOffset + 60] = 0; batchBuffer[batchOffset + 61] = 0;
+          batchBuffer[batchOffset + 62] = 0; batchBuffer[batchOffset + 63] = 0;
+          uniformBindGroup_ARRAY[arrayLength++] = trailBindGroup;
+          blockIndex++;
+          batchOffset += 64;
         }
       }
     }
@@ -270,6 +323,7 @@ export function renderPlayfieldBorder(
   NORMALMATRIX: Matrix.mat4,
   dissolveBuffer: GPUBuffer,
   fresnelParamsUniform: GPUBuffer,
+  worldOffsetX = 0,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
     playfield: [
@@ -303,7 +357,7 @@ export function renderPlayfieldBorder(
 
       Matrix.mat4.identity(MODELMATRIX);
       Matrix.mat4.identity(NORMALMATRIX);
-      _f32_3[0] = borderWorldX(colom); _f32_3[1] = borderWorldY(row); _f32_3[2] = 0.0;
+      _f32_3[0] = borderWorldX(colom) + worldOffsetX; _f32_3[1] = borderWorldY(row); _f32_3[2] = 0.0;
       Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
 
       device.queue.writeBuffer(vertexUniformBuffer, offset_ARRAY + 0, vpMatrix as Float32Array);

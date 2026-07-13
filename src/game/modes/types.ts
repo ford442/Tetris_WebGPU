@@ -2,7 +2,7 @@
  * Game mode strategy contracts — win/lose rules and HUD without forking core engine logic.
  */
 
-export type GameModeId = 'marathon' | 'sprint' | 'ultra' | 'cheese' | 'zen';
+export type GameModeId = 'marathon' | 'sprint' | 'ultra' | 'cheese' | 'zen' | 'versus';
 
 export type ModeEndReason = 'continue' | 'victory' | 'defeat';
 

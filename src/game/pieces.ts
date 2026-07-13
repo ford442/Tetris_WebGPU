@@ -13,8 +13,25 @@ export interface Piece {
   _bounds?: { minX: number, maxX: number, minY: number, maxY: number };
 }
 
+/** Seeded or unseeded RNG returning [0, 1). */
+export type Rng = () => number;
+
+/** Mulberry32 — fast deterministic PRNG for replay bags. */
+export function createSeededRng(seed: number): Rng {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class PieceGenerator {
   private bag: string[] = [];
+  private rng: Rng = Math.random;
+  private seed: number | null = null;
 
   createPieceByType(type: string): Piece {
     const piece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type };
@@ -110,11 +127,45 @@ export class PieceGenerator {
     return this.createPieceByType(type);
   }
 
+  /** Pin bag shuffle to a seed (replay / deterministic runs). */
+  setSeed(seed: number): void {
+    this.seed = seed >>> 0;
+    this.rng = createSeededRng(this.seed);
+    this.bag.length = 0;
+  }
+
+  getSeed(): number | null {
+    return this.seed;
+  }
+
+  clearBag(): void {
+    this.bag.length = 0;
+  }
+
+  /** Ensure at least `count` piece types are available without consuming. */
+  ensureBagFilled(count: number): void {
+    while (this.bag.length < count) {
+      this.generateBag();
+    }
+  }
+
+  /** Peek the next N piece type ids from the 7-bag (non-consuming). */
+  peekTypes(count: number): string[] {
+    const n = Math.max(0, count);
+    if (n === 0) return [];
+    this.ensureBagFilled(n);
+    return this.bag.slice(0, n);
+  }
+
+  /** Preview pieces for UI — does not advance the bag. */
+  peekPieces(count: number): Piece[] {
+    return this.peekTypes(count).map((type) => this.createPieceByType(type));
+  }
+
   generateBag(): void {
     const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-    // Shuffle
     for (let i = pieces.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(this.rng() * (i + 1));
       [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
     }
     this.bag.push(...pieces);

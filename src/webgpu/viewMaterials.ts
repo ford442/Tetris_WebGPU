@@ -113,52 +113,121 @@ export function renderPiece(
   currentTheme: ThemeColors,
   blockSize: number = 20
 ) {
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  renderMaterialBlock(ctx, piece, currentTheme, blockSize, 1);
+}
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+/** Draw hold / next preview with beveled blocks matching board material colors. */
+export function renderMaterialBlock(
+  ctx: CanvasRenderingContext2D,
+  piece: Piece | null,
+  currentTheme: ThemeColors,
+  blockSize: number,
+  slotScale = 1,
+): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = 'rgba(8, 12, 24, 0.55)';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.strokeStyle = 'rgba(120, 180, 255, 0.12)';
   ctx.lineWidth = 1;
-  const gridSize = blockSize;
-
-  ctx.beginPath();
-  for (let x = 0; x <= ctx.canvas.width; x += gridSize) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, ctx.canvas.height);
-  }
-  for (let y = 0; y <= ctx.canvas.height; y += gridSize) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(ctx.canvas.width, y);
-  }
-  ctx.stroke();
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
 
   if (!piece) return;
 
   const { blocks } = piece;
-  const themeColors = Object.values(currentTheme).filter(
-    (v): v is number[] => Array.isArray(v) && v.length >= 3
-  );
-
-  const offsetX = (ctx.canvas.width - blocks[0].length * blockSize) / 2;
-  const offsetY = (ctx.canvas.height - blocks.length * blockSize) / 2;
+  const bs = blockSize * slotScale;
+  const offsetX = (w - blocks[0].length * bs) / 2;
+  const offsetY = (h - blocks.length * bs) / 2;
 
   blocks.forEach((row: number[], y: number) => {
     row.forEach((value: number, x: number) => {
-      if (value > 0) {
-        const color = themeColors[value] as number[] | undefined;
-        if (!color) return;
-        const px = offsetX + x * blockSize;
-        const py = offsetY + y * blockSize;
+      if (value <= 0) return;
+      const color = currentTheme[value] as number[] | undefined;
+      if (!color || color.length < 3) return;
+      const px = offsetX + x * bs;
+      const py = offsetY + y * bs;
+      const r = Math.floor(color[0] * 255);
+      const g = Math.floor(color[1] * 255);
+      const b = Math.floor(color[2] * 255);
 
+      const grad = ctx.createLinearGradient(px, py, px + bs, py + bs);
+      grad.addColorStop(0, `rgba(${Math.min(255, r + 40)}, ${Math.min(255, g + 40)}, ${Math.min(255, b + 40)}, 1)`);
+      grad.addColorStop(0.45, `rgb(${r}, ${g}, ${b})`);
+      grad.addColorStop(1, `rgb(${Math.floor(r * 0.55)}, ${Math.floor(g * 0.55)}, ${Math.floor(b * 0.55)})`);
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(px + 1, py + 1, bs - 2, bs - 2);
+
+      ctx.strokeStyle = `rgba(255, 255, 255, 0.35)`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 1.5, py + 1.5, bs - 3, bs - 3);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillRect(px + 2, py + 2, bs * 0.45, bs * 0.18);
+    });
+  });
+}
+
+/** Stack multiple upcoming pieces in one side-panel canvas. */
+export function renderNextQueue(
+  ctx: CanvasRenderingContext2D,
+  queue: Piece[],
+  currentTheme: ThemeColors,
+  blockSize = 18,
+): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(8, 12, 24, 0.55)';
+  ctx.fillRect(0, 0, w, h);
+
+  if (!queue.length) return;
+
+  const slotH = h / queue.length;
+  for (let i = 0; i < queue.length; i++) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, i * slotH, w, slotH);
+    ctx.clip();
+    const piece = queue[i];
+    const rows = piece.blocks.length;
+    const cols = piece.blocks[0]?.length ?? 0;
+    const bs = Math.min(blockSize, Math.floor(Math.min(w / (cols + 1), slotH / (rows + 1))));
+    const offsetX = (w - cols * bs) / 2;
+    const offsetY = i * slotH + (slotH - rows * bs) / 2;
+
+    const themeColors = Object.values(currentTheme).filter(
+      (v): v is number[] => Array.isArray(v) && v.length >= 3,
+    );
+
+    piece.blocks.forEach((row, y) => {
+      row.forEach((value, x) => {
+        if (value <= 0) return;
+        const color = themeColors[value];
+        if (!color) return;
+        const px = offsetX + x * bs;
+        const py = offsetY + y * bs;
         const r = Math.floor(color[0] * 255);
         const g = Math.floor(color[1] * 255);
         const b = Math.floor(color[2] * 255);
-        const cssColor = `rgb(${r}, ${g}, ${b})`;
-
-        ctx.save();
-        ctx.strokeStyle = cssColor;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(px + 2, py + 2, blockSize - 4, blockSize - 4);
-        ctx.restore();
-      }
+        const grad = ctx.createLinearGradient(px, py, px + bs, py + bs);
+        grad.addColorStop(0, `rgba(${Math.min(255, r + 35)}, ${Math.min(255, g + 35)}, ${Math.min(255, b + 35)}, 1)`);
+        grad.addColorStop(1, `rgb(${Math.floor(r * 0.6)}, ${Math.floor(g * 0.6)}, ${Math.floor(b * 0.6)})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(px + 1, py + 1, bs - 2, bs - 2);
+      });
     });
-  });
+    ctx.restore();
+
+    if (i < queue.length - 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.moveTo(4, (i + 1) * slotH);
+      ctx.lineTo(w - 4, (i + 1) * slotH);
+      ctx.stroke();
+    }
+  }
 }

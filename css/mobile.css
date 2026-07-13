@@ -1,0 +1,166 @@
+/* Mobile / PWA layout — safe areas, landscape, offline banner */
+
+html {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+body {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+#ui-container {
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-sizing: border-box;
+}
+
+.pwa-standalone .header h1 {
+  font-size: 2.2rem;
+}
+
+.pwa-standalone .main-layout {
+  width: 92%;
+}
+
+.offline-banner {
+  position: fixed;
+  top: env(safe-area-inset-top, 0);
+  left: 0;
+  right: 0;
+  z-index: 500;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  background: rgba(40, 20, 80, 0.92);
+  color: #bdf;
+  border-bottom: 1px solid rgba(140, 200, 255, 0.35);
+  pointer-events: none;
+}
+
+.pwa-update-toast {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(10, 10, 30, 0.95);
+  border: 1px solid rgba(140, 200, 255, 0.4);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.pwa-update-toast button {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+#fullscreen-button {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0));
+  right: calc(8px + env(safe-area-inset-right, 0));
+  z-index: 200;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .main-layout {
+    width: 96%;
+    max-width: none;
+    flex-direction: column;
+    height: auto;
+    gap: 8px;
+  }
+
+  .left-panel,
+  .right-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .panel-box {
+    padding: 10px;
+    min-width: 72px;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .control-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .control-buttons button {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    margin: 2px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .header h1 {
+    font-size: 1.6rem;
+    margin-bottom: 4px;
+  }
+
+  .main-layout {
+    flex-direction: row;
+    width: 98%;
+    height: calc(100dvh - 48px);
+    align-items: stretch;
+  }
+
+  .left-panel,
+  .right-panel {
+    flex-direction: column;
+    width: 22%;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  .panel-box {
+    padding: 8px;
+  }
+
+  .panel-label {
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+  }
+
+  .panel-value {
+    font-size: 1.1rem;
+  }
+
+  #fullscreen-button {
+    top: calc(4px + env(safe-area-inset-top, 0));
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  .mode-select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+.is-offline .video-toggle,
+.is-offline #video-toggle {
+  opacity: 0.5;
+}

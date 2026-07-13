@@ -3,6 +3,8 @@
  * Creates dramatic visual effects for game over screen
  */
 
+import type { RunStatsSnapshot } from '../game/runStats.js';
+
 export interface GameOverStats {
   score: number;
   lines: number;
@@ -14,6 +16,7 @@ export interface GameOverStats {
   modeHighScoreLabel?: string;
   elapsedMs?: number;
   metric?: 'score' | 'time';
+  runStats?: RunStatsSnapshot;
 }
 
 export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
@@ -58,6 +61,18 @@ export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
     : `<div class="final-high-score">${displayValue}</div>
        <div class="high-score-label">${bestLabel}: ${bestDisplay}</div>`;
 
+  const rs = stats.runStats;
+  const timeStr = stats.elapsedMs !== undefined ? formatRunTime(stats.elapsedMs) : '—';
+  const detailStats = rs ? `
+        <div class="stats-grid">
+          <div class="stat-box"><span class="stat-label">TIME</span><span class="stat-value">${timeStr}</span></div>
+          <div class="stat-box"><span class="stat-label">PPS</span><span class="stat-value">${rs.pps.toFixed(2)}</span></div>
+          <div class="stat-box"><span class="stat-label">APM</span><span class="stat-value">${Math.round(rs.apm)}</span></div>
+          <div class="stat-box"><span class="stat-label">PEAK COMBO</span><span class="stat-value">${rs.peakCombo > 0 ? `x${rs.peakCombo}` : '—'}</span></div>
+          <div class="stat-box"><span class="stat-label">PEAK B2B</span><span class="stat-value">${rs.peakB2BChain > 1 ? `x${rs.peakB2BChain}` : '—'}</span></div>
+          <div class="stat-box"><span class="stat-label">FINESSE−</span><span class="stat-value">${rs.finesseFaults}</span></div>
+        </div>` : '';
+
   overlay.innerHTML = `
     <div class="game-over-content">
       ${titleHtml}
@@ -75,9 +90,11 @@ export function createGameOverOverlay(stats: GameOverStats): HTMLElement {
             <span class="stat-value">${stats.level}</span>
           </div>
         </div>
+        ${detailStats}
       </div>
       <div class="game-over-buttons">
         <button id="game-over-retry" class="game-over-btn retry">TRY AGAIN</button>
+        <button id="game-over-share" class="game-over-btn share">SHARE SCORE</button>
         <button id="game-over-menu" class="game-over-btn menu">MENU</button>
       </div>
       <p class="game-over-hint">Press ENTER to restart</p>
@@ -250,6 +267,14 @@ export function addGameOverStyles(): void {
       display: flex;
       gap: 40px;
     }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(90px, 1fr));
+      gap: 12px 20px;
+      width: 100%;
+      margin-top: 8px;
+    }
     
     .stat-box {
       display: flex;
@@ -299,6 +324,17 @@ export function addGameOverStyles(): void {
       background: rgba(255, 51, 51, 0.4);
       transform: scale(1.05);
       box-shadow: 0 0 20px rgba(255, 51, 51, 0.4);
+    }
+
+    .game-over-btn.share {
+      background: rgba(80, 160, 255, 0.15);
+      border-color: #5af;
+      color: #8cf;
+    }
+
+    .game-over-btn.share:hover {
+      background: rgba(80, 160, 255, 0.35);
+      transform: scale(1.05);
     }
     
     .game-over-btn.menu {

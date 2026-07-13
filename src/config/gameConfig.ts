@@ -48,6 +48,15 @@ export const GHOST_CONFIG = {
   ALPHA: 0.3,
   /** Whether to show ghost piece */
   ENABLED: true,
+  /** Fading trail along hard-drop path (GPU) */
+  DROP_TRAIL: true,
+} as const;
+
+// Next-piece preview queue (7-bag aware)
+export const NEXT_QUEUE_CONFIG = {
+  DEFAULT_DEPTH: 5,
+  MIN_DEPTH: 1,
+  MAX_DEPTH: 5,
 } as const;
 
 // Default exports for convenience

@@ -52,6 +52,9 @@ describe('gameSettings', () => {
 
   it('persists and reloads settings', () => {
     const settings = settingsFromPreset('medium', { reactiveVideo: false, glitch: true });
+    settings.mute = true;
+    settings.sfxVolume = 0.42;
+    settings.musicVolume = 0.21;
     saveGameSettings(settings);
     const raw = storage.getItem(SETTINGS_STORAGE_KEY);
     expect(raw).toBeTruthy();
@@ -59,6 +62,9 @@ describe('gameSettings', () => {
     expect(loaded.quality).toBe('medium');
     expect(loaded.reactiveVideo).toBe(false);
     expect(loaded.glitch).toBe(true);
+    expect(loaded.mute).toBe(true);
+    expect(loaded.sfxVolume).toBe(0.42);
+    expect(loaded.musicVolume).toBe(0.21);
   });
 
   it('migrates legacy reactive video flag when settings missing', () => {

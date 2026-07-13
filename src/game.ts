@@ -5,15 +5,24 @@ import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
 import { compactClearedRows, isPlayfieldEmpty } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import type { GameState } from './game/gameState.js';
+import { RunStats } from './game/runStats.js';
+import { NEXT_QUEUE_CONFIG } from './config/gameConfig.js';
+import { loadGameSettings } from './config/gameSettings.js';
 import { createGameMode, parseGameModeId } from './game/modes/createGameMode.js';
 import type { GameMode, GameModeId, ModeContext, ModeGameHooks } from './game/modes/types.js';
 import { getModeLeaderboard } from './game/modeLeaderboard.js';
 import { WasmCore } from './wasm/WasmCore.js';
 import { wasmLogger } from './utils/logger.js';
+import { injectGarbageRows } from './versus/garbage.js';
 import type { IView } from './view/IView.js';
 
 export type { GameState } from './game/gameState.js';
 export type { GameModeId } from './game/modes/types.js';
+
+export interface GameOptions {
+  /** Use a private playfield (required for 2P — WASM memory is single-board). */
+  dedicatedPlayfield?: boolean;
+}
 
 export default class Game implements ModeGameHooks {
   gameOver!: boolean;
@@ -25,8 +34,11 @@ export default class Game implements ModeGameHooks {
 
   activPiece!: Piece;
   nextPiece!: Piece;
+  private nextQueue: Piece[] = [];
+  nextQueueDepth: number = NEXT_QUEUE_CONFIG.DEFAULT_DEPTH;
   holdPieceObj: Piece | null = null;
   canHold: boolean = true;
+  readonly runStats = new RunStats();
 
   // Lock Delay
   lockTimer: number = 0;
@@ -78,6 +90,13 @@ export default class Game implements ModeGameHooks {
 
   private _linesClearedCache: number[] = [];
 
+  private hardDropSnapshot: { blocks: number[][]; x: number } | null = null;
+
+  /** Incoming garbage rows from opponent (applied on next lock). */
+  pendingGarbageRows = 0;
+
+  private useWasmCollision = true;
+
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
   };
@@ -87,6 +106,7 @@ export default class Game implements ModeGameHooks {
     level: 1,
     lines: 0,
     nextPiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
+    nextQueue: [],
     holdPiece: null,
     activePiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
     isGameOver: false,
@@ -111,24 +131,44 @@ export default class Game implements ModeGameHooks {
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
-    isTSpinReady: false
+    isTSpinReady: false,
+    runStats: {
+      piecesPlaced: 0,
+      moves: 0,
+      rotations: 0,
+      hardDrops: 0,
+      finesseFaults: 0,
+      peakCombo: 0,
+      peakB2BChain: 0,
+      elapsedMs: 0,
+      pps: 0,
+      apm: 0,
+    },
   };
 
   // View reference for reactive system hooks
   view: IView | null = null;
 
-  constructor() {
+  constructor(options?: GameOptions) {
     this.pieceGenerator = new PieceGenerator();
-    // --- WASM INTEGRATION ---
-    try {
-        this.playfield = WasmCore.get().playfieldView;
-        if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
-            wasmLogger.error("Memory View mismatch");
-            this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight); // Fallback
-        }
-    } catch (e) {
-        wasmLogger.warn("Not loaded, using fallback memory");
-        this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+    const dedicated = options?.dedicatedPlayfield === true;
+    if (dedicated) {
+      this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+      this.useWasmCollision = false;
+    } else {
+      // --- WASM INTEGRATION ---
+      try {
+          this.playfield = WasmCore.get().playfieldView;
+          if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
+              wasmLogger.error("Memory View mismatch");
+              this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+              this.useWasmCollision = false;
+          }
+      } catch (e) {
+          wasmLogger.warn("Not loaded, using fallback memory");
+          this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+          this.useWasmCollision = false;
+      }
     }
     // ------------------------
     this.collisionDetector = new CollisionDetector(this.playfield);
@@ -187,8 +227,45 @@ export default class Game implements ModeGameHooks {
   tickMode(dt: number): void {
     if (this.isRunEnded) return;
     this.modeElapsedMs += dt;
+    this.runStats.tick(dt);
     this.mode.onTick(dt, this.buildModeContext());
     this.evaluateModeEnd();
+  }
+
+  setNextQueueDepth(depth: number): void {
+    this.nextQueueDepth = Math.max(
+      NEXT_QUEUE_CONFIG.MIN_DEPTH,
+      Math.min(NEXT_QUEUE_CONFIG.MAX_DEPTH, Math.floor(depth)),
+    );
+    while (this.nextQueue.length > this.nextQueueDepth) {
+      this.nextQueue.pop();
+    }
+    this.refillNextQueue();
+  }
+
+  /** Preview types from bag — validates UI matches generator order. */
+  peekUpcomingTypes(count = this.nextQueueDepth): string[] {
+    const fromQueue = this.nextQueue.slice(0, count).map((p) => p.type);
+    const need = count - fromQueue.length;
+    if (need <= 0) return fromQueue.slice(0, count);
+    return [...fromQueue, ...this.pieceGenerator.peekTypes(need)];
+  }
+
+  private applyUxSettings(): void {
+    if (typeof localStorage === 'undefined') return;
+    const settings = loadGameSettings();
+    this.nextQueueDepth = settings.nextQueueDepth;
+  }
+
+  private syncNextPieceField(): void {
+    this.nextPiece = this.nextQueue[0] ?? this.nextPiece;
+  }
+
+  private refillNextQueue(): void {
+    while (this.nextQueue.length < this.nextQueueDepth) {
+      this.nextQueue.push(this.createPiece());
+    }
+    this.syncNextPieceField();
   }
 
   private evaluateModeEnd(): void {
@@ -316,6 +393,12 @@ export default class Game implements ModeGameHooks {
     this._gameStateCache.level = this.level;
     this._gameStateCache.lines = this.lines;
     this._gameStateCache.nextPiece = this.nextPiece;
+    if (this._gameStateCache.nextQueue.length !== this.nextQueue.length) {
+      this._gameStateCache.nextQueue = new Array(this.nextQueue.length);
+    }
+    for (let i = 0; i < this.nextQueue.length; i++) {
+      this._gameStateCache.nextQueue[i] = this.nextQueue[i];
+    }
     this._gameStateCache.holdPiece = this.holdPieceObj;
     this._gameStateCache.activePiece = this.activPiece;
     this._gameStateCache.isGameOver = this.gameOver;
@@ -344,6 +427,7 @@ export default class Game implements ModeGameHooks {
     this._gameStateCache.lastDropDistance = this.lastDropDistance;
     this._gameStateCache.scoreEvent = this.scoreEvent;
     this._gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
+    this._gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
 
     return this._gameStateCache;
   }
@@ -386,6 +470,11 @@ export default class Game implements ModeGameHooks {
         this.isTSpin = false;
     }
 
+    this.hardDropSnapshot = {
+      blocks: this.activPiece.blocks,
+      x: this.activPiece.x,
+    };
+
     const distance = ghostY - this.activPiece.y;
     this.activPiece.y = ghostY;
 
@@ -426,6 +515,11 @@ export default class Game implements ModeGameHooks {
     if (this.activPiece.y !== ghostY) {
         this.isTSpin = false;
     }
+
+    this.hardDropSnapshot = {
+      blocks: this.activPiece.blocks,
+      x: this.activPiece.x,
+    };
 
     const distance = ghostY - this.activPiece.y;
     this.activPiece.y = ghostY;
@@ -474,17 +568,25 @@ export default class Game implements ModeGameHooks {
         if (wasTSpin) this.triggerTSpinReactive('normal');
         if (isAllClear) this.view?.onPerfectClearReactive?.();
         this.notifyModeLineClear(linesScore.length);
+        if (this.scoreEvent) {
+          this.runStats.onLineClear(this.scoreEvent.combo, this.scoreEvent.backToBack);
+        }
     } else {
         this.scoringSystem.resetCombo();
         this.scoreEvent = null;
     }
   }
 
-  reset(): void {
+  reset(options?: { seed?: number }): void {
+    if (options?.seed !== undefined) {
+      this.pieceGenerator.setSeed(options.seed);
+    }
     this.scoringSystem.reset();
     this.gameOver = false;
     this.victory = false;
     this.modeElapsedMs = 0;
+    this.runStats.reset();
+    this.applyUxSettings();
     this.mode.onReset(this);
     this.playfield.fill(0); // Efficient clear
     this.collisionDetector.updatePlayfield(this.playfield);
@@ -493,8 +595,17 @@ export default class Game implements ModeGameHooks {
     this.lockTimer = 0;
     this.isTSpin = false;
 
+    this.nextQueue.length = 0;
     this.activPiece = this.createPiece();
-    this.nextPiece = this.createPiece();
+    this.refillNextQueue();
+  }
+
+  getReplaySeed(): number | null {
+    return this.pieceGenerator.getSeed();
+  }
+
+  getHardDropSnapshot(): { blocks: number[][]; x: number } | null {
+    return this.hardDropSnapshot;
   }
 
   // Called every frame (CPU line detection — used by unit tests)
@@ -575,6 +686,9 @@ export default class Game implements ModeGameHooks {
               this.triggerLevelUpReactive(this.level);
           }
           this.notifyModeLineClear(linesScore.length);
+          if (this.scoreEvent) {
+            this.runStats.onLineClear(this.scoreEvent.combo, this.scoreEvent.backToBack);
+          }
       } else {
           this.scoringSystem.resetCombo();
           this.scoreEvent = null;
@@ -782,10 +896,13 @@ export default class Game implements ModeGameHooks {
   }
 
   hasCollision(): boolean {
-    return this.collisionDetector.hasCollision(this.activPiece);
+    return this.hasCollisionPiece(this.activPiece);
   }
 
   hasCollisionPiece(piece: Piece): boolean {
+    if (!this.useWasmCollision) {
+      return this.collisionDetector.hasCollision(piece);
+    }
     // --- WASM ACCELERATION ---
     let count = 0;
     
@@ -833,8 +950,10 @@ export default class Game implements ModeGameHooks {
   }
 
   updatePieces(): void {
-    this.activPiece = this.nextPiece;
-    this.nextPiece = this.createPiece();
+    this.applyPendingGarbage();
+    this.runStats.onPieceLocked();
+    this.activPiece = this.nextQueue.shift()!;
+    this.refillNextQueue();
     this.canHold = true;
     this.lockTimer = 0;
     this.lockResets = 0;
@@ -865,7 +984,7 @@ export default class Game implements ModeGameHooks {
 
   /** GPU line detection + CPU compaction (falls back to clearLine when GPU unavailable). */
   async clearLineAsync(): Promise<number[]> {
-    if (this.view?.gpuLineClearReady) {
+    if (this.view?.gpuLineClearReady && this.useWasmCollision) {
       const lines = await this.view.detectLinesGpu(this.playfield);
       if (lines.length > 0) {
         compactClearedRows(
@@ -883,13 +1002,35 @@ export default class Game implements ModeGameHooks {
     return this.clearLine();
   }
 
+  /** Queue garbage rows from opponent (applied before next piece spawns). */
+  queueGarbage(rows: number): void {
+    if (rows > 0) this.pendingGarbageRows += rows;
+  }
+
+  private applyPendingGarbage(): void {
+    if (this.pendingGarbageRows <= 0 || this.gameOver) return;
+    const rows = this.pendingGarbageRows;
+    this.pendingGarbageRows = 0;
+    const overflow = injectGarbageRows(
+      this.playfield,
+      this.playfieldWidth,
+      this.playfieldHeight,
+      rows,
+    );
+    this.collisionDetector.updatePlayfield(this.playfield);
+    if (overflow) {
+      this.gameOver = true;
+      this.view?.onGameOverReactive?.();
+    }
+  }
+
   hold(): void {
       if (!this.canHold) return;
 
       if (!this.holdPieceObj) {
           this.holdPieceObj = this.activPiece;
-          this.activPiece = this.nextPiece;
-          this.nextPiece = this.createPiece();
+          this.activPiece = this.nextQueue.shift()!;
+          this.refillNextQueue();
       } else {
           const temp = this.activPiece;
           this.activPiece = this.holdPieceObj;

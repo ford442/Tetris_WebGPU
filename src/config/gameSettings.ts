@@ -8,6 +8,11 @@ import {
   type QualityPreset,
   type QualityPresetValues,
 } from './renderConfig.js';
+import { VOLUME_CONFIG } from './audioConfig.js';
+import { GHOST_CONFIG, NEXT_QUEUE_CONFIG } from './gameConfig.js';
+import type { ColorPaletteId } from '../a11y/colorPalettes.js';
+import { parseColorPaletteId } from '../a11y/colorPalettes.js';
+import type { ReducedMotionPref } from '../a11y/accessibility.js';
 
 export type GpuPowerPreference = 'auto' | 'high-performance' | 'low-power';
 
@@ -26,6 +31,20 @@ export interface GameSettings {
   crt: boolean;
   fxaa: boolean;
   gpuPower: GpuPowerPreference;
+  /** Master mute — persisted. */
+  mute: boolean;
+  /** SFX bus 0–1 */
+  sfxVolume: number;
+  /** Music bus 0–1 */
+  musicVolume: number;
+  /** Next-piece preview depth (1–5, 7-bag order). */
+  nextQueueDepth: number;
+  /** Ghost trail along hard-drop path. */
+  ghostDropTrail: boolean;
+  /** Piece tint palette for color vision accessibility. */
+  colorPalette: ColorPaletteId;
+  /** Reduced motion: auto follows OS, on/off override. */
+  reducedMotion: ReducedMotionPref;
 }
 
 export const SETTINGS_STORAGE_KEY = 'tetris_settings';
@@ -86,6 +105,13 @@ export function settingsFromPreset(
     crt: p.crt,
     fxaa: p.fxaa,
     gpuPower: overrides.gpuPower ?? 'auto',
+    mute: false,
+    sfxVolume: VOLUME_CONFIG.SFX,
+    musicVolume: VOLUME_CONFIG.MUSIC,
+    nextQueueDepth: NEXT_QUEUE_CONFIG.DEFAULT_DEPTH,
+    ghostDropTrail: GHOST_CONFIG.DROP_TRAIL,
+    colorPalette: 'default',
+    reducedMotion: 'auto',
   };
 }
 
@@ -115,6 +141,11 @@ function parseQuality(value: unknown): SettingsQuality {
   return 'custom';
 }
 
+function parseReducedMotion(value: unknown, fallback: ReducedMotionPref): ReducedMotionPref {
+  if (value === 'auto' || value === 'on' || value === 'off') return value;
+  return fallback;
+}
+
 /** Parse raw JSON from localStorage into validated GameSettings. */
 export function parseGameSettings(raw: unknown, fallback: GameSettings = createDefaultSettings()): GameSettings {
   if (!raw || typeof raw !== 'object') return { ...fallback };
@@ -142,6 +173,18 @@ export function parseGameSettings(raw: unknown, fallback: GameSettings = createD
     crt: parseBool(o.crt, base.crt),
     fxaa: parseBool(o.fxaa, base.fxaa),
     gpuPower: parseGpuPower(o.gpuPower),
+    mute: parseBool(o.mute, fallback.mute),
+    sfxVolume: parseNumber(o.sfxVolume, fallback.sfxVolume),
+    musicVolume: parseNumber(o.musicVolume, fallback.musicVolume),
+    nextQueueDepth: Math.max(
+      NEXT_QUEUE_CONFIG.MIN_DEPTH,
+      Math.min(NEXT_QUEUE_CONFIG.MAX_DEPTH, parseNumber(o.nextQueueDepth, fallback.nextQueueDepth)),
+    ),
+    ghostDropTrail: parseBool(o.ghostDropTrail, fallback.ghostDropTrail),
+    colorPalette: parseColorPaletteId(
+      typeof o.colorPalette === 'string' ? o.colorPalette : fallback.colorPalette,
+    ),
+    reducedMotion: parseReducedMotion(o.reducedMotion, fallback.reducedMotion),
   };
 
   if (settings.quality === 'custom') {

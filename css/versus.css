@@ -1,0 +1,37 @@
+/* Local 2P split-screen layout */
+
+body.versus-layout .header h1 {
+  font-size: 2rem;
+}
+
+body.versus-layout .main-layout {
+  width: 94%;
+  max-width: 1100px;
+}
+
+body.versus-layout .left-panel .panel-label:first-child,
+body.versus-layout .left-panel .hold-piece-container .panel-label {
+  color: #8cf;
+}
+
+body.versus-layout .p2-panel .panel-label {
+  color: #f8c;
+}
+
+body.versus-layout .versus-controls-hint {
+  display: list-item;
+}
+
+.pause-controls .versus-controls-hint {
+  display: none;
+}
+
+body.versus-layout .combo-display {
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  body.versus-layout .main-layout {
+    width: 98%;
+  }
+}

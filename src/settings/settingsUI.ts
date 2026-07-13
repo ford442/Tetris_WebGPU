@@ -14,6 +14,12 @@ import {
   type SettingsQuality,
 } from '../config/gameSettings.js';
 import { getRendererPreference } from '../view/rendererPreference.js';
+import {
+  COLOR_PALETTE_IDS,
+  COLOR_PALETTE_LABELS,
+  type ColorPaletteId,
+} from '../a11y/colorPalettes.js';
+import type { ReducedMotionPref } from '../a11y/accessibility.js';
 
 type SettingsView = IView & {
   applyGameSettings?(settings: GameSettings): void;
@@ -83,6 +89,8 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
   const toggleGlitch = document.getElementById('settings-glitch') as HTMLInputElement | null;
   const toggleFilmGrain = document.getElementById('settings-film-grain') as HTMLInputElement | null;
   const gpuPowerSelect = document.getElementById('settings-gpu-power') as HTMLSelectElement | null;
+  const colorPaletteSelect = document.getElementById('settings-color-palette') as HTMLSelectElement | null;
+  const reducedMotionSelect = document.getElementById('settings-reduced-motion') as HTMLSelectElement | null;
   const rendererDisplay = document.getElementById('settings-renderer-display');
   const qualityCustomHint = document.getElementById('settings-quality-custom-hint');
 
@@ -114,6 +122,8 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
     if (toggleGlitch) toggleGlitch.checked = settings.glitch;
     if (toggleFilmGrain) toggleFilmGrain.checked = settings.filmGrain;
     if (gpuPowerSelect) gpuPowerSelect.value = settings.gpuPower;
+    if (colorPaletteSelect) colorPaletteSelect.value = settings.colorPalette;
+    if (reducedMotionSelect) reducedMotionSelect.value = settings.reducedMotion;
     updateRendererDisplay();
   }
 
@@ -167,6 +177,18 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
     if (suppressEvents) return;
     const gpuPower = (gpuPowerSelect.value as GpuPowerPreference) || 'auto';
     persistAndApply({ ...settings, gpuPower }, { reloadOnGpuChange: true });
+  });
+
+  colorPaletteSelect?.addEventListener('change', () => {
+    if (suppressEvents) return;
+    const colorPalette = (colorPaletteSelect.value as ColorPaletteId) || 'default';
+    persistAndApply({ ...settings, colorPalette });
+  });
+
+  reducedMotionSelect?.addEventListener('change', () => {
+    if (suppressEvents) return;
+    const reducedMotion = (reducedMotionSelect.value as ReducedMotionPref) || 'auto';
+    persistAndApply({ ...settings, reducedMotion });
   });
 
   syncControls();

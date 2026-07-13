@@ -4,6 +4,8 @@
  */
 
 import { videoLogger } from '../utils/logger.js';
+import { levelToVideoIndex, resolveVideoUrl } from '../config/videoConfig.js';
+import { probeVideoAvailability, resolveLevelVideoSrc } from './videoManifest.js';
 
 // Video background library - maps bg1.mp4–bg15.mp4 across 15 level tiers
 export const VIDEO_BACKGROUNDS = {
@@ -273,6 +275,15 @@ export class ReactiveVideoBackground {
 
   // Video playback state
   isVideoPlaying: boolean = false;
+  /** When false, skip MP4 loads and rely on procedural GPU background. */
+  videosEnabled: boolean = true;
+  private availableFiles: Set<string> = new Set();
+  private assetsReady: boolean = false;
+  private preloadVideo: HTMLVideoElement | null = null;
+  private preloadedSrc: string | null = null;
+  private preloadedLevel: number = -1;
+  /** Procedural shader always drawn under video to avoid black flashes. */
+  readonly proceduralUnderlay: boolean = true;
   
   // NEW: Sea creature state for bioluminescent level
   seaCreatureIntensity: number = 0;     // Current creature reactivity (0-1)
@@ -294,8 +305,56 @@ export class ReactiveVideoBackground {
     
     this.updatePosition(width, height);
     
+    // Probe manifest / HEAD — fresh clones without MP4s use procedural only
+    void this.initializeAssets();
+
     // Setup animation loop for smooth effects
     this.animate();
+  }
+
+  /** Probe which MP4s exist; disables video path when none are reachable. */
+  async initializeAssets(): Promise<void> {
+    if (this.assetsReady) return;
+    this.availableFiles = await probeVideoAvailability();
+    this.videosEnabled = this.availableFiles.size > 0;
+    this.assetsReady = true;
+    if (!this.videosEnabled) {
+      this.isVideoPlaying = false;
+      this.videoElement.style.display = 'none';
+      this.secondaryVideo.style.display = 'none';
+      videoLogger.info('No level videos found — procedural background active');
+    }
+  }
+
+  whenAssetsReady(): Promise<void> {
+    return this.initializeAssets();
+  }
+
+  private resolveSrcForLevel(level: number): string | null {
+    if (!this.videosEnabled) return null;
+    return resolveLevelVideoSrc(level, this.availableFiles);
+  }
+
+  /** Warm the next level clip during play to avoid transition hitches. */
+  preloadForLevel(level: number): void {
+    if (!this.videosEnabled) return;
+    const nextLevel = Math.min(level + 1, 14);
+    const src = this.resolveSrcForLevel(nextLevel);
+    if (!src || src === this.preloadedSrc) return;
+
+    if (!this.preloadVideo) {
+      this.preloadVideo = document.createElement('video');
+      this.preloadVideo.muted = true;
+      this.preloadVideo.playsInline = true;
+      this.preloadVideo.preload = 'auto';
+      this.preloadVideo.crossOrigin = 'anonymous';
+      this.preloadVideo.style.display = 'none';
+      this.parentElement.appendChild(this.preloadVideo);
+    }
+    this.preloadedLevel = nextLevel;
+    this.preloadedSrc = src;
+    this.preloadVideo.src = src;
+    this.preloadVideo.load();
   }
 
   private createVideoElement(): HTMLVideoElement {
@@ -324,27 +383,19 @@ export class ReactiveVideoBackground {
     });
 
     video.addEventListener('error', () => {
-      videoLogger.warn('Failed to load video, using fallback');
-      this.isVideoPlaying = false;
-      // Try fallback if available
-      const currentSrc = video.src; // browser-expanded absolute URL
+      videoLogger.warn('Failed to load video, using procedural fallback');
+      const currentSrc = video.src;
       const bgKey = this.getBackgroundForLevel(this.currentLevel);
       const bgConfig = VIDEO_BACKGROUNDS[bgKey];
-      if (bgConfig && bgConfig.fallbackSrc) {
-        // Normalise bgConfig.src to an absolute URL before comparing with the browser-expanded currentSrc
-        const resolvedBgSrc = new URL(bgConfig.src, location.href).href;
-        if (currentSrc === resolvedBgSrc) {
-          videoLogger.info('Attempting fallback...');
-          video.style.display = '';
-          video.src = bgConfig.fallbackSrc;
-          video.load();
-        } else {
-          // Current src is already the fallback (or an unexpected URL) — hide the video
-          // to avoid an infinite retry loop.
-          video.style.display = 'none';
-        }
+      const fallbackRel = bgConfig?.fallbackSrc;
+      if (bgConfig && fallbackRel && currentSrc !== resolveVideoUrl(fallbackRel)) {
+        videoLogger.info('Attempting fallback...');
+        video.style.display = '';
+        video.src = resolveVideoUrl(fallbackRel);
+        video.load();
       } else {
         video.style.display = 'none';
+        this.isVideoPlaying = false;
       }
     });
     
@@ -482,85 +533,122 @@ export class ReactiveVideoBackground {
   // ENHANCED: Update for level with smooth crossfade and background selection
   updateForLevel(level: number, instant: boolean = false): void {
     this.currentLevel = level;
-    
-    // Auto-activate the new aurora procedural background mode for the 'future' theme
+    this.preloadForLevel(level);
+
     if (this.currentTheme === 'future') {
       this.setAuroraForTheme('future');
     }
-    
-    // NEW: Select background based on level
+
     const bgKey = this.getBackgroundForLevel(level);
     const bgConfig = VIDEO_BACKGROUNDS[bgKey];
-    
     if (!bgConfig) return;
-    
-    // Apply base params for this background
+
     this.brightness = bgConfig.baseParams?.brightness ?? 1.0;
     this.contrast = bgConfig.baseParams?.contrast ?? 1.0;
     this.saturation = bgConfig.baseParams?.saturation ?? 1.0;
-    
-    const newSrc = bgConfig.src;
-    
-    if (!newSrc) return;
 
-    // PERFECT URL normalization (handles relative/absolute, query strings, and initial empty src)
+    const newSrc = this.resolveSrcForLevel(level) ?? resolveVideoUrl(bgConfig.src);
+    if (!this.videosEnabled) return;
+
     const resolvedNew = new URL(newSrc, location.href).href;
     const currentSrc = this.videoElement.src || '';
-    if (currentSrc === resolvedNew) {
-      return; // Already on the correct background for this level tier
-    }
-    
+    if (currentSrc === resolvedNew) return;
+
     this.currentBackground = bgKey;
-    
-    // NEW: Set sea creature level flag
     this.isSeaCreatureLevel = bgConfig.hasSeaCreature ?? false;
     if (this.isSeaCreatureLevel) {
       this.seaCreaturePulse = (bgConfig.baseParams as { creaturePulse?: number }).creaturePulse ?? 1.0;
     }
-    
+
+    // Use preloaded element when available for hitch-free swaps
+    if (
+      this.preloadVideo &&
+      this.preloadedLevel === level &&
+      this.preloadedSrc === newSrc &&
+      this.preloadVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    ) {
+      this.swapToPreloaded(instant);
+      return;
+    }
+
     if (instant) {
       this.videoElement.style.display = '';
-      this.videoElement.src = newSrc; // keep original relative form for cleanliness
+      this.videoElement.src = newSrc;
       this.videoElement.load();
     } else {
       this.startCrossfade(newSrc);
     }
   }
 
+  private swapToPreloaded(instant: boolean): void {
+    if (!this.preloadVideo || !this.preloadedSrc) return;
+    const pre = this.preloadVideo;
+    this.videoElement.style.display = '';
+    this.videoElement.src = this.preloadedSrc;
+    this.videoElement.load();
+    void this.videoElement.play().catch(() => {});
+    if (!instant) {
+      this.videoElement.style.opacity = '1';
+    }
+    pre.src = '';
+    this.preloadedSrc = null;
+    this.preloadedLevel = -1;
+  }
+
   private startCrossfade(newSrc: string): void {
     if (this.isCrossfading) return;
-    
+
     this.isCrossfading = true;
     this.crossfadeProgress = 0;
-    
-    // Load new video in secondary
+
     this.secondaryVideo.style.display = '';
     this.secondaryVideo.src = newSrc;
     this.secondaryVideo.load();
-    
-    // Start crossfade when secondary is ready
-    this.secondaryVideo.onplaying = () => {
+
+    const maxWaitMs = 2000;
+    const started = performance.now();
+
+    const beginFade = () => {
       const fadeInterval = setInterval(() => {
-        this.crossfadeProgress += 0.05;
-        
+        this.crossfadeProgress += 0.08;
+
         if (this.crossfadeProgress >= 1) {
           clearInterval(fadeInterval);
-          // Swap videos
           this.videoElement.style.display = '';
           this.videoElement.src = newSrc;
           this.videoElement.load();
-          this.videoElement.play().catch(() => {});
+          void this.videoElement.play().catch(() => {});
           this.secondaryVideo.style.opacity = '0';
           this.videoElement.style.opacity = '1';
           this.isCrossfading = false;
           this.crossfadeProgress = 0;
         } else {
-          // Fade out primary, fade in secondary
-          this.videoElement.style.opacity = String(1 - this.crossfadeProgress);
+          this.videoElement.style.opacity = String(Math.max(0.15, 1 - this.crossfadeProgress));
           this.secondaryVideo.style.opacity = String(this.crossfadeProgress);
         }
-      }, 50);
+      }, 40);
     };
+
+    const onReady = () => {
+      if (this.secondaryVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        void this.secondaryVideo.play().catch(() => {});
+        beginFade();
+      }
+    };
+
+    this.secondaryVideo.onplaying = onReady;
+    this.secondaryVideo.oncanplay = onReady;
+
+    const waitTimer = setInterval(() => {
+      if (this.secondaryVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        clearInterval(waitTimer);
+        onReady();
+      } else if (performance.now() - started > maxWaitMs) {
+        clearInterval(waitTimer);
+        this.isCrossfading = false;
+        videoLogger.warn('Crossfade timed out — keeping current clip');
+      }
+    }, 50);
   }
 
   // ENHANCED GAMEPLAY REACTIVITY
@@ -818,3 +906,18 @@ export class ReactiveVideoBackground {
 }
 
 export default ReactiveVideoBackground;
+
+/** Wait for manifest probe, then bind theme sources and level (no-op when no MP4s). */
+export function applyReactiveVideoSources(
+  background: ReactiveVideoBackground | null | undefined,
+  levelVideos: string[] | undefined,
+  level: number,
+  instant = true,
+): void {
+  if (!background || !levelVideos?.length) return;
+  void background.whenAssetsReady().then(() => {
+    if (!background.videosEnabled) return;
+    background.setVideoSources(levelVideos);
+    background.updateForLevel(level, instant);
+  });
+}
