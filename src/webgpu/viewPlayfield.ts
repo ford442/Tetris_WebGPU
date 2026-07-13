@@ -11,8 +11,9 @@ import {
   borderWorldX,
   borderWorldY,
 } from './renderMetrics.js';
-import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
-import { createBlockTextureBindingView } from './blockTexture.js';
+import type { GameState } from '../game/gameState.js';
+import type { ThemeColors } from './themes.js';
+import { createBlockBindGroupEntries } from './shaders/block/bindings.js';
 
 /**
  * Render the playfield blocks, building uniform batches for all visible blocks.
@@ -20,8 +21,8 @@ import { createBlockTextureBindingView } from './blockTexture.js';
  */
 export function renderPlayfieldBlocks(
   device: GPUDevice,
-  state: any,
-  currentTheme: any,
+  state: GameState,
+  currentTheme: ThemeColors,
   visualEffects: any,
   visualX: number,
   visualY: number,
@@ -262,7 +263,7 @@ export function renderPlayfieldBorder(
   blockTexture: GPUTexture,
   blockSampler: GPUSampler,
   vpMatrix: Float32Array | Matrix.mat4,
-  currentTheme: any,
+  currentTheme: ThemeColors,
   _f32_3: Float32Array,
   _f32_4: Float32Array,
   MODELMATRIX: Matrix.mat4,
@@ -289,14 +290,15 @@ export function renderPlayfieldBorder(
 
       const uniformBindGroup_next = device.createBindGroup({
         label: "uniformBindGroup_next 635", layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: vertexUniformBuffer, offset: offset_ARRAY, size: 208 } },
-          { binding: 1, resource: { buffer: fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
-          { binding: 2, resource: createBlockTextureBindingView(blockTexture) },
-          { binding: 3, resource: blockSampler },
-          { binding: 5, resource: { buffer: dissolveBuffer } },
-          { binding: 6, resource: { buffer: fresnelParamsUniform } },
-        ],
+        entries: createBlockBindGroupEntries({
+          vertexUniformBuffer,
+          vertexUniformOffset: offset_ARRAY,
+          fragmentUniformBuffer,
+          blockTexture,
+          blockSampler,
+          dissolveBuffer,
+          fresnelParamsUniform,
+        }),
       });
 
       Matrix.mat4.identity(MODELMATRIX);

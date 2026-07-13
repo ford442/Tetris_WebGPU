@@ -271,10 +271,11 @@ export default class SoundManager {
 
         osc.connect(gain);
         
-        if (this.ctx.createStereoPanner) {
-            (panner as StereoPannerNode).pan.value = pan;
-            gain.connect(panner as StereoPannerNode);
-            (panner as StereoPannerNode).connect(this.masterGain);
+        if ('createStereoPanner' in this.ctx && typeof this.ctx.createStereoPanner === 'function') {
+            const stereo = this.ctx.createStereoPanner();
+            stereo.pan.value = pan;
+            gain.connect(stereo);
+            stereo.connect(this.masterGain);
         } else {
             gain.connect(this.sfxGain);
         }

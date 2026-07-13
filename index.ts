@@ -3,8 +3,11 @@ import { createView, getRendererPreference } from "./src/view/createView.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
+import { initSettingsUI } from './src/settings/settingsUI.js';
+import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSettings.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
-import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
+import { parseGameModeId } from './src/game/modes/createGameMode.js';
+import type { GameModeId } from './src/game/modes/types.js';
 
 declare global {
   interface Window {
@@ -33,19 +36,35 @@ uiContainer.innerHTML = `
             <canvas id="hold-piece-canvas" width="80" height="80"></canvas>
           </div>
 
+          <div class="panel-box mode-select-box">
+            <p class="panel-label">MODE</p>
+            <select id="game-mode-select" class="mode-select" aria-label="Game mode">
+              <option value="marathon">Marathon</option>
+              <option value="sprint">Sprint 40L</option>
+              <option value="ultra">Ultra 2:00</option>
+            </select>
+            <p id="mode-label" class="mode-current-label">Marathon</p>
+          </div>
+          <div class="panel-box mode-hud-box" id="mode-hud-box">
+            <p class="panel-label" id="mode-hud-primary-label">GOAL</p>
+            <p id="mode-hud-primary-value" class="panel-value">Survive</p>
+            <p class="panel-label mode-hud-secondary" id="mode-hud-secondary-label">TIME</p>
+            <p id="mode-hud-secondary-value" class="panel-value mode-hud-secondary">0:00</p>
+          </div>
+
            <div class="panel-box score-box">
             <p class="panel-label">SCORE</p>
             <p id="score" class="panel-value">0</p>
           </div>
           <div class="panel-box high-score-box">
-            <p class="panel-label">HIGH SCORE</p>
+            <p class="panel-label" id="high-score-label">HIGH SCORE</p>
             <p id="high-score" class="panel-value">-</p>
           </div>
            <div class="panel-box">
             <p class="panel-label">LINES</p>
             <p id="lines" class="panel-value">0</p>
           </div>
-           <div class="panel-box">
+           <div class="panel-box" id="level-panel-box">
             <p class="panel-label">LEVEL</p>
             <p id="level" class="panel-value">0</p>
           </div>
@@ -128,6 +147,46 @@ uiContainer.innerHTML = `
           <div class="experimental-hint">Gentle visual priming for focus &amp; motivation. Toggle anytime.</div>
         </div>
       </div>
+
+      <!-- Graphics Settings -->
+      <div class="pause-settings-section">
+        <h3>SETTINGS</h3>
+
+        <div class="settings-group">
+          <span class="settings-label">Quality</span>
+          <div class="settings-quality-row" role="radiogroup" aria-label="Graphics quality">
+            <label class="settings-pill"><input type="radio" name="settings-quality" value="low"> Low</label>
+            <label class="settings-pill"><input type="radio" name="settings-quality" value="medium"> Med</label>
+            <label class="settings-pill"><input type="radio" name="settings-quality" value="high"> High</label>
+            <label class="settings-pill"><input type="radio" name="settings-quality" value="ultra"> Ultra</label>
+          </div>
+          <div id="settings-quality-custom-hint" class="settings-hint" style="display: none;">Custom mix — adjust toggles below.</div>
+        </div>
+
+        <div class="settings-toggles">
+          <label class="settings-toggle"><input type="checkbox" id="settings-bloom" checked> Bloom</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-shockwave" checked> Shockwave</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-particles" checked> Particles</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-reactive-video" checked> Reactive video</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-glitch"> Glitch FX</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-film-grain" checked> Film grain</label>
+        </div>
+
+        <div class="settings-group settings-gpu-row">
+          <label class="settings-label" for="settings-gpu-power">GPU power</label>
+          <select id="settings-gpu-power" class="settings-select">
+            <option value="auto">Auto</option>
+            <option value="high-performance">High performance</option>
+            <option value="low-power">Low power</option>
+          </select>
+        </div>
+
+        <div class="settings-group settings-renderer-row">
+          <span class="settings-label">Renderer</span>
+          <p id="settings-renderer-display" class="settings-renderer-text">—</p>
+          <p class="settings-hint">Switch via <code>?renderer=webgpu</code>, <code>webgl2</code>, or <code>webgpu-cpp</code> — or set <code>localStorage.tetris_renderer</code>. Reload required.</p>
+        </div>
+      </div>
       
       <!-- Controls Reference -->
       <div class="pause-controls">
@@ -187,16 +246,7 @@ uiContainer.innerHTML = `
   // Connect game to view for reactive events
   game.view = view;
 
-  const savedUseVideo = localStorage.getItem('tetris_use_reactive_video') !== 'false';
-
-  // Premium visuals (supersampling, bloom, reactive video)
-  view.setPremiumVisualsPreset({
-    renderScale: 1.5,
-    enhancedPostProcess: true,
-    reactiveVideo: savedUseVideo,
-    reactiveMusic: true,
-    particleInteraction: true,
-  });
+  const settingsUI = initSettingsUI(view);
 
   // Initialize reactive music when sound manager is ready
   soundManager.onReady = () => {
@@ -230,32 +280,46 @@ uiContainer.innerHTML = `
   // (line clears, T-spins, level ups, new high scores, background cadence).
   (controller as any).subliminal = subliminal;
 
-  // Initialize high score display
-  const highestScore = game.getHighScoreManager().getHighestScore();
-  const highScoreElement = document.getElementById('high-score');
-  if (highScoreElement && highestScore) {
-    highScoreElement.textContent = highestScore.score.toLocaleString();
+  // Initialize high score display for current mode
+  const savedMode = parseGameModeId(localStorage.getItem('tetris_game_mode'));
+  const modeSelect = document.getElementById('game-mode-select') as HTMLSelectElement;
+  if (modeSelect) {
+    modeSelect.value = savedMode;
+    modeSelect.addEventListener('change', () => {
+      if (controller.isPlaying) return;
+      game.setMode(modeSelect.value as GameModeId);
+      controller.updateHighScoreDisplay();
+      controller.updateModeHud();
+    });
   }
+  controller.updateHighScoreDisplay();
+  controller.updateModeHud();
 
   document.getElementById('start-button')!.addEventListener('click', () => {
+      if (!controller.isPlaying) {
+        game.setMode((modeSelect?.value || savedMode) as GameModeId);
+        controller.updateHighScoreDisplay();
+        controller.updateModeHud();
+      }
       controller.play();
       (document.getElementById('start-button') as HTMLButtonElement).blur();
   });
 
   document.getElementById('pause-button')!.addEventListener('click', () => {
       controller.togglePause();
+      settingsUI.syncControls();
       (document.getElementById('pause-button') as HTMLButtonElement).blur();
   });
 
   document.getElementById('glitch-button')!.addEventListener('click', (e) => {
-      view.toggleGlitch();
+      view.toggleGlitch?.();
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.useGlitch ? "FX: ON" : "FX: OFF";
       btn.blur();
   });
 
   document.getElementById('bloom-button')!.addEventListener('click', (e) => {
-      view.toggleBloom();
+      view.toggleBloom?.();
       const btn = e.target as HTMLButtonElement;
       btn.textContent = view.bloomEnabled ? "BLOOM: ON" : "BLOOM: OFF";
       btn.blur();
@@ -273,24 +337,22 @@ uiContainer.innerHTML = `
   });
 
   const videoToggle = document.getElementById('video-toggle') as HTMLButtonElement;
+  const settingsReactiveVideo = document.getElementById('settings-reactive-video') as HTMLInputElement | null;
 
   function updateVideoToggle(useVideo: boolean) {
     videoToggle.textContent = useVideo ? 'VIDEO: ON' : 'VIDEO: OFF';
-    view.setPremiumVisualsPreset({
-      renderScale: 1.5,
-      useEnhancedPostProcess: true,
-      useReactiveVideo: useVideo,
-      useReactiveMusic: true
-    });
-    localStorage.setItem('tetris_use_reactive_video', String(useVideo));
+    if (settingsReactiveVideo) settingsReactiveVideo.checked = useVideo;
   }
 
-  let currentVideoState = savedUseVideo;
-  updateVideoToggle(currentVideoState);
+  updateVideoToggle(settingsUI.settings.reactiveVideo);
 
   videoToggle.addEventListener('click', () => {
-    currentVideoState = !currentVideoState;
-    updateVideoToggle(currentVideoState);
+    const next = !settingsUI.settings.reactiveVideo;
+    settingsUI.settings.reactiveVideo = next;
+    settingsUI.settings.quality = inferQualityFromToggles(settingsUI.settings);
+    saveGameSettings(settingsUI.settings);
+    view.applyGameSettings?.(settingsUI.settings);
+    updateVideoToggle(next);
     videoToggle.blur();
   });
 

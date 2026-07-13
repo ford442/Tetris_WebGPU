@@ -5,7 +5,12 @@ import {
   BOARD_WORLD_CENTER_X,
   BOARD_WORLD_CENTER_Y,
 } from './webgpu/renderMetrics.js';
-import { themes, ThemeColors, Themes } from './webgpu/themes.js';
+import { themes, type ThemeColors, type Themes } from './webgpu/themes.js';
+import type { IView } from './view/IView.js';
+import type { ViewEventHost } from './view/viewTypes.js';
+import type { GameState } from './game/gameState.js';
+import { createEmptyGameState } from './game/gameState.js';
+import type { Piece } from './game/pieces.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import { ReactiveVideoBackground } from './webgpu/reactiveVideo.js';
@@ -29,7 +34,9 @@ import {
   setBloomIntensity as setBloomIntensityImpl,
   toggleMultiPassBloom as toggleMultiPassBloomImpl,
   setBloomParameters as setBloomParametersImpl,
+  applyGameSettings as applyGameSettingsImpl,
 } from './webgpu/viewPremium.js';
+import type { GameSettings } from './config/gameSettings.js';
 import { renderLogger } from './utils/logger.js';
 import {
   initFrostedGlassBackboard as initFrostedGlassImpl,
@@ -68,7 +75,7 @@ import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
 import { acquireGpuContext, resizeGpuContext, pushGpuErrorScopes, popGpuErrorScopes } from './webgpu/gpuContext.js';
 import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
 
-export default class View {
+export default class View implements IView, ViewEventHost {
   readonly rendererName = 'webgpu' as const;
   element: HTMLElement;
   width: number;
@@ -93,8 +100,8 @@ export default class View {
   panelHeight: number;
   visualX: number = 0;
   visualY: number = 0;
-  private _previousActivePiece: any = null;
-  state: { playfield: number[][], lockTimer?: number, lockDelayTime?: number, level?: number, nextPiece?: any, holdPiece?: any, activePiece?: any, score?: number, lines?: number, effectEvent?: string | null, effectCounter?: number, lastDropPos?: any, lastDropDistance?: number, scoreEvent?: any };
+  _previousActivePiece: Piece | null = null;
+  state: GameState = createEmptyGameState();
   device!: GPUDevice;
   numberOfVertices!: number;
   vertexBuffer!: GPUBuffer;
@@ -115,6 +122,11 @@ export default class View {
   blockRenderer!: BlockRenderer;
 
   useGlitch: boolean = false;
+  useParticles: boolean = true;
+  useShockwave: boolean = true;
+  useFilmGrain: boolean = true;
+  useCRT: boolean = false;
+  useFXAA: boolean = true;
   private _shakeOffsetSmoothed = {x: 0, y: 0};
 
   // Grid
@@ -156,9 +168,9 @@ export default class View {
   // Render pass caching - GC optimized (lazy init pattern)
   private _offscreenTextureView!: GPUTextureView;
   private _depthTextureView!: GPUTextureView;
-  private _backgroundPassDescriptor!: GPURenderPassDescriptor;
-  private _mainPassDescriptor!: GPURenderPassDescriptor;
-  private _ppPassDescriptor!: GPURenderPassDescriptor;
+  _backgroundPassDescriptor!: GPURenderPassDescriptor;
+  _mainPassDescriptor!: GPURenderPassDescriptor;
+  _ppPassDescriptor!: GPURenderPassDescriptor;
 
   // Particles
   particlePipeline!: GPURenderPipeline;
@@ -203,15 +215,15 @@ export default class View {
   authoredBlockTextureLoaded: boolean = false;
 
   // Pre-allocated Float32Arrays for reduced GC pressure
-  private _f32_1 = new Float32Array(1);
-  private _f32_2 = new Float32Array(2);
-  private _f32_3 = new Float32Array(3);
-  private _f32_4 = new Float32Array(4);
-  private _f32_8 = new Float32Array(8);
-  private _f32_12 = new Float32Array(12);
-  private _camEye = new Float32Array(3);
-  private _camTarget = new Float32Array([BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0]);
-  private _camUp = new Float32Array([0.0, 1.0, 0.0]);
+  _f32_1 = new Float32Array(1);
+  _f32_2 = new Float32Array(2);
+  _f32_3 = new Float32Array(3);
+  _f32_4 = new Float32Array(4);
+  _f32_8 = new Float32Array(8);
+  _f32_12 = new Float32Array(12);
+  _camEye = new Float32Array(3);
+  _camTarget = new Float32Array([BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y, 0.0]);
+  _camUp = new Float32Array([0.0, 1.0, 0.0]);
 
   // Material properties for premium rendering
   materialUniformBuffer!: GPUBuffer;
@@ -265,7 +277,8 @@ export default class View {
       _pad1: 0,
   };
 
-  _lastEffectCounter: number = 0;
+  lastEffectCounter = -1;
+  lastScore = -1;
   _hardDropBoostTimer: number = 0;
 
   // Pre-allocated object for post process parameters to avoid GC
@@ -348,11 +361,7 @@ export default class View {
     this.panelWidth = this.width / 3;
     this.panelHeight = this.height;
 
-    this.state = {
-      playfield: Array(20).fill(null).map(() => Array(10).fill(0)),
-      lockTimer: 0,
-      lockDelayTime: 500,
-    };
+    this.state = createEmptyGameState();
     this.MODELMATRIX = Matrix.mat4.create();
     this.NORMALMATRIX = Matrix.mat4.create();
     this.VIEWMATRIX = Matrix.mat4.create();
@@ -403,13 +412,13 @@ export default class View {
     if (this.device) {
         this.renderPlayfield_Border_WebGPU();
         const bgColors = this.currentTheme.backgroundColors;
-        this.backgroundRenderer.setThemeColors(bgColors);
+        this.backgroundRenderer.setThemeColors(bgColors as [number, number, number][]);
     }
 
     this.setMaterialTheme(themeName);
   }
 
-  renderPiece(ctx: CanvasRenderingContext2D, piece: any, blockSize: number = 20) {
+  renderPiece(ctx: CanvasRenderingContext2D, piece: Piece | null, blockSize: number = 20) {
     renderPieceImpl(ctx, piece, this.currentTheme, blockSize);
   }
 
@@ -451,8 +460,8 @@ export default class View {
   triggerBackgroundResonance(intensity: number, _durationMs: number = 280) {
     this.visualEffects.triggerBackgroundResonance(intensity);
   }
-  renderMainScreen(state: any) { handleRenderMainScreen(this, state); }
-  renderEndScreen(state: any) { handleRenderEndScreen(this, state); }
+  renderMainScreen(state: GameState) { handleRenderMainScreen(this, state); }
+  renderEndScreen(state: GameState) { handleRenderEndScreen(this, state); }
   renderPauseScreen() { handleRenderPauseScreen(this); }
   onMove(x: number, y: number) { handleMove(this, x, y); }
 
@@ -626,7 +635,7 @@ export default class View {
   private _uniformBatchBuffer = new Float32Array(200 * 64);
 
   // Playfield rendering (delegated to viewPlayfield.ts)
-  async renderPlayfield_WebGPU(state: any) {
+  async renderPlayfield_WebGPU(state: GameState) {
     this.blockRenderer.updateUniforms(state);
   }
 
@@ -676,4 +685,5 @@ export default class View {
   setBloomIntensity(intensity: number) { setBloomIntensityImpl(this as any, intensity); }
   toggleMultiPassBloom() { return toggleMultiPassBloomImpl(this as any); }
   setBloomParameters(params: Partial<BloomParameters>) { setBloomParametersImpl(this as any, params); }
+  applyGameSettings(settings: GameSettings) { applyGameSettingsImpl(this as any, settings); }
 }

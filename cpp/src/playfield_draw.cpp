@@ -2,7 +2,7 @@
 
 #include <emscripten/emscripten.h>
 
-EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int canvas_w, int canvas_h), {
+EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int canvas_w, int canvas_h, int show_badge), {
   var canvas = Module.canvas;
   if (!canvas) {
     canvas = document.getElementById('canvaswebgpu');
@@ -13,9 +13,7 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
   if (!ctx) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Distinctive full-canvas tint — visible proof the wasm draw path ran.
-  ctx.fillStyle = '#071812';
+  ctx.fillStyle = 'rgba(7, 24, 18, 0.85)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   var heap = HEAP8;
@@ -33,16 +31,13 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.fillRect(originX - gap, originY - gap, boardW + gap * 2, boardH + gap * 2);
 
-  // Lime frame marks output as C++ / wasm (not TS placeholder).
-  ctx.strokeStyle = 'rgba(0, 255, 140, 0.9)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(originX - gap - 5, originY - gap - 5, boardW + gap * 2 + 10, boardH + gap * 2 + 10);
-
-  ctx.fillStyle = 'rgba(0, 255, 140, 0.95)';
-  ctx.font = 'bold 12px monospace';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText('C++ wasm', 10, canvas.height - 10);
+  if (show_badge) {
+    ctx.fillStyle = 'rgba(180, 180, 180, 0.85)';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('C++ Canvas2D fallback', 10, canvas.height - 10);
+  }
 
   var palette = [
     [77, 77, 77],
@@ -79,6 +74,7 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
   }
 });
 
-void canvas_draw_playfield(const int8_t* playfield, int cols, int rows, int canvas_w, int canvas_h) {
-  js_draw_playfield(playfield, cols, rows, canvas_w, canvas_h);
+void canvas_draw_playfield(const int8_t* playfield, int cols, int rows, int canvas_w, int canvas_h,
+                           int show_fallback_badge) {
+  js_draw_playfield(playfield, cols, rows, canvas_w, canvas_h, show_fallback_badge);
 }

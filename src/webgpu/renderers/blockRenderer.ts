@@ -1,10 +1,12 @@
 import * as Matrix from 'gl-matrix';
+import type { GameState } from '../../game/gameState.js';
+import type { ThemeColors } from '../themes.js';
 import { renderPlayfieldBlocks, renderPlayfieldBorder } from '../viewPlayfield.js';
 
 type BlockView = {
   device: GPUDevice;
   blockTexture: GPUTexture;
-  currentTheme: any;
+  currentTheme: ThemeColors;
   visualEffects: any;
   visualX: number;
   visualY: number;
@@ -33,7 +35,7 @@ type BlockView = {
 export class BlockRenderer {
   constructor(private readonly view: BlockView) {}
 
-  updateUniforms(state: any) {
+  updateUniforms(state: GameState) {
     if (!this.view.device || !this.view.blockTexture) return;
     renderPlayfieldBlocks(
       this.view.device, state, this.view.currentTheme, this.view.visualEffects,

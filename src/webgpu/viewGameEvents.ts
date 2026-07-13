@@ -1,4 +1,7 @@
-export function showFloatingText(view: any, text: string, subText: string = ""): void {
+import type { GameState } from '../game/gameState.js';
+import type { ViewEventHost } from '../view/viewTypes.js';
+
+export function showFloatingText(_view: ViewEventHost, text: string, subText: string = ""): void {
   const container = document.getElementById('ui-container');
   if (!container) return;
 
@@ -48,14 +51,14 @@ export function showFloatingText(view: any, text: string, subText: string = ""):
   }, 2000);
 }
 
-export function triggerComboOverdrive(view: any, combo: number): void {
+export function triggerComboOverdrive(view: ViewEventHost, combo: number): void {
   view.visualEffects.triggerNeonBloomFlash(2.5 + combo * 0.3);
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
 }
 
-export function triggerEnergyWave(view: any, combo: number): void {
+export function triggerEnergyWave(view: ViewEventHost, combo: number): void {
   view.visualEffects.triggerWarpSurge(4.0 + combo * 1.0);
   view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
@@ -63,13 +66,13 @@ export function triggerEnergyWave(view: any, combo: number): void {
   view.visualEffects.triggerHardDropAberrationPulse(1.5);
 }
 
-export function showFloatingComboText(view: any, combo: number): void {
+export function showFloatingComboText(view: ViewEventHost, combo: number): void {
   // Use existing floating text system but force higher intensity styling via JS injected classes/styles
   // The system relies on view.showFloatingText which passes to showFloatingText
   view.showFloatingText(`COMBO x${combo}`, "OVERDRIVE");
 }
 
-export function onLineClear(view: any, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
+export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
 
   const base = 0.45;
   const lineBonus = Math.min(lines.length * 0.12, 0.35);
@@ -260,11 +263,12 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   // 0.6s life, visual spin from dynamics + existing sparkle. Wired in onLineClear.
   // =====================================================================
   {
-    const snapshot: number[][] | null = (view.state && view.state.playfield) ? [] : null;
-    if (snapshot && view.state.playfield) {
+    const snapshot: number[][] | null = view.state?.playfield ? [] : null;
+    if (snapshot && view.state?.playfield) {
+      const playfield = view.state.playfield;
       for (const y of lines) {
-        if (y >= 0 && y < view.state.playfield.length) {
-          snapshot.push([...view.state.playfield[y]]);
+        if (y >= 0 && y < playfield.length) {
+          snapshot.push([...playfield[y]]);
         } else {
           snapshot.push(new Array(10).fill(0));
         }
@@ -309,7 +313,7 @@ export function onLineClear(view: any, lines: number[], tSpin: boolean = false, 
   }
 }
 
-export function onLock(view: any, isTSpin: boolean = false): void {
+export function onLock(view: ViewEventHost, isTSpin: boolean = false): void {
   view.visualEffects.triggerLock(0.3);
   view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
   // JUICE: Chromatic Aberration on regular locks to make every placement tactile
@@ -357,7 +361,7 @@ export function onLock(view: any, isTSpin: boolean = false): void {
   }
 }
 
-export function onHold(view: any): void {
+export function onHold(view: ViewEventHost): void {
   // Emits a particle burst at the top left to represent the hold piece swapping
   if (view.particleSystem) {
       view.particleSystem.emitParticlesRadial(-5.0, 20.0, 0.0, Math.PI / 4, 25.0, [1.0, 0.8, 0.2, 1.0]);
@@ -380,7 +384,7 @@ export function onHold(view: any): void {
   view.particleSystem.emitParticles(centerX, centerY, 0.0, 10, [1.0, 1.0, 1.0, 1.0]);
 }
 
-export function onRotate(view: any): void {
+export function onRotate(view: ViewEventHost): void {
   view.visualEffects.triggerRotate(0.2);
   view.visualEffects.triggerAberration(0.3); // Add tactile visual bump
   view.visualEffects.triggerMovementFlash(0.15);
@@ -396,7 +400,7 @@ export function onRotate(view: any): void {
   }
 }
 
-export function triggerImpactEffects(view: any, worldX: number, impactY: number, distance: number): void {
+export function triggerImpactEffects(view: ViewEventHost, worldX: number, impactY: number, distance: number): void {
   const camY = -20.0;
   const camZ = 75.0;
   const fov = (35 * Math.PI) / 180;
@@ -418,7 +422,7 @@ export function triggerImpactEffects(view: any, worldX: number, impactY: number,
   view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
 }
 
-export function onHardDrop(view: any, x: number, y: number, distance: number, colorIdx: number = 0): void {
+export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0): void {
   const worldX = x * 2.2;
   const startRow = y - distance;
 
@@ -488,7 +492,7 @@ export function onHardDrop(view: any, x: number, y: number, distance: number, co
 
 import { levelUpCelebration } from '../effects/levelUpCelebration.js';
 
-export function renderMainScreen(view: any, state: any): void {
+export function renderMainScreen(view: ViewEventHost, state: GameState): void {
   view.state = state;
 
   // Handle T-Spin Ready indicator
@@ -592,7 +596,7 @@ export function renderMainScreen(view: any, state: any): void {
   }
 
   if (state.scoreEvent) {
-    if (state.effectCounter !== view.lastEffectCounter && state.scoreEvent.text) {
+    if (state.effectCounter !== view.lastEffectCounter && state.scoreEvent?.text) {
       showFloatingText(view, state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
 
       if (state.scoreEvent.backToBack) {
@@ -602,7 +606,7 @@ export function renderMainScreen(view: any, state: any): void {
       view.lastEffectCounter = state.effectCounter;
     }
 
-    if (view.lastScore !== state.score && state.scoreEvent.text) {
+    if (view.lastScore !== state.score && state.scoreEvent?.text) {
       showFloatingText(view, state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
       view.lastScore = state.score;
     }
@@ -613,38 +617,49 @@ export function renderMainScreen(view: any, state: any): void {
   view.renderPiece(view.holdPieceContext, state.holdPiece, 20);
 
   const scoreEl = document.getElementById('score');
-  if (scoreEl) scoreEl.textContent = state.score;
+  if (scoreEl) scoreEl.textContent = String(state.score);
 
   const linesEl = document.getElementById('lines');
-  if (linesEl) linesEl.textContent = state.lines;
+  if (linesEl) linesEl.textContent = String(state.lines);
 
   const levelEl = document.getElementById('level');
-  if (levelEl) levelEl.textContent = state.level;
+  if (levelEl) levelEl.textContent = String(state.level);
 }
 
 import { gameOverAnimation } from '../effects/gameOverAnimation.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
 
-export function renderEndScreen(view: any, state: any): void {
-  // Add styles first
+export function renderEndScreen(view: ViewEventHost, state: GameState): void {
   gameOverAnimation.addGameOverStyles();
-  
-  // Trigger dramatic visual effects
   gameOverAnimation.triggerGameOverEffects(view);
-  
-  // Get high score info
-  const highScoreManager = view.game?.getHighScoreManager?.();
-  const highScore = highScoreManager?.getHighestScore?.();
-  const isNewHighScore = highScoreManager && state.score > 0 && state.score >= (highScore?.score || 0);
-  
-  // Create enhanced overlay
+
+  const mode = view.game?.getMode?.();
+  const modeBoard = mode && view.game?.getModeLeaderboardDisplay
+    ? view.game.getModeLeaderboardDisplay()
+    : null;
+  const legacyHigh = view.game?.getHighScoreManager?.()?.getHighestScore?.();
+  const metric = mode?.getLeaderboardMetric() ?? 'score';
+  const bestNumeric = mode
+    ? parseLeaderboardDisplay(modeBoard, metric)
+    : (legacyHigh?.score || 0);
+
+  const runValue = metric === 'time' ? state.elapsedMs : state.score;
+  const isNewHighScore = metric === 'time'
+    ? Boolean(runValue > 0 && (bestNumeric === 0 || runValue <= bestNumeric))
+    : Boolean(runValue > 0 && (bestNumeric === 0 || runValue >= bestNumeric));
+
   setTimeout(() => {
     const overlay = gameOverAnimation.createGameOverOverlay({
       score: state.score,
       lines: state.lines,
       level: state.level,
-      highScore: highScore?.score || 0,
-      isNewHighScore
+      highScore: bestNumeric,
+      isNewHighScore,
+      isVictory: state.isVictory,
+      modeLabel: state.modeLabel,
+      modeHighScoreLabel: state.modeHighScoreLabel,
+      elapsedMs: state.elapsedMs,
+      metric,
     });
     
     // Wire up buttons
@@ -668,12 +683,27 @@ export function renderEndScreen(view: any, state: any): void {
   }, 800); // Delay to let effects play
 }
 
-export function renderPauseScreen(view: any): void {
+function parseLeaderboardDisplay(display: string | null, metric: 'score' | 'time'): number {
+  if (!display || display === '—') return 0;
+  if (metric === 'time') {
+    const parts = display.split(':');
+    if (parts.length !== 2) return 0;
+    const min = parseInt(parts[0], 10) || 0;
+    const secParts = parts[1].split('.');
+    const sec = parseInt(secParts[0], 10) || 0;
+    const cs = parseInt(secParts[1] || '0', 10) || 0;
+    return ((min * 60) + sec) * 1000 + cs * 10;
+  }
+  const parsed = parseInt(display.replace(/,/g, ''), 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function renderPauseScreen(_view: ViewEventHost): void {
   // Pause screen is handled by DOM overlay
   // Visual effects could be added here (e.g., dim the board)
 }
 
-export function onMove(view: any, x: number, y: number): void {
+export function onMove(view: ViewEventHost, x: number, y: number): void {
   view.visualEffects.triggerMovementFlash(0.2);
   const worldX = (x + 1.5) * 2.2;
   const worldY = (y + 1.5) * -2.2;

@@ -515,7 +515,7 @@ export class ReactiveVideoBackground {
     // NEW: Set sea creature level flag
     this.isSeaCreatureLevel = bgConfig.hasSeaCreature ?? false;
     if (this.isSeaCreatureLevel) {
-      this.seaCreaturePulse = bgConfig.baseParams.creaturePulse ?? 1.0;
+      this.seaCreaturePulse = (bgConfig.baseParams as { creaturePulse?: number }).creaturePulse ?? 1.0;
     }
     
     if (instant) {
