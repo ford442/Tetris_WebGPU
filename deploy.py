@@ -6,7 +6,7 @@ Copy this file into your project as `deploy.py` (or deploy_contabo.py).
 Customize the constants at the top for your project.
 
 Usage:
-  1. Build your project:  npm run build   (or python build, etc.)
+  1. Build your project:  npm run build:all   (or python deploy.py --build)
   2. python deploy.py
 
 This script contacts https://storage.noahcohn.com (your Contabo storage manager)
@@ -20,8 +20,11 @@ Requirements:
   pip install requests
 """
 
+import argparse
+import hashlib
 import io
 import os
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -41,6 +44,54 @@ DEPLOY_FOLDER: str = ""  # override remote target folder; empty = use PROJECT_NA
 # Set via environment: export DEPLOY_TOKEN="your_long_token_from_vps_env"
 DEPLOY_TOKEN: Optional[str] = os.environ.get("DEPLOY_TOKEN")
 # ============================================================
+
+# Assets that must be present in dist/ for glass/gold block sampling to work.
+REQUIRED_ASSETS = (
+    'index.html',
+    'block.png',
+    'release.wasm',
+)
+
+
+def md5_file(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open('rb') as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def run_build() -> bool:
+    print('Running npm run build:all ...')
+    try:
+        subprocess.run(['npm', 'run', 'build:all'], check=True)
+        return True
+    except FileNotFoundError:
+        print('ERROR: npm not found on PATH.')
+        return False
+    except subprocess.CalledProcessError as exc:
+        print(f'ERROR: build failed with exit code {exc.returncode}')
+        return False
+
+
+def preflight(build_path: Path) -> bool:
+    ok = True
+    print('Preflight checks:')
+    for rel in REQUIRED_ASSETS:
+        asset = build_path / rel
+        if not asset.is_file():
+            print(f"  ✗ Missing required asset: {rel}")
+            ok = False
+            continue
+        if rel == 'block.png':
+            digest = md5_file(asset)
+            print(f"  ✓ {rel} ({asset.stat().st_size / 1024:.1f} KB, md5={digest[:8]}…)")
+        else:
+            print(f"  ✓ {rel} ({asset.stat().st_size / 1024:.1f} KB)")
+    if not DEPLOY_TOKEN:
+        print('  ⚠ DEPLOY_TOKEN is not set — upload may be rejected by the deploy API.')
+    print()
+    return ok
 
 
 def build_zip(build_path: Path) -> bytes:
@@ -99,12 +150,31 @@ def deploy_bundle(build_path: Path) -> bool:
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Deploy Tetris WebGPU dist/ to Contabo storage.')
+    parser.add_argument(
+        '--build',
+        action='store_true',
+        help='Run npm run build:all before deploying (recommended after shader or block.png edits).',
+    )
+    args = parser.parse_args()
+
     print(f"\n=== Deploying '{PROJECT_NAME}' via Contabo -> storage.1ink.us ===\n")
+    print('Note: GitHub Pages (konstantin84ukr.github.io) is a separate host — this script')
+    print('only updates the Contabo mirror (e.g. test.1ink.us/tetris-webgpu/).\n')
+
+    if args.build:
+        if not run_build():
+            sys.exit(1)
+        print()
 
     build_path = Path(BUILD_DIR)
     if not build_path.exists() or not build_path.is_dir():
         print(f"ERROR: Build directory '{BUILD_DIR}/' does not exist.")
-        print("Please run your build command first (e.g. `npm run build`).")
+        print("Run `npm run build:all` first, or re-run with `--build`.")
+        sys.exit(1)
+
+    if not preflight(build_path):
+        print('ERROR: Preflight failed — fix the build before deploying.')
         sys.exit(1)
 
     try:
@@ -118,6 +188,9 @@ def main():
     success = deploy_bundle(build_path)
 
     print(f"\n=== {'Deployment complete' if success else 'Deployment finished with errors'} ===")
+    if success:
+        print('After deploy: hard-refresh the browser (Ctrl+Shift+R) — block.png is cache-busted')
+        print('via ?v=<md5> in the built bundle, but HTML/JS may still be cached briefly.')
     sys.exit(0 if success else 1)
 
 

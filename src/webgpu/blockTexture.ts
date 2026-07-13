@@ -19,18 +19,34 @@ export interface BlockTexturePainter {
   strokeRect(x: number, y: number, width: number, height: number): void;
 }
 
+declare const __BLOCK_TEXTURE_CACHE_KEY__: string | undefined;
+
+function appendBlockTextureCacheBust(url: string): string {
+  if (!url || url.startsWith('data:')) return url;
+  const key =
+    typeof __BLOCK_TEXTURE_CACHE_KEY__ !== 'undefined'
+      ? __BLOCK_TEXTURE_CACHE_KEY__
+      : '';
+  if (!key || key === 'missing') return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${key}`;
+}
+
 /** Resolve block.png against the Vite deployment base (e.g. /tetris-webgpu/block.png). */
 export function resolveBlockTextureUrl(_moduleUrl?: string): string {
   const configured = currentTextureConfig.url;
   // Absolute URLs and data URLs are used as-is.
-  if (/^(https?:|data:|\/)/.test(configured)) {
-    return configured;
+  if (/^(https?:|data:)/.test(configured)) {
+    return appendBlockTextureCacheBust(configured);
+  }
+  if (configured.startsWith('/')) {
+    return appendBlockTextureCacheBust(configured);
   }
   const base =
     (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
   const asset = configured.replace(/^\.\//, '');
-  return `${normalizedBase}${asset}`;
+  return appendBlockTextureCacheBust(`${normalizedBase}${asset}`);
 }
 
 /** Default authored block texture URL (honours Vite base path). */
