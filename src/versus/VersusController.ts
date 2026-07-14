@@ -2,20 +2,20 @@
  * Local split-screen 2P — dual Game instances, garbage attacks, shared WebGPU view.
  */
 
-import Game from './game.js';
-import type { IView } from './view/IView.js';
-import type { WebGPUViewHost } from './view/viewTypes.js';
-import SoundManager from './sound.js';
-import { INPUT_CONFIG } from './config/gameConfig.js';
-import { PLAYER1_KEY_MAP, PLAYER2_KEY_MAP, type PlayerAction } from './versus/inputMaps.js';
-import { attackRowsFromClear } from './versus/garbage.js';
-import { SPLIT_PARTICLE_CAP } from './versus/splitScreen.js';
-import { generateReplaySeed } from './replay/recorder.js';
+import Game from '../game.js';
+import type { IView } from '../view/IView.js';
+import type { WebGPUViewHost } from '../view/viewTypes.js';
+import SoundManager from '../sound.js';
+import { INPUT_CONFIG } from '../config/gameConfig.js';
+import { PLAYER1_KEY_MAP, PLAYER2_KEY_MAP, type PlayerAction } from './inputMaps.js';
+import { attackRowsFromClear } from './garbage.js';
+import { SPLIT_PARTICLE_CAP } from './splitScreen.js';
+import { generateReplaySeed } from '../replay/recorder.js';
 import {
   announce,
   announceLineClear,
-} from './a11y/announcer.js';
-import { onPauseMenuClose, onPauseMenuOpen } from './a11y/keyboardNav.js';
+} from '../a11y/announcer.js';
+import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
 
 type Action = PlayerAction;
 
