@@ -116,7 +116,7 @@ export class VisualEffects {
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
         const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity *= 1.0 / (1.0 + dt * 15.0);
+        this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 15.0);
         this.aberrationIntensity *= aberrationDecay;
 
         // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)
@@ -141,7 +141,7 @@ export class VisualEffects {
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         // Neon Bloom decay
-        this.neonBloomIntensity *= 1.0 / (1.0 + dt * 10.0); // NEON BRICKLAYER: Fast algebraic decay approximation for snappy flash
+        this.neonBloomIntensity = this.neonBloomIntensity * Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         // Background Resonance decay
