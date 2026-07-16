@@ -535,6 +535,10 @@ export const PBRBlockShaders = () => {
             let fresnelRim = rimColor * rimIntensity * fresnel;
             finalColor += fresnelRim; // Additive rim — looks great on gold glass
 
+            // JUICE: Dynamic Pulse Effect for Neon Bricklayer
+            let pulseBlock = (sin(time * 5.0) * 0.5 + 0.5) * 0.3;
+            finalColor += vColor.rgb * pulseBlock;
+
             // Lock tension effect
             let lockPercent = fUniforms.lockPercent;
             if (lockPercent > 0.25) {
