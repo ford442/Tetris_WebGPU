@@ -457,7 +457,7 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
   const impactY = y * -2.2;
   const burstColor = [...themeColors, 1.0];
   view.visualEffects.triggerFlash(0.1);
-  view.visualEffects.triggerAberration(1.5); // JUICE: Heavy chromatic aberration on hard drop
+  view.visualEffects.triggerAberration(1.5 + distance * 0.1); // JUICE: Distance-scaled heavy chromatic aberration on hard drop
   view.visualEffects.triggerHardDropAberrationPulse(1.2); // NEW: 300ms exp decay spike -> u_aberrationPulse uniform (separate RGB offsets in enhancedPostProcess)
   view.visualEffects.triggerNeonBloomFlash(3.0); // JUICE: Explode with neon bloom on hard drop
   view.visualEffects.triggerParticleHit(2.0);

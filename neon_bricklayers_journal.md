@@ -49,3 +49,6 @@
 - "Added Particle-Material Interaction to pbrBlocks.ts! Particles hitting glass blocks now create realistic refraction ripples, while hitting gold/chrome blocks creates intense specular flashes, perfectly matching the visual parity with premium blocks for ultimate JUICE."
 - "Added 'Line Clear Escalation' Saturation Boost! When scoring Tetrises, T-Spins, or building high combos, the screen's color saturation exponentially spikes, making big plays look incredibly vibrant and rewarding before smoothly decaying back to baseline."
 - "Updated shakeIntensity and neonBloomIntensity in VisualEffects (effects.ts) to use true exponential decay (Math.exp) instead of algebraic approximations, leading to a much snappier game feel."
+- "Adding additive blending to the particle shader makes the explosions look like real light."
+- "Screen shake should decay exponentially, not linearly, for a snappier feel."
+- "Enhanced the chromatic aberration triggered by hard drops so it scales dynamically with the fall distance, making large drops feel incredibly heavy!"
