@@ -67,6 +67,9 @@ export class VisualEffects {
     // (separate from general aberrationIntensity; fed to u_aberrationPulse uniform in enhanced post-process)
     hardDropAberrationPulse: number = 0;
 
+    // Music/Event driven base chromatic intensity (exponential decay)
+    baseChromaticIntensity: number = 0;
+
     // Grid radial ripple from last lock (epicenter + 0..0.5s wave time for 500ms outward fade on grid lines)
     gridRippleCenter: [number, number] = [0.0, 0.0];
     gridRippleTime: number = 0.0;
@@ -178,6 +181,10 @@ export class VisualEffects {
         this.hardDropAberrationPulse *= 1.0 / (1.0 + dt / 0.08);
         if (this.hardDropAberrationPulse < 0.005) this.hardDropAberrationPulse = 0;
 
+        // Base chromatic aberration intensity decay
+        this.baseChromaticIntensity *= Math.exp(-dt * 3.0);
+        if (this.baseChromaticIntensity < 0.005) this.baseChromaticIntensity = 0;
+
         // Grid ripple decay (age the wave; render loop / shader handles visual fade at 500ms)
         if (this.gridRippleTime > 0.0) {
             this.gridRippleTime += dt;
@@ -287,6 +294,14 @@ export class VisualEffects {
     triggerHardDropAberrationPulse(strength: number = 1.0): void {
         if (this.reducedMotion) return;
         this.hardDropAberrationPulse = Math.max(this.hardDropAberrationPulse, strength);
+    }
+
+    /**
+     * Trigger a spike in base chromatic intensity (e.g. from line clears, combo, or hard drop)
+     */
+    triggerChromaticSpike(strength: number = 1.0): void {
+        if (this.reducedMotion) return;
+        this.baseChromaticIntensity = Math.min(3.0, this.baseChromaticIntensity + strength);
     }
 
     /**

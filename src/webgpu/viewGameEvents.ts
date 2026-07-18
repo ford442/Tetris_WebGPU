@@ -58,6 +58,7 @@ export function triggerComboOverdrive(view: ViewEventHost, combo: number): void 
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
+  view.visualEffects.triggerChromaticSpike(2.0); // NEON BRICKLAYER
 }
 
 export function triggerEnergyWave(view: ViewEventHost, combo: number): void {
@@ -66,6 +67,7 @@ export function triggerEnergyWave(view: ViewEventHost, combo: number): void {
   view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerAberration(1.5 + combo * 0.3);
   view.visualEffects.triggerHardDropAberrationPulse(1.5);
+  view.visualEffects.triggerChromaticSpike(1.5); // NEON BRICKLAYER
 }
 
 export function showFloatingComboText(view: ViewEventHost, combo: number): void {
@@ -176,6 +178,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   // If it's a Tetris or T-Spin, heavily distort the background hyperspace tunnel.
   if (lines.length >= 4 || tSpin) {
     view.visualEffects.triggerWarpSurge(2.0 + lines.length * 0.5);
+    view.visualEffects.triggerChromaticSpike(1.5 + lines.length * 0.2); // NEON BRICKLAYER
   }
 
   lines.forEach((y: number) => {

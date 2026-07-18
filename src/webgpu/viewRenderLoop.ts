@@ -355,7 +355,7 @@ function updatePostProcessUniforms(view: any, time: number) {
 
   view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
   view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
-  view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
+  view._postProcessParams.chromaticIntensity = view.visualEffects.baseChromaticIntensity || 0.0;
 
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.
@@ -413,6 +413,9 @@ function updatePostProcessUniforms(view: any, time: number) {
     view.device.queue.writeBuffer(view.fragmentUniformBuffer, 188, view._f32_1);
     view._f32_1[0] = bands.treble || 0;
     view.device.queue.writeBuffer(view.fragmentUniformBuffer, 192, view._f32_1);
+
+    // NEON BRICKLAYER: Add music reactivity to chromatic aberration
+    view._postProcessParams.chromaticIntensity += (bands.bass || 0.0) * 0.8 + (bands.mid || 0.0) * 0.3;
   }
 
   // Drive border glow (per-side pulsing) via the helper in viewPlayfield (uniforms + shader primary).
