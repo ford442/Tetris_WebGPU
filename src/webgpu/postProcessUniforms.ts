@@ -71,7 +71,7 @@ struct PostProcessUniforms {
     blackHoleCenter: vec2f,       // 168
     neonBurst: f32,               // 176 - hard-drop radial glow/distortion
     saturationBoost: f32,         // 180 - Line Clear Escalation
-    _padTail1: f32,               // 184
+    chromaticIntensity: f32,      // 184 - Music/Event driven chromatic aberration
     _padTail2: f32,               // 188
 };
 `;
@@ -131,6 +131,9 @@ export interface PostProcessUniformData {
 
   // Hard-drop neon burst radial glow (Neon Bricklayer)
   saturationBoost?: number;
+
+  // Music/Event driven chromatic aberration
+  chromaticIntensity?: number;
 }
 
 export class PostProcessUniformManager {
@@ -166,6 +169,7 @@ export class PostProcessUniformManager {
     blackHoleTime: 0,
     blackHoleCenter: [0.5, 0.5],
     saturationBoost: 0,
+    chromaticIntensity: 0,
   };
 
   /**
@@ -236,7 +240,8 @@ export class PostProcessUniformManager {
     this.data[43] = bhCenter[1];
     this.data[44] = v.neonBurst ?? 0; // neonBurst @ 176
     this.data[45] = v.saturationBoost ?? 0; // saturationBoost @ 180
-    // floats 46-47: WGSL struct tail padding (192B)
+    this.data[46] = v.chromaticIntensity ?? 0; // chromaticIntensity @ 184
+    // floats 47: WGSL struct tail padding (192B)
 
     return this.data;
   }
