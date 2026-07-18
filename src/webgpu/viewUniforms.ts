@@ -19,6 +19,8 @@ export interface FrameUniforms {
   ghostUVW: number;
   hasActiveParticles: boolean;
   commandEncoder: GPUCommandEncoder;
+  dt: number;
+  time: number;
 }
 
 /**
@@ -51,7 +53,7 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
   );
 
   // Particle render uniforms
-  device.queue.writeBuffer(view.particleUniformBuffer, 0, view.vpMatrix);
+  device.queue.writeBuffer(view.particleUniformBuffer, 0, view.vpMatrix as Float32Array);
   view._f32_1[0] = time;
   device.queue.writeBuffer(view.particleUniformBuffer, 64, view._f32_1);
 
@@ -211,5 +213,5 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
     device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
   }
 
-  return { lockPercent, ghostUVX, ghostUVW, hasActiveParticles, commandEncoder };
+  return { lockPercent, ghostUVX, ghostUVW, hasActiveParticles, commandEncoder, dt, time };
 }

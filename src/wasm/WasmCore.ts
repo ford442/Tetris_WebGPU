@@ -3,21 +3,24 @@
 import { clearFullLines as clearFullLinesJs } from '../game/lineUtils.js';
 import { wasmLogger } from '../utils/logger.js';
 
-/** Playfield cells in shared linear memory (10×20). */
+/** Playfield cells per board (10×20). */
 export const WASM_PLAYFIELD_BYTES = 200;
-/** Scratch region immediately after playfield (row flags + cleared indices). */
-export const WASM_ROW_SCRATCH_OFFSET = WASM_PLAYFIELD_BYTES;
+export const WASM_BOARD_COUNT = 2;
 export const WASM_ROW_SCRATCH_BYTES = 20;
+export const WASM_SCRATCH_BLOCK_BYTES = WASM_ROW_SCRATCH_BYTES * 2;
+export const WASM_SCRATCH_REGION_BASE = WASM_PLAYFIELD_BYTES * WASM_BOARD_COUNT;
+export const WASM_MEMORY_BYTES = WASM_SCRATCH_REGION_BASE + WASM_SCRATCH_BLOCK_BYTES * WASM_BOARD_COUNT;
+
+/** Board 0 scratch offset (legacy parity with assembly exports). */
+export const WASM_ROW_SCRATCH_OFFSET = WASM_SCRATCH_REGION_BASE;
 
 export class WasmCore {
   private static instance: WasmCore;
   private wasmMemory!: WebAssembly.Memory;
   private exports!: Record<string, WebAssembly.ExportValue>;
 
-  /** Direct view of playfield bytes 0..199 in WASM linear memory. */
-  public playfieldView!: Int8Array;
-  /** Scratch bytes 200..219 (row flags during ops; indices after clearLines). */
-  private rowScratchView!: Int8Array;
+  private playfieldViews: Int8Array[] = [];
+  private rowScratchViews: Int8Array[] = [];
 
   private constructor() {}
 
@@ -93,8 +96,37 @@ export class WasmCore {
 
   private attachMemoryViews(): void {
     const buf = this.wasmMemory.buffer;
-    this.playfieldView = new Int8Array(buf, 0, WASM_PLAYFIELD_BYTES);
-    this.rowScratchView = new Int8Array(buf, WASM_ROW_SCRATCH_OFFSET, WASM_ROW_SCRATCH_BYTES);
+    if (buf.byteLength < WASM_MEMORY_BYTES) {
+      wasmLogger.warn(`WASM memory smaller than expected (${buf.byteLength} < ${WASM_MEMORY_BYTES})`);
+    }
+
+    this.playfieldViews.length = 0;
+    this.rowScratchViews.length = 0;
+    for (let boardId = 0; boardId < WASM_BOARD_COUNT; boardId++) {
+      const playfieldOffset = boardId * WASM_PLAYFIELD_BYTES;
+      const scratchOffset = WASM_SCRATCH_REGION_BASE + boardId * WASM_SCRATCH_BLOCK_BYTES;
+      this.playfieldViews.push(new Int8Array(buf, playfieldOffset, WASM_PLAYFIELD_BYTES));
+      this.rowScratchViews.push(new Int8Array(buf, scratchOffset, WASM_ROW_SCRATCH_BYTES));
+    }
+  }
+
+  /** Board 0 playfield view (backward compatible). */
+  get playfieldView(): Int8Array {
+    return this.getPlayfieldView(0);
+  }
+
+  getPlayfieldView(boardId: number): Int8Array {
+    return this.playfieldViews[boardId];
+  }
+
+  resolveBoardId(playfield: Int8Array): number | null {
+    if (!this.wasmMemory || playfield.buffer !== this.wasmMemory.buffer) return null;
+    const byteOffset = playfield.byteOffset;
+    if (byteOffset % WASM_PLAYFIELD_BYTES !== 0) return null;
+    const boardId = byteOffset / WASM_PLAYFIELD_BYTES;
+    if (boardId < 0 || boardId >= WASM_BOARD_COUNT) return null;
+    if (playfield !== this.playfieldViews[boardId]) return null;
+    return boardId;
   }
 
   get isReady(): boolean {
@@ -109,18 +141,34 @@ export class WasmCore {
     return Boolean(this.exports?.hardDropDistance);
   }
 
+  get hasDualBoard(): boolean {
+    return Boolean(this.exports?.clearLinesBoard);
+  }
+
   // --- API Wrappers ---
 
-  checkCollision(coords: {x: number, y: number}[], offsetX: number, offsetY: number): boolean {
-    const fn = this.exports?.checkPieceCollision as ((...args: number[]) => number) | undefined;
+  checkCollision(
+    coords: {x: number, y: number}[],
+    offsetX: number,
+    offsetY: number,
+    boardId = 0,
+  ): boolean {
+    const boardFn = this.exports?.checkPieceCollisionBoard as ((...args: number[]) => number) | undefined;
+    const legacyFn = this.exports?.checkPieceCollision as ((...args: number[]) => number) | undefined;
+    const fn = boardFn ?? (boardId === 0 ? legacyFn : undefined);
     if (!fn) return false;
 
-    return fn(
+    const args = [
       coords[0].x + offsetX, coords[0].y + offsetY,
       coords[1].x + offsetX, coords[1].y + offsetY,
       coords[2].x + offsetX, coords[2].y + offsetY,
-      coords[3].x + offsetX, coords[3].y + offsetY
-    ) === 1;
+      coords[3].x + offsetX, coords[3].y + offsetY,
+    ];
+
+    if (boardFn) {
+      return boardFn(boardId, ...args) === 1;
+    }
+    return fn(...args) === 1;
   }
 
   /**
@@ -137,11 +185,15 @@ export class WasmCore {
     const out = outLinesCleared || [];
     out.length = 0;
 
+    const boardId = this.resolveBoardId(playfield);
+    const clearBoardFn = this.exports?.clearLinesBoard as ((id: number) => number) | undefined;
     const clearFn = this.exports?.clearLines as (() => number) | undefined;
-    if (clearFn && playfield === this.playfieldView) {
-      const count = clearFn();
+
+    if (boardId !== null && (clearBoardFn || (boardId === 0 && clearFn))) {
+      const count = clearBoardFn ? clearBoardFn(boardId) : clearFn!();
+      const scratch = this.rowScratchViews[boardId];
       for (let i = 0; i < count; i++) {
-        out.push(this.rowScratchView[i]);
+        out.push(scratch[i]);
       }
       return out;
     }
@@ -152,17 +204,24 @@ export class WasmCore {
   hardDropDistance(
     pieceX: number,
     pieceY: number,
-    coords: { x: number; y: number }[]
+    coords: { x: number; y: number }[],
+    boardId = 0,
   ): number {
-    const fn = this.exports?.hardDropDistance as ((...args: number[]) => number) | undefined;
+    const boardFn = this.exports?.hardDropDistanceBoard as ((...args: number[]) => number) | undefined;
+    const legacyFn = this.exports?.hardDropDistance as ((...args: number[]) => number) | undefined;
+    const fn = boardFn ?? (boardId === 0 ? legacyFn : undefined);
     if (!fn) return -1;
 
-    return fn(
-      pieceX, pieceY,
+    const blockArgs = [
       coords[0].x, coords[0].y,
       coords[1].x, coords[1].y,
       coords[2].x, coords[2].y,
-      coords[3].x, coords[3].y
-    );
+      coords[3].x, coords[3].y,
+    ];
+
+    if (boardFn) {
+      return boardFn(boardId, pieceX, pieceY, ...blockArgs);
+    }
+    return fn(pieceX, pieceY, ...blockArgs);
   }
 }

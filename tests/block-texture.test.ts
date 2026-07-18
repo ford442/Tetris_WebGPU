@@ -10,7 +10,6 @@ import {
   getAtlasSamplingParams,
   createBlockTextureSamplerDescriptor,
   createBlockTextureBindingView,
-  DEFAULT_BLOCK_TEXTURE_CONFIG,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
   type BlockTexturePainter,

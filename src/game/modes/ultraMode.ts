@@ -37,6 +37,8 @@ export const ultraMode: GameMode = {
       secondaryValue: ctx.score.toLocaleString(),
       showSecondary: true,
       showLevel: true,
+      showScore: true,
+      showHighScore: true,
       highScoreLabel: 'BEST SCORE',
     };
   },

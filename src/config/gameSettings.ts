@@ -14,6 +14,8 @@ import type { ColorPaletteId } from '../a11y/colorPalettes.js';
 import { parseColorPaletteId } from '../a11y/colorPalettes.js';
 import type { ReducedMotionPref } from '../a11y/accessibility.js';
 
+export type { QualityPreset } from './renderConfig.js';
+
 export type GpuPowerPreference = 'auto' | 'high-performance' | 'low-power';
 
 export type SettingsQuality = QualityPreset | 'custom';
@@ -70,7 +72,15 @@ export function inferQualityFromToggles(settings: Pick<GameSettings,
   'renderScale' | 'bloom' | 'particles' | 'filmGrain' | 'crt' | 'fxaa' | 'shockwave'
 >): SettingsQuality {
   for (const preset of ['ultra', 'high', 'medium', 'low'] as QualityPreset[]) {
-    if (presetMatches({ ...settings, quality: preset, version: 1, reactiveVideo: false, glitch: false, gpuPower: 'auto' }, preset)) {
+    if (presetMatches({
+      ...createDefaultSettings(),
+      ...settings,
+      quality: preset,
+      version: 1,
+      reactiveVideo: false,
+      glitch: false,
+      gpuPower: 'auto',
+    }, preset)) {
       return preset;
     }
   }

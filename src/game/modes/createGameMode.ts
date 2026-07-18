@@ -2,6 +2,8 @@ import { marathonMode } from './marathonMode.js';
 import { sprintMode } from './sprintMode.js';
 import { ultraMode } from './ultraMode.js';
 import { versusMode } from './versusMode.js';
+import { cheeseMode } from './cheeseMode.js';
+import { zenMode } from './zenMode.js';
 import type { GameMode, GameModeId } from './types.js';
 
 const MODES: Record<GameModeId, GameMode | undefined> = {
@@ -9,11 +11,11 @@ const MODES: Record<GameModeId, GameMode | undefined> = {
   sprint: sprintMode,
   ultra: ultraMode,
   versus: versusMode,
-  cheese: undefined,
-  zen: undefined,
+  cheese: cheeseMode,
+  zen: zenMode,
 };
 
-export const SHIPPED_MODE_IDS: GameModeId[] = ['marathon', 'sprint', 'ultra', 'versus'];
+export const SHIPPED_MODE_IDS: GameModeId[] = ['marathon', 'sprint', 'ultra', 'cheese', 'zen', 'versus'];
 
 export function createGameMode(id: GameModeId): GameMode {
   const mode = MODES[id];
@@ -24,7 +26,16 @@ export function createGameMode(id: GameModeId): GameMode {
 }
 
 export function parseGameModeId(raw: string | null | undefined): GameModeId {
-  if (raw === 'sprint' || raw === 'ultra' || raw === 'marathon' || raw === 'versus') return raw;
+  if (
+    raw === 'sprint' ||
+    raw === 'ultra' ||
+    raw === 'marathon' ||
+    raw === 'versus' ||
+    raw === 'cheese' ||
+    raw === 'zen'
+  ) {
+    return raw;
+  }
   return 'marathon';
 }
 

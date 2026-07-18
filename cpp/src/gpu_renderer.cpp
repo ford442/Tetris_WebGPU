@@ -29,9 +29,10 @@ struct BlockInstance {
 
 struct UniformData {
   float view_proj[16];
-  float half_size;
-  float lock_flash;
-  float pad[2];
+  float params0[4];  // halfSize, lockFlash, ambient, diffuse
+  float params1[4];  // textureMix, pad...
+  float light_dir[4];
+  float eye_pos[4];
 };
 
 struct GpuState {
@@ -45,10 +46,15 @@ struct GpuState {
   WGPUBuffer instance_buffer = nullptr;
   WGPUBuffer uniform_buffer = nullptr;
   WGPUBindGroup bind_group = nullptr;
+  WGPUBindGroupLayout bind_group_layout = nullptr;
+  WGPUTexture block_texture = nullptr;
+  WGPUTextureView block_texture_view = nullptr;
+  WGPUSampler block_sampler = nullptr;
   WGPUTexture depth_texture = nullptr;
   WGPUTextureView depth_view = nullptr;
   WGPUTextureFormat surface_format = WGPUTextureFormat_BGRA8Unorm;
   bool draw_blocks = false;
+  bool texture_ready = false;
   char canvas_selector[64] = "canvaswebgpu";
   int width = 1;
   int height = 1;
@@ -72,8 +78,8 @@ static WGPUTextureFormat preferred_surface_format() {
                                        : WGPUTextureFormat_BGRA8Unorm;
 }
 
-/** Distinctive deep-teal background (#071812-ish) proving the GPU clear path ran. */
-static const WGPUColor kClearColorDeepTeal = {0.027f, 0.094f, 0.071f, 1.0f};
+/** Transparent clear (alpha=0) so the DOM video portal shows through premultiplied surface. */
+static const WGPUColor kClearColorTransparent = {0.0f, 0.0f, 0.0f, 0.0f};
 
 static WGPUStringView make_stringview(const char* str) {
   WGPUStringView res = {};
@@ -239,8 +245,17 @@ static void update_uniforms(float dt) {
 
   UniformData uniforms = {};
   memcpy(uniforms.view_proj, vp.m, sizeof(vp.m));
-  uniforms.half_size = kBlockHalfWorldSize;
-  uniforms.lock_flash = 0.0f;
+  uniforms.params0[0] = kBlockHalfWorldSize;
+  uniforms.params0[1] = 0.0f;
+  uniforms.params0[2] = 0.35f;  // ambient
+  uniforms.params0[3] = 0.85f;  // diffuse
+  uniforms.params1[0] = g_gpu.texture_ready ? 1.0f : 0.0f;
+  uniforms.light_dir[0] = 0.35f;
+  uniforms.light_dir[1] = 0.85f;
+  uniforms.light_dir[2] = 0.45f;
+  uniforms.eye_pos[0] = 0.0f;
+  uniforms.eye_pos[1] = cam_y;
+  uniforms.eye_pos[2] = kCameraZ;
 
   wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.uniform_buffer, 0, &uniforms, sizeof(uniforms));
 }
@@ -248,73 +263,231 @@ static void update_uniforms(float dt) {
 static const char* kBlockWgsl = R"(
 struct Uniforms {
   viewProj: mat4x4<f32>,
-  halfSize: f32,
-  lockFlash: f32,
-  _pad: vec2<f32>,
+  params0: vec4<f32>,
+  params1: vec4<f32>,
+  lightDir: vec4<f32>,
+  eyePos: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var blockTex: texture_2d<f32>;
+@group(0) @binding(2) var blockSamp: sampler;
 
 struct VSOut {
   @builtin(position) position: vec4<f32>,
-  @location(0) color: vec4<f32>,
+  @location(0) worldPos: vec3<f32>,
+  @location(1) normal: vec3<f32>,
+  @location(2) color: vec4<f32>,
+  @location(3) uv: vec2<f32>,
 };
 
 @vertex
 fn vs_main(
   @location(0) localPos: vec3<f32>,
-  @location(1) instPos: vec3<f32>,
-  @location(2) instColor: vec4<f32>,
+  @location(1) localNormal: vec3<f32>,
+  @location(2) localUv: vec2<f32>,
+  @location(3) instPos: vec3<f32>,
+  @location(4) instColor: vec4<f32>,
 ) -> VSOut {
   var out: VSOut;
-  let world = localPos * u.halfSize * 2.0 + instPos;
+  let halfSize = u.params0.x;
+  let world = localPos * halfSize * 2.0 + instPos;
   out.position = u.viewProj * vec4<f32>(world, 1.0);
+  out.worldPos = world;
+  out.normal = localNormal;
   out.color = instColor;
+  out.uv = localUv;
   return out;
 }
 
+const ATLAS_COLUMNS: f32 = 4.0;
+const ATLAS_ROWS: f32 = 3.0;
+const ATLAS_TILE_COL: f32 = 1.0;
+const ATLAS_TILE_ROW: f32 = 1.0;
+const ATLAS_INSET: f32 = 0.03;
+
+fn transformAtlasUV(uv: vec2<f32>) -> vec2<f32> {
+  let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
+  let atlasTiles = vec2<f32>(ATLAS_COLUMNS, ATLAS_ROWS);
+  let atlasTile = vec2<f32>(ATLAS_TILE_COL, ATLAS_TILE_ROW);
+  let inset = vec2<f32>(ATLAS_INSET, ATLAS_INSET);
+  return (texUV * (vec2<f32>(1.0) - inset * 2.0) + inset + atlasTile) / atlasTiles;
+}
+
+fn metalMask(texColor: vec3<f32>) -> f32 {
+  let luma = dot(texColor, vec3<f32>(0.299, 0.587, 0.114));
+  let warmth = texColor.r - texColor.b;
+  let lumaBand = smoothstep(0.25, 0.55, luma) * (1.0 - smoothstep(0.82, 0.95, luma));
+  return clamp(lumaBand * smoothstep(0.45, 0.55, warmth) * 3.0, 0.0, 1.0);
+}
+
+fn composeBase(texColor: vec3<f32>, pieceColor: vec3<f32>, metal: f32) -> vec3<f32> {
+  let luma = dot(texColor, vec3<f32>(0.299, 0.587, 0.114));
+  let crystalBrightness = smoothstep(0.15, 0.90, luma);
+  let glassColor = pieceColor * (0.58 + crystalBrightness * 0.52);
+  let metalColor = texColor * 1.12 + vec3<f32>(0.025, 0.010, 0.0);
+  return mix(glassColor, metalColor, metal);
+}
+
 @fragment
-fn fs_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {
-  return vec4<f32>(color.rgb * color.a, color.a);
+fn fs_main(
+  @location(0) worldPos: vec3<f32>,
+  @location(1) normal: vec3<f32>,
+  @location(2) color: vec4<f32>,
+  @location(3) uv: vec2<f32>,
+) -> @location(0) vec4<f32> {
+  let N = normalize(normal);
+  let L = normalize(u.lightDir.xyz);
+  let V = normalize(u.eyePos.xyz - worldPos);
+  let H = normalize(L + V);
+  let NdotL = max(dot(N, L), 0.0);
+  let NdotH = max(dot(N, H), 0.0);
+
+  var base = color.rgb;
+  var alpha = color.a;
+
+  if (u.params1.x > 0.5) {
+    let texUV = transformAtlasUV(uv);
+    let texColor = textureSampleLevel(blockTex, blockSamp, texUV, 0.0);
+    let metal = metalMask(texColor.rgb);
+    base = composeBase(texColor.rgb, color.rgb, metal);
+    alpha = color.a * mix(0.92, 1.0, metal);
+  }
+
+  let lighting = u.params0.z + u.params0.w * NdotL;
+  let lit = base * lighting;
+  let spec = pow(NdotH, 32.0) * 0.12;
+  let rgb = clamp(lit + vec3<f32>(spec), vec3<f32>(0.0), vec3<f32>(1.0));
+  return vec4<f32>(rgb * alpha, alpha);
 }
 )";
+
+static void release_block_texture() {
+  if (g_gpu.block_texture_view) {
+    wgpuTextureViewRelease(g_gpu.block_texture_view);
+    g_gpu.block_texture_view = nullptr;
+  }
+  if (g_gpu.block_sampler) {
+    wgpuSamplerRelease(g_gpu.block_sampler);
+    g_gpu.block_sampler = nullptr;
+  }
+  if (g_gpu.block_texture) {
+    wgpuTextureRelease(g_gpu.block_texture);
+    g_gpu.block_texture = nullptr;
+  }
+  g_gpu.texture_ready = false;
+}
+
+static bool create_placeholder_block_texture() {
+  release_block_texture();
+  if (!g_gpu.device) return false;
+
+  static const uint8_t white_rgba[4] = {255, 255, 255, 255};
+
+  WGPUTextureDescriptor tex_desc = {};
+  tex_desc.size = {1, 1, 1};
+  tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
+  tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+  tex_desc.mipLevelCount = 1;
+  g_gpu.block_texture = wgpuDeviceCreateTexture(g_gpu.device, &tex_desc);
+  if (!g_gpu.block_texture) return false;
+
+  WGPUTexelCopyTextureInfo dest = {};
+  dest.texture = g_gpu.block_texture;
+  WGPUTexelCopyBufferLayout layout = {};
+  layout.bytesPerRow = 4;
+  layout.rowsPerImage = 1;
+  WGPUExtent3D size = {1, 1, 1};
+  wgpuQueueWriteTexture(g_gpu.queue, &dest, white_rgba, 4, &layout, &size);
+
+  g_gpu.block_texture_view = wgpuTextureCreateView(g_gpu.block_texture, nullptr);
+
+  WGPUSamplerDescriptor samp_desc = {};
+  samp_desc.magFilter = WGPUFilterMode_Linear;
+  samp_desc.minFilter = WGPUFilterMode_Linear;
+  samp_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+  g_gpu.block_sampler = wgpuDeviceCreateSampler(g_gpu.device, &samp_desc);
+
+  return g_gpu.block_texture_view && g_gpu.block_sampler;
+}
+
+static bool recreate_bind_group() {
+  if (g_gpu.bind_group) {
+    wgpuBindGroupRelease(g_gpu.bind_group);
+    g_gpu.bind_group = nullptr;
+  }
+  if (!g_gpu.pipeline || !g_gpu.uniform_buffer || !g_gpu.block_texture_view || !g_gpu.block_sampler) {
+    return false;
+  }
+
+  WGPUBindGroupLayout layout = g_gpu.bind_group_layout;
+  if (!layout) {
+    layout = wgpuRenderPipelineGetBindGroupLayout(g_gpu.pipeline, 0);
+  }
+
+  WGPUBindGroupEntry entries[3] = {};
+  entries[0].binding = 0;
+  entries[0].buffer = g_gpu.uniform_buffer;
+  entries[0].size = sizeof(UniformData);
+  entries[1].binding = 1;
+  entries[1].textureView = g_gpu.block_texture_view;
+  entries[2].binding = 2;
+  entries[2].sampler = g_gpu.block_sampler;
+
+  WGPUBindGroupDescriptor bg_desc = {};
+  bg_desc.layout = layout;
+  bg_desc.entryCount = 3;
+  bg_desc.entries = entries;
+  g_gpu.bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
+  return g_gpu.bind_group != nullptr;
+}
 
 static bool create_pipeline() {
   WGPUShaderModule shader = create_shader(kBlockWgsl);
 
   WGPUVertexAttribute attrs[] = {
       {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 0},
-      {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 1},
-      {.format = WGPUVertexFormat_Float32x4, .offset = 12, .shaderLocation = 2},
+      {.format = WGPUVertexFormat_Float32x3, .offset = 12, .shaderLocation = 1},
+      {.format = WGPUVertexFormat_Float32x2, .offset = 24, .shaderLocation = 2},
+      {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 3},
+      {.format = WGPUVertexFormat_Float32x4, .offset = 12, .shaderLocation = 4},
   };
 
   WGPUVertexBufferLayout layouts[2] = {
       {
           .stepMode = WGPUVertexStepMode_Vertex,
-          .arrayStride = 3 * sizeof(float),
-          .attributeCount = 1,
+          .arrayStride = 8 * sizeof(float),
+          .attributeCount = 3,
           .attributes = &attrs[0],
       },
       {
           .stepMode = WGPUVertexStepMode_Instance,
           .arrayStride = sizeof(BlockInstance),
           .attributeCount = 2,
-          .attributes = &attrs[1],
+          .attributes = &attrs[3],
       },
   };
 
-  WGPUBindGroupLayoutEntry bgl_entry = {};
-  bgl_entry.binding = 0;
-  bgl_entry.visibility = WGPUShaderStage_Vertex;
-  bgl_entry.buffer.type = WGPUBufferBindingType_Uniform;
+  WGPUBindGroupLayoutEntry bgl_entries[3] = {};
+  bgl_entries[0].binding = 0;
+  bgl_entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+  bgl_entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+  bgl_entries[0].buffer.minBindingSize = sizeof(UniformData);
+  bgl_entries[1].binding = 1;
+  bgl_entries[1].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[1].texture.sampleType = WGPUTextureSampleType_Float;
+  bgl_entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+  bgl_entries[2].binding = 2;
+  bgl_entries[2].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
 
   WGPUBindGroupLayoutDescriptor bgl_desc = {};
-  bgl_desc.entryCount = 1;
-  bgl_desc.entries = &bgl_entry;
-  WGPUBindGroupLayout bgl = wgpuDeviceCreateBindGroupLayout(g_gpu.device, &bgl_desc);
+  bgl_desc.entryCount = 3;
+  bgl_desc.entries = bgl_entries;
+  g_gpu.bind_group_layout = wgpuDeviceCreateBindGroupLayout(g_gpu.device, &bgl_desc);
 
   WGPUPipelineLayoutDescriptor layout_desc = {};
   layout_desc.bindGroupLayoutCount = 1;
-  layout_desc.bindGroupLayouts = &bgl;
+  layout_desc.bindGroupLayouts = &g_gpu.bind_group_layout;
   WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(g_gpu.device, &layout_desc);
 
   WGPUBlendState blend = {};
@@ -356,20 +529,48 @@ static bool create_pipeline() {
 
   g_gpu.pipeline = wgpuDeviceCreateRenderPipeline(g_gpu.device, &pipe_desc);
 
-  wgpuBindGroupLayoutRelease(bgl);
   wgpuPipelineLayoutRelease(layout);
   wgpuShaderModuleRelease(shader);
   return g_gpu.pipeline != nullptr;
 }
 
 static bool create_mesh_buffers() {
+  // pos(3) + normal(3) + uv(2) per vertex — 24 verts (unique UVs per face)
   static const float cube_verts[] = {
-      -0.5f, -0.5f,  0.5f,   0.5f, -0.5f,  0.5f,   0.5f,  0.5f,  0.5f,  -0.5f,  0.5f,  0.5f,
-      -0.5f, -0.5f, -0.5f,   0.5f, -0.5f, -0.5f,   0.5f,  0.5f, -0.5f,  -0.5f,  0.5f, -0.5f,
+      // +Z
+      -0.5f,-0.5f, 0.5f,  0,0,1,  0,0,
+       0.5f,-0.5f, 0.5f,  0,0,1,  1,0,
+       0.5f, 0.5f, 0.5f,  0,0,1,  1,1,
+      -0.5f, 0.5f, 0.5f,  0,0,1,  0,1,
+      // -Z
+       0.5f,-0.5f,-0.5f,  0,0,-1,  0,0,
+      -0.5f,-0.5f,-0.5f,  0,0,-1,  1,0,
+      -0.5f, 0.5f,-0.5f,  0,0,-1,  1,1,
+       0.5f, 0.5f,-0.5f,  0,0,-1,  0,1,
+      // +X
+       0.5f,-0.5f, 0.5f,  1,0,0,  0,0,
+       0.5f,-0.5f,-0.5f,  1,0,0,  1,0,
+       0.5f, 0.5f,-0.5f,  1,0,0,  1,1,
+       0.5f, 0.5f, 0.5f,  1,0,0,  0,1,
+      // -X
+      -0.5f,-0.5f,-0.5f, -1,0,0,  0,0,
+      -0.5f,-0.5f, 0.5f, -1,0,0,  1,0,
+      -0.5f, 0.5f, 0.5f, -1,0,0,  1,1,
+      -0.5f, 0.5f,-0.5f, -1,0,0,  0,1,
+      // +Y
+      -0.5f, 0.5f, 0.5f,  0,1,0,  0,0,
+       0.5f, 0.5f, 0.5f,  0,1,0,  1,0,
+       0.5f, 0.5f,-0.5f,  0,1,0,  1,1,
+      -0.5f, 0.5f,-0.5f,  0,1,0,  0,1,
+      // -Y
+      -0.5f,-0.5f,-0.5f,  0,-1,0,  0,0,
+       0.5f,-0.5f,-0.5f,  0,-1,0,  1,0,
+       0.5f,-0.5f, 0.5f,  0,-1,0,  1,1,
+      -0.5f,-0.5f, 0.5f,  0,-1,0,  0,1,
   };
   static const uint16_t cube_indices[] = {
-      0,1,2, 2,3,0,  1,5,6, 6,2,1,  5,4,7, 7,6,5,
-      4,0,3, 3,7,4,  3,2,6, 6,7,3,  4,5,1, 1,0,4,
+      0,1,2, 2,3,0,   4,5,6, 6,7,4,   8,9,10, 10,11,8,
+      12,13,14, 14,15,12,  16,17,18, 18,19,16,  20,21,22, 22,23,20,
   };
 
   g_gpu.vertex_buffer = create_buffer(cube_verts, sizeof(cube_verts), WGPUBufferUsage_Vertex);
@@ -377,18 +578,9 @@ static bool create_mesh_buffers() {
   g_gpu.instance_buffer = create_buffer(nullptr, sizeof(BlockInstance) * kMaxInstances, WGPUBufferUsage_Vertex);
   g_gpu.uniform_buffer = create_buffer(nullptr, sizeof(UniformData), WGPUBufferUsage_Uniform);
 
-  WGPUBindGroupEntry bg_entry = {};
-  bg_entry.binding = 0;
-  bg_entry.buffer = g_gpu.uniform_buffer;
-  bg_entry.size = sizeof(UniformData);
-
-  WGPUBindGroupDescriptor bg_desc = {};
-  bg_desc.layout = wgpuRenderPipelineGetBindGroupLayout(g_gpu.pipeline, 0);
-  bg_desc.entryCount = 1;
-  bg_desc.entries = &bg_entry;
-  g_gpu.bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
-
-  return g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer && g_gpu.bind_group;
+  if (!create_placeholder_block_texture()) return false;
+  return recreate_bind_group() &&
+         g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer;
 }
 
 } // namespace
@@ -427,12 +619,12 @@ int gpu_renderer_init(const char* canvas_selector, int width, int height) {
 
   if (create_pipeline() && create_mesh_buffers()) {
     g_gpu.draw_blocks = true;
-    EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU instanced block pipeline ready'); });
+    EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU instanced textured block pipeline ready'); });
   } else {
     EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU clear-only path (block pipeline skipped)'); });
   }
 
-  EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU surface ready (preferred format, deep-teal clear)'); });
+  EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU surface ready (preferred format, transparent clear for video portal)'); });
   return 1;
 }
 
@@ -446,11 +638,13 @@ void gpu_renderer_resize(int width, int height) {
 
 void gpu_renderer_shutdown(void) {
   if (g_gpu.bind_group) wgpuBindGroupRelease(g_gpu.bind_group);
+  if (g_gpu.bind_group_layout) wgpuBindGroupLayoutRelease(g_gpu.bind_group_layout);
   if (g_gpu.uniform_buffer) wgpuBufferRelease(g_gpu.uniform_buffer);
   if (g_gpu.instance_buffer) wgpuBufferRelease(g_gpu.instance_buffer);
   if (g_gpu.index_buffer) wgpuBufferRelease(g_gpu.index_buffer);
   if (g_gpu.vertex_buffer) wgpuBufferRelease(g_gpu.vertex_buffer);
   if (g_gpu.pipeline) wgpuRenderPipelineRelease(g_gpu.pipeline);
+  release_block_texture();
   release_depth();
   if (g_gpu.surface) wgpuSurfaceRelease(g_gpu.surface);
   if (g_gpu.queue) wgpuQueueRelease(g_gpu.queue);
@@ -485,7 +679,7 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   color_att.view = color_view;
   color_att.loadOp = WGPULoadOp_Clear;
   color_att.storeOp = WGPUStoreOp_Store;
-  color_att.clearValue = kClearColorDeepTeal;
+  color_att.clearValue = kClearColorTransparent;
 
   WGPURenderPassDepthStencilAttachment depth_att = {};
   depth_att.view = g_gpu.depth_view;
@@ -521,6 +715,59 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   wgpuSurfacePresent(g_gpu.surface);
 }
 
+int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len) {
+  if (!g_gpu.active || !g_gpu.device || !g_gpu.queue || !data || width <= 0 || height <= 0) {
+    return 0;
+  }
+
+  const size_t expected = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+  if (byte_len < 0 || static_cast<size_t>(byte_len) < expected) {
+    return 0;
+  }
+
+  release_block_texture();
+
+  WGPUTextureDescriptor tex_desc = {};
+  tex_desc.size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+  tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
+  tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+  tex_desc.mipLevelCount = 1;
+  g_gpu.block_texture = wgpuDeviceCreateTexture(g_gpu.device, &tex_desc);
+  if (!g_gpu.block_texture) return 0;
+
+  WGPUTexelCopyTextureInfo dest = {};
+  dest.texture = g_gpu.block_texture;
+  WGPUTexelCopyBufferLayout layout = {};
+  layout.bytesPerRow = static_cast<uint32_t>(width) * 4u;
+  layout.rowsPerImage = static_cast<uint32_t>(height);
+  WGPUExtent3D size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+  wgpuQueueWriteTexture(g_gpu.queue, &dest, data, expected, &layout, &size);
+
+  g_gpu.block_texture_view = wgpuTextureCreateView(g_gpu.block_texture, nullptr);
+  if (!g_gpu.block_sampler) {
+    WGPUSamplerDescriptor samp_desc = {};
+    samp_desc.magFilter = WGPUFilterMode_Linear;
+    samp_desc.minFilter = WGPUFilterMode_Linear;
+    samp_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+    g_gpu.block_sampler = wgpuDeviceCreateSampler(g_gpu.device, &samp_desc);
+  }
+
+  g_gpu.texture_ready = g_gpu.block_texture_view != nullptr && g_gpu.block_sampler != nullptr;
+  if (g_gpu.texture_ready && !recreate_bind_group()) {
+    g_gpu.texture_ready = false;
+    return 0;
+  }
+
+  if (g_gpu.texture_ready) {
+    EM_ASM({
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[cpp renderer] block.png uploaded to GPU texture');
+      }
+    });
+  }
+  return g_gpu.texture_ready ? 1 : 0;
+}
+
 } // extern "C"
 
 #else // !TETRIS_ENABLE_WEBGPU
@@ -550,6 +797,14 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   (void)rows;
   (void)piece_state;
   (void)dt;
+}
+
+int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len) {
+  (void)data;
+  (void)width;
+  (void)height;
+  (void)byte_len;
+  return 0;
 }
 
 } // extern "C"

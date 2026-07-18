@@ -12,6 +12,8 @@ import { BLOCK_WORLD_SIZE, BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './
 import { SPLIT_BOARD_OFFSETS } from '../versus/splitScreen.js';
 import { updateBorderAudioGlow } from './viewPlayfield.js';
 import type { WebGPUViewHost } from '../view/viewTypes.js';
+import type { FrameUniforms } from './viewUniforms.js';
+import type { Piece } from '../game/pieces.js';
 
 const glMatrix = Matrix;
 
@@ -109,8 +111,15 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 /**
  * Update piece visual interpolation for smooth movement
  */
-function updatePieceInterpolation(view: any, clampedDt: number) {
-  const smooth = (targetX: number, targetY: number, currentX: number, currentY: number, prevPiece: unknown, activePiece: unknown) => {
+function updatePieceInterpolation(view: WebGPUViewHost, clampedDt: number) {
+  const smooth = (
+    targetX: number,
+    targetY: number,
+    currentX: number,
+    currentY: number,
+    prevPiece: Piece | null,
+    activePiece: Piece | null,
+  ): { x: number; y: number; prev: Piece | null } => {
     if (!activePiece) return { x: currentX, y: currentY, prev: null };
     if (prevPiece !== activePiece) {
       return { x: targetX, y: targetY, prev: activePiece };
@@ -161,7 +170,7 @@ function updatePieceInterpolation(view: any, clampedDt: number) {
 /**
  * Update camera position and view matrix with shake
  */
-function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt: number) {
+function updateCameraAndUniforms(view: WebGPUViewHost, _dt: number, time: number, clampedDt: number) {
   // Camera updates - Ethereal Floating Panel View
   let camX = 0.0 + Math.sin(time * 0.2) * 0.5;
   let camY = BOARD_WORLD_CENTER_Y + Math.cos(time * 0.3) * 0.25 + 2.0; // Slight downward tilt (+2.0 Y offset)
@@ -194,7 +203,7 @@ function updateCameraAndUniforms(view: any, dt: number, time: number, clampedDt:
 /**
  * Upload pending particle data to GPU
  */
-function uploadParticles(view: any) {
+function uploadParticles(view: WebGPUViewHost) {
   if (view.particleSystem.pendingUploadCount > 0) {
     for (let i = 0; i < view.particleSystem.pendingUploadCount; i++) {
       const index = view.particleSystem.pendingUploadIndices[i];
@@ -209,7 +218,7 @@ function uploadParticles(view: any) {
 /**
  * Update compute shader uniforms for particle physics
  */
-function updateComputeUniforms(view: any, dt: number, time: number) {
+function updateComputeUniforms(view: WebGPUViewHost, dt: number, time: number) {
   const swParams = view.visualEffects.getShockwaveParams();
   const swCenter = view.visualEffects.shockwaveCenter;
   const swTimer = view.visualEffects.shockwaveTimer;
@@ -233,7 +242,7 @@ function updateComputeUniforms(view: any, dt: number, time: number) {
 /**
  * Update per-frame GPU uniforms for rendering
  */
-function updateRenderUniforms(view: any, time: number, result: any) {
+function updateRenderUniforms(view: WebGPUViewHost, time: number, result: FrameUniforms) {
   // Particle uniforms
   view.device.queue.writeBuffer(view.particleUniformBuffer, 0, view.vpMatrix as Float32Array);
   view._f32_1[0] = time;
@@ -310,7 +319,7 @@ function updateRenderUniforms(view: any, time: number, result: any) {
 /**
  * Update post-process shader uniforms
  */
-function updatePostProcessUniforms(view: any, time: number) {
+function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.time = time;
   view._postProcessParams.useGlitch = Math.max(view.useGlitch ? 1.0 : 0.0, view.visualEffects.glitchIntensity);
   const shockwaveActive = view.useShockwave !== false;
@@ -380,10 +389,12 @@ function updatePostProcessUniforms(view: any, time: number) {
   view._postProcessParams.gameOverKaleidoTime = view.visualEffects.gameOverKaleidoTimer || 0;
 
   // Line clear laser uniforms
-  view._postProcessParams.lineClearLaserY[0] = view.visualEffects.lineClearLaserY[0];
-  view._postProcessParams.lineClearLaserY[1] = view.visualEffects.lineClearLaserY[1];
-  view._postProcessParams.lineClearLaserY[2] = view.visualEffects.lineClearLaserY[2];
-  view._postProcessParams.lineClearLaserY[3] = view.visualEffects.lineClearLaserY[3];
+  const laserY = view._postProcessParams.lineClearLaserY ?? [0, 0, 0, 0];
+  laserY[0] = view.visualEffects.lineClearLaserY[0];
+  laserY[1] = view.visualEffects.lineClearLaserY[1];
+  laserY[2] = view.visualEffects.lineClearLaserY[2];
+  laserY[3] = view.visualEffects.lineClearLaserY[3];
+  view._postProcessParams.lineClearLaserY = laserY as [number, number, number, number];
   view._postProcessParams.lineClearLaserIntensity = view.visualEffects.lineClearLaserIntensity || 0;
 
   // Column heights (topmost row index per column, 0=top of board) for simple depth-based
@@ -432,7 +443,7 @@ function updatePostProcessUniforms(view: any, time: number) {
 /**
  * Execute all render passes (background, main, post-process)
  */
-function executeRenderPasses(view: any, commandEncoder: any, result: any) {
+function executeRenderPasses(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder, result: FrameUniforms) {
   // 1. Background (Video or Shader)
   renderBackgroundPass(view, commandEncoder);
 
@@ -449,9 +460,9 @@ function executeRenderPasses(view: any, commandEncoder: any, result: any) {
 /**
  * Render background pass (procedural or video)
  */
-function renderBackgroundPass(view: any, commandEncoder: any) {
+function renderBackgroundPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder) {
   const renderVideo = view.reactiveVideoBackground?.isVideoPlaying ?? false;
-  const videoTex = renderVideo ? view.reactiveVideoBackground?.getExternalVideoTexture() : null;
+  const videoTex = renderVideo ? (view.reactiveVideoBackground?.getExternalVideoTexture() ?? null) : null;
   const clearColors = view.visualEffects.getClearColors();
   const colorAttachment0 = (view._backgroundPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
   const clearValue = colorAttachment0.clearValue as GPUColorDict;
@@ -468,7 +479,7 @@ function renderBackgroundPass(view: any, commandEncoder: any) {
 /**
  * Render frosted glass backboard pass
  */
-function renderFrostedGlassPass(view: any, commandEncoder: any) {
+function renderFrostedGlassPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder) {
   if (!view.useFrostedGlass || !view.frostedGlassPipeline) return;
 
   view.updateFrostedGlassUniforms();
@@ -494,7 +505,7 @@ function renderFrostedGlassPass(view: any, commandEncoder: any) {
 /**
  * Render main scene pass (blocks, grid, particles)
  */
-function renderMainPass(view: any, commandEncoder: any, result: any) {
+function renderMainPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder, result: FrameUniforms) {
   const passEncoder = commandEncoder.beginRenderPass(view._mainPassDescriptor);
 
   const split = view.splitScreen?.active && view.splitScreen.stateB;
@@ -532,6 +543,6 @@ function renderMainPass(view: any, commandEncoder: any, result: any) {
 /**
  * Render post-process pass
  */
-function renderPostProcessPass(view: any, commandEncoder: any) {
+function renderPostProcessPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder) {
   view.postProcessor.render(commandEncoder, view.vpMatrix as Float32Array);
 }

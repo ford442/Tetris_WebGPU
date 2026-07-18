@@ -38,6 +38,8 @@ export const sprintMode: GameMode = {
       secondaryValue: formatMsAsClock(ctx.elapsedMs),
       showSecondary: true,
       showLevel: false,
+      showScore: true,
+      showHighScore: true,
       highScoreLabel: 'BEST TIME',
     };
   },

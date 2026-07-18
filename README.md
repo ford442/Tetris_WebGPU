@@ -25,13 +25,22 @@ See the pause menu during play to enable/disable.
 
 ## Development
 
+**Requires Node.js 20+** (CI tests Node 20 and 22).
+
 ```bash
 npm ci                   # install dependencies
 npm run dev              # start the Vite dev server
 npm test                 # run the Vitest suite (auto-builds release WASM)
+npm run typecheck        # tsc --noEmit (src/ only)
+npm run lint             # ESLint (typescript-eslint, minimal ruleset)
+npm run lint:fix         # auto-fix import style where possible
 npm run build            # production bundle (dist/)
 npm run build:all        # AssemblyScript WASM + C++ renderer + Vite build
 ```
+
+**Lint rules:** `@typescript-eslint/no-floating-promises`, `consistent-type-imports`, and `no-unused-vars` (aligned with `tsc` underscore-ignore convention). Config: [`eslint.config.js`](eslint.config.js).
+
+**C++ renderer:** match [`.emsdk-version`](.emsdk-version) locally; `scripts/build-cpp.mjs` warns on emsdk drift. See [`cpp/README.md`](cpp/README.md).
 
 ### Level background videos
 
@@ -57,6 +66,23 @@ npm run preview      # test offline in DevTools Network → Offline
 
 Touch controls, safe-area layout, swipe gestures, and fullscreen: see [`docs/MOBILE_PWA.md`](docs/MOBILE_PWA.md).
 
+### Game modes
+
+Select a mode from the left panel before **START**. Mode rules also appear in the pause menu.
+
+| Mode | Goal | Win | Lose | Leaderboard |
+|------|------|-----|------|-------------|
+| **Marathon** | Survive and climb levels | — | Top-out | High score |
+| **Sprint 40L** | Clear 40 lines fast | 40 lines cleared | Top-out | Best time |
+| **Ultra 2:00** | Max score in 2 minutes | Timer ends | Top-out | Best score |
+| **Cheese Race** | Clear all cheese blocks | No garbage cells remain | Top-out | Best time |
+| **Zen Practice** | Relaxed practice | — (no end) | Never | None |
+| **Local 2P** | Beat opponent | Opponent tops out | Top-out | — |
+
+**Cheese Race** starts with 7 rows of garbage (one hole per row). Clear every gray cheese block to win; your own piece colors can stay on the board. Customize row count with `?cheeseRows=5` through `?cheeseRows=10`.
+
+**Zen Practice** uses fixed slow gravity (level 1), infinite hold, and no game over — if spawn is blocked, the top four rows are cleared automatically. The HUD tracks lines and time only (no score pressure). Pairs well with reduced-motion settings in the pause menu.
+
 ### Local 2P versus
 
 Split-screen on one keyboard with garbage attacks. Select **Local 2P** → **START**. See [`docs/VERSUS.md`](docs/VERSUS.md).
@@ -64,9 +90,9 @@ Split-screen on one keyboard with garbage attacks. Select **Local 2P** → **STA
 ### Continuous Integration
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`.
-It installs dependencies with `npm ci`, builds the release WASM, runs `npm test`,
-and produces the production build across a Node LTS matrix (20 and 22). PRs must
-be green before merge.
+It installs dependencies with `npm ci`, builds the release WASM, runs `npm run typecheck`,
+`npm run lint`, `npm test`, and produces the production build across a Node LTS matrix
+(20 and 22). PRs must be green before merge.
 
 ### Screenshots / diagnostics
 

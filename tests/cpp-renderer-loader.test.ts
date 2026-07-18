@@ -22,4 +22,20 @@ describe('CppRendererLoader paths', () => {
     expect(src).toContain('get_renderer_backend');
     expect(src).toContain('preinitializedWebGPUDevice');
   });
+
+  it('uses shared gpuContext device policy (no ad-hoc requestAdapter)', () => {
+    const src = readFileSync(join(process.cwd(), 'src/viewCpp/CppRendererLoader.ts'), 'utf8');
+    expect(src).toContain("from '../webgpu/gpuContext.js'");
+    expect(src).toContain('requestGpuAdapterAndDevice');
+    expect(src).toContain('attachDeviceLifecycleHandlers');
+    expect(src).not.toMatch(/navigator\.gpu\.requestAdapter\s*\(/);
+  });
+
+  it('uploads block.png via set_block_texture_rgba', () => {
+    const src = readFileSync(join(process.cwd(), 'src/viewCpp/CppRendererLoader.ts'), 'utf8');
+    expect(src).toContain('set_block_texture_rgba');
+    expect(src).toContain('uploadBlockTexture');
+    expect(src).toContain('resolveBlockTextureUrl');
+    expect(src).toContain('hasBlockTexture');
+  });
 });

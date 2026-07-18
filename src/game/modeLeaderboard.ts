@@ -63,7 +63,7 @@ export class ModeLeaderboard {
   private normalize(raw: unknown): ModeLeaderboardEntry | null {
     if (!raw || typeof raw !== 'object') return null;
     const record = raw as Record<string, unknown>;
-    const compact = record as StoredModeEntry;
+    const compact = record as unknown as StoredModeEntry;
     const value = typeof record.value === 'number' ? record.value : compact.v;
     const metric = record.metric === 'time' || record.metric === 'score'
       ? record.metric

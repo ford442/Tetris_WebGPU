@@ -4,7 +4,7 @@
 
 import type { AudioBus } from './audioBus.js';
 import type { MusicEngine } from './musicEngine.js';
-import type { LineClearPayload, LockPayload, MoveDirection, MovePayload } from './types.js';
+import type { LineClearPayload, LockPayload, MovePayload } from './types.js';
 
 const LOCK_TIMBRE: Record<string, number> = {
   I: 196,

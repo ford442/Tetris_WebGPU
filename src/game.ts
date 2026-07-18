@@ -1,8 +1,8 @@
-import { Piece, PieceGenerator } from './game/pieces.js';
+import { type Piece, PieceGenerator } from './game/pieces.js';
 import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
-import { ScoringSystem, ScoreEvent, HighScoreManager } from './game/scoring.js';
-import { compactClearedRows, isPlayfieldEmpty } from './game/lineUtils.js';
+import { ScoringSystem, type ScoreEvent, type HighScoreManager } from './game/scoring.js';
+import { compactClearedRows, isPlayfieldEmpty, countGarbageCells, clearTopRows } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
 import type { GameState } from './game/gameState.js';
 import { RunStats } from './game/runStats.js';
@@ -15,13 +15,28 @@ import { WasmCore } from './wasm/WasmCore.js';
 import { wasmLogger } from './utils/logger.js';
 import { injectGarbageRows } from './versus/garbage.js';
 import type { IView } from './view/IView.js';
+import {
+  handleMoveReset as applyMoveReset,
+  resetLockDelayResult,
+  tickLockDelay,
+  tickLockDelaySync,
+  type LockDelayHost,
+} from './game/lockDelay.js';
+import { evaluateTSpin } from './game/tSpin.js';
+import {
+  performHold as applyHold,
+  refillNextQueue as refillNextQueueHost,
+  spawnNextPiece,
+  type SpawnHoldHost,
+} from './game/spawnHold.js';
+import { performHardDrop } from './game/hardDrop.js';
 
 export type { GameState } from './game/gameState.js';
 export type { GameModeId } from './game/modes/types.js';
 
 export interface GameOptions {
-  /** Use a private playfield (required for 2P — WASM memory is single-board). */
-  dedicatedPlayfield?: boolean;
+  /** Shared WASM playfield index (0 = single-player default, 1 = versus P2). */
+  wasmBoardId?: 0 | 1;
 }
 
 export default class Game implements ModeGameHooks {
@@ -34,7 +49,7 @@ export default class Game implements ModeGameHooks {
 
   activPiece!: Piece;
   nextPiece!: Piece;
-  private nextQueue: Piece[] = [];
+  nextQueue: Piece[] = [];
   nextQueueDepth: number = NEXT_QUEUE_CONFIG.DEFAULT_DEPTH;
   holdPieceObj: Piece | null = null;
   canHold: boolean = true;
@@ -90,18 +105,30 @@ export default class Game implements ModeGameHooks {
 
   private _linesClearedCache: number[] = [];
 
-  private hardDropSnapshot: { blocks: number[][]; x: number } | null = null;
+  hardDropSnapshot: { blocks: number[][]; x: number } | null = null;
 
   /** Incoming garbage rows from opponent (applied on next lock). */
   pendingGarbageRows = 0;
 
+  /** Deterministic garbage hole RNG for lockstep (optional). */
+  private garbageRngFactory: (() => () => number) | null = null;
+
+  private practiceInfiniteHold = false;
+  practiceTopOutRecovery = false;
+  private static readonly ZEN_RECOVERY_ROWS = 4;
+
+  get infiniteHold(): boolean {
+    return this.practiceInfiniteHold;
+  }
+
   private useWasmCollision = true;
+  private wasmBoardId = 0;
 
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
   };
 
-  private _gameStateCache: GameState = {
+  readonly gameStateCache: GameState = {
     score: 0,
     level: 1,
     lines: 0,
@@ -119,6 +146,8 @@ export default class Game implements ModeGameHooks {
     modeSecondaryValue: '0:00',
     modeShowSecondary: true,
     modeShowLevel: true,
+    modeShowScore: true,
+    modeShowHighScore: true,
     modeHighScoreLabel: 'HIGH SCORE',
     elapsedMs: 0,
     playfield: [],
@@ -151,24 +180,27 @@ export default class Game implements ModeGameHooks {
 
   constructor(options?: GameOptions) {
     this.pieceGenerator = new PieceGenerator();
-    const dedicated = options?.dedicatedPlayfield === true;
-    if (dedicated) {
-      this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
-      this.useWasmCollision = false;
-    } else {
-      // --- WASM INTEGRATION ---
-      try {
-          this.playfield = WasmCore.get().playfieldView;
+    this.wasmBoardId = options?.wasmBoardId ?? 0;
+    // --- WASM INTEGRATION ---
+    try {
+        const core = WasmCore.get();
+        if (core.isReady) {
+          this.playfield = core.getPlayfieldView(this.wasmBoardId);
           if (this.playfield.length !== this.playfieldWidth * this.playfieldHeight) {
               wasmLogger.error("Memory View mismatch");
               this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
               this.useWasmCollision = false;
+          } else {
+              this.useWasmCollision = true;
           }
-      } catch (e) {
-          wasmLogger.warn("Not loaded, using fallback memory");
+        } else {
           this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
           this.useWasmCollision = false;
-      }
+        }
+    } catch (_e) {
+        wasmLogger.warn("Not loaded, using fallback memory");
+        this.playfield = new Int8Array(this.playfieldWidth * this.playfieldHeight);
+        this.useWasmCollision = false;
     }
     // ------------------------
     this.collisionDetector = new CollisionDetector(this.playfield);
@@ -213,6 +245,40 @@ export default class Game implements ModeGameHooks {
     this.modeElapsedMs = 0;
   }
 
+  injectCheeseRows(rowCount: number, rng: () => number = Math.random): void {
+    if (rowCount <= 0) return;
+    injectGarbageRows(
+      this.playfield,
+      this.playfieldWidth,
+      this.playfieldHeight,
+      rowCount,
+      rng,
+    );
+    this.collisionDetector.updatePlayfield(this.playfield);
+  }
+
+  countGarbageCells(): number {
+    return countGarbageCells(this.playfield);
+  }
+
+  setPracticeFlags(flags: { infiniteHold?: boolean; topOutRecovery?: boolean }): void {
+    this.practiceInfiniteHold = flags.infiniteHold ?? false;
+    this.practiceTopOutRecovery = flags.topOutRecovery ?? false;
+  }
+
+  recoverFromTopOut(): boolean {
+    if (!this.practiceTopOutRecovery) return false;
+    clearTopRows(
+      this.playfield,
+      this.playfieldWidth,
+      this.playfieldHeight,
+      Game.ZEN_RECOVERY_ROWS,
+    );
+    this.collisionDetector.updatePlayfield(this.playfield);
+    this.view?.syncBoardToGPU?.(this.playfield);
+    return true;
+  }
+
   private buildModeContext(): ModeContext {
     return {
       lines: this.lines,
@@ -221,6 +287,7 @@ export default class Game implements ModeGameHooks {
       elapsedMs: this.modeElapsedMs,
       gameOver: this.gameOver,
       victory: this.victory,
+      garbageCellsRemaining: this.countGarbageCells(),
     };
   }
 
@@ -257,15 +324,8 @@ export default class Game implements ModeGameHooks {
     this.nextQueueDepth = settings.nextQueueDepth;
   }
 
-  private syncNextPieceField(): void {
-    this.nextPiece = this.nextQueue[0] ?? this.nextPiece;
-  }
-
   private refillNextQueue(): void {
-    while (this.nextQueue.length < this.nextQueueDepth) {
-      this.nextQueue.push(this.createPiece());
-    }
-    this.syncNextPieceField();
+    refillNextQueueHost(this as SpawnHoldHost);
   }
 
   private evaluateModeEnd(): void {
@@ -279,14 +339,14 @@ export default class Game implements ModeGameHooks {
     }
   }
 
-  private notifyModeLineClear(linesCleared: number): void {
+  notifyModeLineClear(linesCleared: number): void {
     if (linesCleared > 0) {
       this.mode.onLineClear(linesCleared, this.buildModeContext());
       this.evaluateModeEnd();
     }
   }
 
-  private notifyModeLock(): void {
+  notifyModeLock(): void {
     this.mode.onLock(this.buildModeContext());
     this.evaluateModeEnd();
   }
@@ -366,11 +426,11 @@ export default class Game implements ModeGameHooks {
 
   // Set view reference for reactive events
   // ==================== REACTIVE EVENT HOOKS ====================
-  private triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
+  triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
     this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin, isAllClear);
   }
 
-  private triggerLevelUpReactive(newLevel: number): void {
+  triggerLevelUpReactive(newLevel: number): void {
     this.view?.onLevelUpReactive?.(newLevel);
   }
 
@@ -389,47 +449,49 @@ export default class Game implements ModeGameHooks {
       targetArray: this.projectedPlayfield
     });
 
-    this._gameStateCache.score = this.score;
-    this._gameStateCache.level = this.level;
-    this._gameStateCache.lines = this.lines;
-    this._gameStateCache.nextPiece = this.nextPiece;
-    if (this._gameStateCache.nextQueue.length !== this.nextQueue.length) {
-      this._gameStateCache.nextQueue = new Array(this.nextQueue.length);
+    this.gameStateCache.score = this.score;
+    this.gameStateCache.level = this.level;
+    this.gameStateCache.lines = this.lines;
+    this.gameStateCache.nextPiece = this.nextPiece;
+    if (this.gameStateCache.nextQueue.length !== this.nextQueue.length) {
+      this.gameStateCache.nextQueue = new Array(this.nextQueue.length);
     }
     for (let i = 0; i < this.nextQueue.length; i++) {
-      this._gameStateCache.nextQueue[i] = this.nextQueue[i];
+      this.gameStateCache.nextQueue[i] = this.nextQueue[i];
     }
-    this._gameStateCache.holdPiece = this.holdPieceObj;
-    this._gameStateCache.activePiece = this.activPiece;
-    this._gameStateCache.isGameOver = this.gameOver;
-    this._gameStateCache.isVictory = this.victory;
+    this.gameStateCache.holdPiece = this.holdPieceObj;
+    this.gameStateCache.activePiece = this.activPiece;
+    this.gameStateCache.isGameOver = this.gameOver;
+    this.gameStateCache.isVictory = this.victory;
 
     const hud = this.mode.getHud(this.buildModeContext());
-    this._gameStateCache.modeId = hud.modeId;
-    this._gameStateCache.modeLabel = hud.modeLabel;
-    this._gameStateCache.modePrimaryLabel = hud.primaryLabel;
-    this._gameStateCache.modePrimaryValue = hud.primaryValue;
-    this._gameStateCache.modeSecondaryLabel = hud.secondaryLabel;
-    this._gameStateCache.modeSecondaryValue = hud.secondaryValue;
-    this._gameStateCache.modeShowSecondary = hud.showSecondary;
-    this._gameStateCache.modeShowLevel = hud.showLevel;
-    this._gameStateCache.modeHighScoreLabel = hud.highScoreLabel;
-    this._gameStateCache.elapsedMs = this.modeElapsedMs;
+    this.gameStateCache.modeId = hud.modeId;
+    this.gameStateCache.modeLabel = hud.modeLabel;
+    this.gameStateCache.modePrimaryLabel = hud.primaryLabel;
+    this.gameStateCache.modePrimaryValue = hud.primaryValue;
+    this.gameStateCache.modeSecondaryLabel = hud.secondaryLabel;
+    this.gameStateCache.modeSecondaryValue = hud.secondaryValue;
+    this.gameStateCache.modeShowSecondary = hud.showSecondary;
+    this.gameStateCache.modeShowLevel = hud.showLevel;
+    this.gameStateCache.modeShowScore = hud.showScore;
+    this.gameStateCache.modeShowHighScore = hud.showHighScore;
+    this.gameStateCache.modeHighScoreLabel = hud.highScoreLabel;
+    this.gameStateCache.elapsedMs = this.modeElapsedMs;
 
-    this._gameStateCache.playfield = playfield2D;
-    this._gameStateCache.lockTimer = this.lockTimer;
-    this._gameStateCache.lockDelayTime = this.lockDelayTime;
-    this._gameStateCache.effectEvent = this.effectEvent;
-    this._gameStateCache.effectCounter = this.effectCounter;
-    this._gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
-    this._gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
-    this._gameStateCache.lastDropPos = this.lastDropPos;
-    this._gameStateCache.lastDropDistance = this.lastDropDistance;
-    this._gameStateCache.scoreEvent = this.scoreEvent;
-    this._gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
-    this._gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
+    this.gameStateCache.playfield = playfield2D;
+    this.gameStateCache.lockTimer = this.lockTimer;
+    this.gameStateCache.lockDelayTime = this.lockDelayTime;
+    this.gameStateCache.effectEvent = this.effectEvent;
+    this.gameStateCache.effectCounter = this.effectCounter;
+    this.gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
+    this.gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
+    this.gameStateCache.lastDropPos = this.lastDropPos;
+    this.gameStateCache.lastDropDistance = this.lastDropDistance;
+    this.gameStateCache.scoreEvent = this.scoreEvent;
+    this.gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
+    this.gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
 
-    return this._gameStateCache;
+    return this.gameStateCache;
   }
 
   getGhostY(): number {
@@ -451,7 +513,7 @@ export default class Game implements ModeGameHooks {
     if (count === 4) {
       const core = WasmCore.get();
       if (core.hasHardDrop) {
-        const dist = core.hardDropDistance(piece.x, piece.y, this.collisionCoordsCache);
+        const dist = core.hardDropDistance(piece.x, piece.y, this.collisionCoordsCache, this.wasmBoardId);
         if (dist >= 0) return piece.y + dist;
       }
     }
@@ -460,100 +522,16 @@ export default class Game implements ModeGameHooks {
   }
 
   hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-    this._hardDropResult.linesCleared.length = 0;
-    this._hardDropResult.locked = false;
-    this._hardDropResult.gameOver = false;
-    this._hardDropResult.tSpin = false;
-
-    const ghostY = this.getGhostY();
-    if (this.activPiece.y !== ghostY) {
-        this.isTSpin = false;
-    }
-
-    this.hardDropSnapshot = {
-      blocks: this.activPiece.blocks,
-      x: this.activPiece.x,
-    };
-
-    const distance = ghostY - this.activPiece.y;
-    this.activPiece.y = ghostY;
-
-    this.effectEvent = 'hardDrop';
-    this.effectCounter++;
-    this.effectFlag = true;
-    this._gameStateCache.effectFlag = true;
-    this._gameStateCache.neonBurstFlag = true;
-
-    if (!this.lastDropPos) {
-        this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
-    } else {
-        this.lastDropPos.x = this.activPiece.x;
-        this.lastDropPos.y = this.activPiece.y;
-    }
-    this.lastDropDistance = distance;
-
-    this.lockPiece();
-    this._hardDropResult.locked = true;
-
-    const wasTSpin = this.isTSpin;
-    const linesScore = this.clearLine();
-    this.applyLineClearScoring(linesScore, wasTSpin, this._hardDropResult);
-    this.notifyModeLock();
-
-    this.updatePieces();
-    if (this.gameOver || this.victory) this._hardDropResult.gameOver = true;
-
+    void performHardDrop(this, () => this.clearLine(), this._hardDropResult);
     return this._hardDropResult;
   }
 
   async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
-    this._hardDropResult.linesCleared.length = 0;
-    this._hardDropResult.locked = false;
-    this._hardDropResult.gameOver = false;
-    this._hardDropResult.tSpin = false;
-
-    const ghostY = this.getGhostY();
-    if (this.activPiece.y !== ghostY) {
-        this.isTSpin = false;
-    }
-
-    this.hardDropSnapshot = {
-      blocks: this.activPiece.blocks,
-      x: this.activPiece.x,
-    };
-
-    const distance = ghostY - this.activPiece.y;
-    this.activPiece.y = ghostY;
-
-    this.effectEvent = 'hardDrop';
-    this.effectCounter++;
-    this.effectFlag = true;
-    this._gameStateCache.effectFlag = true;
-    this._gameStateCache.neonBurstFlag = true;
-
-    if (!this.lastDropPos) {
-        this.lastDropPos = { x: this.activPiece.x, y: this.activPiece.y };
-    } else {
-        this.lastDropPos.x = this.activPiece.x;
-        this.lastDropPos.y = this.activPiece.y;
-    }
-    this.lastDropDistance = distance;
-
-    this.lockPiece();
-    this._hardDropResult.locked = true;
-
-    const wasTSpin = this.isTSpin;
-    const linesScore = await this.clearLineAsync();
-    this.applyLineClearScoring(linesScore, wasTSpin, this._hardDropResult);
-    this.notifyModeLock();
-
-    this.updatePieces();
-    if (this.gameOver || this.victory) this._hardDropResult.gameOver = true;
-
+    await performHardDrop(this, () => this.clearLineAsync(), this._hardDropResult);
     return this._hardDropResult;
   }
 
-  private applyLineClearScoring(
+  applyLineClearScoring(
     linesScore: number[],
     wasTSpin: boolean,
     result: { linesCleared: number[], tSpin: boolean },
@@ -590,8 +568,9 @@ export default class Game implements ModeGameHooks {
     this.runStats.reset();
     this.applyUxSettings();
     this.mode.onReset(this);
-    this.playfield.fill(0); // Efficient clear
+    this.playfield.fill(0);
     this.collisionDetector.updatePlayfield(this.playfield);
+    this.mode.onBoardReady?.(this);
     this.holdPieceObj = null;
     this.canHold = true;
     this.lockTimer = 0;
@@ -612,92 +591,23 @@ export default class Game implements ModeGameHooks {
 
   // Called every frame (CPU line detection — used by unit tests)
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-      this._updateResult.linesCleared.length = 0;
-      this._updateResult.locked = false;
-      this._updateResult.gameOver = false;
-      this._updateResult.tSpin = false;
-
+      resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
-
-      this.activPiece.y += 1;
-      const onGround = this.hasCollision();
-      this.activPiece.y -= 1;
-
-      if (onGround) {
-          this.lockTimer += dt;
-          if (this.lockTimer > this.lockDelayTime + 33) {
-              this.effectCounter++;
-              this.lockPiece();
-              this._updateResult.locked = true;
-              const wasTSpin = this.isTSpin;
-              const linesScore = this.clearLine();
-              this.finishLockUpdate(linesScore, wasTSpin, this._updateResult);
-          }
-      } else {
-          this.lockTimer = 0;
-      }
+      tickLockDelaySync(this as LockDelayHost, dt, () => this.clearLine(), this._updateResult);
       return this._updateResult;
   }
 
   /** Game loop entry — GPU line detection when the view pipeline is ready. */
   async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
-      this._updateResult.linesCleared.length = 0;
-      this._updateResult.locked = false;
-      this._updateResult.gameOver = false;
-      this._updateResult.tSpin = false;
-
+      resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
-
-      this.activPiece.y += 1;
-      const onGround = this.hasCollision();
-      this.activPiece.y -= 1;
-
-      if (onGround) {
-          this.lockTimer += dt;
-          if (this.lockTimer > this.lockDelayTime + 33) {
-              this.effectCounter++;
-              this.lockPiece();
-              this._updateResult.locked = true;
-              const wasTSpin = this.isTSpin;
-              const linesScore = await this.clearLineAsync();
-              this.finishLockUpdate(linesScore, wasTSpin, this._updateResult);
-          }
-      } else {
-          this.lockTimer = 0;
-      }
+      await tickLockDelay(
+        this as LockDelayHost,
+        dt,
+        () => this.clearLineAsync(),
+        this._updateResult,
+      );
       return this._updateResult;
-  }
-
-  private finishLockUpdate(
-    linesScore: number[],
-    wasTSpin: boolean,
-    result: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean },
-  ): void {
-      if (linesScore.length > 0) {
-          const isAllClear = this.isPlayfieldEmpty();
-          const previousLevel = this.level;
-          this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
-          result.linesCleared.length = 0;
-          for (let i = 0; i < linesScore.length; i++) {
-              result.linesCleared.push(linesScore[i]);
-          }
-          result.tSpin = wasTSpin;
-          this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-          if (wasTSpin) this.view?.onTSpinReactive?.();
-          if (this.level > previousLevel) {
-              this.triggerLevelUpReactive(this.level);
-          }
-          this.notifyModeLineClear(linesScore.length);
-          if (this.scoreEvent) {
-            this.runStats.onLineClear(this.scoreEvent.combo, this.scoreEvent.backToBack);
-          }
-      } else {
-          this.scoringSystem.resetCombo();
-          this.scoreEvent = null;
-      }
-      this.notifyModeLock();
-      this.updatePieces();
-      if (this.gameOver || this.victory) result.gameOver = true;
   }
 
   movePieceLeft(): void {
@@ -749,46 +659,18 @@ export default class Game implements ModeGameHooks {
     this.updatePieces();
   }
 
-  private isPlayfieldEmpty(): boolean {
+  isPlayfieldEmpty(): boolean {
       return isPlayfieldEmpty(this.playfield);
   }
 
   checkTSpin(): void {
-      if (this.activPiece.type !== 'T') {
-          this.isTSpin = false;
-          return;
-      }
-
-      // Check 4 corners of the 3x3 box
-      // Relative to piece X,Y: (0,0), (2,0), (0,2), (2,2)
-      // Standard T-piece spawns/rotates within a 3x3 grid.
-      // 3 of 4 corners must be occupied (block or wall/floor).
-
-      const px = this.activPiece.x;
-      const py = this.activPiece.y;
-
-      // Use pre-allocated array to avoid GC
-      this._tSpinCorners[0].x = px;     this._tSpinCorners[0].y = py;
-      this._tSpinCorners[1].x = px + 2; this._tSpinCorners[1].y = py;
-      this._tSpinCorners[2].x = px;     this._tSpinCorners[2].y = py + 2;
-      this._tSpinCorners[3].x = px + 2; this._tSpinCorners[3].y = py + 2;
-
-      let occupied = 0;
-      for (let i = 0; i < 4; i++) {
-          const c = this._tSpinCorners[i];
-          // Check if out of bounds or occupied
-          if (c.x < 0 || c.x >= this.playfieldWidth || c.y >= this.playfieldHeight) {
-              occupied++;
-          } else if (c.y >= 0) { // If valid Y inside grid
-              if (this.getCell(c.x, c.y) !== 0) {
-                  occupied++;
-              }
-          }
-          // Note: Standard SRS T-Spin rules usually don't count the space *above* the board as occupied wall,
-          // but we treat x < 0 and x >= width as walls.
-      }
-
-      this.isTSpin = (occupied >= 3);
+      this.isTSpin = evaluateTSpin(
+        this.activPiece,
+        this.boundGetCell,
+        this.playfieldWidth,
+        this.playfieldHeight,
+        this._tSpinCorners,
+      );
   }
 
   rotatePiece(rightRurn: boolean = true): void {
@@ -879,22 +761,7 @@ export default class Game implements ModeGameHooks {
   }
 
   handleMoveReset(): void {
-      this.activPiece.y += 1;
-      const onGround = this.hasCollision();
-      this.activPiece.y -= 1;
-
-      // Coyote time: if we move off the ground, lock timer pauses/resets
-      // If we move on the ground, lock timer resets (extended placement)
-      if (onGround) {
-          if (this.lockResets < this.maxLockResets) {
-              this.lockTimer = 0;
-              this.lockResets++;
-          }
-      } else {
-          // Moved off the edge, reset lock timer entirely (coyote time)
-          this.lockTimer = -150; // Extra grace period when falling off a ledge
-          this.lockResets = 0; // Treat the piece as entirely fresh
-      }
+      applyMoveReset(this as LockDelayHost);
   }
 
   hasCollision(): boolean {
@@ -924,8 +791,8 @@ export default class Game implements ModeGameHooks {
     // Only use WASM for standard tetrominoes (4 blocks)
     if (count === 4) {
         try {
-            return WasmCore.get().checkCollision(this.collisionCoordsCache, piece.x, piece.y);
-        } catch (e) {
+            return WasmCore.get().checkCollision(this.collisionCoordsCache, piece.x, piece.y, this.wasmBoardId);
+        } catch (_e) {
             // WASM not available or failed, fallback to JS
             return this.collisionDetector.hasCollision(piece);
         }
@@ -942,6 +809,9 @@ export default class Game implements ModeGameHooks {
       for (let x = 0; x < blocks[y].length; x++) {
         if (blocks[y][x]) {
             if (pieceY + y < 0) {
+                if (this.practiceTopOutRecovery) {
+                    continue;
+                }
                 this.gameOver = true;
                 return;
             }
@@ -952,22 +822,7 @@ export default class Game implements ModeGameHooks {
   }
 
   updatePieces(): void {
-    this.applyPendingGarbage();
-    this.runStats.onPieceLocked();
-    this.activPiece = this.nextQueue.shift()!;
-    this.refillNextQueue();
-    this.canHold = true;
-    this.lockTimer = 0;
-    this.lockResets = 0;
-    this.isTSpin = false;
-
-    if (this.hasCollision()) {
-        this.gameOver = true;
-        // NEW: Trigger reactive game over
-        if (this.view?.onGameOverReactive) {
-            this.view.onGameOverReactive();
-        }
-    }
+    spawnNextPiece(this as SpawnHoldHost);
   }
 
   clearLine(): number[] {
@@ -986,7 +841,7 @@ export default class Game implements ModeGameHooks {
 
   /** GPU line detection + CPU compaction (falls back to clearLine when GPU unavailable). */
   async clearLineAsync(): Promise<number[]> {
-    if (this.view?.gpuLineClearReady && this.useWasmCollision) {
+    if (this.view?.gpuLineClearReady && this.view.detectLinesGpu && this.useWasmCollision) {
       const lines = await this.view.detectLinesGpu(this.playfield);
       if (lines.length > 0) {
         compactClearedRows(
@@ -1009,7 +864,16 @@ export default class Game implements ModeGameHooks {
     if (rows > 0) this.pendingGarbageRows += rows;
   }
 
-  private applyPendingGarbage(): void {
+  setGarbageRngFactory(factory: () => () => number): void {
+    this.garbageRngFactory = factory;
+  }
+
+  applyPendingGarbage(): void {
+    const rng = this.garbageRngFactory ? this.garbageRngFactory() : Math.random;
+    this.applyPendingGarbageWithRng(rng);
+  }
+
+  applyPendingGarbageWithRng(rng: () => number): void {
     if (this.pendingGarbageRows <= 0 || this.gameOver) return;
     const rows = this.pendingGarbageRows;
     this.pendingGarbageRows = 0;
@@ -1018,6 +882,7 @@ export default class Game implements ModeGameHooks {
       this.playfieldWidth,
       this.playfieldHeight,
       rows,
+      rng,
     );
     this.collisionDetector.updatePlayfield(this.playfield);
     if (overflow) {
@@ -1027,23 +892,6 @@ export default class Game implements ModeGameHooks {
   }
 
   hold(): void {
-      if (!this.canHold) return;
-
-      if (!this.holdPieceObj) {
-          this.holdPieceObj = this.activPiece;
-          this.activPiece = this.nextQueue.shift()!;
-          this.refillNextQueue();
-      } else {
-          const temp = this.activPiece;
-          this.activPiece = this.holdPieceObj;
-          this.holdPieceObj = temp;
-      }
-
-      this.resetPiecePosition(this.activPiece);
-      this.resetPiecePosition(this.holdPieceObj); // Fixed: Reset held piece too
-      this.canHold = false;
-      this.lockTimer = 0;
-      this.lockResets = 0;
-      this.isTSpin = false;
+      applyHold(this as SpawnHoldHost);
   }
 }

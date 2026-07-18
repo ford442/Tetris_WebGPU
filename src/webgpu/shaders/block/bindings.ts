@@ -9,7 +9,6 @@ import {
 } from './uniforms.js';
 import {
   BLOCK_FRAGMENT_BINDING_SPECS,
-  BLOCK_PIPELINE_BINDINGS,
   BLOCK_VERTEX_BINDING_SPECS,
 } from './bindings.wgsl.js';
 

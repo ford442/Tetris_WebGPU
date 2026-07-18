@@ -34,6 +34,7 @@ import {
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
 import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
+import type { GpuDeviceLifecycleHost } from '../webgpu/gpuContext.js';
 import { drawPlayfield2D, drawWipBanner } from './placeholderDraw.js';
 
 const noopParticleSystem = {
@@ -122,11 +123,24 @@ export default class EmscriptenView implements IView, ViewEventHost {
     return view;
   }
 
+  private rendererBadge: HTMLDivElement | null = null;
+
   private async init(): Promise<void> {
+    const lifecycleHost: GpuDeviceLifecycleHost = {
+      device: null as unknown as GPUDevice,
+      element: this.element,
+      onFatalDeviceLoss: () => {
+        if (this.rendererBadge) {
+          this.rendererBadge.textContent = 'GPU lost';
+        }
+      },
+    };
+
     this.cppModuleReady = await CppRendererLoader.init(
       this.canvasWebGPU.width,
       this.canvasWebGPU.height,
       this.canvasWebGPU,
+      lifecycleHost,
     );
 
     this.gpuDrawActive = this.cppModuleReady &&
@@ -162,6 +176,7 @@ export default class EmscriptenView implements IView, ViewEventHost {
       'position:fixed;bottom:8px;right:8px;z-index:9999;padding:4px 8px;' +
       'font:12px monospace;background:rgba(0,0,0,0.55);color:#f8c;border-radius:4px;pointer-events:none;';
     document.body.appendChild(badge);
+    this.rendererBadge = badge;
   }
 
   private applyCanvasSize(cssWidth: number, cssHeight: number): void {

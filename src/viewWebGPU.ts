@@ -7,18 +7,20 @@ import {
 } from './webgpu/renderMetrics.js';
 import { themes, type ThemeColors, type Themes } from './webgpu/themes.js';
 import type { IView } from './view/IView.js';
-import type { ViewEventHost } from './view/viewTypes.js';
+import type { ViewEventHost, WebGPUViewHost } from './view/viewTypes.js';
+import type { MaterialViewLike } from './webgpu/viewMaterials.js';
+import type { ViewLike } from './webgpu/viewPremium.js';
 import type { GameState } from './game/gameState.js';
 import { createEmptyGameState } from './game/gameState.js';
 import type { Piece } from './game/pieces.js';
 import { ParticleSystem } from './webgpu/particles.js';
 import { VisualEffects } from './webgpu/effects.js';
 import { ReactiveVideoBackground, applyReactiveVideoSources } from './webgpu/reactiveVideo.js';
-import { ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
+import { type ReactiveMusicSystem } from './webgpu/reactiveMusic.js';
 import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
 import { ChaosModeController } from './webgpu/chaosMode.js';
-import { BloomSystem, BloomParameters } from './webgpu/bloomSystem.js';
+import { type BloomSystem, type BloomParameters } from './webgpu/bloomSystem.js';
 import {
   setPremiumVisualsPreset as setPremiumPresetImpl,
   onLineClearReactive as onLineClearReactiveImpl,
@@ -75,7 +77,7 @@ import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
 import { acquireGpuContext, resizeGpuContext, pushGpuErrorScopes, popGpuErrorScopes } from './webgpu/gpuContext.js';
 import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
 
-export default class View implements IView, ViewEventHost {
+export default class View implements IView, ViewEventHost, WebGPUViewHost {
   readonly rendererName = 'webgpu' as const;
   element: HTMLElement;
   width: number;
@@ -116,11 +118,11 @@ export default class View implements IView, ViewEventHost {
   uvBuffer!: GPUBuffer;
   pipeline!: GPURenderPipeline;
   fragmentUniformBuffer!: GPUBuffer;
-  MODELMATRIX: any;
-  NORMALMATRIX: any;
-  VIEWMATRIX: any;
-  PROJMATRIX: any;
-  vpMatrix: any;
+  MODELMATRIX: Matrix.mat4;
+  NORMALMATRIX: Matrix.mat4;
+  VIEWMATRIX: Matrix.mat4;
+  PROJMATRIX: Matrix.mat4;
+  vpMatrix: Matrix.mat4;
   vertexUniformBuffer!: GPUBuffer;
   vertexUniformBuffer_border!: GPUBuffer;
   uniformBindGroup_ARRAY: GPUBindGroup[] = [];
@@ -134,7 +136,7 @@ export default class View implements IView, ViewEventHost {
   useFilmGrain: boolean = true;
   useCRT: boolean = false;
   useFXAA: boolean = true;
-  private _shakeOffsetSmoothed = {x: 0, y: 0};
+  _shakeOffsetSmoothed = { x: 0, y: 0 };
 
   // Grid
   gridPipeline!: GPURenderPipeline;
@@ -173,8 +175,8 @@ export default class View implements IView, ViewEventHost {
   postProcessor!: PostProcessor;
 
   // Render pass caching - GC optimized (lazy init pattern)
-  private _offscreenTextureView!: GPUTextureView;
-  private _depthTextureView!: GPUTextureView;
+  _offscreenTextureView!: GPUTextureView;
+  _depthTextureView!: GPUTextureView;
   _backgroundPassDescriptor!: GPURenderPassDescriptor;
   _mainPassDescriptor!: GPURenderPassDescriptor;
   _ppPassDescriptor!: GPURenderPassDescriptor;
@@ -289,7 +291,7 @@ export default class View implements IView, ViewEventHost {
   _hardDropBoostTimer: number = 0;
 
   // Pre-allocated object for post process parameters to avoid GC
-  private _postProcessParams = {
+  _postProcessParams = {
     time: 0,
     useGlitch: 0,
     shockwaveCenter: [0, 0] as [number, number],
@@ -335,9 +337,9 @@ export default class View implements IView, ViewEventHost {
 
     // NEW: Initialize chaos mode
     this.chaosMode = new ChaosModeController();
-    this.backgroundRenderer = new BackgroundRenderer(this as any);
-    this.blockRenderer = new BlockRenderer(this as any);
-    this.postProcessor = new PostProcessor(this as any);
+    this.backgroundRenderer = new BackgroundRenderer(this);
+    this.blockRenderer = new BlockRenderer(this);
+    this.postProcessor = new PostProcessor(this);
 
     this.canvasWebGPU = document.createElement("canvas");
     this.canvasWebGPU.id = "canvaswebgpu";
@@ -394,7 +396,7 @@ export default class View implements IView, ViewEventHost {
 
   resize() { resizeGpuContext(this); }
 
-  recreateRenderTargets() { recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
+  recreateRenderTargets() { void recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
 
   // NEW: Set render scale (1.0 = native, 1.5 = 1.5x, 2.0 = 2x supersampling)
   setRenderScale(scale: number) {
@@ -421,7 +423,7 @@ export default class View implements IView, ViewEventHost {
     }
 
     if (this.device) {
-        this.renderPlayfield_Border_WebGPU();
+        void this.renderPlayfield_Border_WebGPU();
         const bgColors = this.currentTheme.backgroundColors;
         this.backgroundRenderer.setThemeColors(bgColors as [number, number, number][]);
     }
@@ -643,7 +645,7 @@ export default class View implements IView, ViewEventHost {
   }
 
   // Pre-allocated buffer for batched uniform updates (max 200 blocks * 64 floats per block)
-  private _uniformBatchBuffer = new Float32Array(200 * 64);
+  _uniformBatchBuffer = new Float32Array(200 * 64);
 
   // Playfield rendering (delegated to viewPlayfield.ts)
   async renderPlayfield_WebGPU(state: GameState) {
@@ -676,25 +678,25 @@ export default class View implements IView, ViewEventHost {
   };
 
   // Material/theme management (delegated to viewMaterials.ts)
-  setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as any, themeName, pieceType); }
-  updateMaterialUniforms() { updateMaterialUniformsImpl(this as any); }
-  cycleTheme() { cycleThemeImpl(this as any); }
-  setWireframe(enabled: boolean) { setWireframeImpl(this as any, enabled); }  // wireframe for blocks (see viewMaterials)
+  setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as MaterialViewLike, themeName, pieceType); }
+  updateMaterialUniforms() { updateMaterialUniformsImpl(this as MaterialViewLike); }
+  cycleTheme() { cycleThemeImpl(this as MaterialViewLike); }
+  setWireframe(enabled: boolean) { setWireframeImpl(this as MaterialViewLike, enabled); }  // wireframe for blocks (see viewMaterials)
 
   // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
-  setPremiumVisualsPreset(options: any = {}) { setPremiumPresetImpl(this as any, options); }
-  onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) { onLineClearReactiveImpl(this as any, lines, combo, isTSpin, isAllClear); }
-  onTSpinReactive() { onTSpinReactiveImpl(this as any); }
-  onPerfectClearReactive() { onPerfectClearReactiveImpl(this as any); }
-  onLevelUpReactive(level: number) { onLevelUpReactiveImpl(this as any, level); }
-  onGameOverReactive() { onGameOverReactiveImpl(this as any); }
-  initReactiveMusic(audioContext: AudioContext, masterGain: GainNode) { initReactiveMusicImpl(this as any, audioContext, masterGain); }
-  toggleFXAA(enabled: boolean) { toggleFXAAImpl(this as any, enabled); }
-  toggleFilmGrain(enabled: boolean) { toggleFilmGrainImpl(this as any, enabled); }
-  toggleCRT(enabled: boolean) { toggleCRTImpl(this as any, enabled); }
-  toggleBloom(enabled?: boolean) { toggleBloomImpl(this as any, enabled); }
-  setBloomIntensity(intensity: number) { setBloomIntensityImpl(this as any, intensity); }
-  toggleMultiPassBloom() { return toggleMultiPassBloomImpl(this as any); }
-  setBloomParameters(params: Partial<BloomParameters>) { setBloomParametersImpl(this as any, params); }
-  applyGameSettings(settings: GameSettings) { applyGameSettingsImpl(this as any, settings); }
+  setPremiumVisualsPreset(options: Record<string, unknown> = {}) { setPremiumPresetImpl(this as ViewLike, options); }
+  onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) { onLineClearReactiveImpl(this as ViewLike, lines, combo, isTSpin, isAllClear); }
+  onTSpinReactive() { onTSpinReactiveImpl(this as ViewLike); }
+  onPerfectClearReactive() { onPerfectClearReactiveImpl(this as ViewLike); }
+  onLevelUpReactive(level: number) { onLevelUpReactiveImpl(this as ViewLike, level); }
+  onGameOverReactive() { onGameOverReactiveImpl(this as ViewLike); }
+  initReactiveMusic(audioContext: AudioContext, masterGain: GainNode) { initReactiveMusicImpl(this as ViewLike, audioContext, masterGain); }
+  toggleFXAA(enabled: boolean) { toggleFXAAImpl(this as ViewLike, enabled); }
+  toggleFilmGrain(enabled: boolean) { toggleFilmGrainImpl(this as ViewLike, enabled); }
+  toggleCRT(enabled: boolean) { toggleCRTImpl(this as ViewLike, enabled); }
+  toggleBloom(enabled?: boolean) { toggleBloomImpl(this as ViewLike, enabled); }
+  setBloomIntensity(intensity: number) { setBloomIntensityImpl(this as ViewLike, intensity); }
+  toggleMultiPassBloom() { return toggleMultiPassBloomImpl(this as ViewLike); }
+  setBloomParameters(params: Partial<BloomParameters>) { setBloomParametersImpl(this as ViewLike, params); }
+  applyGameSettings(settings: GameSettings) { applyGameSettingsImpl(this as ViewLike, settings); }
 }

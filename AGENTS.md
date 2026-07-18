@@ -5,12 +5,12 @@
 **Tetris_WebGPU** is a browser-based Tetris implementation designed to showcase high-performance web graphics. It targets modern WebGPU-enabled browsers and features advanced visual effects including particle systems, dynamic lighting, PBR material shaders, post-processing (bloom, chromatic aberration, shockwave, film grain, CRT, FXAA), and level-based background video portals.
 
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
-* **Frontend:** TypeScript 4.9 + Vite 4.
+* **Frontend:** TypeScript 4.9 + Vite 6.
+* **Testing:** Vitest 3.x.
 * **Rendering:** WebGPU (WGSL shaders) primary; WebGL2 fallback; optional Emscripten C++ (`webgpu-cpp`).
 * **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM) for collision; C++ renderer is rendering-only.
 * **Audio:** Web Audio API (procedural synthesis + sample playback).
 * **Math:** `gl-matrix` 3.4 for 3D transformations.
-* **Testing:** Vitest 1.x.
 
 ## Architecture
 
@@ -22,10 +22,15 @@ The project follows a classic **MVC** pattern:
 
 ### TypeScript / WASM Hybrid
 
-* **AssemblyScript core:** `assembly/index.ts` exports a fast collision check (`checkPieceCollision`) that reads directly from shared linear memory.
-* **Bridge:** `src/wasm/WasmCore.ts` creates a `WebAssembly.Memory` (initial 1 page = 64KB), loads `release.wasm`, and exposes an `Int8Array` view (`playfieldView`) of the first 200 bytes.
-* **Fallback:** If WASM fails to load, the app falls back to a pure-JS collision path so it does not crash. Tests explicitly verify that the WASM path is active.
-* **Playfield storage:** A flat 1D `Int8Array` of 200 cells (10 columns × 20 rows). The game logic uses Y-down coordinates (row 0 is the top).
+* **AssemblyScript core:** `assembly/index.ts` exports board-indexed collision, line clear, and hard-drop kernels that read/write shared linear memory.
+* **Memory layout (480 bytes used of 64 KiB page):**
+  * Board 0 playfield: bytes 0–199
+  * Board 1 playfield: bytes 200–399
+  * Board 0 scratch (row flags + index staging): bytes 400–439
+  * Board 1 scratch: bytes 440–479
+* **Bridge:** `src/wasm/WasmCore.ts` creates a `WebAssembly.Memory` (initial 1 page = 64KB), loads `release.wasm`, and exposes `getPlayfieldView(boardId)` / `playfieldView` (board 0 alias).
+* **Fallback:** If WASM fails to load, the app falls back to a pure-JS collision path per game instance so it does not crash. Tests explicitly verify that the WASM path is active.
+* **Playfield storage:** A flat 1D `Int8Array` of 200 cells (10 columns × 20 rows) per board. Single-player uses board 0; local versus uses board 0 (P1) and board 1 (P2). The game logic uses Y-down coordinates (row 0 is the top).
 
 ### C++ Renderer (opt-in, Emscripten)
 
@@ -152,8 +157,11 @@ Parallel to `assembly/` — **not** used for game logic or collision.
 deploy.py              # SFTP deployment script
 index.html             # Vite entry HTML
 vite.config.ts         # Vite config (base: '/tetris-webgpu/')
-package.json           # npm scripts and dependencies
+package.json           # npm scripts and dependencies (engines.node >=20)
 tsconfig.json          # TypeScript config (strict, ESNext, .js imports)
+eslint.config.js       # ESLint flat config (minimal typescript-eslint rules)
+tsconfig.eslint.json   # Lint scope (src, tests, index.ts, vite/vitest configs)
+vitest.config.ts       # Vitest 3 config (merges vite.config.ts)
 ```
 
 ## Build & Development Commands
@@ -178,6 +186,10 @@ npm run build:all
 
 # Run unit tests (Vitest). pretest compiles collision WASM only (not cpp).
 npm test
+
+# Lint (minimal typescript-eslint ruleset)
+npm run lint
+npm run lint:fix
 ```
 
 ### Renderer preferences (dev)
@@ -311,15 +323,20 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
 ## Continuous Integration & Deployment
 
 - **CI:** `.github/workflows/ci.yml` runs on every pull request and on pushes to
-  `main` — `npm ci` → `npm run asbuild:release` → `npm test` → `npm run build`
-  across Node 20 and 22. Keep PRs green before merge. (`copilot-setup-steps.yml`
-  is a separate setup-only workflow, not the test gate.)
+  `main` — `npm ci` → `npm run asbuild:release` → `npm run typecheck` →
+  `npm run lint` → `npm test` → `npm run build` across Node 20 and 22. Keep PRs
+  green before merge. (`copilot-setup-steps.yml` is a separate setup-only
+  workflow, not the test gate.)
+- **Lint:** `npm run lint` uses [`eslint.config.js`](eslint.config.js) with
+  `@typescript-eslint/no-floating-promises`, `consistent-type-imports`, and
+  `no-unused-vars` (underscore ignore aligned with `tsc`). Type-aware lint scope:
+  [`tsconfig.eslint.json`](tsconfig.eslint.json).
+- **Node:** `package.json` `engines.node` is `>=20` (matches CI matrix).
 - **Deploy:** `deploy.py` uploads `dist/` to the Contabo storage manager and
   reads secrets **from the environment only** (`DEPLOY_TOKEN`). Never hardcode
   credentials in tracked files; use env vars or a secret store. The legacy
   `deploy_old.py` (which contained a plaintext SFTP password) has been removed —
   that password lives in git history and **must be rotated**.
-- **No `npm run lint` script exists yet** (eslint/typescript-eslint not set up).
 
 ## Cursor Cloud specific instructions
 
@@ -340,6 +357,7 @@ C++ renderer (`public/cpp/`) is also a build artifact. Run `npm run cpp:release`
 
 ```bash
 npm test              # Vitest (pretest rebuilds collision WASM only)
+npm run lint          # ESLint
 npm run build:all     # collision WASM + cpp (if emcc) + Vite → /dist
 ```
 
@@ -352,7 +370,7 @@ npm run dev -- --host 0.0.0.0 --port 5173
 # http://localhost:5173/?renderer=webgpu-cpp
 ```
 
-There is **no** `npm run lint` script in this repo.
+Lint runs in the main CI job via `npm run lint` (ESLint + typescript-eslint).
 
 ### Browser / WebGPU on Cloud VMs
 

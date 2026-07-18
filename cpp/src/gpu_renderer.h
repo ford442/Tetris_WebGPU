@@ -21,6 +21,9 @@ void gpu_renderer_shutdown(void);
 void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
                          const PieceState* piece_state, float dt);
 
+/** Upload RGBA8 block atlas pixels (e.g. block.png). Returns 1 on success. */
+int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len);
+
 #ifdef __cplusplus
 }
 #endif

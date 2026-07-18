@@ -5,6 +5,33 @@ export function isPlayfieldEmpty(playfield: Int8Array): boolean {
   return true;
 }
 
+/** Count cells matching garbage color index (default 8). */
+export function countGarbageCells(playfield: Int8Array, garbageCell: number = 8): number {
+  let count = 0;
+  for (let i = 0; i < playfield.length; i++) {
+    if (playfield[i] === garbageCell) count++;
+  }
+  return count;
+}
+
+/** Remove the top N rows and shift remaining cells up (row 0 = top). */
+export function clearTopRows(
+  playfield: Int8Array,
+  playfieldWidth: number,
+  playfieldHeight: number,
+  rowCount: number,
+): void {
+  const n = Math.max(0, Math.min(rowCount, playfieldHeight));
+  if (n === 0) return;
+
+  for (let y = 0; y < playfieldHeight - n; y++) {
+    const dst = y * playfieldWidth;
+    const src = (y + n) * playfieldWidth;
+    playfield.copyWithin(dst, src, src + playfieldWidth);
+  }
+  playfield.fill(0, (playfieldHeight - n) * playfieldWidth);
+}
+
 /** Extract cleared row indices from a GPU line-clear mask (20 u32 slots). */
 export function rowsFromClearMask(mask: Uint32Array, playfieldHeight: number = 20): number[] {
   const rows: number[] = [];

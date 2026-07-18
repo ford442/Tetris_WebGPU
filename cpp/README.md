@@ -187,7 +187,8 @@ Console on boot: `Tetris renderer: webgpu-cpp (preference: webgpu-cpp)`.
 | View / `IView` contract | `EmscriptenView.ts` | Full MVC compatibility |
 | Playfield sync | TS → 200-byte HEAP view | Zero-copy like `WasmCore` |
 | Board draw (bootstrap) | C++ WebGPU instanced cubes | Canvas2D fallback if no GPU |
-| Lighting, PBR, textures | TS WebGPU renderer | Not ported yet |
+| Block texture (`block.png`) | C++ via TS upload | Atlas tile + material-lite lighting |
+| Full PBR / premium materials | TS WebGPU renderer | C++ uses simplified shader |
 | Particles, post-process | TS WebGPU | No-op / DOM effects on cpp path |
 | Reactive video `<video>` | TS DOM portal | C++ compositing planned later |
 | Audio | Web Audio API (TS) | Works on all renderer prefs |
@@ -209,9 +210,10 @@ void update_piece_state(int8_t type, int8_t rot, int8_t x, int8_t y,
 int get_renderer_backend();     // 0=none, 1=canvas2d, 2=webgpu (for TS badge)
 int is_gpu_renderer_active();   // shorthand: backend == 2
 int is_canvas_fallback_active();
+int set_block_texture_rgba(const uint8_t* rgba, int width, int height, int byte_len);
 ```
 
-**WebGPU path:** each `render_frame` acquires the swap-chain texture, clears to deep teal (`#071812`), draws instanced blocks when the pipeline initialized, then presents. Surface format comes from `navigator.gpu.getPreferredCanvasFormat()` (via EM_JS). Camera aligned to `renderMetrics.ts` (FOV 42°, block size 2.2).
+**WebGPU path:** each `render_frame` acquires the swap-chain texture, clears with **transparent alpha** (`a=0`) so the DOM video portal shows through the premultiplied surface, draws instanced blocks when the pipeline initialized, then presents. Surface format comes from `navigator.gpu.getPreferredCanvasFormat()` (via EM_JS). Camera aligned to `renderMetrics.ts` (FOV 42°, block size 2.2).
 
 **Fallback:** Canvas2D quads when WebGPU device/surface init fails.
 
@@ -220,17 +222,16 @@ int is_canvas_fallback_active();
 Adapter/device acquisition is **async in the browser**, so the C++ side uses a synchronous device handle provided by TypeScript before wasm startup:
 
 ```
-1. CppRendererLoader.createWebGpuDevice()
-      navigator.gpu.requestAdapter() → adapter.requestDevice()   [async, TS]
-2. createTetrisRendererModule({ canvas, preinitializedWebGPUDevice: device })
-3. C++ init_renderer()
-      emscripten_webgpu_get_device()   // reads Module.preinitializedWebGPUDevice
-      wgpuInstanceCreateSurface()    // canvas id = "canvaswebgpu" (EmscriptenView)
-      wgpuSurfaceConfigure()         // format = getPreferredCanvasFormat()
-4. render_frame(dt)
-      wgpuSurfaceGetCurrentTexture → clear (deep teal) → [optional block draw] → present
-5. get_renderer_backend() → 2 (WebGPU) | 1 (Canvas2D fallback)
+1. requestGpuAdapterAndDevice()     // shared gpuContext policy (?gpu=, optional features, label)
+2. attachDeviceLifecycleHandlers()  // overlay + device-lost event on fatal loss
+3. createTetrisRendererModule({ canvas, preinitializedWebGPUDevice: device })
+4. init_renderer()                  // C++: emscripten_webgpu_get_device(), surface configure (premultiplied)
+5. uploadBlockTexture()             // TS decodes block.png → set_block_texture_rgba() in wasm
+6. render_frame(dt)                 // clear (alpha=0) → textured instanced blocks → present
+7. get_renderer_backend()           // 2 (WebGPU) | 1 (Canvas2D fallback)
 ```
+
+Release wasm size is recorded in `public/cpp/build-info.json` (`wasmBytes`, `jsBytes`). Target: stay well under debug bloat (~2 MB); release builds are typically tens of KB before texture assets.
 
 **ASYNCIFY / JSPI:** not required with the `preinitializedWebGPUDevice` pattern above. Only needed if you move `requestAdapter` / `requestDevice` into C++ with blocking waits.
 
@@ -263,12 +264,13 @@ Run `npm run dev` (or preview build) and exercise each row. Check console for er
 | (none) / `auto` | any | TS WebGPU if available, else WebGL2 |
 | `?renderer=webgpu` | any | TS WebGPU or WebGL2 fallback |
 | `?renderer=webgl2` | any | WebGL2 |
-| `?renderer=webgpu-cpp` | wasm present | `C++ GPU` badge when WebGPU active, playable blocks |
+| `?renderer=webgpu-cpp` | wasm present | `C++ GPU` badge; textured blocks (block.png), ghost + lock flash |
 | `?renderer=webgpu-cpp` | wasm present, no WebGPU | `C++ wasm` badge, Canvas2D fallback draw |
 | `?renderer=webgpu-cpp` | wasm absent | `C++ WIP` or fallback warning → WebGPU/WebGL2 |
 
 **Per preference, verify:**
 
+- [ ] `?renderer=webgpu-cpp` shows gold/glass textured blocks (not flat vertex colors)
 - [ ] Start / pause / game over overlays
 - [ ] Movement (DAS/ARR), SRS rotations + wall kicks
 - [ ] Hold, hard drop, soft drop

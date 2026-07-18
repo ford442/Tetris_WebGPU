@@ -39,6 +39,8 @@ export const versusMode: GameMode = {
       secondaryValue: formatClock(ctx.elapsedMs),
       showSecondary: true,
       showLevel: false,
+      showScore: true,
+      showHighScore: true,
       highScoreLabel: 'WINS',
     };
   },

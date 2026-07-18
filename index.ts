@@ -15,6 +15,8 @@ import { registerServiceWorker, detectDisplayMode } from './src/pwa/registerServ
 import { initOfflineBanner } from './src/pwa/offlineBanner.js';
 import { initFullscreenButton } from './src/pwa/fullscreen.js';
 import VersusController from './src/versus/VersusController.js';
+import OnlineVersusController from './src/versus/OnlineVersusController.js';
+import { initOnlineVersusUI, parseOnlineVersusUrl } from './src/ui/onlineVersusUI.js';
 import { initAnnouncer } from './src/a11y/announcer.js';
 import { initKeyboardNavigation, enhanceControlAccessibility } from './src/a11y/keyboardNav.js';
 import { watchReducedMotion } from './src/a11y/accessibility.js';
@@ -52,7 +54,10 @@ uiContainer.innerHTML = `
               <option value="marathon">Marathon</option>
               <option value="sprint">Sprint 40L</option>
               <option value="ultra">Ultra 2:00</option>
+              <option value="cheese">Cheese Race</option>
+              <option value="zen">Zen Practice</option>
               <option value="versus">Local 2P</option>
+              <option value="online-versus">Online 2P</option>
             </select>
             <p id="mode-label" class="mode-current-label">Marathon</p>
           </div>
@@ -238,6 +243,11 @@ uiContainer.innerHTML = `
           <p class="settings-hint">Switch via <code>?renderer=webgpu</code>, <code>webgl2</code>, or <code>webgpu-cpp</code> — or set <code>localStorage.tetris_renderer</code>. Reload required.</p>
         </div>
       </div>
+
+      <div class="pause-mode-rules-section">
+        <h3>MODE</h3>
+        <p id="mode-rules-hint" class="pause-mode-rules">Clear lines and survive as long as you can. Top-out ends the run.</p>
+      </div>
       
       <!-- Controls Reference -->
       <div class="pause-controls">
@@ -265,7 +275,7 @@ uiContainer.innerHTML = `
 
 // Styles are in css/style.css, we should probably update them too.
 
-(async () => {
+void (async () => {
   // Dev-only CPU tool for iterating on authored block texture masking.
   // localhost-only + `localStorage.tetris_texture_mask_lab='1'` (or `?masklab=1`).
   try {
@@ -364,9 +374,17 @@ uiContainer.innerHTML = `
 
   const controller = new Controller(game, view, view, soundManager);
   let versusController: VersusController | null = null;
+  let onlineVersusController: OnlineVersusController | null = null;
 
-  const activeController = () =>
-    versusController?.isPlaying || versusController?.isPaused ? versusController : controller;
+  const activeController = () => {
+    if (onlineVersusController?.isPlaying || onlineVersusController?.isPaused) return onlineVersusController;
+    if (versusController?.isPlaying || versusController?.isPaused) return versusController;
+    return controller;
+  };
+
+  const onlineUI = initOnlineVersusUI({
+    getController: () => onlineVersusController,
+  });
 
   const replayUI = initReplayUI({
     viewWebGPU: view,
@@ -409,8 +427,39 @@ uiContainer.innerHTML = `
   controller.updateModeHud();
 
   document.getElementById('start-button')!.addEventListener('click', () => {
-      const mode = (modeSelect?.value || savedMode) as GameModeId;
-      if (mode === 'versus') {
+      const mode = (modeSelect?.value || savedMode) as string;
+      if (mode === 'online-versus') {
+        if (controller.isPlaying) {
+          controller.pause();
+          controller.isPlaying = false;
+        }
+        if (!onlineVersusController) {
+          const holdP2 = document.getElementById('hold-piece-canvas-p2') as HTMLCanvasElement;
+          const nextP2 = document.getElementById('next-piece-canvas-p2') as HTMLCanvasElement;
+          onlineVersusController = new OnlineVersusController(
+            view,
+            soundManager,
+            holdPieceCtx,
+            nextPieceCtx,
+            holdP2.getContext('2d')!,
+            nextP2.getContext('2d')!,
+            {
+              onRoomCode: (code) => onlineUI.setRoomCode(code),
+              onPhaseChange: (phase) => onlineUI.setPhase(phase),
+              onTransportMode: (mode) => onlineUI.setTransportMode(mode),
+              onCountdown: (frames) => onlineUI.setCountdown(frames),
+              onError: (msg) => onlineUI.setError(msg),
+              onDesync: () => onlineUI.setError('Desync detected'),
+              onDisconnected: () => onlineUI.setError('Opponent disconnected'),
+            },
+          );
+          (view as { controller?: OnlineVersusController }).controller = onlineVersusController;
+          window.controller = onlineVersusController as unknown as Controller;
+          onlineVersusController.updateModeHud();
+        }
+        onlineUI.show();
+        onlineVersusController.play();
+      } else if (mode === 'versus') {
         if (controller.isPlaying) {
           controller.pause();
           controller.isPlaying = false;
@@ -499,12 +548,6 @@ uiContainer.innerHTML = `
   // -------------------------------------------------------------------
   const subliminalToggle = document.getElementById('subliminal-toggle') as HTMLInputElement | null;
 
-  function syncSubliminalToggle() {
-    if (subliminalToggle) {
-      subliminalToggle.checked = subliminal.isEnabled();
-    }
-  }
-
   if (subliminalToggle) {
     // Initial sync (in case localStorage had explicit false)
     subliminalToggle.checked = subliminal.isEnabled();
@@ -592,4 +635,16 @@ uiContainer.innerHTML = `
   initOfflineBanner();
   initFullscreenButton();
   registerServiceWorker();
+
+  const onlineUrl = parseOnlineVersusUrl();
+  if (onlineUrl) {
+    if (modeSelect) modeSelect.value = 'online-versus';
+    document.getElementById('start-button')?.click();
+    if (onlineUrl.room) {
+      setTimeout(() => {
+        void onlineVersusController?.joinRoom(onlineUrl.room, onlineUrl.spectate);
+        onlineUI.hide();
+      }, 100);
+    }
+  }
 })();

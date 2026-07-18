@@ -1,5 +1,4 @@
-import Game from '../game.js';
-import type { GameModeId } from '../game/modes/types.js';
+import type Game from '../game.js';
 import {
   decodeInputStream,
   inputEventsToMap,
@@ -150,11 +149,13 @@ export class ReplayPlayback {
       const dt = time - this.lastTime;
       this.lastTime = time;
       this.accumMs += dt;
-      while (this.accumMs >= REPLAY_TICK_MS && this.state === 'playing') {
+      while (this.accumMs >= REPLAY_TICK_MS) {
+        if (this.state !== 'playing') break;
         this.stepForward();
         this.accumMs -= REPLAY_TICK_MS;
-        if (this.state === 'ended') return;
       }
+      const finalState = this.state as PlaybackState;
+      if (finalState !== 'playing') return;
       this.rafId = requestAnimationFrame(tick);
     };
     this.rafId = requestAnimationFrame(tick);

@@ -32,6 +32,8 @@ export const marathonMode: GameMode = {
       secondaryValue: formatElapsed(ctx.elapsedMs),
       showSecondary: true,
       showLevel: true,
+      showScore: true,
+      showHighScore: true,
       highScoreLabel: 'HIGH SCORE',
     };
   },

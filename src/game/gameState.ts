@@ -34,6 +34,8 @@ export interface GameState {
   modeSecondaryValue: string;
   modeShowSecondary: boolean;
   modeShowLevel: boolean;
+  modeShowScore: boolean;
+  modeShowHighScore: boolean;
   modeHighScoreLabel: string;
   elapsedMs: number;
   playfield: ProjectedPlayfield;
@@ -41,8 +43,8 @@ export interface GameState {
   lockDelayTime: number;
   effectEvent: string | null;
   effectCounter: number;
-  effectFlag?: boolean;
-  neonBurstFlag?: boolean;
+  effectFlag: boolean;
+  neonBurstFlag: boolean;
   lastDropPos: { x: number; y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
@@ -74,6 +76,8 @@ export function createEmptyGameState(): GameState {
     modeSecondaryValue: '0:00',
     modeShowSecondary: true,
     modeShowLevel: true,
+    modeShowScore: true,
+    modeShowHighScore: true,
     modeHighScoreLabel: 'HIGH SCORE',
     elapsedMs: 0,
     playfield: Array.from({ length: 20 }, () => Array(10).fill(0)),
@@ -81,6 +85,8 @@ export function createEmptyGameState(): GameState {
     lockDelayTime: 500,
     effectEvent: null,
     effectCounter: 0,
+    effectFlag: false,
+    neonBurstFlag: false,
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,

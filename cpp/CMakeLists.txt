@@ -44,7 +44,7 @@ target_link_options(tetris_renderer PRIVATE
   "-sEXPORT_NAME=createTetrisRendererModule"
   "-sENVIRONMENT=web"
   "-sALLOW_MEMORY_GROWTH=1"
-  "-sEXPORTED_FUNCTIONS=[_init_renderer,_resize_renderer,_render_frame,_update_playfield,_get_playfield_ptr,_get_playfield_len,_get_piece_state_ptr,_update_piece_state,_get_renderer_backend,_is_gpu_renderer_active,_is_canvas_fallback_active,_malloc,_free]"
+  "-sEXPORTED_FUNCTIONS=[_init_renderer,_resize_renderer,_render_frame,_update_playfield,_get_playfield_ptr,_get_playfield_len,_get_piece_state_ptr,_update_piece_state,_get_renderer_backend,_is_gpu_renderer_active,_is_canvas_fallback_active,_set_block_texture_rgba,_malloc,_free]"
   "-sEXPORTED_RUNTIME_METHODS=[ccall,cwrap,HEAP8,HEAPU8]"
 )
 

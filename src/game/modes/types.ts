@@ -13,6 +13,7 @@ export interface ModeContext {
   elapsedMs: number;
   gameOver: boolean;
   victory: boolean;
+  garbageCellsRemaining: number;
 }
 
 export interface ModeHudSnapshot {
@@ -24,6 +25,8 @@ export interface ModeHudSnapshot {
   secondaryValue: string;
   showSecondary: boolean;
   showLevel: boolean;
+  showScore: boolean;
+  showHighScore: boolean;
   highScoreLabel: string;
 }
 
@@ -41,6 +44,7 @@ export interface GameMode {
   readonly label: string;
 
   onReset(game: ModeGameHooks): void;
+  onBoardReady?(game: ModeGameHooks): void;
   onLineClear(linesCleared: number, ctx: ModeContext): void;
   onLock(ctx: ModeContext): void;
   onTick(dt: number, ctx: ModeContext): void;
@@ -59,6 +63,10 @@ export interface GameMode {
 export interface ModeGameHooks {
   setFixedScoringLevel(level: number | null): void;
   resetElapsedMs(): void;
+  injectCheeseRows(rowCount: number, rng?: () => number): void;
+  countGarbageCells(): number;
+  setPracticeFlags(flags: { infiniteHold?: boolean; topOutRecovery?: boolean }): void;
+  recoverFromTopOut(): boolean;
 }
 
 export function formatMsAsClock(ms: number): string {

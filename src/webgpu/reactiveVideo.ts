@@ -4,7 +4,7 @@
  */
 
 import { videoLogger } from '../utils/logger.js';
-import { levelToVideoIndex, resolveVideoUrl } from '../config/videoConfig.js';
+import { resolveVideoUrl } from '../config/videoConfig.js';
 import { probeVideoAvailability, resolveLevelVideoSrc } from './videoManifest.js';
 
 // Video background library - maps bg1.mp4–bg15.mp4 across 15 level tiers
@@ -226,12 +226,9 @@ export class ReactiveVideoBackground {
   crossfadeDuration: number = 1.0;
   
   // Event triggers
-  private lastLineClear: number = 0;
-  private comboMultiplier: number = 1.0;
   private isSlowMotion: boolean = false;
   private slowMotionTimer: number = 0;
   private reversePlayback: boolean = false;
-  private reverseDuration: number = 0;
   
   // Video sources for different levels/themes
   videoSources: string[] = [];
@@ -654,10 +651,6 @@ export class ReactiveVideoBackground {
   // ENHANCED GAMEPLAY REACTIVITY
 
   onLineClear(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
-    const now = performance.now();
-    const timeSinceLast = now - this.lastLineClear;
-    this.lastLineClear = now;
-    
     // ENHANCED: Speed ramp 0.3x - 2.5x based on line count and combo
     const speedBoost = 1.0 + (lines * 0.4) + (combo * 0.15);
     this.targetPlaybackRate = Math.min(speedBoost, this.maxPlaybackRate);
@@ -771,8 +764,7 @@ export class ReactiveVideoBackground {
   // ENHANCED: Trigger reverse with configurable duration
   triggerReverse(duration: number): void {
     this.reversePlayback = true;
-    this.reverseDuration = duration;
-    setTimeout(() => { 
+    setTimeout(() => {
       this.reversePlayback = false; 
     }, duration * 1000);
   }

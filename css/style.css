@@ -581,6 +581,30 @@ canvas {
     text-align: center;
 }
 
+.pause-mode-rules-section {
+    width: 100%;
+    padding: 12px 15px;
+    background: rgba(0, 12, 24, 0.45);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 255, 255, 0.22);
+}
+
+.pause-mode-rules-section h3 {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    color: #00cccc;
+    letter-spacing: 3px;
+    text-align: center;
+}
+
+.pause-mode-rules {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: rgba(200, 240, 255, 0.85);
+    text-align: center;
+}
+
 .settings-group {
     display: flex;
     flex-direction: column;

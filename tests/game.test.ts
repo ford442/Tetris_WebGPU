@@ -84,4 +84,24 @@ describe('Tetris WASM Core & Game Integration', () => {
     // Verify WASM view is still attached/valid after the operation
     expect(game.playfield.buffer.byteLength).toBeGreaterThan(0);
   });
+
+  it('board 1 game uses WASM memory at offset 200', () => {
+    const core = WasmCore.get();
+    if (!core.hasDualBoard) {
+      throw new Error('WASM dual-board exports not loaded');
+    }
+
+    const gameP2 = new Game({ wasmBoardId: 1 });
+    expect(gameP2.playfield.byteOffset).toBe(200);
+    expect(gameP2.playfield.buffer).toBe(core.playfieldView.buffer);
+
+    gameP2.setCell(5, 19, 1);
+    const piece = {
+      x: 4,
+      y: 18,
+      blocks: [[1, 1], [1, 1]],
+    } as Parameters<Game['hasCollisionPiece']>[0];
+
+    expect(gameP2.hasCollisionPiece(piece)).toBe(true);
+  });
 });

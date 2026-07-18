@@ -35,3 +35,132 @@ body.versus-layout .combo-display {
     width: 98%;
   }
 }
+
+/* Online versus overlay */
+.online-versus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.online-versus-overlay.visible {
+  display: flex;
+}
+
+.online-versus-panel {
+  background: linear-gradient(145deg, #1a1a2e, #16213e);
+  border: 1px solid rgba(140, 200, 255, 0.3);
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  max-width: 360px;
+  width: 90%;
+  color: #eee;
+}
+
+.online-versus-panel h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+}
+
+.online-versus-sub {
+  margin: 0 0 1rem;
+  opacity: 0.7;
+  font-size: 0.85rem;
+}
+
+.online-versus-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.online-join-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.online-join-row input {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #0d0d1a;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.online-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  background: #3a7bd5;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.online-btn.secondary {
+  background: #333;
+}
+
+.online-btn:hover {
+  filter: brightness(1.1);
+}
+
+.online-room-display {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.online-room-code {
+  font-size: 2rem;
+  letter-spacing: 0.2em;
+  font-weight: bold;
+  color: #8cf;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.online-waiting {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.online-error {
+  color: #f66;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.online-status-badge {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 9999;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #8cf;
+  font-size: 0.75rem;
+  border: 1px solid rgba(140, 200, 255, 0.3);
+}
+
+.online-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 40px rgba(140, 200, 255, 0.8);
+  pointer-events: none;
+}

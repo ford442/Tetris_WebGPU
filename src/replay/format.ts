@@ -97,7 +97,12 @@ export function parseReplayFile(raw: unknown): ReplayFile {
     throw new TypeError('invalid replay header');
   }
   const mode = o.mode;
-  if (mode !== 'marathon' && mode !== 'sprint' && mode !== 'ultra') {
+  if (
+    mode !== 'marathon' &&
+    mode !== 'sprint' &&
+    mode !== 'ultra' &&
+    mode !== 'versus'
+  ) {
     throw new TypeError('invalid replay mode');
   }
   return {

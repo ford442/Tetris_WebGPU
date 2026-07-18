@@ -16,7 +16,7 @@ describe('build-cpp outputs', () => {
     expect(src).toContain('build-info.json');
     expect(src).toContain('compile_commands.json');
     expect(src).toContain('SAFE_HEAP');
-    expect(src).toContain('-flto');
+    expect(src).toContain('wasmBytes');
   });
 
   it('emits build-info.json with backend metadata when emcc ran', () => {
@@ -29,6 +29,10 @@ describe('build-cpp outputs', () => {
     expect(info).toHaveProperty('emccVersion');
     expect(info).toHaveProperty('webGpuBackend');
     expect(info).toHaveProperty('pinnedEmsdkVersion');
+    if (info.wasmBytes != null) {
+      expect(typeof info.wasmBytes).toBe('number');
+      expect(info.wasmBytes).toBeGreaterThan(0);
+    }
     expect(['debug', 'release']).toContain(info.mode);
   });
 

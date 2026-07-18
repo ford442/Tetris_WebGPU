@@ -171,8 +171,8 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   const vertexModule = device.createShaderModule({ code: vertexCode });
   const fragmentModule = device.createShaderModule({ code: fragmentCode });
 
-  vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Vertex:', info.messages); });
-  fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Fragment:', info.messages); });
+  void vertexModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Vertex:', info.messages); });
+  void fragmentModule.getCompilationInfo().then(info => { if (info.messages.length > 0) shaderLogger.warn('Fragment:', info.messages); });
 
   view.pipeline = device.createRenderPipeline({
     label: 'main pipeline', layout: 'auto',

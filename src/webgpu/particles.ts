@@ -22,7 +22,6 @@ export class ParticleSystem extends ParticleEmitter {
   /** Legacy field — unused (GPU-resident pool). */
   particles: Particle[] = [];
 
-  private dropletEnabled = false;
   private dropletAccumulator = 0;
     /**
      * Emit a brief "crown" sprite for T-Spin: ring of 6 spike-shaped (velocity-stretched) quads
@@ -173,11 +172,9 @@ export class ParticleSystem extends ParticleEmitter {
         themeColor: number[]  // [r,g,b] or [r,g,b,a] from active piece theme
     ): void {
         if (!enabled) {
-            this.dropletEnabled = false;
             this.dropletAccumulator = 0;
             return;
         }
-        this.dropletEnabled = true;
 
         // Target ~3 per second (clamped to 2-4 range with occasional doubles)
         const targetRate = 3.0;
@@ -220,7 +217,6 @@ export class ParticleSystem extends ParticleEmitter {
 
     // Simple enable/disable helper (optional, updatePieceDropletEmitter preferred)
     enablePieceDroplets(enabled: boolean): void {
-        this.dropletEnabled = enabled;
         if (!enabled) this.dropletAccumulator = 0;
     }
 

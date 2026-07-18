@@ -105,14 +105,6 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   }
 
 
-  const camY = -20.0;
-  const camZ = 75.0;
-  const fov = (35 * Math.PI) / 180;
-  const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
-
-  const midY = lines[Math.floor(lines.length / 2)] * -2.2;
-  const uvY = 0.5 - (midY - camY) / visibleHeight;
-
   // BALANCED FLASH INTENSITY - Prevents blinding while maintaining satisfying feedback
   //
   // DESIGN RATIONALE:
@@ -633,7 +625,7 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
     }
   }
 
-  view.renderPlayfield_WebGPU(state);
+  void view.renderPlayfield_WebGPU(state);
   const queue = state.nextQueue?.length ? state.nextQueue : [state.nextPiece];
   if (queue.length > 1) {
     renderNextQueue(view.nextPieceContext, queue, view.currentTheme, queue.length <= 3 ? 20 : 16);

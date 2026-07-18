@@ -158,9 +158,7 @@ function bakeMetalFrameMaskIntoAlpha(
     const keep = new Uint8Array(n);
 
     for (let y = 0; y < height; y++) {
-      const v = y / vDen;
       for (let x = 0; x < width; x++) {
-        const u = x / uDen;
         const idx = y * width + x;
         const r = maskData[idx * 4 + 0] / 255;
         const a = maskData[idx * 4 + 3] / 255;
@@ -256,9 +254,7 @@ function bakeMetalFrameMaskIntoAlpha(
   let minS = Number.POSITIVE_INFINITY;
   let maxS = Number.NEGATIVE_INFINITY;
   for (let y = 0; y < height; y++) {
-    const v = y / vDen;
     for (let x = 0; x < width; x++) {
-      const u = x / uDen;
       const idx = y * width + x;
       const i4 = idx * 4;
       const r = data[i4 + 0] / 255;

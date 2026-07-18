@@ -65,6 +65,7 @@ const EXPORTED_FUNCTIONS = [
   '_get_renderer_backend',
   '_is_gpu_renderer_active',
   '_is_canvas_fallback_active',
+  '_set_block_texture_rgba',
   '_malloc',
   '_free',
 ];
@@ -232,6 +233,9 @@ function emitCompileCommands(linkedPort) {
 function writeBuildInfo(linkedPort) {
   const pinned = readPinnedEmsdkVersion();
   const emccVersion = getEmccVersion();
+  const wasmPublic = join(OUT_PUBLIC, 'tetris_renderer.wasm');
+  const wasmBytes = existsSync(wasmPublic) ? readFileSync(wasmPublic).byteLength : null;
+  const jsBytes = existsSync(OUT_JS) ? readFileSync(OUT_JS).byteLength : null;
   const info = {
     mode: MODE,
     builtAt: new Date().toISOString(),
@@ -242,6 +246,8 @@ function writeBuildInfo(linkedPort) {
     webGpuEnv: WEBGPU_ENV,
     optFlags: getOptFlags(),
     sources: SOURCES.map((s) => s.replace(`${ROOT}/`, '')),
+    wasmBytes,
+    jsBytes,
   };
 
   const payload = `${JSON.stringify(info, null, 2)}\n`;

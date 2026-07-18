@@ -42,7 +42,7 @@ int init_renderer(int width, int height) {
   if (gpu_ok) {
     EM_ASM({
       if (typeof console !== 'undefined' && console.info) {
-        console.info('[cpp renderer] init_renderer — WebGPU (clear + instanced blocks when pipeline ready)');
+        console.info('[cpp renderer] init_renderer — WebGPU (textured instanced blocks when pipeline ready)');
       }
     });
   } else {
@@ -105,6 +105,11 @@ void update_piece_state(int8_t piece_type, int8_t rotation, int8_t x, int8_t y,
   g_piece_state.y = y;
   g_piece_state.ghost_y = ghost_y;
   g_piece_state.lock_flash = lock_flash;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int set_block_texture_rgba(const uint8_t* data, int width, int height, int byte_len) {
+  return gpu_renderer_set_block_texture(data, width, height, byte_len);
 }
 
 EMSCRIPTEN_KEEPALIVE

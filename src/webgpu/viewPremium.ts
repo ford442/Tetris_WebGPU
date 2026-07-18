@@ -6,14 +6,22 @@
  */
 
 import { applyReactiveVideoSources } from './reactiveVideo.js';
+import type { ReactiveVideoBackground } from './reactiveVideo.js';
 import type { BloomParameters } from './bloomSystem.js';
+import type { BloomSystem } from './bloomSystem.js';
 import { ReactiveMusicSystem } from './reactiveMusic.js';
+import type { VisualEffects } from './effects.js';
+import type { ParticleSystem } from './particles.js';
+import type { ChaosModeController } from './chaosMode.js';
+import type { JellyfishParticleSystem } from './jellyfishParticles.js';
 import { renderLogger, audioLogger } from '../utils/logger.js';
 import type { GameSettings } from '../config/gameSettings.js';
+import type { GameState } from '../game/gameState.js';
 import { QUALITY_PRESET_VALUES } from '../config/renderConfig.js';
 import { applyAccessibilitySettings } from '../a11y/applyAccessibility.js';
 import { isReducedMotionActive } from '../a11y/accessibility.js';
 import { particleBudgetForQuality } from './particles/layout.js';
+import type { ThemeColors, Themes } from './themes.js';
 
 /** The subset of View that these helpers need. */
 export interface ViewLike {
@@ -33,17 +41,19 @@ export interface ViewLike {
   useCRT: boolean;
   useFXAA: boolean;
   useGlitch: boolean;
-  currentTheme: any;
-  reactiveVideoBackground: any;
-  reactiveMusicSystem: any;
-  jellyfishSystem: any;
-  chaosMode: any;
-  bloomSystem: any;
-  visualEffects: any;
+  currentTheme: ThemeColors;
+  themes?: Themes;
+  setTheme?(name: keyof Themes): void;
+  reactiveVideoBackground: ReactiveVideoBackground;
+  reactiveMusicSystem: ReactiveMusicSystem | null;
+  jellyfishSystem: JellyfishParticleSystem;
+  chaosMode: ChaosModeController;
+  bloomSystem: BloomSystem | null;
+  visualEffects: VisualEffects;
   setMaterialTheme(name: string): void;
   fragmentUniformBuffer: GPUBuffer;
   backgroundUniformBuffer: GPUBuffer;
-  currentMaterial: any;
+  currentMaterial: unknown;
   usePremiumMaterials: boolean;
   particleInteractionUniforms: {
     particleInfluence: number;
@@ -51,8 +61,8 @@ export interface ViewLike {
     goldSpecularBoost: number;
     cyberEmissivePulse: number;
   };
-  particleSystem: any;
-  state: any;
+  particleSystem: ParticleSystem | null;
+  state: GameState | null;
 }
 
 export function setPremiumVisualsPreset(view: ViewLike, options: {
@@ -220,7 +230,7 @@ export function toggleFilmGrain(view: ViewLike, enabled: boolean) { view.useFilm
 export function toggleCRT(view: ViewLike, enabled: boolean) { view.useCRT = enabled; }
 
 export function applyGameSettings(view: ViewLike, settings: GameSettings): void {
-  const safe = applyAccessibilitySettings(view as Parameters<typeof applyAccessibilitySettings>[0], settings);
+  const safe = applyAccessibilitySettings(view, settings);
   const reduced = isReducedMotionActive(settings);
 
   view.setRenderScale(safe.renderScale);

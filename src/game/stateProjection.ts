@@ -1,4 +1,4 @@
-import { Piece } from './pieces.js';
+import { type Piece } from './pieces.js';
 
 interface PlayfieldProjectionParams {
   playfieldWidth: number;

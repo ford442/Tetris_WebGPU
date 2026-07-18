@@ -19,13 +19,12 @@ export class MusicEngine {
   private readonly outputGain: GainNode;
   private currentSource: AudioBufferSourceNode | null = null;
   private currentBuffer: AudioBuffer | null = null;
-  private currentUrl: string | null = null;
   private currentStem: MusicStemId | null = null;
   private isPlaying = false;
   private isPaused = false;
   private playbackStartTime = 0;
   private pausedAt = 0;
-  private loop = MUSIC_CONFIG.LOOP;
+  private loop: boolean = MUSIC_CONFIG.LOOP;
   private proceduralGenerator: ProceduralMusicGenerator | null = null;
   private useProcedural = false;
   private userVolume = 0.3;
@@ -98,7 +97,6 @@ export class MusicEngine {
       }
       const arrayBuffer = await response.arrayBuffer();
       this.currentBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-      this.currentUrl = url;
       this.useProcedural = false;
       return true;
     } catch (e) {
@@ -129,7 +127,6 @@ export class MusicEngine {
       const wasPlaying = this.isPlaying;
       this.stop();
       this.currentBuffer = buf;
-      this.currentUrl = MUSIC_STEMS[stem];
       this.currentStem = stem;
       this.useProcedural = false;
       if (wasPlaying) this.play();

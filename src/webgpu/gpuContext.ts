@@ -21,6 +21,52 @@ export const DESIRED_OPTIONAL_FEATURES: GPUFeatureName[] = [
   'shader-f16',
 ];
 
+/** Minimal host for device-loss recovery and uncaptured-error logging. */
+export interface GpuDeviceLifecycleHost {
+  device: GPUDevice;
+  element?: HTMLElement;
+  preRender?: () => Promise<void>;
+  onFatalDeviceLoss?: () => void;
+  _recoveringDevice?: boolean;
+  _deviceLost?: boolean;
+  _currentGpuScope?: string | null;
+}
+
+/** Full View surface for GPU device/canvas lifecycle helpers. */
+export interface GpuContextHost extends GpuDeviceLifecycleHost {
+  canvasWebGPU: HTMLCanvasElement;
+  ctxWebGPU: GPUCanvasContext;
+  width: number;
+  height: number;
+  renderScale: number;
+  element: HTMLElement;
+  reactiveVideoBackground: { setWebGPUDevice(d: GPUDevice): void };
+  visualEffects: { updateVideoPosition(w: number, h: number): void };
+  postProcessor: { resize(w: number, h: number): void };
+  bloomSystem?: { resize(w: number, h: number): Promise<void> };
+  playfildWidth: number;
+  playfildHeight: number;
+  playfildBorderWidth: number;
+  playfildInnerWidth: number;
+  playfildInnerHeight: number;
+  preRender(): Promise<void>;
+}
+
+export interface RequestGpuDeviceOptions {
+  search?: string;
+  storageValue?: string | null;
+  deviceLabel?: string;
+}
+
+export interface RequestGpuDeviceResult {
+  adapter: GPUAdapter;
+  device: GPUDevice;
+  powerPreference: GPUPowerPreference;
+  enabledFeatures: GPUFeatureName[];
+}
+
+type AdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfo };
+
 /**
  * Resolve the requested GPU power preference from `?gpu=low|high` or the
  * `tetris_gpu` localStorage key. Defaults to `high-performance` (this is a
@@ -69,7 +115,7 @@ export function selectOptionalFeatures(
 
 /** Best-effort adapter diagnostics; `adapter.info` is not available everywhere. */
 function logAdapterInfo(adapter: GPUAdapter, powerPreference: GPUPowerPreference): void {
-  const info = (adapter as any).info as GPUAdapterInfo | undefined;
+  const info = (adapter as AdapterWithInfo).info;
   if (info) {
     renderLogger.info(
       `Adapter (${powerPreference}):`,
@@ -84,14 +130,21 @@ function logAdapterInfo(adapter: GPUAdapter, powerPreference: GPUPowerPreference
 }
 
 /**
- * Request a GPU adapter/device and configure the canvas context.
- * Sizes the backing canvas to the device pixel ratio.
- *
- * Returns the preferred presentation format on success, or `null` if no
- * adapter/device is available (caller should abort and fall back).
+ * Request a GPU adapter and device using the shared policy (power preference,
+ * optional feature detection, labeled device with retry). Pure inputs can be
+ * passed for unit tests; defaults read from window location / localStorage.
  */
-export async function acquireGpuContext(view: any): Promise<GPUTextureFormat | null> {
-  const powerPreference = resolvePowerPreference();
+export async function requestGpuAdapterAndDevice(
+  options: RequestGpuDeviceOptions = {},
+): Promise<RequestGpuDeviceResult | null> {
+  if (typeof navigator === 'undefined' || !navigator.gpu) {
+    renderLogger.error('WebGPU is not available');
+    return null;
+  }
+
+  const powerPreference = resolvePowerPreference(options.search, options.storageValue);
+  const deviceLabel = options.deviceLabel ?? 'tetris-main-device';
+
   let adapter: GPUAdapter | null = null;
   try {
     adapter = await navigator.gpu.requestAdapter({ powerPreference });
@@ -110,23 +163,38 @@ export async function acquireGpuContext(view: any): Promise<GPUTextureFormat | n
     renderLogger.info('Enabling optional features:', requiredFeatures.join(', '));
   }
 
+  let device: GPUDevice;
   try {
-    view.device = await adapter.requestDevice({
-      label: 'tetris-main-device',
+    device = await adapter.requestDevice({
+      label: deviceLabel,
       requiredFeatures,
     });
   } catch (err) {
-    // Feature set may be rejected on some drivers — retry with a bare device.
     renderLogger.warn('requestDevice with optional features failed; retrying minimal:', err);
     try {
-      view.device = await adapter.requestDevice({ label: 'tetris-main-device' });
+      device = await adapter.requestDevice({ label: deviceLabel });
     } catch (err2) {
       renderLogger.error('requestDevice failed:', err2);
       return null;
     }
   }
-  view.device.label = view.device.label || 'tetris-main-device';
+  device.label = device.label || deviceLabel;
 
+  return { adapter, device, powerPreference, enabledFeatures: requiredFeatures };
+}
+
+/**
+ * Request a GPU adapter/device and configure the canvas context.
+ * Sizes the backing canvas to the device pixel ratio.
+ *
+ * Returns the preferred presentation format on success, or `null` if no
+ * adapter/device is available (caller should abort and fall back).
+ */
+export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextureFormat | null> {
+  const bundle = await requestGpuAdapterAndDevice();
+  if (!bundle) return null;
+
+  view.device = bundle.device;
   attachDeviceLifecycleHandlers(view);
 
   const dpr = window.devicePixelRatio || 1;
@@ -149,12 +217,12 @@ export async function acquireGpuContext(view: any): Promise<GPUTextureFormat | n
  * Wire `device.lost` recovery and an `uncapturederror` listener. Idempotent per
  * device (each freshly created device gets its own handlers).
  */
-export function attachDeviceLifecycleHandlers(view: any): void {
+export function attachDeviceLifecycleHandlers(view: GpuDeviceLifecycleHost): void {
   const device: GPUDevice = view.device;
   if (!device) return;
 
-  device.addEventListener('uncapturederror', (event: any) => {
-    const err = event?.error;
+  device.addEventListener('uncapturederror', (event: GPUUncapturedErrorEvent) => {
+    const err = event.error;
     renderLogger.error(
       'Uncaptured GPU error',
       view._currentGpuScope ? `during ${view._currentGpuScope}` : '',
@@ -165,14 +233,14 @@ export function attachDeviceLifecycleHandlers(view: any): void {
     );
   });
 
-  device.lost.then((info: GPUDeviceLostInfo) => {
+  void device.lost.then((info: GPUDeviceLostInfo) => {
     // 'destroyed' is an intentional teardown (e.g. re-init); don't treat as fatal.
     if (info.reason === 'destroyed') {
       renderLogger.info('GPU device destroyed (intentional)');
       return;
     }
     renderLogger.error(`GPU device lost: reason=${info.reason || 'unknown'} — ${info.message}`);
-    handleDeviceLost(view);
+    void handleDeviceLost(view);
   });
 }
 
@@ -180,16 +248,23 @@ export function attachDeviceLifecycleHandlers(view: any): void {
  * Attempt a single re-initialization after unexpected device loss; on failure,
  * surface an overlay and invoke the fatal hook (fallback chain) if present.
  */
-async function handleDeviceLost(view: any): Promise<void> {
+async function handleDeviceLost(view: GpuDeviceLifecycleHost): Promise<void> {
   if (view._recoveringDevice) return;
   view._recoveringDevice = true;
   view._deviceLost = true;
 
-  showDeviceLostOverlay(view.element, 'GPU device lost — attempting recovery…');
+  const canRecover = typeof view.preRender === 'function';
+  showDeviceLostOverlay(
+    view.element,
+    canRecover ? 'GPU device lost — attempting recovery…' : 'GPU device lost…',
+  );
 
   try {
+    if (!canRecover) {
+      throw new Error('no preRender recovery hook');
+    }
     // preRender re-runs acquireGpuContext + resource setup on a fresh device.
-    await view.preRender();
+    await view.preRender!();
     if (view.device) {
       view._deviceLost = false;
       removeDeviceLostOverlay(view.element);
@@ -243,7 +318,7 @@ function removeDeviceLostOverlay(element: HTMLElement | undefined): void {
  * Push validation/out-of-memory error scopes before pipeline creation so WGSL
  * and allocation failures are reported with actionable context.
  */
-export function pushGpuErrorScopes(view: any, scopeLabel: string): void {
+export function pushGpuErrorScopes(view: GpuContextHost, scopeLabel: string): void {
   if (!view.device) return;
   view._currentGpuScope = scopeLabel;
   view.device.pushErrorScope('validation');
@@ -251,7 +326,7 @@ export function pushGpuErrorScopes(view: any, scopeLabel: string): void {
 }
 
 /** Pop the scopes pushed by {@link pushGpuErrorScopes} and log any errors. */
-export async function popGpuErrorScopes(view: any): Promise<void> {
+export async function popGpuErrorScopes(view: GpuContextHost): Promise<void> {
   if (!view.device) return;
   const label = view._currentGpuScope || 'pipeline setup';
   try {
@@ -270,7 +345,7 @@ export async function popGpuErrorScopes(view: any): Promise<void> {
  * Handle a window resize: recompute canvas backing size (with render scale),
  * reconfigure the context, and resize render targets / bloom.
  */
-export function resizeGpuContext(view: any) {
+export function resizeGpuContext(view: GpuContextHost): void {
   if (!view.device || view._deviceLost) return;
   const dpr = window.devicePixelRatio || 1;
   view.width = window.innerWidth;

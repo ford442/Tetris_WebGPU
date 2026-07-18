@@ -1,4 +1,4 @@
-import * as Matrix from 'gl-matrix';
+import type * as Matrix from 'gl-matrix';
 import type { GameState } from '../../game/gameState.js';
 import type { ThemeColors } from '../themes.js';
 import { renderPlayfieldBlocks, renderPlayfieldBorder } from '../viewPlayfield.js';

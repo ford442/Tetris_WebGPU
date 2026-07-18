@@ -2,12 +2,12 @@
  * Apply accessibility settings to view + document.
  */
 
-import type { IView } from '../view/IView.js';
 import type { GameSettings } from '../config/gameSettings.js';
 import {
   buildThemeColors,
   type ThemeColors,
 } from '../webgpu/themes.js';
+import type { VisualEffects } from '../webgpu/effects.js';
 import {
   applyReducedMotionDocumentClass,
   isReducedMotionActive,
@@ -15,8 +15,8 @@ import {
 } from './accessibility.js';
 import type { ColorPaletteId } from './colorPalettes.js';
 
-type A11yView = IView & {
-  visualEffects?: { reducedMotion: boolean };
+export type A11yView = {
+  visualEffects?: VisualEffects;
   currentTheme?: ThemeColors;
   themes?: { imageSampled: ThemeColors };
   setTheme?(name: 'imageSampled'): void;

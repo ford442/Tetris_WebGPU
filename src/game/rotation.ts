@@ -3,8 +3,6 @@
  * Implements the Super Rotation System with wall kicks
  */
 
-import { Piece } from './pieces.js';
-
 // SRS Wall Kick Data for J, L, S, T, Z pieces
 export const SRS_KICKS_JLSTZ: { [key: string]: number[][] } = {
   '0-1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],

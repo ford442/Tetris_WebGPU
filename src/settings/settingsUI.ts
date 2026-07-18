@@ -14,11 +14,7 @@ import {
   type SettingsQuality,
 } from '../config/gameSettings.js';
 import { getRendererPreference } from '../view/rendererPreference.js';
-import {
-  COLOR_PALETTE_IDS,
-  COLOR_PALETTE_LABELS,
-  type ColorPaletteId,
-} from '../a11y/colorPalettes.js';
+import type { ColorPaletteId } from '../a11y/colorPalettes.js';
 import type { ReducedMotionPref } from '../a11y/accessibility.js';
 
 type SettingsView = IView & {
@@ -29,19 +25,6 @@ type SettingsView = IView & {
   useGlitch?: boolean;
   bloomEnabled?: boolean;
 };
-
-const QUALITY_OPTIONS: { id: QualityPreset; label: string }[] = [
-  { id: 'low', label: 'Low' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'high', label: 'High' },
-  { id: 'ultra', label: 'Ultra' },
-];
-
-const GPU_POWER_OPTIONS: { id: GpuPowerPreference; label: string }[] = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'high-performance', label: 'High performance' },
-  { id: 'low-power', label: 'Low power' },
-];
 
 const RENDERER_LABELS: Record<string, string> = {
   auto: 'Auto (WebGPU → WebGL2)',

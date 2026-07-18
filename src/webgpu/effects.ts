@@ -3,7 +3,7 @@
  * Manages visual effects like shake, flash, shockwave, and video backgrounds
  */
 
-import { videoLogger, renderLogger, audioLogger } from '../utils/logger.js';
+import { renderLogger } from '../utils/logger.js';
 
 export class VisualEffects {
     /** When true, skip shake / shockwave / flash / heavy FX (a11y). */
@@ -48,8 +48,6 @@ export class VisualEffects {
 
     // Ghost/shadow vertical light-trail state (animates 200ms after piece move)
     ghostTrailTimer: number = 0;
-    private _lastActiveY: number = -999;
-    private _lastActiveRot: number = -999;
 
     /** Vertical trail along hard-drop path (optional, ~350ms). */
     hardDropTrail = {
@@ -274,7 +272,7 @@ export class VisualEffects {
       this.triggerGhostTrail(Math.min(0.45, duration + 0.1));
     }
 
-    triggerShake(magnitude: number, duration: number): void {
+    triggerShake(magnitude: number, _duration: number): void {
         if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
@@ -319,7 +317,7 @@ export class VisualEffects {
      * Trigger the WebGPU-side fullscreen additive color-burn flash on level up.
      * Color comes from the new level's theme.backgroundColors[0]; fades over 400ms at high opacity.
      */
-    triggerLevelUpColorFlash(color: [number, number, number], duration: number = 0.4): void {
+    triggerLevelUpColorFlash(color: [number, number, number], _duration: number = 0.4): void {
         if (this.reducedMotion) return;
         this.levelUpFlashColor = color && color.length >= 3 ? [color[0], color[1], color[2]] : [0.3, 0.7, 1.0];
         this.levelUpFlashIntensity = 1.0; // start at high opacity for burn
@@ -454,18 +452,11 @@ export class VisualEffects {
         return this._shakeOffset;
     }
 
-    // ==================== REACTIVE VIDEO & MUSIC ====================
-    private reactiveVideoEnabled: boolean = false;
-    private reactiveMusicEnabled: boolean = false;
-    private videoPlaybackRate: number = 1.0;
-
     setReactiveVideoEnabled(enabled: boolean): void {
-        this.reactiveVideoEnabled = enabled;
         renderLogger.info('Reactive video:', enabled ? 'enabled' : 'disabled');
     }
 
     setReactiveMusicEnabled(enabled: boolean): void {
-        this.reactiveMusicEnabled = enabled;
         renderLogger.info('Reactive music:', enabled ? 'enabled' : 'disabled');
     }
 

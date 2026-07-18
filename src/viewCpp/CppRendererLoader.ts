@@ -4,11 +4,17 @@
  */
 import { renderLogger } from '../utils/logger.js';
 import {
+  attachDeviceLifecycleHandlers,
+  requestGpuAdapterAndDevice,
+  type GpuDeviceLifecycleHost,
+} from '../webgpu/gpuContext.js';
+import {
   flattenPlayfieldGrid,
   packPieceState,
   PIECE_STATE_BYTES,
   PLAYFIELD_CELL_COUNT,
 } from './cppPlayfieldSync.js';
+import { resolveBlockTextureUrl } from '../webgpu/blockTexture.js';
 import type { GameState } from '../game/gameState.js';
 
 export const PLAYFIELD_BYTES = PLAYFIELD_CELL_COUNT;
@@ -94,16 +100,18 @@ async function importCreateModule(): Promise<{ create: CreateModuleFn; jsUrl: st
   return null;
 }
 
-async function createWebGpuDevice(): Promise<GPUDevice | null> {
-  if (typeof navigator === 'undefined' || !navigator.gpu) return null;
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return null;
-    return adapter.requestDevice();
-  } catch (err) {
-    renderLogger.warn('[cpp] WebGPU device request failed:', err);
-    return null;
+async function createWebGpuDevice(
+  lifecycleHost?: GpuDeviceLifecycleHost,
+): Promise<GPUDevice | null> {
+  const bundle = await requestGpuAdapterAndDevice();
+  if (!bundle) return null;
+
+  if (lifecycleHost) {
+    lifecycleHost.device = bundle.device;
+    attachDeviceLifecycleHandlers(lifecycleHost);
   }
+
+  return bundle.device;
 }
 
 export class CppRendererLoader {
@@ -132,6 +140,8 @@ export class CppRendererLoader {
   ) => void) | null = null;
   private static isGpuActiveFn: (() => number) | null = null;
   private static getBackendFn: (() => number) | null = null;
+  private static setBlockTextureFn: ((ptr: number, w: number, h: number, len: number) => number) | null = null;
+  private static blockTextureReady = false;
 
   static isLoaded(): boolean {
     return this.loaded;
@@ -154,7 +164,66 @@ export class CppRendererLoader {
     return this.playfieldView;
   }
 
-  static async init(width: number, height: number, canvas: HTMLCanvasElement): Promise<boolean> {
+  static hasBlockTexture(): boolean {
+    return this.blockTextureReady;
+  }
+
+  /** Decode block.png in TS and upload RGBA pixels into the C++ bind group texture. */
+  static async uploadBlockTexture(): Promise<boolean> {
+    if (!this.module || !this.setBlockTextureFn || this.backend !== RendererBackend.WEBGPU) {
+      return false;
+    }
+    if (!this.module._malloc || !this.module._free) {
+      renderLogger.warn('[cpp] _malloc/_free unavailable for block texture upload');
+      return false;
+    }
+
+    try {
+      const url = resolveBlockTextureUrl();
+      const res = await fetch(url);
+      if (!res.ok) {
+        renderLogger.warn(`[cpp] block texture fetch failed: ${res.status} ${url}`);
+        return false;
+      }
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(bitmap.width, bitmap.height)
+        : document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        renderLogger.warn('[cpp] 2D context unavailable for block texture decode');
+        return false;
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+      const bytes = imageData.data;
+      const ptr = this.module._malloc(bytes.length);
+      try {
+        this.module.HEAPU8.set(bytes, ptr);
+        const ok = this.setBlockTextureFn(ptr, bitmap.width, bitmap.height, bytes.length);
+        this.blockTextureReady = ok === 1;
+        if (this.blockTextureReady) {
+          renderLogger.info(`[cpp] block texture uploaded (${bitmap.width}x${bitmap.height})`);
+        }
+        return this.blockTextureReady;
+      } finally {
+        this.module._free(ptr);
+      }
+    } catch (err) {
+      renderLogger.warn('[cpp] block texture upload failed:', err);
+      return false;
+    }
+  }
+
+  static async init(
+    width: number,
+    height: number,
+    canvas: HTMLCanvasElement,
+    lifecycleHost?: GpuDeviceLifecycleHost,
+  ): Promise<boolean> {
     if (this.loaded) return true;
 
     const wasmProbe = await fetchWasmModule();
@@ -169,7 +238,7 @@ export class CppRendererLoader {
       return false;
     }
 
-    const webgpuDevice = await createWebGpuDevice();
+    const webgpuDevice = await createWebGpuDevice(lifecycleHost);
 
     try {
       const instance = await imported.create({
@@ -206,6 +275,9 @@ export class CppRendererLoader {
       ) => void;
       this.isGpuActiveFn = instance.cwrap('is_gpu_renderer_active', 'number', []) as () => number;
       this.getBackendFn = instance.cwrap('get_renderer_backend', 'number', []) as () => number;
+      this.setBlockTextureFn = instance.cwrap('set_block_texture_rgba', 'number', [
+        'number', 'number', 'number', 'number',
+      ]) as (ptr: number, w: number, h: number, len: number) => number;
 
       const ok = this.initFn(width, height);
       if (ok !== 1) {
@@ -214,6 +286,10 @@ export class CppRendererLoader {
 
       this.bindHeapViews();
       this.backend = (this.getBackendFn?.() ?? this.isGpuActiveFn?.() ?? 0) as RendererBackendId;
+
+      if (this.backend === RendererBackend.WEBGPU) {
+        await this.uploadBlockTexture();
+      }
 
       this.loaded = true;
       const backendLabel =
@@ -326,6 +402,8 @@ export class CppRendererLoader {
     this.updatePieceStateFn = null;
     this.isGpuActiveFn = null;
     this.getBackendFn = null;
+    this.setBlockTextureFn = null;
+    this.blockTextureReady = false;
     this.backend = RendererBackend.NONE;
     this.loaded = false;
   }

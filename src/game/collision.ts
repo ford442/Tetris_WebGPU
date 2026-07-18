@@ -3,7 +3,7 @@
  * Handles collision detection for pieces with the playfield and boundaries
  */
 
-import { Piece } from './pieces.js';
+import { type Piece } from './pieces.js';
 
 export class CollisionDetector {
   private playfieldWidth: number;
@@ -27,15 +27,6 @@ export class CollisionDetector {
   updatePlayfield(playfield: Int8Array | number[][]): void {
     this.playfield = playfield;
     this.isTypedArray = playfield instanceof Int8Array;
-  }
-
-  // Helper to get cell value regardless of array type
-  private getCell(x: number, y: number): number {
-      if (this.isTypedArray) {
-          return (this.playfield as Int8Array)[y * this.playfieldWidth + x];
-      } else {
-          return (this.playfield as number[][])[y][x];
-      }
   }
 
   hasCollision(piece: Piece): boolean {

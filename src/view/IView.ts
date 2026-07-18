@@ -1,3 +1,4 @@
+import type { GameSettings } from '../config/gameSettings.js';
 import type { GameState } from '../game/gameState.js';
 import type { Piece } from '../game/pieces.js';
 import type { VisualEffects } from '../webgpu/effects.js';
@@ -28,7 +29,7 @@ export interface IView {
   setTheme(themeName: keyof Themes): void;
   setMaterialTheme?(themeName: string, pieceType?: number): void;
   setPremiumVisualsPreset?(options?: Record<string, unknown>): void;
-  applyGameSettings?(settings: import('../config/gameSettings.js').GameSettings): void;
+  applyGameSettings?(settings: GameSettings): void;
   initReactiveMusic?(audioContext: AudioContext, masterGain: GainNode): void;
 
   toggleGlitch?(): void;

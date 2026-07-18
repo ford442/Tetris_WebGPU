@@ -6,7 +6,6 @@
 
 export class ProceduralMusicGenerator {
   private ctx: AudioContext;
-  private masterGain: GainNode;
   private isPlaying: boolean = false;
   private loopInterval: number | null = null;
   private nextNoteTime: number = 0;
@@ -34,7 +33,6 @@ export class ProceduralMusicGenerator {
 
   constructor(audioContext: AudioContext, masterGain: GainNode) {
     this.ctx = audioContext;
-    this.masterGain = masterGain;
     this.secondsPerBeat = 60.0 / this.tempo;
     
     this.musicGain = this.ctx.createGain();

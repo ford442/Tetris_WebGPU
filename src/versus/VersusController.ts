@@ -5,7 +5,7 @@
 import Game from '../game.js';
 import type { IView } from '../view/IView.js';
 import type { WebGPUViewHost } from '../view/viewTypes.js';
-import SoundManager from '../sound.js';
+import type SoundManager from '../sound.js';
 import { INPUT_CONFIG } from '../config/gameConfig.js';
 import { PLAYER1_KEY_MAP, PLAYER2_KEY_MAP, type PlayerAction } from './inputMaps.js';
 import { attackRowsFromClear } from './garbage.js';
@@ -65,7 +65,7 @@ export default class VersusController {
     this.soundManager = soundManager;
 
     const g0 = new Game();
-    const g1 = new Game({ dedicatedPlayfield: true });
+    const g1 = new Game({ wasmBoardId: 1 });
     g0.setMode('versus');
     g1.setMode('versus');
     g0.view = view;

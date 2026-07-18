@@ -29,13 +29,11 @@ export class ReactiveMusicSystem {
   
   // Effect chain
   private compressor: DynamicsCompressorNode;
-  private reverb: ConvolverNode | null = null;
   
   // State for reactivity
   private intensity: number = 0.5; // 0.0 - 1.0
   private targetIntensity: number = 0.5;
   private comboLevel: number = 0;
-  private isTension: boolean = false;
   private currentScale: number[] = [];
   
   // Audio analysis for visual band reactivity (exposed for border glow in renderloop)
@@ -206,11 +204,11 @@ export class ReactiveMusicSystem {
   }
 
   pause(): void {
-    this.ctx.suspend();
+    void this.ctx.suspend();
   }
 
   resume(): void {
-    this.ctx.resume();
+    void this.ctx.resume();
   }
 
   // GAMEPLAY REACTIVITY
@@ -229,8 +227,6 @@ export class ReactiveMusicSystem {
   }
 
   onTSpin(): void {
-    // Tension moment
-    this.isTension = true;
     this.targetIntensity = 0.9;
     this.switchScale('phrygian');
     
@@ -238,7 +234,6 @@ export class ReactiveMusicSystem {
     this.pitchDive();
     
     setTimeout(() => {
-      this.isTension = false;
       this.switchScale('minor');
     }, 1000);
   }
