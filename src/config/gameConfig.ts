@@ -12,9 +12,9 @@ export const INPUT_CONFIG = {
   /** Soft drop speed (sonic drop) */
   SOFT_DROP_SPEED: 1,
   /** Input buffer window for movement (ms) */
-  MOVE_BUFFER_WINDOW: 20,
+  MOVE_BUFFER_WINDOW: 40,
   /** Input buffer window for rotation (ms) - tighter to prevent double-rotations */
-  ROTATE_BUFFER_WINDOW: 20,
+  ROTATE_BUFFER_WINDOW: 40,
 } as const;
 
 // Lock delay mechanics (milliseconds)

@@ -193,12 +193,12 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionHeight: 0.446,
   subregionInset: 0.04,
   materialDetectionMode: 'color_signal',
-  metalThresholdLow: 0.80,
+  metalThresholdLow: 0.75,
   metalThresholdHigh: 1.20,
   useProceduralFallback: true,
   maskChannel: 'auto',
   // Reference curve matching block.png gold frame + crystal interior.
-  authoredGlassMin: 0.38,
+  authoredGlassMin: 0.30,
   authoredGlassMax: 0.78,
   authoredGlassFresnelPower: 2.0,
 
@@ -215,10 +215,10 @@ export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
   url: 'block.png',
   samplingMode: 'single',
   materialDetectionMode: 'luminance',
-  metalThresholdLow: 0.45,
+  metalThresholdLow: 0.40,
   metalThresholdHigh: 0.55,
   useProceduralFallback: true,
-  authoredGlassMin: 0.38,
+  authoredGlassMin: 0.30,
   authoredGlassMax: 0.78,
   authoredGlassFresnelPower: 2.0,
 
@@ -289,7 +289,7 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
     addressModeV: 'clamp-to-edge',
     lodMinClamp: 0,
     lodMaxClamp: BLOCK_TEXTURE_MAX_LOD,
-    maxAnisotropy: 16,
+    maxAnisotropy: 4,
   };
 }
 

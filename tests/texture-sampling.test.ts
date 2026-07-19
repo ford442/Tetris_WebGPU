@@ -48,7 +48,7 @@ describe('texture sampling WGSL generation', () => {
     it('uses color-signal-based gold/crystal separation by default', () => {
       const code = getSimpleTextureSamplingWGSL();
       expect(code).toContain('let goldSignal = texColor.r + texColor.g - texColor.b * 0.5');
-      expect(code).toContain('let metalMask = smoothstep(0.8, 1.2, goldSignal)');
+      expect(code).toContain('let metalMask = smoothstep(0.75, 1.2, goldSignal)');
     });
   });
 
@@ -158,12 +158,12 @@ describe('texture sampling WGSL generation', () => {
     it('updates material detection thresholds in generated code', () => {
       setBlockTextureConfig({
         materialDetectionMode: 'color_signal',
-        metalThresholdLow: 0.8,
+        metalThresholdLow: 0.75,
         metalThresholdHigh: 1.2,
       });
       const code = getSimpleTextureSamplingWGSL();
       // Should include the threshold values in the mask extraction
-      expect(code).toContain('smoothstep(0.8, 1.2, goldSignal)'); // low threshold
+      expect(code).toContain('smoothstep(0.75, 1.2, goldSignal)'); // low threshold
     });
   });
 });

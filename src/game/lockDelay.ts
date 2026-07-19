@@ -54,7 +54,7 @@ export function handleMoveReset(host: LockDelayHost): void {
       host.lockResets++;
     }
   } else {
-    host.lockTimer = -150;
+    host.lockTimer = -200;
     host.lockResets = 0;
   }
 }

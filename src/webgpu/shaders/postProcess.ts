@@ -203,10 +203,10 @@ export const PostProcessShaders = () => {
             let pulseG = pulse * 0.004;
             let pulseB = pulse * -0.018;
 
-            let baseSample = textureSample(myTexture, mySampler, finalUV);
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR + chromaticMusicHoriz, vertAberration + pulseG * 0.6 + chromaticMusicOffset)).r;
+            let baseSample = textureSampleLevel(myTexture, mySampler, finalUV, 0.0);
+            var r = textureSampleLevel(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR + chromaticMusicHoriz, vertAberration + pulseG * 0.6 + chromaticMusicOffset), 0.0).r;
             var g = baseSample.g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset)).b;
+            var b = textureSampleLevel(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset), 0.0).b;
             let a = baseSample.a;
 
             // Bloom-ish boost (optimized 5-tap tent filter)
@@ -220,10 +220,10 @@ export const PostProcessShaders = () => {
             // 4 directional samples (cardinal directions for better cache coherence)
             let dX = vec2<f32>(spread, 0.0);
             let dY = vec2<f32>(0.0, spread);
-            glow += textureSample(myTexture, mySampler, finalUV + dX).rgb * 0.1875;
-            glow += textureSample(myTexture, mySampler, finalUV - dX).rgb * 0.1875;
-            glow += textureSample(myTexture, mySampler, finalUV + dY).rgb * 0.1875;
-            glow += textureSample(myTexture, mySampler, finalUV - dY).rgb * 0.1875;
+            glow += textureSampleLevel(myTexture, mySampler, finalUV + dX, 0.0).rgb * 0.1875;
+            glow += textureSampleLevel(myTexture, mySampler, finalUV - dX, 0.0).rgb * 0.1875;
+            glow += textureSampleLevel(myTexture, mySampler, finalUV + dY, 0.0).rgb * 0.1875;
+            glow += textureSampleLevel(myTexture, mySampler, finalUV - dY, 0.0).rgb * 0.1875;
 
             // Tuned bloom that preserves texture detail
             let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
