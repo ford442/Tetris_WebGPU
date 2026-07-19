@@ -41,9 +41,11 @@ describe('authoritative block shader structure', () => {
     expect(fragment).toContain('struct FragmentUniforms');
     expect(fragment).toContain('dissolveField');
     expect(fragment).toContain('fresnelParams');
-    // Particle interaction injected once (no duplicate WGSL paste)
-    const interactionMarker = 'applyMaterialParticleInteraction';
-    expect(fragment.split(interactionMarker).length - 1).toBe(1);
+    // Particle interaction injected once (no duplicate WGSL paste or duplicate locals)
+    const interactionMarker = 'applyParticleInteraction';
+    expect(fragment.split(interactionMarker).length - 1).toBe(2); // fn def + one call site
+    expect(fragment.split('let particleIntensity').length - 1).toBe(1);
+    expect(fragment).not.toContain('applyMaterialParticleInteraction');
   });
 
   it('keeps CPU uniform buffer size aligned with WGSL struct', () => {
