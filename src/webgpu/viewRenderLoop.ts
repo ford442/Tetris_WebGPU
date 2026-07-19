@@ -326,6 +326,9 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.shockwaveCenter[0] = view.visualEffects.shockwaveCenter[0];
   view._postProcessParams.shockwaveCenter[1] = view.visualEffects.shockwaveCenter[1];
   view._postProcessParams.shockwaveTime = shockwaveActive ? view.visualEffects.shockwaveTimer : 0;
+  view._postProcessParams.blackHoleTime = view.visualEffects.blackHoleTime;
+  view._postProcessParams.blackHoleCenter[0] = view.visualEffects.blackHoleCenter[0];
+  view._postProcessParams.blackHoleCenter[1] = view.visualEffects.blackHoleCenter[1];
   
   const currentShockwaveParams = view.visualEffects.getShockwaveParams();
   view._postProcessParams.shockwaveParams[0] = currentShockwaveParams[0];
