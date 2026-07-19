@@ -89,7 +89,10 @@ def preflight(build_path: Path) -> bool:
         else:
             print(f"  ✓ {rel} ({asset.stat().st_size / 1024:.1f} KB)")
     if not DEPLOY_TOKEN:
-        print('  ⚠ DEPLOY_TOKEN is not set — upload may be rejected by the deploy API.')
+        print('  ✗ DEPLOY_TOKEN is not set — upload will be rejected (403).')
+        ok = False
+    else:
+        print('  ✓ DEPLOY_TOKEN is set')
     print()
     return ok
 
@@ -174,7 +177,13 @@ def main():
         sys.exit(1)
 
     if not preflight(build_path):
-        print('ERROR: Preflight failed — fix the build before deploying.')
+        if not DEPLOY_TOKEN:
+            print('ERROR: DEPLOY_TOKEN is required for Contabo deploy uploads.')
+            print('Set it in your shell or Cloud Agent environment secrets, then retry:')
+            print('  export DEPLOY_TOKEN="<token-from-vps-env>"')
+            print('  python deploy.py')
+        else:
+            print('ERROR: Preflight failed — fix the build before deploying.')
         sys.exit(1)
 
     try:
