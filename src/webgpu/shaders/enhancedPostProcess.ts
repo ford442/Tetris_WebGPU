@@ -36,10 +36,10 @@ export const EnhancedPostProcessShaders = () => {
             let texelSize = 1.0 / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
 
             // Sample neighboring pixels (all sampling done unconditionally)
-            let nw = textureSample(myTexture, mySampler, uv + vec2<f32>(-texelSize.x, -texelSize.y)).rgb;
-            let ne = textureSample(myTexture, mySampler, uv + vec2<f32>( texelSize.x, -texelSize.y)).rgb;
-            let sw = textureSample(myTexture, mySampler, uv + vec2<f32>(-texelSize.x,  texelSize.y)).rgb;
-            let se = textureSample(myTexture, mySampler, uv + vec2<f32>( texelSize.x,  texelSize.y)).rgb;
+            let nw = textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-texelSize.x, -texelSize.y), 0.0).rgb;
+            let ne = textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( texelSize.x, -texelSize.y), 0.0).rgb;
+            let sw = textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-texelSize.x,  texelSize.y), 0.0).rgb;
+            let se = textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( texelSize.x,  texelSize.y), 0.0).rgb;
 
             // Convert to luminance
             let lumaM = dot(texColor, vec3<f32>(0.299, 0.587, 0.114));
@@ -65,12 +65,12 @@ export const EnhancedPostProcessShaders = () => {
 
             // Sample along gradient (unconditional - avoids non-uniform control flow)
             let rgbA = 0.5 * (
-                textureSample(myTexture, mySampler, uv + dir * (1.0 / 3.0 - 0.5)).rgb +
-                textureSample(myTexture, mySampler, uv + dir * (2.0 / 3.0 - 0.5)).rgb
+                textureSampleLevel(myTexture, mySampler, uv + dir * (1.0 / 3.0 - 0.5), 0.0).rgb +
+                textureSampleLevel(myTexture, mySampler, uv + dir * (2.0 / 3.0 - 0.5), 0.0).rgb
             );
             let rgbB = rgbA * 0.5 + 0.25 * (
-                textureSample(myTexture, mySampler, uv + dir * -0.5).rgb +
-                textureSample(myTexture, mySampler, uv + dir * 0.5).rgb
+                textureSampleLevel(myTexture, mySampler, uv + dir * -0.5, 0.0).rgb +
+                textureSampleLevel(myTexture, mySampler, uv + dir * 0.5, 0.0).rgb
             );
             let lumaB = dot(rgbB, vec3<f32>(0.299, 0.587, 0.114));
 
@@ -135,19 +135,19 @@ export const EnhancedPostProcessShaders = () => {
             let weight = 1.0 / 13.0;
             
             // 13-tap bloom (center + 12 samples)
-            bloom += textureSample(myTexture, mySampler, uv).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>( spread, 0.0)).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(-spread, 0.0)).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(0.0,  spread)).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(0.0, -spread)).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>( spread,  spread) * 0.7).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(-spread,  spread) * 0.7).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>( spread, -spread) * 0.7).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(-spread, -spread) * 0.7).rgb * weight;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>( spread * 1.5, 0.0)).rgb * weight * 0.5;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(-spread * 1.5, 0.0)).rgb * weight * 0.5;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(0.0,  spread * 1.5)).rgb * weight * 0.5;
-            bloom += textureSample(myTexture, mySampler, uv + vec2<f32>(0.0, -spread * 1.5)).rgb * weight * 0.5;
+            bloom += textureSampleLevel(myTexture, mySampler, uv, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( spread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-spread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  spread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -spread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( spread,  spread) * 0.7, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-spread,  spread) * 0.7, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( spread, -spread) * 0.7, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-spread, -spread) * 0.7, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( spread * 1.5, 0.0), 0.0).rgb * weight * 0.5;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-spread * 1.5, 0.0), 0.0).rgb * weight * 0.5;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  spread * 1.5), 0.0).rgb * weight * 0.5;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -spread * 1.5), 0.0).rgb * weight * 0.5;
             
             // Threshold bloom
             let bloomLum = dot(bloom, vec3<f32>(0.299, 0.587, 0.114));
@@ -299,10 +299,10 @@ export const EnhancedPostProcessShaders = () => {
             let pulseG = pulse * 0.004;
             let pulseB = pulse * -0.018;
 
-            let baseSample = textureSample(myTexture, mySampler, finalUV);
-            var r = textureSample(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR + chromaticMusicHoriz, vertAberration + pulseG * 0.6 + chromaticMusicOffset)).r;
+            let baseSample = textureSampleLevel(myTexture, mySampler, finalUV, 0.0);
+            var r = textureSampleLevel(myTexture, mySampler, finalUV + vec2<f32>(horizOffset + pulseR + chromaticMusicHoriz, vertAberration + pulseG * 0.6 + chromaticMusicOffset), 0.0).r;
             var g = baseSample.g;
-            var b = textureSample(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset)).b;
+            var b = textureSampleLevel(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset), 0.0).b;
             var color = vec3<f32>(r, g, b);
 
             // Add the shattered glass overlay into the final color
