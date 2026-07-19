@@ -296,6 +296,8 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     useGlitch: 0,
     shockwaveCenter: [0, 0] as [number, number],
     shockwaveTime: 0,
+    blackHoleTime: 0,
+    blackHoleCenter: [0, 0] as [number, number],
     shockwaveParams: [0, 0, 0, 0] as [number, number, number, number],
     level: 0,
     warpSurge: 0,

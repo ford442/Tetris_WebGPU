@@ -176,7 +176,7 @@ export const EnhancedPostProcessShaders = () => {
                 let bhDist = length(bhDiff);
 
                 // Exponential radius shrink as it decays
-                let bhRadius = 0.5 * (1.0 - pow(bhTime, 0.5));
+                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
 
                 if (bhDist < bhRadius && bhDist > 0.0) {
                     let angle = atan2(bhDiff.y, bhDiff.x);
@@ -414,6 +414,23 @@ export const EnhancedPostProcessShaders = () => {
             }
 
             // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
+
+            // Darken the center of the black hole
+            if (uniforms.blackHoleTime > 0.001) {
+                let bhCenter = uniforms.blackHoleCenter;
+                let bhTime = uniforms.blackHoleTime;
+                let bhDiff = uv - bhCenter;
+                let bhDist = length(bhDiff);
+                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
+                if (bhDist < bhRadius) {
+                    let darkFactor = smoothstep(0.0, bhRadius * 0.5, bhDist);
+                    color *= darkFactor;
+                    // Event horizon cyan glow
+                    let ring = smoothstep(bhRadius * 0.8, bhRadius, bhDist) * (1.0 - smoothstep(bhRadius, bhRadius * 1.2, bhDist));
+                    color += vec3<f32>(0.2, 0.8, 1.0) * ring * 2.0 * (1.0 - bhTime);
+                }
+            }
+
             return vec4<f32>(color * sampledAlpha, sampledAlpha);
         }
     `;

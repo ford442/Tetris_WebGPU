@@ -48,7 +48,7 @@ export const PostProcessShaders = () => {
                 let bhDist = length(bhDiff);
 
                 // Exponential radius shrink as it decays
-                let bhRadius = 0.5 * (1.0 - pow(bhTime, 0.5));
+                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
 
                 if (bhDist < bhRadius && bhDist > 0.0) {
                     let angle = atan2(bhDiff.y, bhDiff.x);
@@ -240,7 +240,7 @@ export const PostProcessShaders = () => {
                 let bhTime = uniforms.blackHoleTime;
                 let bhDiff = uv - bhCenter;
                 let bhDist = length(bhDiff);
-                let bhRadius = 0.5 * (1.0 - pow(bhTime, 0.5));
+                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
                 if (bhDist < bhRadius) {
                     let darkFactor = smoothstep(0.0, bhRadius * 0.5, bhDist);
                     color *= darkFactor;
