@@ -30,10 +30,6 @@ export function createBlockShaders(): BlockShaderSources {
 
         ${textureSamplingCode}
 
-        struct MaterialProperties {
-           metallic: f32,
-        };
-
         ${BLOCK_FRAGMENT_MAIN_WGSL}
     `;
 

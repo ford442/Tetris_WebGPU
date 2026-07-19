@@ -463,22 +463,6 @@ export const BLOCK_FRAGMENT_MAIN_WGSL = `
                 finalColor += vec3f(borderBoost);
             }
 
-            // NEW: Apply particle-material interaction
-            let matType = fUniforms.particleMaterialType;
-            let particleIntensity = fUniforms.particleIntensity;
-            if (matType > 0u && particleIntensity > 0.0) {
-                // Determine interaction color based on material
-                var interactionColor = vec3f(1.0);
-                if (matType == 2u) { interactionColor = vec3f(1.0, 0.84, 0.0); } // Gold
-                else if (matType == 3u) { interactionColor = vec3f(0.9, 0.95, 1.0); } // Chrome
-                else if (matType == 4u) { interactionColor = vec3f(0.0, 1.0, 1.0); } // Cyber
-
-                var dummyMat: MaterialProperties;
-                dummyMat.metallic = fUniforms.metallic;
-
-                finalColor = applyMaterialParticleInteraction(dummyMat, finalColor, N, V, L, matType, particleIntensity, interactionColor);
-            }
-
             finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));
 
             // === GPU CLEAR-DISSOLVE GLOW ===
