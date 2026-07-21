@@ -52,3 +52,5 @@
 - "Adding additive blending to the particle shader makes the explosions look like real light."
 - "Screen shake should decay exponentially, not linearly, for a snappier feel."
 - "Enhanced the chromatic aberration triggered by hard drops so it scales dynamically with the fall distance, making large drops feel incredibly heavy!"
+- "Added rotational camera shake to the existing translation shake to make hard drops feel even more visceral."
+- "Added upward-shooting vertical sparks on hard drops to sell the impact force."
