@@ -500,6 +500,13 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
     view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, angle, speed, burstColor);
   }
 
+  // Emit vertical sparks shooting up for extra juice
+  for (let i = 0; i < 20; i++) {
+    const upwardAngle = Math.PI * 1.5 + (Math.random() - 0.5) * 0.5; // Roughly upwards
+    const upwardSpeed = (30.0 + Math.random() * 40.0) * 2.0;
+    view.particleSystem.emitParticlesRadial(worldX, impactY, 0.0, upwardAngle, upwardSpeed, burstColor);
+  }
+
   triggerImpactEffects(view, worldX, impactY, distance);
 }
 

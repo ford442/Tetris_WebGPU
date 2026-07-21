@@ -195,6 +195,11 @@ function updateCameraAndUniforms(view: WebGPUViewHost, _dt: number, time: number
   view._camEye[1] = camY; 
   view._camEye[2] = view.splitScreen?.active ? 98.0 : 75.0;
   
+  const angle = (Math.random() - 0.5) * 0.05 * view.visualEffects.shakeIntensity;
+  view._camUp[0] = Math.sin(angle);
+  view._camUp[1] = Math.cos(angle);
+  view._camUp[2] = 0.0;
+
   glMatrix.mat4.lookAt(view.VIEWMATRIX, view._camEye, view._camTarget, view._camUp);
   glMatrix.mat4.multiply(view.vpMatrix, view.PROJMATRIX, view.VIEWMATRIX);
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, 16, view._camEye);
