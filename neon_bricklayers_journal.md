@@ -54,3 +54,4 @@
 - "Enhanced the chromatic aberration triggered by hard drops so it scales dynamically with the fall distance, making large drops feel incredibly heavy!"
 - "Added rotational camera shake to the existing translation shake to make hard drops feel even more visceral."
 - "Added upward-shooting vertical sparks on hard drops to sell the impact force."
+- "Confirmed that the Shockwave distortion effect on Hard Drops, along with all associated JUICE (Warp Surge, Neon Burst, Chromatic Aberration, Bloom), are perfectly integrated and fully operational in the WebGPU pipeline and Game Logic."
