@@ -472,19 +472,19 @@ export default class Controller {
             this.game.movePieceDown();
             this.recordReplay('down');
             this.playMoveSound('down');
-            this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
-            this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
+            // Remove heavy movement flash to let continuous soft drop take over
+            this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.2);
             if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
                 const worldX = (this.game.activPiece.x + 1.5) * 2.2;
                 const worldY = (this.game.activPiece.y + 1.5) * -2.2;
-                for(let i = 0; i < 3; i++) {
-                    const spreadX = (Math.random() - 0.5) * 4.0;
-                    const spreadY = (Math.random() - 0.5) * 4.0;
+                for(let i = 0; i < 2; i++) {
+                    const spreadX = (Math.random() - 0.5) * 2.0;
+                    const spreadY = (Math.random() - 0.5) * 2.0;
                     (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
                         worldX + spreadX, worldY + spreadY, 0.0,
                         Math.PI / 2 + (Math.random() - 0.5) * 0.5,
-                        10.0 + Math.random() * 15.0,
-                        [0.2, 0.8, 1.0, 0.6] // Cyan trail
+                        10.0 + Math.random() * 10.0,
+                        [0.2, 0.8, 1.0, 0.4] // Subtle cyan trail
                     );
                 }
             }
@@ -594,19 +594,19 @@ export default class Controller {
               this.game.movePieceDown();
               this.recordReplay('down');
               this.playMoveSound('down');
-              this.viewWebGPU.visualEffects?.triggerGhostTrail?.(0.1);
-              this.viewWebGPU.visualEffects?.triggerMovementFlash?.(0.15);
+              // Remove heavy movement flash to let continuous soft drop take over
+              this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.2);
             if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
                 const worldX = (this.game.activPiece.x + 1.5) * 2.2;
                 const worldY = (this.game.activPiece.y + 1.5) * -2.2;
-                for(let i = 0; i < 3; i++) {
-                    const spreadX = (Math.random() - 0.5) * 4.0;
-                    const spreadY = (Math.random() - 0.5) * 4.0;
+                for(let i = 0; i < 2; i++) {
+                    const spreadX = (Math.random() - 0.5) * 2.0;
+                    const spreadY = (Math.random() - 0.5) * 2.0;
                     (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
                         worldX + spreadX, worldY + spreadY, 0.0,
                         Math.PI / 2 + (Math.random() - 0.5) * 0.5,
-                        10.0 + Math.random() * 15.0,
-                        [0.2, 0.8, 1.0, 0.6] // Cyan trail
+                        10.0 + Math.random() * 10.0,
+                        [0.2, 0.8, 1.0, 0.4] // Subtle cyan trail
                     );
                 }
             }
@@ -807,7 +807,18 @@ export default class Controller {
       moveDown: () => {
         const prevY = this.game.activPiece.y;
         this.game.movePieceDown();
-        this.viewWebGPU.onMove?.(this.game.activPiece.x, this.game.activPiece.y);
+        // Replace heavy onMove flash spam with continuous soft drop pressure
+        this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.1);
+        if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
+          const worldX = (this.game.activPiece.x + 1.5) * 2.2;
+          const worldY = (this.game.activPiece.y + 1.5) * -2.2;
+          (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
+            worldX, worldY, 0.0,
+            Math.PI / 2 + (Math.random() - 0.5) * 0.5,
+            5.0 + Math.random() * 10.0,
+            [0.2, 0.8, 1.0, 0.4] // Very subtle cyan trail
+          );
+        }
         return prevY !== this.game.activPiece.y;
       },
       recordDownReplay: () => { this.recordReplay('down'); },
