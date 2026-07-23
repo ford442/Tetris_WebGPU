@@ -42,6 +42,10 @@ export class VisualEffects {
     movementFlashTimer: number = 0;
     lineClearFlashTimer: number = 0;
 
+    // Continuous soft-drop pressure (0..1)
+    softDropPressure: number = 0;
+    softDropActive: boolean = false;
+
     // Supernova Line Clear Laser state
     lineClearLaserY: Float32Array = new Float32Array([0.0, 0.0, 0.0, 0.0]);
     lineClearLaserIntensity: number = 0.0;
@@ -162,6 +166,12 @@ export class VisualEffects {
         this.lineClearFlashTimer *= 1.0 / (1.0 + dt * 4.0);
         if (this.lineClearFlashTimer < 0.01) this.lineClearFlashTimer = 0;
 
+        this.softDropPressure *= 1.0 / (1.0 + dt * 4.0); // slower decay than movement flash
+        if (this.softDropPressure < 0.01) {
+            this.softDropPressure = 0;
+            this.softDropActive = false;
+        }
+
         // Ghost trail decay (200ms window after moves)
         if (this.ghostTrailTimer > 0) this.ghostTrailTimer -= dt;
         if (this.ghostTrailTimer < 0) this.ghostTrailTimer = 0;
@@ -239,6 +249,12 @@ export class VisualEffects {
     triggerLineClearFlash(duration: number = 1.0): void {
         if (this.reducedMotion) return;
         this.lineClearFlashTimer = duration;
+    }
+
+    triggerSoftDropPressure(strength: number = 0.25): void {
+        if (this.reducedMotion) return;
+        this.softDropPressure = Math.min(1.0, this.softDropPressure + strength);
+        this.softDropActive = true;
     }
 
     triggerLock(duration: number = 0.3): void {

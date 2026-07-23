@@ -191,6 +191,13 @@ function updateCameraAndUniforms(view: WebGPUViewHost, _dt: number, time: number
   camX += view._shakeOffsetSmoothed.x;
   camY += view._shakeOffsetSmoothed.y;
 
+  // Add subtle wobble from soft drop pressure
+  if (view.visualEffects.softDropPressure > 0) {
+    const pressure = view.visualEffects.softDropPressure;
+    camX += Math.cos(time * 25.0) * pressure * 0.15;
+    camY += Math.sin(time * 30.0) * pressure * 0.15;
+  }
+
   view._camEye[0] = camX; 
   view._camEye[1] = camY; 
   view._camEye[2] = view.splitScreen?.active ? 98.0 : 75.0;
@@ -380,6 +387,11 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
   view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
   view._postProcessParams.chromaticIntensity = view.visualEffects.baseChromaticIntensity || 0.0;
+
+  // Add continuous soft drop pressure to chromatic intensity
+  if (view.visualEffects.softDropActive || view.visualEffects.softDropPressure > 0) {
+    view._postProcessParams.chromaticIntensity += view.visualEffects.softDropPressure * 0.4;
+  }
 
   // Compute board height fill ratio (0-1) for contracting danger vignette.
   // Uses highest occupied row (top = low index). No allocations in hot path.
