@@ -142,10 +142,55 @@ function updatePieceInterpolation(view: WebGPUViewHost, clampedDt: number) {
       view._previousActivePiece,
       view.state.activePiece,
     );
+
     view.visualX = r.x;
     view.visualY = r.y;
     view._previousActivePiece = r.prev;
-  } else {
+
+    // Trigger Neon Echo Trails
+    if (view.visualEffects && view.state.activePiece) {
+      if (view._lastEchoTrailX === undefined) view._lastEchoTrailX = view.state.activePiece.x;
+      if (view._lastEchoTrailY === undefined) view._lastEchoTrailY = view.state.activePiece.y;
+      if (view._lastEchoTrailTime === undefined) view._lastEchoTrailTime = 0;
+
+      const dx = Math.abs(view.state.activePiece.x - view._lastEchoTrailX);
+      const dy = Math.abs(view.state.activePiece.y - view._lastEchoTrailY);
+      const isSoftDropping = view.visualEffects.softDropActive;
+      const moved = dx >= 0.5 || dy >= 0.5;
+
+      if (moved && (isSoftDropping || dx > 0.1)) {
+        view._lastEchoTrailTime += clampedDt;
+        if (view._lastEchoTrailTime > 0.05) { // Limit trail emission rate
+          const combo = view.state.runStats?.peakCombo || 0;
+          const distanceBoost = Math.min(dy * 0.1, 1.0);
+          const intensity = 0.5 + (isSoftDropping ? 0.3 : 0.0) + (combo * 0.05) + distanceBoost;
+
+          let colorIdx = 4;
+          if (view.state.activePiece.blocks && view.state.activePiece.blocks.length > 0) {
+              const row = view.state.activePiece.blocks.find(r => r.some(c => c > 0));
+              if (row) {
+                  const val = row.find(c => c > 0);
+                  if (val) colorIdx = val;
+              }
+          }
+
+          view.visualEffects.addEchoTrail(
+            view._lastEchoTrailX,
+            view._lastEchoTrailY,
+            view.state.activePiece.blocks.map(row => [...row]),
+            colorIdx,
+            intensity
+          );
+
+          view._lastEchoTrailX = view.state.activePiece.x;
+          view._lastEchoTrailY = view.state.activePiece.y;
+          view._lastEchoTrailTime = 0;
+        }
+      } else if (!moved) {
+        view._lastEchoTrailX = view.state.activePiece.x;
+        view._lastEchoTrailY = view.state.activePiece.y;
+      }
+    }  } else {
     view._previousActivePiece = null;
   }
 

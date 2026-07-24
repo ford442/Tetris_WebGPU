@@ -5,7 +5,18 @@
 
 import { renderLogger } from '../utils/logger.js';
 
+
+export interface EchoTrail {
+    x: number;
+    y: number;
+    blocks: number[][];
+    colorIdx: number;
+    age: number;
+    intensity: number;
+}
+
 export class VisualEffects {
+    echoTrails: EchoTrail[] = [];
     /** When true, skip shake / shockwave / flash / heavy FX (a11y). */
     reducedMotion = false;
 
@@ -141,6 +152,15 @@ export class VisualEffects {
         this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
+
+        // Update echo trails
+        for (let i = this.echoTrails.length - 1; i >= 0; i--) {
+            this.echoTrails[i].age += dt;
+            if (this.echoTrails[i].age > 0.22) {
+                this.echoTrails.splice(i, 1);
+            }
+        }
+
         // Glitch decay
         this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
@@ -225,6 +245,15 @@ export class VisualEffects {
         }
 
         // Video crossfade animation is now managed by ReactiveVideoBackground
+    }
+
+
+    addEchoTrail(x: number, y: number, blocks: number[][], colorIdx: number, intensity: number = 1.0): void {
+        if (this.reducedMotion) return;
+        this.echoTrails.push({ x, y, blocks, colorIdx, age: 0, intensity });
+        if (this.echoTrails.length > 5) {
+            this.echoTrails.shift();
+        }
     }
 
     triggerFlash(duration: number = 1.0): void {
