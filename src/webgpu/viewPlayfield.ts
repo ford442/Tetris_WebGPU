@@ -301,7 +301,72 @@ export function renderPlayfieldBlocks(
     }
   }
 
+
+  // =========================================================================
+  // NEON ECHO TRAILS (Neon Bricklayer)
+  // Holographic movement and soft-drop trails
+  // =========================================================================
+  if (visualEffects?.echoTrails?.length) {
+    for (const trail of visualEffects.echoTrails) {
+      if (blockIndex >= uniformBindGroup_CACHE.length - 8) break;
+
+      const pieceW = trail.blocks[0]?.length || 0;
+      const pieceH = trail.blocks.length || 0;
+      const baseCol = currentTheme[trail.colorIdx] || currentTheme[1] || [0.9, 0.9, 0.9];
+
+      // True exponential decay matching effects.ts age logic
+      // Fade out fully by ~220ms
+      const decay = Math.exp(-trail.age * 15.0);
+      // Keep alpha low enough to trigger holographic 'isGhost' path in shader (<0.4)
+      const alpha = Math.min(0.38, 0.35 * decay * trail.intensity);
+
+      // Overbright cyan/magenta tint for "Neon" feel
+      const tintColor = trail.colorIdx % 2 === 0
+          ? [0.2, 0.9, 1.0] // Cyan
+          : [1.0, 0.2, 0.8]; // Magenta
+
+      const mixRatio = 0.6; // Mix base piece color with neon tint
+      const r = Math.min(2.0, (baseCol[0] * (1 - mixRatio) + tintColor[0] * mixRatio) * (1.5 + trail.intensity));
+      const g = Math.min(2.0, (baseCol[1] * (1 - mixRatio) + tintColor[1] * mixRatio) * (1.5 + trail.intensity));
+      const b = Math.min(2.0, (baseCol[2] * (1 - mixRatio) + tintColor[2] * mixRatio) * (1.5 + trail.intensity));
+
+      for (let ly = 0; ly < pieceH; ly++) {
+        for (let lx = 0; lx < pieceW; lx++) {
+          if (trail.blocks[ly][lx] === 0) continue;
+          if (blockIndex >= uniformBindGroup_CACHE.length) break;
+
+          _f32_4[0] = r; _f32_4[1] = g; _f32_4[2] = b; _f32_4[3] = alpha;
+
+          Matrix.mat4.identity(MODELMATRIX);
+          Matrix.mat4.identity(NORMALMATRIX);
+          _f32_3[0] = worldX(trail.x + lx);
+          _f32_3[1] = boardWorldY(trail.y + ly);
+          _f32_3[2] = 0.0;
+          Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
+
+          const trailBindGroup = uniformBindGroup_CACHE[blockIndex];
+          batchBuffer.set(vpMatrix as Float32Array, batchOffset);
+          batchBuffer.set(MODELMATRIX as Float32Array, batchOffset + 16);
+          batchBuffer.set(NORMALMATRIX as Float32Array, batchOffset + 32);
+          batchBuffer.set(_f32_4, batchOffset + 48);
+          // padding
+          batchBuffer[batchOffset + 52] = 0; batchBuffer[batchOffset + 53] = 0;
+          batchBuffer[batchOffset + 54] = 0; batchBuffer[batchOffset + 55] = 0;
+          batchBuffer[batchOffset + 56] = 0; batchBuffer[batchOffset + 57] = 0;
+          batchBuffer[batchOffset + 58] = 0; batchBuffer[batchOffset + 59] = 0;
+          batchBuffer[batchOffset + 60] = 0; batchBuffer[batchOffset + 61] = 0;
+          batchBuffer[batchOffset + 62] = 0; batchBuffer[batchOffset + 63] = 0;
+
+          uniformBindGroup_ARRAY[arrayLength++] = trailBindGroup;
+          blockIndex++;
+          batchOffset += 64;
+        }
+      }
+    }
+  }
+
   uniformBindGroup_ARRAY.length = arrayLength;
+
   return arrayLength;
 }
 

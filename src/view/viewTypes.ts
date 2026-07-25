@@ -88,6 +88,12 @@ export interface WebGPUViewHost extends ViewEventHost {
   _previousActivePiece: Piece | null;
   _hardDropBoostTimer: number;
   _shakeOffsetSmoothed: { x: number; y: number };
+  _lastEchoTrailX?: number;
+  _lastEchoTrailY?: number;
+  _lastEchoTrailTime?: number;
+  _lastEchoTrailX2?: number;
+  _lastEchoTrailY2?: number;
+  _lastEchoTrailTime2?: number;
   _f32_1: Float32Array;
   _f32_2: Float32Array;
   _f32_3: Float32Array;
