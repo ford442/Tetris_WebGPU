@@ -534,7 +534,10 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   render(dt: number) {
     // Decay Fresnel boost if any
     if (this.fresnelParams.hardDropBoost > 0) {
-      this.fresnelParams.hardDropBoost = Math.max(0, this.fresnelParams.hardDropBoost - dt * 2.0); // Simple decay
+      this.fresnelParams.hardDropBoost *= Math.exp(-dt * 10.0);
+      if (this.fresnelParams.hardDropBoost < 0.01) {
+        this.fresnelParams.hardDropBoost = 0;
+      }
     }
     if (this.device) {
       this.device.queue.writeBuffer(
