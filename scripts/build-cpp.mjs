@@ -19,6 +19,8 @@
  *   public/cpp/tetris_renderer.{js,wasm}
  *   public/cpp/build-info.json
  *   build/cpp/compile_commands.json  (+ cpp/compile_commands.json mirror for clangd)
+ *   cpp/src/generated/shader_sources.h  (embedded cpp/src/shaders/**\/*.wgsl —
+ *     via scripts/generate-cpp-shaders.mjs, runs even without emcc)
  */
 
 import { spawnSync } from 'node:child_process';
@@ -359,8 +361,24 @@ function buildLinkedPort() {
   return { result, linkedPort };
 }
 
+function generateShaderHeaders() {
+  const result = spawnSync(process.execPath, [join(__dirname, 'generate-cpp-shaders.mjs')], {
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  if (result.status !== 0) {
+    console.error(result.stderr || result.stdout || '[build-cpp] generate-cpp-shaders.mjs failed');
+    process.exit(result.status ?? 1);
+  }
+  console.log((result.stdout || '').trim());
+}
+
 function main() {
   mkdirSync(OUT_PUBLIC, { recursive: true });
+
+  // Pure Node, no emcc needed — regenerate before the emcc-presence check so the
+  // generated header stays fresh for editors/clangd even when emcc is absent.
+  generateShaderHeaders();
 
   if (!hasEmcc()) {
     console.log('[build-cpp] emcc not found — skipping C++ renderer build (TS fallbacks remain available).');

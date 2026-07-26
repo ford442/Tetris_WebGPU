@@ -35,6 +35,23 @@ describe('build-cpp outputs', () => {
     expect(src).toMatch(/DEFAULT_WASM_BUDGET_BYTES\s*=\s*256\s*\*\s*1024/);
   });
 
+  it('regenerates the embedded shader header before every build (with or without emcc)', () => {
+    const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
+    expect(src).toContain('generate-cpp-shaders.mjs');
+    expect(src).toContain('generateShaderHeaders');
+    const cmake = readFileSync(join(ROOT, 'cpp/CMakeLists.txt'), 'utf8');
+    expect(cmake).toContain('generate-cpp-shaders.mjs');
+    expect(cmake).toContain('generate_cpp_shaders');
+  });
+
+  it('gpu_renderer.cpp consumes the generated header instead of a hand-copied WGSL string', () => {
+    const blockWgsl = readFileSync(join(ROOT, 'cpp/src/shaders/block/block.wgsl'), 'utf8');
+    const cppSrc = readFileSync(join(ROOT, 'cpp/src/gpu_renderer.cpp'), 'utf8');
+    expect(cppSrc).toContain('generated/shader_sources.h');
+    expect(cppSrc).not.toContain('struct Uniforms {'); // that struct now lives only in block.wgsl
+    expect(blockWgsl).toContain('struct Uniforms {');
+  });
+
   it('emits build-info.json with backend metadata when emcc ran', () => {
     const infoPath = join(ROOT, 'public/cpp/build-info.json');
     if (!existsSync(infoPath)) {
