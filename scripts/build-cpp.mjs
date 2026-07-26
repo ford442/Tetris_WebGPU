@@ -84,6 +84,22 @@ function readPinnedEmsdkVersion() {
   return line || null;
 }
 
+/** Major version of a dotted semver string (e.g. "5.0.7" → 5). */
+function semverMajor(version) {
+  const match = version?.match(/^(\d+)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+/**
+ * Legacy `-s USE_WEBGPU=1` was removed upstream around the emsdk 5.0 line.
+ * When the repo pin is ≥ 5.0, `auto` should not waste a failed link on it.
+ */
+function shouldSkipLegacyWebGpu() {
+  const pinned = readPinnedEmsdkVersion();
+  const major = semverMajor(pinned);
+  return major != null && major >= 5;
+}
+
 function hasEmcc() {
   const probe = spawnSync('emcc', ['--version'], { encoding: 'utf8' });
   return probe.status === 0;
@@ -136,6 +152,9 @@ function resolveWebGpuAttempts() {
       return ['NONE'];
     case 'auto':
     default:
+      if (shouldSkipLegacyWebGpu()) {
+        return ['EMDAWN', 'NONE'];
+      }
       return ['EMDAWN', 'USE_WEBGPU', 'NONE'];
   }
 }
@@ -388,6 +407,12 @@ function main() {
   }
 
   warnEmsdkDrift();
+  if (WEBGPU_ENV === 'auto' && shouldSkipLegacyWebGpu()) {
+    console.log(
+      '[build-cpp] pinned emsdk >= 5.0 — skipping legacy -s USE_WEBGPU=1 (removed upstream); ' +
+      'use TETRIS_CPP_WEBGPU=legacy to force on older toolchains'
+    );
+  }
   console.log(`[build-cpp] Building ${MODE} → ${OUT_JS}`);
   console.log(`[build-cpp] TETRIS_CPP_WEBGPU=${WEBGPU_ENV}`);
   console.log(`[build-cpp] Flags: ${getOptFlags().join(' ')}`);

@@ -17,15 +17,29 @@ describe('build-cpp outputs', () => {
     expect(src).toContain('compile_commands.json');
     expect(src).toContain('SAFE_HEAP');
     expect(src).toContain('wasmBytes');
+    expect(src).toContain('jsBytes');
+    expect(src).toContain('shouldSkipLegacyWebGpu');
   });
 
   it('auto WebGPU port order tries emdawnwebgpu before the removed legacy flag', () => {
     const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
-    const match = src.match(/case 'auto':\s*\n\s*default:\s*\n\s*return \[([^\]]+)\];/);
+    const match = src.match(/case 'auto':\s*\n\s*default:\s*\n\s*if \(shouldSkipLegacyWebGpu\(\)\) \{\s*\n\s*return \[([^\]]+)\];\s*\n\s*\}\s*\n\s*return \[([^\]]+)\];/);
     expect(match).not.toBeNull();
-    const order = match![1].split(',').map((s) => s.trim().replace(/'/g, ''));
-    expect(order.indexOf('EMDAWN')).toBeLessThan(order.indexOf('USE_WEBGPU'));
-    expect(order[order.length - 1]).toBe('NONE');
+    const pinnedOrder = match![1].split(',').map((s) => s.trim().replace(/'/g, ''));
+    const fallbackOrder = match![2].split(',').map((s) => s.trim().replace(/'/g, ''));
+    expect(pinnedOrder).toEqual(['EMDAWN', 'NONE']);
+    expect(fallbackOrder.indexOf('EMDAWN')).toBeLessThan(fallbackOrder.indexOf('USE_WEBGPU'));
+    expect(fallbackOrder[fallbackOrder.length - 1]).toBe('NONE');
+  });
+
+  it('skips legacy USE_WEBGPU when pinned emsdk is 5.x', () => {
+    const pinned = readFileSync(join(ROOT, '.emsdk-version'), 'utf8').trim();
+    const major = Number.parseInt(pinned.split('.')[0], 10);
+    const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
+    expect(src).toContain('shouldSkipLegacyWebGpu');
+    if (major >= 5) {
+      expect(src).toContain("major >= 5");
+    }
   });
 
   it('enforces a release wasm size budget', () => {

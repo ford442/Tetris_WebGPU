@@ -87,7 +87,7 @@ Set **`TETRIS_CPP_WEBGPU`** before building:
 
 | Value | Behavior |
 |-------|----------|
-| `auto` (default) | Try `emdawnwebgpu` → `USE_WEBGPU` → Canvas2D-only |
+| `auto` (default) | Try `emdawnwebgpu` → Canvas2D-only on pinned emsdk ≥ 5.0; on older pins also tries legacy `USE_WEBGPU` before Canvas2D |
 | `emdawn` | Force `--use-port=emdawnwebgpu`, then Canvas2D fallback |
 | `legacy` | Force `-s USE_WEBGPU=1`, then Canvas2D fallback |
 | `none` | Canvas2D bootstrap only (`TETRIS_ENABLE_WEBGPU=0`) |
@@ -289,7 +289,7 @@ Release wasm size is recorded in `public/cpp/build-info.json` (`wasmBytes`, `jsB
 | emsdk | Typical linked port |
 |-------|---------------------|
 | 4.0.10 – 4.x | `--use-port=emdawnwebgpu` (tried first) or `-s USE_WEBGPU=1` if forced via `TETRIS_CPP_WEBGPU=legacy` |
-| 5.0.7+ (pinned) | `--use-port=emdawnwebgpu` — `-s USE_WEBGPU=1` is gone upstream, `auto` skips straight to it |
+| 5.0.7+ (pinned) | `--use-port=emdawnwebgpu` only — `-s USE_WEBGPU=1` is gone upstream, `auto` skips it intentionally |
 | no GPU headers | Canvas2D-only (stubs) |
 
 ## Loading from TypeScript
