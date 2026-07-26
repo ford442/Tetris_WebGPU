@@ -6,11 +6,6 @@
  * - Cyber blocks: emit small neon bursts
  */
 
-
-export interface MaterialProperties {
-  metallic: number;
-}
-
 export interface ParticleHit {
   blockX: number;
   blockY: number;
@@ -199,103 +194,5 @@ export class ParticleMaterialInteraction {
     this.activeInteractions.clear();
   }
 }
-
-// WGSL Shader code for material-particle interaction
-export const ParticleMaterialInteractionWGSL = `
-// Material-particle interaction uniforms
-struct MaterialInteractionUniforms {
-  interactionType: u32,      // 0=none, 1=refraction, 2=specular_flash, 3=neon_burst
-  intensity: f32,
-  color: vec4f,
-  particlePos: vec3f,
-  pad: f32,
-};
-
-// Glass refraction distortion
-fn applyGlassRefraction(
-  baseColor: vec3f, 
-  normal: vec3f, 
-  viewDir: vec3f,
-  interactionIntensity: f32
-) -> vec3f {
-  // Calculate refraction offset based on view angle
-  let refractFactor = 1.0 - abs(dot(normal, viewDir));
-  let distortion = refractFactor * interactionIntensity * 0.3;
-  
-  // Add chromatic aberration for glass
-  let r = baseColor.r * (1.0 + distortion * 0.5);
-  let g = baseColor.g;
-  let b = baseColor.b * (1.0 - distortion * 0.3);
-  
-  return vec3f(r, g, b) * (1.0 + interactionIntensity * 0.2);
-}
-
-// Gold/Chrome specular flash
-fn applySpecularFlash(
-  baseColor: vec3f,
-  normal: vec3f,
-  lightDir: vec3f,
-  viewDir: vec3f,
-  flashColor: vec3f,
-  intensity: f32
-) -> vec3f {
-  // Calculate specular highlight
-  let halfDir = normalize(lightDir + viewDir);
-  let specAngle = max(dot(normal, halfDir), 0.0);
-  let s2 = specAngle * specAngle;
-  let s4 = s2 * s2;
-  let s8 = s4 * s4;
-  let s16 = s8 * s8;
-  let s32 = s16 * s16;
-  let specular = s32 * intensity * 2.0;
-  
-  // Add bloom-like glow
-  let glow = flashColor * intensity * 0.5;
-  
-  return baseColor + specular + glow;
-}
-
-// Cyber neon burst
-fn applyNeonBurst(
-  baseColor: vec3f,
-  emission: vec3f,
-  intensity: f32
-) -> vec3f {
-  // Intense cyan/magenta emission
-  let burst = vec3f(0.0, 1.0, 1.0) * intensity * 3.0;
-  
-  // Add pulse effect
-  let pulse = sin(intensity * 10.0) * 0.3 + 0.7;
-  
-  return baseColor + (burst * pulse) + (emission * intensity);
-}
-
-// Main interaction function called from fragment shader
-fn applyMaterialParticleInteraction(
-  material: MaterialProperties,
-  baseColor: vec3f,
-  normal: vec3f,
-  viewDir: vec3f,
-  lightDir: vec3f,
-  interactionType: u32,
-  interactionIntensity: f32,
-  interactionColor: vec3f
-) -> vec3f {
-  switch (interactionType) {
-    case 1u: { // Refraction (glass)
-      return applyGlassRefraction(baseColor, normal, viewDir, interactionIntensity);
-    }
-    case 2u: { // Specular flash (gold/chrome)
-      return applySpecularFlash(baseColor, normal, lightDir, viewDir, interactionColor, interactionIntensity);
-    }
-    case 3u: { // Neon burst (cyber)
-      return applyNeonBurst(baseColor, baseColor * 0.1, interactionIntensity);
-    }
-    default: {
-      return baseColor;
-    }
-  }
-}
-`;
 
 export default ParticleMaterialInteraction;

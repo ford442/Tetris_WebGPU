@@ -89,7 +89,10 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   scratch[0] = textureMix;
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.textureMix, scratch);
 
-  // Write particleMaterialType to offset 116 (previously pad2)
+  // KNOWN BUG: written every frame but block/fragmentMain.wgsl.ts never reads
+  // fUniforms.particleMaterialType — the gold/chrome/cyber tinted-particle-hit
+  // visual this was meant to drive doesn't run. Left in place (harmless write)
+  // since fixing the shader behavior needs visual review, not a plumbing PR.
   view.device.queue.writeBuffer(
     view.fragmentUniformBuffer,
     offs.particleMaterialType,

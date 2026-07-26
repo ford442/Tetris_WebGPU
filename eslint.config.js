@@ -8,7 +8,6 @@ export default tseslint.config(
       'dist/**',
       'public/**',
       'node_modules/**',
-      'src/webgpu/shaders/_legacy/**',
       'scripts/**',
     ],
   },

@@ -17,6 +17,5 @@
     "skipLibCheck": true,
     "types": ["@webgpu/types", "vite/client"]
   },
-  "include": ["src"],
-  "exclude": ["src/webgpu/shaders/_legacy"]
+  "include": ["src"]
 }

@@ -4,7 +4,7 @@ import { BackgroundShaders } from '../src/webgpu/shaders/background.js';
 import { PostProcessShaders } from '../src/webgpu/shaders/postProcess.js';
 import { EnhancedPostProcessShaders } from '../src/webgpu/shaders/enhancedPostProcess.js';
 import { MaterialAwarePostProcessShaders } from '../src/webgpu/shaders/materialAwarePostProcess.js';
-import { PBRBlockShaders } from '../src/webgpu/shaders/pbrBlocks.js';
+import { createBlockShaders as PBRBlockShaders } from '../src/webgpu/shaders/block/blockShader.js';
 import { CompositeShader } from '../src/webgpu/bloomShaders.js';
 
 describe('shader optimization updates', () => {
