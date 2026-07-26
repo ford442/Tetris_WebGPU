@@ -86,7 +86,7 @@ export const BackgroundShaders = () => {
           // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
           // Used dot(centered, centered) for squared distance to avoid sqrt if warp only cares about magnitude approx,
           // but we will use length() as it's intended to be linear to distance.
-          let dist = length(centered);
+          let dist = sqrt(dot(centered, centered));
           nextUV -= centered * (warpStrength * dist); // Quadratic warp for "tunnel" feel
           uv = mix(uv, nextUV, doWarp);
 
@@ -247,7 +247,9 @@ export const BackgroundShaders = () => {
           var wallColor = mix(brickColor, mortarColor, mortarMask);
 
           // Refraction simulation
-          let glassShine = pow(1.0 - edgeDist, 4.0) * 0.5;
+          let glassF = 1.0 - edgeDist;
+          let glassF2 = glassF * glassF;
+          let glassShine = (glassF2 * glassF2) * 0.5;
           wallColor += vec3<f32>(glassShine);
 
           var finalColor = mix(deepSpace, wallColor, 0.75);
