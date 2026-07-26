@@ -200,6 +200,12 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
   p.pos += p.velocity * dt;
   p.life -= dt;
 
+  // Frustum / world-bounds cull — frees ring-buffer slots early
+  if (p.pos.y < -60.0 || abs(p.pos.z) > 40.0 || abs(p.pos.x - 10.0) > 35.0) {
+    p.life = -1.0;
+    p.scale = 0.0;
+  }
+
   // Scale animation
   // Poof out at death, Pop in at birth
   let normLife = p.life / p.maxLife;
