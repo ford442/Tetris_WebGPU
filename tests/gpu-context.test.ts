@@ -4,6 +4,7 @@ import {
   selectOptionalFeatures,
   requestGpuAdapterAndDevice,
   resolveRequiredLimits,
+  buildCanvasConfiguration,
   REQUIRED_GPU_LIMITS,
   DESIRED_OPTIONAL_FEATURES,
 } from '../src/webgpu/gpuContext.js';
@@ -68,6 +69,19 @@ describe('selectOptionalFeatures', () => {
   it('tolerates a throwing has()', () => {
     const bad = { has() { throw new Error('boom'); } };
     expect(selectOptionalFeatures(bad)).toEqual([]);
+  });
+});
+
+describe('buildCanvasConfiguration', () => {
+  it('uses premultiplied alpha and an explicit empty viewFormats list', () => {
+    const device = {} as GPUDevice;
+    const config = buildCanvasConfiguration(device, 'bgra8unorm');
+    expect(config).toEqual({
+      device,
+      format: 'bgra8unorm',
+      alphaMode: 'premultiplied',
+      viewFormats: [],
+    });
   });
 });
 
