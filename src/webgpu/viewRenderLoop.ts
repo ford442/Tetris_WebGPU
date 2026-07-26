@@ -32,7 +32,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   if (view.state && view.state.effectFlag && view.state.effectCounter !== view.lastEffectCounter) {
     view.lastEffectCounter = view.state.effectCounter;
     view.shockwaveParamsUniform[0] = 1.0;
-    view._hardDropBoostTimer = 0.420; // 420ms
+
     if (typeof view.setFresnelBoost === 'function') {
       view.setFresnelBoost(1.0);
     }
@@ -47,13 +47,15 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 
   // Decay the neon burst (3x speed decay)
   if (view.neonBurstUniform && view.neonBurstUniform[0] > 0) {
-    view.neonBurstUniform[0] = Math.max(0, view.neonBurstUniform[0] - dt * 3.0);
+    view.neonBurstUniform[0] *= Math.exp(-dt * 10.0);
+    if (view.neonBurstUniform[0] < 0.01) {
+      view.neonBurstUniform[0] = 0.0;
+    }
   }
 
-  if (view._hardDropBoostTimer > 0) {
-    view._hardDropBoostTimer -= dt;
-    if (view._hardDropBoostTimer <= 0) {
-      view._hardDropBoostTimer = 0;
+  if (view.shockwaveParamsUniform && view.shockwaveParamsUniform[0] > 0) {
+    view.shockwaveParamsUniform[0] *= Math.exp(-dt * 10.0);
+    if (view.shockwaveParamsUniform[0] < 0.01) {
       view.shockwaveParamsUniform[0] = 0.0;
     }
   }

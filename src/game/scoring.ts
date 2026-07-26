@@ -267,8 +267,7 @@ export class ScoringSystem {
     for (let index = 0; index < clearedLines.length; index++) {
       const element = clearedLines[index];
       playfield.splice(element, 1);
-      const arr = new Array(10);
-      arr.fill(0);
+      const arr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
       playfield.unshift(arr);
       this.lines += 1;
     }

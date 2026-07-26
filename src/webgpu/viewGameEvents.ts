@@ -267,7 +267,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         if (y >= 0 && y < playfield.length) {
           snapshot.push([...playfield[y]]);
         } else {
-          snapshot.push(new Array(10).fill(0));
+          snapshot.push([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
         }
       }
     }

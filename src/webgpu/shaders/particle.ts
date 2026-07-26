@@ -45,7 +45,7 @@ export const ParticleShaders = () => {
 
             // Velocity Stretching (Neon Sparks)
             // If particle is moving fast, stretch it along the velocity vector
-            let speed = length(particleVel);
+            let speed = sqrt(dot(particleVel, particleVel));
             var vOffset = vec3<f32>(pos * particleScale, 0.0);
 
             if (speed > 0.5) { // JUICE: Threshold lowered

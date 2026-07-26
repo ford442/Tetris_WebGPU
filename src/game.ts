@@ -454,7 +454,7 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.lines = this.lines;
     this.gameStateCache.nextPiece = this.nextPiece;
     if (this.gameStateCache.nextQueue.length !== this.nextQueue.length) {
-      this.gameStateCache.nextQueue = new Array(this.nextQueue.length);
+      this.gameStateCache.nextQueue.length = this.nextQueue.length;
     }
     for (let i = 0; i < this.nextQueue.length; i++) {
       this.gameStateCache.nextQueue[i] = this.nextQueue[i];
