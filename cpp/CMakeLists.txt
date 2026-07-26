@@ -35,7 +35,19 @@ if(NOT EMSCRIPTEN)
     "This CMake project targets Emscripten. Use: emcmake cmake -S cpp -B build/cpp-cmake -G Ninja")
 endif()
 
+# Embed cpp/src/shaders/**/*.wgsl into cpp/src/generated/shader_sources.h so
+# gpu_renderer.cpp never hand-copies a WGSL string. Pure Node, no emcc needed;
+# always re-run (ALL) so a stale header can't get compiled by accident.
+find_program(NODE_EXECUTABLE node REQUIRED)
+add_custom_target(generate_cpp_shaders ALL
+  COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-shaders.mjs"
+  WORKING_DIRECTORY "${TETRIS_REPO_ROOT}"
+  COMMENT "Embedding cpp/src/shaders/**/*.wgsl into cpp/src/generated/shader_sources.h"
+  VERBATIM
+)
+
 add_executable(tetris_renderer ${TETRIS_CPP_SOURCES})
+add_dependencies(tetris_renderer generate_cpp_shaders)
 target_include_directories(tetris_renderer PRIVATE src)
 
 target_compile_options(tetris_renderer PRIVATE -O3)

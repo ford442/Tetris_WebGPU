@@ -24,6 +24,9 @@ npm run dev
 |------|---------|
 | `cpp/src/renderer.cpp` | Exported API (`init_renderer`, `render_frame`, `update_playfield`) |
 | `cpp/src/gpu_renderer.cpp` | WebGPU instanced cubes + Canvas2D stub fallback |
+| `cpp/src/shaders/block/block.wgsl` | C++ block shader source (real file — see "Shader source of truth" below) |
+| `cpp/src/generated/shader_sources.h` | Generated, gitignored — `cpp/src/shaders/**/*.wgsl` embedded as C++ string constants |
+| `scripts/generate-cpp-shaders.mjs` | Embeds `cpp/src/shaders/**/*.wgsl` into the header above; pure Node, no `emcc` needed |
 | `src/viewCpp/EmscriptenView.ts` | `IView` adapter — TS shell + wasm handoff |
 | `src/viewCpp/CppRendererLoader.ts` | Loads glue JS + wasm (WasmCore-style multi-path fetch) |
 | `src/view/createView.ts` | Dynamic `import()` of EmscriptenView when pref is `webgpu-cpp` |
@@ -117,7 +120,7 @@ cmake --build build/cpp-cmake
 # compile_commands.json → build/cpp-cmake/compile_commands.json
 ```
 
-`npm run cpp:release` remains the canonical path (build-info, port fallbacks, artifact mirroring).
+`npm run cpp:release` remains the canonical path (build-info, port fallbacks, artifact mirroring). Both paths regenerate `cpp/src/generated/shader_sources.h` before compiling (CMake via the `generate_cpp_shaders` custom target).
 
 ## CI
 
@@ -251,6 +254,32 @@ Both this loader and the TS WebGPU renderer call the same `requestGpuAdapterAndD
 
 See the doc comments on `requestGpuAdapterAndDevice`, `resolvePowerPreference`, `resolveRequiredLimits`, and `buildCanvasConfiguration` in `gpuContext.ts` for the exact fallback order; `tests/gpu-context.test.ts` covers all of it.
 
+## Shader source of truth (TS + C++)
+
+Both renderers used to hold their block shader as a hand-copied string — TS as JS template literals split across `src/webgpu/shaders/block/*.wgsl.ts`, and C++ as an inline `R"(...)"` literal in `gpu_renderer.cpp` (`kBlockWgsl`). Neither is true anymore:
+
+- **TS**: the static parts of the block shader (vertex, fragment `main()`, PBR helper functions, the `FragmentUniforms` struct, particle-material-interaction functions) are real `.wgsl` files under `src/webgpu/shaders/wgsl/block/`, loaded with Vite's `?raw` import (`vite/client` types already cover this). Each `block/*.wgsl.ts` file is now a one-line `?raw` re-export — the `.wgsl` file is the only copy. The one exception is `getSimpleTextureSamplingWGSL()` (`src/webgpu/textureSampling.ts`), which stays TS-generated because it interpolates runtime `BlockTextureConfig` values (metal/glass thresholds) into the shader text — it's genuinely not static.
+- **C++**: `cpp/src/shaders/block/block.wgsl` is a real file too. `scripts/generate-cpp-shaders.mjs` (pure Node, no `emcc` needed) embeds every `cpp/src/shaders/**/*.wgsl` into `cpp/src/generated/shader_sources.h` (gitignored, regenerated on every build — wired into both `scripts/build-cpp.mjs`'s `main()` and `cpp/CMakeLists.txt`'s `generate_cpp_shaders` target). `gpu_renderer.cpp` includes that header instead of hand-copying the string.
+
+**Important:** this does *not* mean the TS and C++ block shaders are the same program. They intentionally aren't (see "What lives in C++ vs TypeScript today" above) — C++'s `Uniforms`/`UniformData` struct (128 bytes: `viewProj`, `params0`, `params1`, `lightDir`, `eyePos`) is a completely different, deliberately simplified contract from TS's 224-byte `FragmentUniforms` (no PBR branches, ghost piece, dissolve glow, audio-reactive border, or particle-material interaction). Full parity is the "long term" roadmap item below, not this. What changed here is that **each shader now has exactly one real file as its source** on both sides, instead of a string literal being the only copy — so future parity work has real files to diff against instead of re-deriving WGSL from JS/C++ source.
+
+### Adding a block-shader uniform
+
+**TS path:**
+1. Add the field (with its byte-offset comment) to `src/webgpu/shaders/wgsl/block/uniforms.wgsl`'s `FragmentUniforms` struct.
+2. Add the same offset to `BLOCK_FRAGMENT_UNIFORM_OFFSETS` (and bump `BLOCK_FRAGMENT_UNIFORM_SIZE` if it no longer fits) in `src/webgpu/shaders/block/uniforms.ts`.
+3. Write it from the appropriate call site (`viewMaterials.ts` or `viewUniforms.ts`).
+4. Run `tests/block-uniform-layout.test.ts` — it fails if the WGSL comment and the CPU offset disagree.
+
+**C++ path:**
+1. Add the field to `UniformData` in `cpp/src/gpu_renderer.cpp` and the matching field to the `Uniforms` struct in `cpp/src/shaders/block/block.wgsl`.
+2. Write it in `update_uniforms()` / `recreate_bind_group()`.
+3. Run `tests/block-uniform-layout.test.ts` — its second describe block parses both structs and fails if their total byte sizes disagree (it only knows about the WGSL types already in use; extend `WGSL_TYPE_SIZES` in the test if you add a new one).
+
+TS and C++ uniform layouts are **independent contracts today** — this workflow is about keeping each side internally consistent (WGSL text matching its own CPU offsets), not about the two backends describing identical bytes.
+
+`cpp/src/board_metrics.h` (camera/board/block-size constants) has a similar parity test against `src/webgpu/renderMetrics.ts` in `tests/render-metrics.test.ts` — update both files together when either changes.
+
 Release wasm size is recorded in `public/cpp/build-info.json` (`wasmBytes`, `jsBytes`). Target: stay well under debug bloat (~2 MB); release builds are typically tens of KB before texture assets.
 
 **ASYNCIFY / JSPI:** not required with the `preinitializedWebGPUDevice` pattern above. Only needed if you move `requestAdapter` / `requestDevice` into C++ with blocking waits.
@@ -321,7 +350,7 @@ RENDERER=webgpu-cpp node scripts/screenshot.cjs
 
 ### Mid term — rendering depth
 - Move block lighting math to C++
-- Bundle WGSL from the C++ build
+- ~~Bundle WGSL from the C++ build~~ — done: `cpp/src/shaders/**/*.wgsl` embedded via `scripts/generate-cpp-shaders.mjs` (see "Shader source of truth" above). Remaining work is PBR *parity* with TS, not sourcing.
 - GPU particle system (or hybrid with TS effects)
 
 ### Long term — full renderer ownership
@@ -332,7 +361,7 @@ RENDERER=webgpu-cpp node scripts/screenshot.cjs
 ### Suggested follow-up issues
 1. C++ WebGPU device + surface acquisition (#362)
 2. Textured block quads + camera in C++
-3. WGSL shader pipeline owned by cpp build
+3. ~~WGSL shader pipeline owned by cpp build~~ — done (`cpp/src/shaders/` + `generate-cpp-shaders.mjs`); full PBR parity with the TS shader is the real remaining work
 4. Particle pass migration
 5. Video background compositing in C++
 
