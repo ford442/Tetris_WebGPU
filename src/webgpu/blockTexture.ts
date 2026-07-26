@@ -289,7 +289,7 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
     addressModeV: 'clamp-to-edge',
     lodMinClamp: 0,
     lodMaxClamp: BLOCK_TEXTURE_MAX_LOD,
-    maxAnisotropy: 4,
+    maxAnisotropy: 16,
   };
 }
 

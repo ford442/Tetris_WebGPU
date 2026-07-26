@@ -235,7 +235,8 @@ export const MaterialAwarePostProcessShaders = () => {
                     let newAngle = angle + spin;
 
                     // Suck inwards (gravity)
-                    let suck = pow(bhDist / bhRadius, 2.0) * bhRadius;
+                    let suckRatio = bhDist / bhRadius;
+                    let suck = (suckRatio * suckRatio) * bhRadius;
 
                     finalUV = bhCenter + vec2<f32>(cos(newAngle), sin(newAngle)) * suck;
                 }
