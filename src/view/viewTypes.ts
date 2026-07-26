@@ -52,6 +52,7 @@ export interface ViewEventHost extends IView {
   lastEffectCounter: number;
   lastScore: number;
   neonBurstUniform?: Float32Array;
+  setFresnelBoost?(boost: number): void;
   game?: {
     getHighScoreManager?: () => HighScoreManager;
     getMode?: () => GameMode;

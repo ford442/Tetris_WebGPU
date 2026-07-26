@@ -458,6 +458,11 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
   view.visualEffects.triggerParticleHit(2.0);
   if (view.neonBurstUniform) view.neonBurstUniform[0] = 1.0;
 
+  const fresnelBoost = 1.0 + Math.min(distance * 0.05, 0.8);
+  if (typeof view.setFresnelBoost === 'function') {
+    view.setFresnelBoost(fresnelBoost);
+  }
+
   // JUICE: Multiplied particle speeds and counts by 3.0x for heavier impact
   for (let i = 0; i < 450; i++) {
     const angle = (i / 450) * Math.PI * 2;
