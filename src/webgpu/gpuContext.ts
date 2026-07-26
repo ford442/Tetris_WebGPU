@@ -7,6 +7,7 @@
  * and later surfaces (C++ handoff) can share the same behavior.
  */
 import { renderLogger } from '../utils/logger.js';
+import { loadGameSettings } from '../config/gameSettings.js';
 
 /**
  * Optional device features we *request when present*. These are never
@@ -56,6 +57,8 @@ export interface RequestGpuDeviceOptions {
   search?: string;
   storageValue?: string | null;
   deviceLabel?: string;
+  /** Override the derived required limits (mainly for tests). */
+  requiredLimits?: Record<string, number>;
 }
 
 export interface RequestGpuDeviceResult {
@@ -63,16 +66,56 @@ export interface RequestGpuDeviceResult {
   device: GPUDevice;
   powerPreference: GPUPowerPreference;
   enabledFeatures: GPUFeatureName[];
+  enabledLimits: Record<string, number>;
 }
 
 type AdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfo };
 
 /**
- * Resolve the requested GPU power preference from `?gpu=low|high` or the
- * `tetris_gpu` localStorage key. Defaults to `high-performance` (this is a
- * game); `low`/`low-power` selects `low-power` for battery/laptop use.
+ * GPU limits this renderer actually depends on: line-clear compute reads/
+ * writes 4 storage buffers (board, dissolve, clearFlags, results) in one
+ * shader stage, and both the line-clear and particle compute passes dispatch
+ * `@workgroup_size(64)`. These sit comfortably below WebGPU's default-limits
+ * tier (8 storage buffers/stage, 256 invocations/workgroup) — requesting them
+ * as `requiredLimits` turns an adapter that somehow can't provide them into a
+ * clear `requestDevice()` rejection instead of a cryptic validation error
+ * deep inside a compute dispatch.
+ */
+export const REQUIRED_GPU_LIMITS: Record<string, number> = {
+  maxStorageBuffersPerShaderStage: 4,
+  maxComputeWorkgroupSizeX: 64,
+  maxComputeInvocationsPerWorkgroup: 64,
+};
+
+/**
+ * Clamp desired limits to what the adapter actually reports so `requestDevice`
+ * never rejects for asking more than a weaker adapter can give; limits the
+ * adapter doesn't report at all are omitted rather than guessed.
+ */
+export function resolveRequiredLimits(
+  adapter: { limits?: GPUSupportedLimits | Record<string, number> } | null | undefined,
+  desired: Record<string, number> = REQUIRED_GPU_LIMITS,
+): Record<string, number> {
+  if (!adapter?.limits) return {};
+  const limits = adapter.limits as unknown as Record<string, number>;
+  const resolved: Record<string, number> = {};
+  for (const [key, value] of Object.entries(desired)) {
+    const adapterValue = limits[key];
+    if (typeof adapterValue === 'number') {
+      resolved[key] = Math.min(value, adapterValue);
+    }
+  }
+  return resolved;
+}
+
+/**
+ * Resolve the requested GPU power preference from `?gpu=low|high` or an
+ * explicit `storageValue`. Defaults to `high-performance` (this is a game);
+ * `low`/`low-power` selects `low-power` for battery/laptop use.
  *
- * Pure and side-effect free so it can be unit tested with plain inputs.
+ * Pure and side-effect free so it can be unit tested with plain inputs — the
+ * `storageValue` fallback (persisted `GameSettings.gpuPower`) is resolved by
+ * the caller, {@link requestGpuAdapterAndDevice}, not here.
  */
 export function resolvePowerPreference(
   search?: string,
@@ -86,12 +129,28 @@ export function resolvePowerPreference(
     raw = null;
   }
   if (raw == null) {
-    raw = storageValue ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('tetris_gpu') : null);
+    raw = storageValue ?? null;
   }
 
   const normalized = (raw ?? '').toLowerCase();
   if (normalized === 'low' || normalized === 'low-power') return 'low-power';
   return 'high-performance';
+}
+
+/**
+ * Default `storageValue` source for {@link resolvePowerPreference} when a
+ * caller doesn't supply one explicitly: the persisted settings-UI choice
+ * (`GameSettings.gpuPower`, `tetris_settings` key) — so `?gpu=` (debug/manual
+ * override) and the in-game GPU power select resolve through the exact same
+ * policy instead of two disconnected mechanisms.
+ */
+function resolveGpuPowerFromSettings(): string | null {
+  try {
+    const gpuPower = loadGameSettings().gpuPower;
+    return gpuPower === 'auto' ? null : gpuPower;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -142,7 +201,10 @@ export async function requestGpuAdapterAndDevice(
     return null;
   }
 
-  const powerPreference = resolvePowerPreference(options.search, options.storageValue);
+  const storageValue = options.storageValue !== undefined
+    ? options.storageValue
+    : resolveGpuPowerFromSettings();
+  const powerPreference = resolvePowerPreference(options.search, storageValue);
   const deviceLabel = options.deviceLabel ?? 'tetris-main-device';
 
   let adapter: GPUAdapter | null = null;
@@ -163,16 +225,21 @@ export async function requestGpuAdapterAndDevice(
     renderLogger.info('Enabling optional features:', requiredFeatures.join(', '));
   }
 
+  const requiredLimits = options.requiredLimits ?? resolveRequiredLimits(adapter);
+
   let device: GPUDevice;
+  let enabledLimits = requiredLimits;
   try {
     device = await adapter.requestDevice({
       label: deviceLabel,
       requiredFeatures,
+      requiredLimits,
     });
   } catch (err) {
-    renderLogger.warn('requestDevice with optional features failed; retrying minimal:', err);
+    renderLogger.warn('requestDevice with optional features/limits failed; retrying minimal:', err);
     try {
       device = await adapter.requestDevice({ label: deviceLabel });
+      enabledLimits = {};
     } catch (err2) {
       renderLogger.error('requestDevice failed:', err2);
       return null;
@@ -180,7 +247,30 @@ export async function requestGpuAdapterAndDevice(
   }
   device.label = device.label || deviceLabel;
 
-  return { adapter, device, powerPreference, enabledFeatures: requiredFeatures };
+  return { adapter, device, powerPreference, enabledFeatures: requiredFeatures, enabledLimits };
+}
+
+/**
+ * Single source of truth for `GPUCanvasContext.configure()` — used by both
+ * initial acquisition and resize so the two paths can never drift apart.
+ *
+ * `alphaMode: 'premultiplied'` is required for the video-portal compositing
+ * (the DOM `<video>` shows through the canvas's transparent regions). `usage`
+ * is left at the spec default (`RENDER_ATTACHMENT`) since nothing samples the
+ * canvas texture directly today; `viewFormats` is listed explicitly as `[]`
+ * so a future need (e.g. `COPY_SRC` for a screenshot path, or a `-srgb` view
+ * format) has one call site to extend instead of two to keep in sync.
+ */
+export function buildCanvasConfiguration(
+  device: GPUDevice,
+  format: GPUTextureFormat,
+): GPUCanvasConfiguration {
+  return {
+    device,
+    format,
+    alphaMode: 'premultiplied',
+    viewFormats: [],
+  };
 }
 
 /**
@@ -202,12 +292,7 @@ export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextur
   view.canvasWebGPU.height = view.height * dpr;
 
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  // alphaMode 'premultiplied' is required for the video portal compositing.
-  view.ctxWebGPU.configure({
-    device: view.device,
-    format: presentationFormat,
-    alphaMode: 'premultiplied',
-  });
+  view.ctxWebGPU.configure(buildCanvasConfiguration(view.device, presentationFormat));
 
   view.reactiveVideoBackground.setWebGPUDevice(view.device);
   return presentationFormat;
@@ -369,11 +454,7 @@ export function resizeGpuContext(view: GpuContextHost): void {
   view.visualEffects.updateVideoPosition(view.width, view.height);
 
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  view.ctxWebGPU.configure({
-    device: view.device,
-    format: presentationFormat,
-    alphaMode: 'premultiplied',
-  });
+  view.ctxWebGPU.configure(buildCanvasConfiguration(view.device, presentationFormat));
 
   view.postProcessor.resize(scaledWidth, scaledHeight);
 

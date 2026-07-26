@@ -9,8 +9,8 @@
  *   TETRIS_CPP_SANITIZE=1                      — debug: -fsanitize=address,undefined (local only)
  *
  * WebGPU port selection (TETRIS_CPP_WEBGPU=auto):
- *   1. -s USE_WEBGPU=1          (legacy; removed on emsdk 4.x+)
- *   2. --use-port=emdawnwebgpu  (current Dawn webgpu.h port; needs emsdk 4.0.10+)
+ *   1. --use-port=emdawnwebgpu  (current Dawn webgpu.h port; needs emsdk 4.0.10+; pinned emsdk is 5.0.7)
+ *   2. -s USE_WEBGPU=1          (legacy; removed upstream around the emsdk 5.0 line)
  *   3. (none)                   Canvas2D bootstrap only — gpu_renderer.cpp stubs
  *
  * Pinned emsdk: see .emsdk-version (documented in cpp/README.md).
@@ -134,7 +134,7 @@ function resolveWebGpuAttempts() {
       return ['NONE'];
     case 'auto':
     default:
-      return ['USE_WEBGPU', 'EMDAWN', 'NONE'];
+      return ['EMDAWN', 'USE_WEBGPU', 'NONE'];
   }
 }
 
@@ -254,6 +254,38 @@ function writeBuildInfo(linkedPort) {
   writeFileSync(BUILD_INFO_PUBLIC, payload);
   writeFileSync(BUILD_INFO_MIRROR, payload);
   console.log(`[build-cpp] Wrote ${BUILD_INFO_PUBLIC}`);
+  return info;
+}
+
+const DEFAULT_WASM_BUDGET_BYTES = 256 * 1024;
+
+function getWasmBudgetBytes() {
+  const raw = process.env.TETRIS_CPP_WASM_BUDGET_BYTES;
+  if (!raw) return DEFAULT_WASM_BUDGET_BYTES;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WASM_BUDGET_BYTES;
+}
+
+/**
+ * Guardrail against accidental release bloat. Debug builds (-O0 -g,
+ * ASSERTIONS=2) are exempt — only release wasm is budgeted.
+ */
+function enforceWasmSizeBudget(info) {
+  if (MODE !== 'release') return;
+  if (typeof info.wasmBytes !== 'number') {
+    console.error('[build-cpp] release build produced no wasmBytes in build-info.json — failing.');
+    process.exit(1);
+  }
+
+  const budget = getWasmBudgetBytes();
+  if (info.wasmBytes > budget) {
+    console.error(
+      `[build-cpp] release tetris_renderer.wasm is ${info.wasmBytes} bytes, ` +
+      `over the ${budget} byte budget. If this growth is intentional, raise ` +
+      'TETRIS_CPP_WASM_BUDGET_BYTES in this PR with a comment explaining why.'
+    );
+    process.exit(1);
+  }
 }
 
 function mirrorArtifacts() {
@@ -350,11 +382,13 @@ function main() {
   }
 
   emitCompileCommands(linkedPort);
-  writeBuildInfo(linkedPort);
+  const info = writeBuildInfo(linkedPort);
   mirrorArtifacts();
 
   console.log(`[build-cpp] Linked WebGPU port: ${PORT_LABELS[linkedPort] || linkedPort}`);
   console.log('[build-cpp] Wrote public/cpp/tetris_renderer.js (+ wasm)');
+
+  enforceWasmSizeBudget(info);
 }
 
 main();

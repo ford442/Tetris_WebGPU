@@ -97,7 +97,7 @@ Built with `TETRIS_CPP_WEBGPU=emdawn npm run cpp:release`:
 - **C ABI churn:** `webgpu.h` moved to `WGPUStringView`, `WGPUShaderSourceWGSL`, `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` — spikes fail if copied from old tutorials.
 - **Async device** must be handled in JS (or ASYNCIFY) — we already solved this with `preinitializedWebGPUDevice`.
 - **Debugging:** C++ in wasm + browser GPU capture (Chrome WebGPU inspector); no native RenderDoc on the C++ path in browser.
-- **emsdk pin drift:** active emcc 5.0.7 vs pinned `.emsdk-version` 4.0.10 — CI/local should align pins.
+- **emsdk pin drift:** resolved — `.emsdk-version` bumped to 5.0.7 to match the emcc line actually producing working `emdawnwebgpu` builds; keep CI/local aligned to this pin going forward.
 
 ### 3.2 wgpu-native (C API → native GPU)
 

@@ -3,8 +3,23 @@ import {
   resolvePowerPreference,
   selectOptionalFeatures,
   requestGpuAdapterAndDevice,
+  resolveRequiredLimits,
+  REQUIRED_GPU_LIMITS,
   DESIRED_OPTIONAL_FEATURES,
 } from '../src/webgpu/gpuContext.js';
+import { SETTINGS_STORAGE_KEY, settingsFromPreset } from '../src/config/gameSettings.js';
+
+function createStorage(): Storage {
+  const map = new Map<string, string>();
+  return {
+    get length() { return map.size; },
+    clear: () => map.clear(),
+    getItem: (key: string) => (map.has(key) ? map.get(key)! : null),
+    key: (index: number) => Array.from(map.keys())[index] ?? null,
+    removeItem: (key: string) => { map.delete(key); },
+    setItem: (key: string, value: string) => { map.set(key, value); },
+  };
+}
 
 describe('resolvePowerPreference', () => {
   it('defaults to high-performance', () => {
@@ -53,6 +68,36 @@ describe('selectOptionalFeatures', () => {
   it('tolerates a throwing has()', () => {
     const bad = { has() { throw new Error('boom'); } };
     expect(selectOptionalFeatures(bad)).toEqual([]);
+  });
+});
+
+describe('resolveRequiredLimits', () => {
+  it('returns empty object when adapter has no limits', () => {
+    expect(resolveRequiredLimits(null)).toEqual({});
+    expect(resolveRequiredLimits(undefined)).toEqual({});
+    expect(resolveRequiredLimits({})).toEqual({});
+  });
+
+  it('clamps desired limits to what the adapter reports', () => {
+    const adapter = { limits: { maxStorageBuffersPerShaderStage: 2, maxComputeWorkgroupSizeX: 256 } };
+    const resolved = resolveRequiredLimits(adapter);
+    expect(resolved.maxStorageBuffersPerShaderStage).toBe(2);
+    expect(resolved.maxComputeWorkgroupSizeX).toBe(REQUIRED_GPU_LIMITS.maxComputeWorkgroupSizeX);
+  });
+
+  it('omits limits the adapter does not report', () => {
+    const adapter = { limits: { maxStorageBuffersPerShaderStage: 8 } };
+    const resolved = resolveRequiredLimits(adapter);
+    expect(resolved).toEqual({ maxStorageBuffersPerShaderStage: 4 });
+    expect(resolved.maxComputeWorkgroupSizeX).toBeUndefined();
+  });
+
+  it('never requests more than REQUIRED_GPU_LIMITS asks for', () => {
+    const adapter = { limits: { maxStorageBuffersPerShaderStage: 999, maxComputeWorkgroupSizeX: 999, maxComputeInvocationsPerWorkgroup: 999 } };
+    const resolved = resolveRequiredLimits(adapter);
+    for (const key of Object.keys(REQUIRED_GPU_LIMITS)) {
+      expect(resolved[key]).toBeLessThanOrEqual(REQUIRED_GPU_LIMITS[key]);
+    }
   });
 });
 
@@ -128,7 +173,33 @@ describe('requestGpuAdapterAndDevice', () => {
     expect(requestDevice).toHaveBeenCalledWith({
       label: 'tetris-main-device',
       requiredFeatures: ['timestamp-query', 'shader-f16'],
+      requiredLimits: {},
     });
+  });
+
+  it('requests clamped limits when the adapter reports them', async () => {
+    const device = { label: '' } as GPUDevice;
+    const requestDevice = vi.fn(async (desc?: GPUDeviceDescriptor) => {
+      if (desc?.label) device.label = desc.label;
+      return device;
+    });
+    const adapter = {
+      features: new Set<string>(),
+      limits: { maxStorageBuffersPerShaderStage: 2 },
+      requestDevice,
+    } as unknown as GPUAdapter;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { gpu: { requestAdapter: vi.fn(async () => adapter) } },
+      configurable: true,
+    });
+
+    const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+    expect(result?.enabledLimits.maxStorageBuffersPerShaderStage).toBe(2);
+    expect(requestDevice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requiredLimits: expect.objectContaining({ maxStorageBuffersPerShaderStage: 2 }),
+      }),
+    );
   });
 
   it('retries with a minimal labeled device when optional features fail', async () => {
@@ -156,5 +227,70 @@ describe('requestGpuAdapterAndDevice', () => {
     await requestGpuAdapterAndDevice();
     const firstCall = requestDevice.mock.calls[0]?.[0] as GPUDeviceDescriptor | undefined;
     expect(firstCall?.requiredFeatures).not.toContain('depth-clip-control');
+  });
+});
+
+describe('requestGpuAdapterAndDevice — GameSettings.gpuPower wiring', () => {
+  const originalNavigator = globalThis.navigator;
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Object.defineProperty(globalThis, 'navigator', {
+      value: originalNavigator,
+      configurable: true,
+    });
+  });
+
+  function mockAdapter(requestAdapter: ReturnType<typeof vi.fn>) {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { gpu: { requestAdapter } },
+      configurable: true,
+    });
+  }
+
+  it('falls back to the persisted settings gpuPower when no storageValue is given', async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(settingsFromPreset('high', { gpuPower: 'low-power' })),
+    );
+    const device = { label: '' } as GPUDevice;
+    const adapter = { features: new Set<string>(), requestDevice: vi.fn(async () => device) } as unknown as GPUAdapter;
+    const requestAdapter = vi.fn(async () => adapter);
+    mockAdapter(requestAdapter);
+
+    await requestGpuAdapterAndDevice();
+    expect(requestAdapter).toHaveBeenCalledWith({ powerPreference: 'low-power' });
+  });
+
+  it('an explicit storageValue takes priority over persisted settings', async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(settingsFromPreset('high', { gpuPower: 'low-power' })),
+    );
+    const device = { label: '' } as GPUDevice;
+    const adapter = { features: new Set<string>(), requestDevice: vi.fn(async () => device) } as unknown as GPUAdapter;
+    const requestAdapter = vi.fn(async () => adapter);
+    mockAdapter(requestAdapter);
+
+    await requestGpuAdapterAndDevice({ storageValue: 'high-performance' });
+    expect(requestAdapter).toHaveBeenCalledWith({ powerPreference: 'high-performance' });
+  });
+
+  it('?gpu= query still overrides persisted settings', async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(settingsFromPreset('high', { gpuPower: 'low-power' })),
+    );
+    const device = { label: '' } as GPUDevice;
+    const adapter = { features: new Set<string>(), requestDevice: vi.fn(async () => device) } as unknown as GPUAdapter;
+    const requestAdapter = vi.fn(async () => adapter);
+    mockAdapter(requestAdapter);
+
+    await requestGpuAdapterAndDevice({ search: '?gpu=high' });
+    expect(requestAdapter).toHaveBeenCalledWith({ powerPreference: 'high-performance' });
   });
 });
