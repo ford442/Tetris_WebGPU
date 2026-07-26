@@ -19,6 +19,22 @@ describe('build-cpp outputs', () => {
     expect(src).toContain('wasmBytes');
   });
 
+  it('auto WebGPU port order tries emdawnwebgpu before the removed legacy flag', () => {
+    const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
+    const match = src.match(/case 'auto':\s*\n\s*default:\s*\n\s*return \[([^\]]+)\];/);
+    expect(match).not.toBeNull();
+    const order = match![1].split(',').map((s) => s.trim().replace(/'/g, ''));
+    expect(order.indexOf('EMDAWN')).toBeLessThan(order.indexOf('USE_WEBGPU'));
+    expect(order[order.length - 1]).toBe('NONE');
+  });
+
+  it('enforces a release wasm size budget', () => {
+    const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
+    expect(src).toContain('TETRIS_CPP_WASM_BUDGET_BYTES');
+    expect(src).toContain('enforceWasmSizeBudget');
+    expect(src).toMatch(/DEFAULT_WASM_BUDGET_BYTES\s*=\s*256\s*\*\s*1024/);
+  });
+
   it('emits build-info.json with backend metadata when emcc ran', () => {
     const infoPath = join(ROOT, 'public/cpp/build-info.json');
     if (!existsSync(infoPath)) {

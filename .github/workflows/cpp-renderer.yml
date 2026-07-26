@@ -71,7 +71,13 @@ jobs:
           test -f public/cpp/tetris_renderer.wasm
           test -f public/cpp/build-info.json
           test -f build/cpp/compile_commands.json
-          node -e "const i=require('./public/cpp/build-info.json'); if(!i.emccVersion) process.exit(1); console.log(i.webGpuBackend)"
+          node -e "
+            const i = require('./public/cpp/build-info.json');
+            if (!i.emccVersion) throw new Error('build-info.json missing emccVersion');
+            if (typeof i.wasmBytes !== 'number') throw new Error('build-info.json missing wasmBytes');
+            if (typeof i.jsBytes !== 'number') throw new Error('build-info.json missing jsBytes');
+            console.log(i.webGpuBackend, 'wasmBytes=' + i.wasmBytes, 'jsBytes=' + i.jsBytes);
+          "
 
       - name: Upload C++ renderer artifacts
         uses: actions/upload-artifact@v4

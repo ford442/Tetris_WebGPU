@@ -36,7 +36,7 @@ npm run dev
 
 ### Pinned version (reproducible builds)
 
-This repo pins a tested emsdk release in **`.emsdk-version`** (currently **4.0.10** — minimum for the built-in `emdawnwebgpu` remote port). Use the same version locally and in CI to avoid `USE_WEBGPU` vs `emdawnwebgpu` drift.
+This repo pins a tested emsdk release in **`.emsdk-version`** (currently **5.0.7** — the line verified to link `emdawnwebgpu` successfully; legacy `-s USE_WEBGPU=1` was removed upstream around the 5.0 line, so `auto` no longer wastes a failed link attempt on it). Use the same version locally and in CI to avoid `USE_WEBGPU` vs `emdawnwebgpu` drift.
 
 ```bash
 git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
@@ -84,10 +84,12 @@ Set **`TETRIS_CPP_WEBGPU`** before building:
 
 | Value | Behavior |
 |-------|----------|
-| `auto` (default) | Try `USE_WEBGPU` → `emdawnwebgpu` → Canvas2D-only |
+| `auto` (default) | Try `emdawnwebgpu` → `USE_WEBGPU` → Canvas2D-only |
 | `emdawn` | Force `--use-port=emdawnwebgpu`, then Canvas2D fallback |
 | `legacy` | Force `-s USE_WEBGPU=1`, then Canvas2D fallback |
 | `none` | Canvas2D bootstrap only (`TETRIS_ENABLE_WEBGPU=0`) |
+
+`auto` prefers `emdawnwebgpu` first: it's the port the pinned emsdk (5.0.7) actually links, so the common case builds without ever attempting — and failing — the removed legacy flag first.
 
 ```bash
 TETRIS_CPP_WEBGPU=emdawn npm run cpp:release
@@ -121,10 +123,15 @@ cmake --build build/cpp-cmake
 
 GitHub Actions workflow **`.github/workflows/cpp-renderer.yml`**:
 
-- Caches emsdk keyed on `.emsdk-version`
+- Caches emsdk keyed on `.emsdk-version` (`emsdk-<version>-ubuntu-22.04`) — bumping the pin automatically busts the cache and installs the new version fresh on the next run; no manual cache invalidation needed
 - Runs `npm run cpp:release` and uploads wasm + `build-info.json` + `compile_commands.json`
+- Verifies `wasmBytes`/`jsBytes` are present in `build-info.json` and enforces the release size budget (see below)
 - Runs debug + sanitizer build with `continue-on-error` (matrix documentation)
 - Skips cleanly when workflow is not triggered; main `npm test` still does **not** require `emcc`
+
+### Release size budget
+
+`scripts/build-cpp.mjs` fails a **release** build if `tetris_renderer.wasm` exceeds **256 KB** (`TETRIS_CPP_WASM_BUDGET_BYTES` to override locally). This is a guardrail against accidental bloat (e.g. forgetting `-flto`, linking unused Emscripten runtime methods) — if a legitimate feature needs more, raise the budget deliberately in the same PR with a comment explaining why, rather than letting it drift silently.
 
 
 ## npm scripts
@@ -160,9 +167,9 @@ emcc cpp/src/renderer.cpp cpp/src/playfield_draw.cpp cpp/src/gpu_renderer.cpp \
 Release: `-O3 -flto` instead of debug flags.
 
 `scripts/build-cpp.mjs` automates port selection, `compile_commands.json`, and `build-info.json`:
-1. Respects `TETRIS_CPP_WEBGPU` (`auto` tries `-s USE_WEBGPU=1` first)
-2. Retries with `--use-port=emdawnwebgpu` on newer emsdk (4.0.10+)
-3. Falls back to Canvas2D-only if WebGPU linking fails
+1. Respects `TETRIS_CPP_WEBGPU` (`auto` tries `--use-port=emdawnwebgpu` first — the port the pinned emsdk 5.0.7 actually links)
+2. Falls back to legacy `-s USE_WEBGPU=1` only if emdawn linking fails (older emsdk)
+3. Falls back to Canvas2D-only if both WebGPU ports fail to link
 
 ## Selecting the renderer
 
@@ -222,7 +229,7 @@ int set_block_texture_rgba(const uint8_t* rgba, int width, int height, int byte_
 Adapter/device acquisition is **async in the browser**, so the C++ side uses a synchronous device handle provided by TypeScript before wasm startup:
 
 ```
-1. requestGpuAdapterAndDevice()     // shared gpuContext policy (?gpu=, optional features, label)
+1. requestGpuAdapterAndDevice()     // shared gpuContext policy (?gpu= / GameSettings.gpuPower, optional features, required limits, label)
 2. attachDeviceLifecycleHandlers()  // overlay + device-lost event on fatal loss
 3. createTetrisRendererModule({ canvas, preinitializedWebGPUDevice: device })
 4. init_renderer()                  // C++: emscripten_webgpu_get_device(), surface configure (premultiplied)
@@ -230,6 +237,19 @@ Adapter/device acquisition is **async in the browser**, so the C++ side uses a s
 6. render_frame(dt)                 // clear (alpha=0) → textured instanced blocks → present
 7. get_renderer_backend()           // 2 (WebGPU) | 1 (Canvas2D fallback)
 ```
+
+### Device request policy (`src/webgpu/gpuContext.ts`)
+
+Both this loader and the TS WebGPU renderer call the same `requestGpuAdapterAndDevice()` — one policy, no divergent adapter/device setup per renderer:
+
+| Concern | Source (first match wins) | Notes |
+|---------|---------------------------|-------|
+| Power preference | `?gpu=low\|high` → `GameSettings.gpuPower` (settings UI) → `high-performance` default | Settings-UI change reloads the page so the new preference takes effect on next acquisition |
+| Optional features | Adapter-advertised subset of `DESIRED_OPTIONAL_FEATURES` (`timestamp-query`, `texture-compression-{bc,astc,etc2}`, `shader-f16`) | Never hard-required; device still creates with none of them present |
+| Required limits | `REQUIRED_GPU_LIMITS` (4 storage buffers/stage, `workgroup_size(64)`), clamped to what the adapter reports | Matches actual line-clear + particle compute usage; a device that can't meet these fails fast at `requestDevice()` instead of deep in a dispatch |
+| Device label | `tetris-main-device` (or caller-supplied) | Retried without features/limits if the labeled+featured request is rejected |
+
+See the doc comments on `requestGpuAdapterAndDevice`, `resolvePowerPreference`, `resolveRequiredLimits`, and `buildCanvasConfiguration` in `gpuContext.ts` for the exact fallback order; `tests/gpu-context.test.ts` covers all of it.
 
 Release wasm size is recorded in `public/cpp/build-info.json` (`wasmBytes`, `jsBytes`). Target: stay well under debug bloat (~2 MB); release builds are typically tens of KB before texture assets.
 
@@ -239,8 +259,8 @@ Release wasm size is recorded in `public/cpp/build-info.json` (`wasmBytes`, `jsB
 
 | emsdk | Typical linked port |
 |-------|---------------------|
-| older | `-s USE_WEBGPU=1` |
-| 4.x+  | `--use-port=emdawnwebgpu` |
+| 4.0.10 – 4.x | `--use-port=emdawnwebgpu` (tried first) or `-s USE_WEBGPU=1` if forced via `TETRIS_CPP_WEBGPU=legacy` |
+| 5.0.7+ (pinned) | `--use-port=emdawnwebgpu` — `-s USE_WEBGPU=1` is gone upstream, `auto` skips straight to it |
 | no GPU headers | Canvas2D-only (stubs) |
 
 ## Loading from TypeScript
@@ -289,7 +309,7 @@ Run `npm run dev` (or preview build) and exercise each row. Check console for er
 node scripts/capture-screenshot.mjs http://127.0.0.1:5173/ ./screenshots webgpu-cpp
 
 # Puppeteer — pass full URL or use RENDERER env
-RENDERER=webgpu-cpp node scripts/screenshot.js
+RENDERER=webgpu-cpp node scripts/screenshot.cjs
 ```
 
 ## Roadmap (post-scaffolding)
@@ -321,7 +341,7 @@ RENDERER=webgpu-cpp node scripts/screenshot.js
 | Symptom | Fix |
 |---------|-----|
 | `emcc not found` | `source emsdk_env.sh` |
-| `USE_WEBGPU` rejected | Normal on emsdk 5.x — build script retries automatically |
+| `USE_WEBGPU` rejected | Normal on emsdk 5.x — legacy flag is gone upstream; `auto` no longer tries it first, and only falls back to it under `TETRIS_CPP_WEBGPU=legacy` on older emsdk |
 | No lime frame / `C++ WIP` badge | Run `npm run cpp:release`; confirm `public/cpp/*.wasm` exists |
 | Black board on cpp path | Check console for wasm fetch failures; verify Vite serves `/cpp/` |
 | Falls back to WebGPU | Expected when wasm missing or `EmscriptenView.create()` throws |
