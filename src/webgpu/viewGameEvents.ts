@@ -248,6 +248,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
         const uvY = 0.5 - (worldY - camY) / visibleHeight;
         view.visualEffects.triggerShockwave([0.5, uvY], 0.4, 0.2, 0.1, 3.0);
+        view.visualEffects.triggerGlitch(1.0);
       }
     }
   });
