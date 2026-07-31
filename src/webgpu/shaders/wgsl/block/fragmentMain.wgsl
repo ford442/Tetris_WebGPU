@@ -397,8 +397,9 @@
             }
 
             // Gentle emissive pulse (main.ts uses 0.25 scale to avoid washout)
-            let idlePulse = sin(time * 3.0) * 0.5 + 0.5;
-            let emissivePulse = idlePulse * 0.25 + fUniforms.movementFlash * 0.4 + fUniforms.lineClearFlash * 0.8;
+            let levelPulseSpeed = 3.0 + fUniforms.level * 0.5;
+            let idlePulse = sin(time * levelPulseSpeed) * 0.5 + 0.5;
+            let emissivePulse = idlePulse * (0.25 + min(fUniforms.level * 0.03, 0.5)) + fUniforms.movementFlash * 0.4 + fUniforms.lineClearFlash * 0.8;
             finalColor += finalColor * emissivePulse;
 
             // Lava-specific magma glow: slow pulsing + bubbling variation (cooling magma look)
