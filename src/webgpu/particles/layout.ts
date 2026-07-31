@@ -35,9 +35,13 @@ export const PARTICLE_BUDGET: Record<QualityPreset, number> = {
 };
 
 export function particleBudgetForQuality(quality: SettingsQuality): number {
-  if (quality === 'custom') return PARTICLE_BUDGET.medium;
-  if (quality in PARTICLE_BUDGET) return PARTICLE_BUDGET[quality as QualityPreset];
-  return PARTICLE_BUDGET.medium;
+  let budget = PARTICLE_BUDGET.medium;
+  if (quality === 'custom') {
+    budget = PARTICLE_BUDGET.medium;
+  } else if (quality in PARTICLE_BUDGET) {
+    budget = PARTICLE_BUDGET[quality as QualityPreset];
+  }
+  return Math.min(budget, 5000);
 }
 
 /** CPU staging row layout (float index within one particle). */
