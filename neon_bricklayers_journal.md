@@ -57,3 +57,4 @@
 - "Confirmed that the Shockwave distortion effect on Hard Drops, along with all associated JUICE (Warp Surge, Neon Burst, Chromatic Aberration, Bloom), are perfectly integrated and fully operational in the WebGPU pipeline and Game Logic."
 - "Added 'Neon Echo Trails' on piece movement and soft-drops. The trails use the holographic ghost shader path with additive cyan/magenta blending, decaying exponentially for a tactile, 'weighty neon' feel."
 - 'Added an intense Glitch effect on Tetris line clears to make big plays feel even more chaotic and impactful.'
+- "Capped max global particles in the WebGPU renderer strictly to 5000 in `particleBudgetForQuality()` to ensure heavy explosive effects don't lag the browser, fulfilling the Neon Bricklayer performance verification clause."
