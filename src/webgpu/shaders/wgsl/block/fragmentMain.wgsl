@@ -271,12 +271,13 @@
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
                 }
 
-                // Opaque gold frame; stained-glass window stays readable over the video portal.
+                // Gold frame opaque; glass center opacity from CPU (reserved2.xy = min/max, .z = Fresnel power).
                 let edgeFresnel = 1.0 - NdotV;
-                let fresnelSq = edgeFresnel * edgeFresnel;
-                let glassMin = 0.82;
-                let glassMax = 0.97;
-                let glassOpacity = mix(glassMin, glassMax, fresnelSq);
+                let glassMin = fUniforms.reserved2.x;
+                let glassMax = fUniforms.reserved2.y;
+                let glassPower = max(fUniforms.reserved2.z, 0.001);
+                let glassFresnel = pow(edgeFresnel, glassPower);
+                let glassOpacity = mix(glassMin, glassMax, glassFresnel);
                 finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode
