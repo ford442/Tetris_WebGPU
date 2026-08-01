@@ -92,11 +92,13 @@ export function AuroraBackgroundShaders() {
         color *= ray;
 
         // Soft horizontal gradient (brighter near "horizon" / center of screen)
-        let horizFade = 1.0 - pow(abs(uv.x - 0.5) * 1.6, 1.6);
+        let fade_val = abs(uv.x - 0.5) * 1.6;
+        let horizFade = 1.0 - sqrt(fade_val * fade_val * fade_val);
         color *= 0.75 + horizFade * 0.5;
 
         // Very gentle vignette so aurora doesn't fight the playfield edges too much
-        let vig = 1.0 - length(uv - vec2<f32>(0.5, 0.5)) * 0.6;
+        let centered_vig = uv - vec2<f32>(0.5, 0.5);
+        let vig = 1.0 - sqrt(dot(centered_vig, centered_vig)) * 0.6;
         color *= clamp(vig, 0.65, 1.0);
 
         // Return with alpha so it can composite nicely over the dark clear or other elements
