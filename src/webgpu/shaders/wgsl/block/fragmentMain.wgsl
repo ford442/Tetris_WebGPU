@@ -359,7 +359,7 @@
             // === FRESNEL RIM LIGHTING (Neon Bricklayer task) ===
             // Rim lighting - Fresnel Schlick approximation for brighter edge glow
             let rimPower = 1.0 - NdotV;
-            let fresnel = pow(rimPower, fresnelParams.fresnelPower);
+            let f2 = rimPower * rimPower; let fresnel = f2 * f2 * rimPower; // approximated pow(rimPower, 5.0)
 
             // Gold rim color + intensity (boosted during hard drops)
             let rimColor = mix(vColor.rgb, vec3f(1.0, 0.85, 0.4), metalMask * fUniforms.metallic); // Warm gold on metal
