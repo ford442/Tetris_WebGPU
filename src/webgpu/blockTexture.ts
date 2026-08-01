@@ -256,6 +256,31 @@ export function resetBlockTextureConfig(): void {
 }
 
 /**
+ * Pick atlas vs single-tile crop based on authored image dimensions.
+ * go.1ink.us uses a 768×768 single tile; this repo's default atlas is 2816×1536.
+ * Wrong subregion coords on a single tile crop a corner sliver and break glass masks.
+ */
+export function applyBlockTextureConfigForImageDimensions(width: number, height: number): void {
+  const maxDim = Math.max(width, height);
+  if (maxDim >= 2000) {
+    setBlockTextureConfig({ ...DEFAULT_BLOCK_TEXTURE_CONFIG });
+    return;
+  }
+
+  setBlockTextureConfig({
+    ...SINGLE_TILE_TEXTURE_CONFIG,
+    subregionX: 0,
+    subregionY: 0,
+    subregionWidth: 1,
+    subregionHeight: 1,
+    subregionInset: 0.04,
+    materialDetectionMode: 'warmth',
+    metalThresholdLow: 0.75,
+    metalThresholdHigh: 1.15,
+  });
+}
+
+/**
  * Generate atlas sampling parameters for WGSL shaders
  * Returns shader-compatible string values for the current config
  */

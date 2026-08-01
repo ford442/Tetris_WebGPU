@@ -25,6 +25,7 @@ import {
   createBlockTextureBindingView,
   setBlockTextureConfig,
   getBlockTextureConfig,
+  applyBlockTextureConfigForImageDimensions,
 } from './blockTexture.js';
 import {
   BLOCK_TILE_EXTRACT_SCALE,
@@ -78,6 +79,8 @@ export async function loadBlockTexture(view: any): Promise<void> {
         reject(new Error(`Failed to load ${textureUrl}`));
       };
     });
+
+    applyBlockTextureConfigForImageDimensions(img.width, img.height);
 
     // Authored tile is uploaded as a SINGLE texture, so the shader uses SINGLE mode.
     setBlockTextureConfig({ samplingMode: 'single' });
