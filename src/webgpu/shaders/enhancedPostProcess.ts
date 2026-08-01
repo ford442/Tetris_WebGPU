@@ -94,7 +94,7 @@ export const EnhancedPostProcessShaders = () => {
         fn crtEffect(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
             // Curvature
             let centered = uv * 2.0 - 1.0;
-            let dist = length(centered);
+            let dist = sqrt(dot(centered, centered));
             let curvature = 0.05;
             let curvedUV = centered * (1.0 + dist * dist * curvature) * 0.5 + 0.5;
             
@@ -173,10 +173,10 @@ export const EnhancedPostProcessShaders = () => {
                 let bhCenter = uniforms.blackHoleCenter;
                 let bhTime = uniforms.blackHoleTime;
                 let bhDiff = finalUV - bhCenter;
-                let bhDist = length(bhDiff);
+                let bhDist = sqrt(dot(bhDiff, bhDiff));
 
                 // Exponential radius shrink as it decays
-                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
+                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
 
                 if (bhDist < bhRadius && bhDist > 0.0) {
                     let angle = atan2(bhDiff.y, bhDiff.x);
@@ -198,7 +198,7 @@ export const EnhancedPostProcessShaders = () => {
             // Game over kaleidoscope (early before sampling)
             if (uniforms.gameOverKaleidoTime > 0.001) {
                 let p = finalUV - vec2<f32>(0.5);
-                let r = length(p);
+                let r = sqrt(dot(p, p));
                 var a = atan2(p.y, p.x);
                 let spin = uniforms.gameOverKaleidoTime * 0.7;
                 let sa = 1.04719755;
@@ -220,7 +220,7 @@ export const EnhancedPostProcessShaders = () => {
             var glassOverlay = 0.0;
             if (time > 0.0 && time < 1.0) {
                 let dir = normalize(uv - center);
-                let dist = length(uv - center);
+                let dist = sqrt(dot(uv - center, uv - center));
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
                 let width = params.x * 1.5; // JUICE: Wider shockwave
@@ -374,7 +374,7 @@ export const EnhancedPostProcessShaders = () => {
             // NEW NEON BRICKLAYER: Neon Burst Radial Distortion & Glow (Hard Drop Crunch)
             let burst = uniforms.neonBurst;
             if (burst > 0.001) {
-                let distCenter = length(uv - vec2<f32>(0.5, 0.5));
+                let distCenter = sqrt(dot(uv - vec2<f32>(0.5, 0.5), uv - vec2<f32>(0.5, 0.5)));
                 let burstRing = smoothstep(0.1, 0.0, abs(distCenter - (1.0 - burst) * 0.8));
                 let burstColor = vec3<f32>(0.2, 0.8, 1.0) * burst + vec3<f32>(1.0, 0.2, 0.8) * (1.0 - burst);
                 color += burstColor * burstRing * burst * 1.5;
@@ -421,8 +421,8 @@ export const EnhancedPostProcessShaders = () => {
                 let bhCenter = uniforms.blackHoleCenter;
                 let bhTime = uniforms.blackHoleTime;
                 let bhDiff = uv - bhCenter;
-                let bhDist = length(bhDiff);
-                let bhRadius = 0.6 * (1.0 - pow(bhTime, 0.4));
+                let bhDist = sqrt(dot(bhDiff, bhDiff));
+                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
                 if (bhDist < bhRadius) {
                     let darkFactor = smoothstep(0.0, bhRadius * 0.5, bhDist);
                     color *= darkFactor;
