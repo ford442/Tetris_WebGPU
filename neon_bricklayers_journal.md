@@ -58,3 +58,4 @@
 - "Added 'Neon Echo Trails' on piece movement and soft-drops. The trails use the holographic ghost shader path with additive cyan/magenta blending, decaying exponentially for a tactile, 'weighty neon' feel."
 - 'Added an intense Glitch effect on Tetris line clears to make big plays feel even more chaotic and impactful.'
 - "Capped max global particles in the WebGPU renderer strictly to 5000 in `particleBudgetForQuality()` to ensure heavy explosive effects don't lag the browser, fulfilling the Neon Bricklayer performance verification clause."
+- "Added Dynamic Particle Rotation in the WGSL particle shader! Explosions and hard drops now look much more chaotic and impactful as the debris spins and rotates dynamically based on its lifetime, rather than just being static quads stretched along velocity."

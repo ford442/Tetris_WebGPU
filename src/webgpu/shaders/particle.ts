@@ -43,6 +43,15 @@ export const ParticleShaders = () => {
             else if (cornerIdx == 4u) { pos = vec2<f32>( 1.0, -1.0); uv = vec2<f32>(1.0, 0.0); }
             else if (cornerIdx == 5u) { pos = vec2<f32>( 1.0,  1.0); uv = vec2<f32>(1.0, 1.0); }
 
+            // JUICE: Dynamic Particle Rotation (Spinning debris)
+            // Add a rotation matrix to the particle based on its life and spatial position
+            let rotSpeed = 15.0; // Spin rate
+            let rotOffset = particlePos.x * 12.9898 + particlePos.y * 78.233; // Pseudo-random starting angle
+            let rotAngle = rotOffset + particleLife * rotSpeed;
+            let s = sin(rotAngle);
+            let c = cos(rotAngle);
+            pos = vec2<f32>(pos.x * c - pos.y * s, pos.x * s + pos.y * c);
+
             // Velocity Stretching (Neon Sparks)
             // If particle is moving fast, stretch it along the velocity vector
             let speed = sqrt(dot(particleVel, particleVel));
