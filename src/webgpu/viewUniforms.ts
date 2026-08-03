@@ -170,6 +170,10 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
     device.queue.writeBuffer(view.fragmentUniformBuffer, 112, view._f32_1);
   }
 
+  // Combo Energy for Fragment shaders (offset 196)
+  view._f32_1[0] = view.visualEffects.comboEnergy;
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 196, view._f32_1);
+
   // Post-process uniforms
   const ppUniforms = postProcessUniforms.pack({
     time,

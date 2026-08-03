@@ -31,6 +31,6 @@ struct FragmentUniforms {
     bassLevel     : f32,        // 184
     midLevel      : f32,        // 188
     trebleLevel   : f32,        // 192
-    padAudio      : f32,        // 196
+    comboEnergy   : f32,        // 196 (replaces padAudio)
     _structPad    : vec2f,      // 200 (WGSL pads struct to 224B minBindingSize)
 };

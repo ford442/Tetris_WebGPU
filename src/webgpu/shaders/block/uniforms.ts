@@ -40,7 +40,7 @@ export const BLOCK_FRAGMENT_UNIFORM_OFFSETS = {
   bassLevel: 184,
   midLevel: 188,
   trebleLevel: 192,
-  padAudio: 196,
+  comboEnergy: 196,
 } as const;
 
 export const BLOCK_FRAGMENT_UNIFORM_SIZE = 224;

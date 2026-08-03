@@ -51,6 +51,7 @@ export class VisualEffects {
     // Block Emissive state
     particleHitTimer: number = 0;
     movementFlashTimer: number = 0;
+    comboEnergy: number = 0; // Decaying combo escalation energy
     lineClearFlashTimer: number = 0;
 
     // Continuous soft-drop pressure (0..1)
@@ -147,6 +148,10 @@ export class VisualEffects {
         // Warp surge decay
         this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
         if (this.warpSurge < 0.01) this.warpSurge = 0;
+
+        // Update combo energy (smooth decay towards 0 if no combo)
+        this.comboEnergy *= 1.0 / (1.0 + dt * 2.0);
+        if (this.comboEnergy < 0.001) this.comboEnergy = 0;
 
         // Saturation Boost decay
         this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
@@ -515,5 +520,13 @@ export class VisualEffects {
 
     triggerWarpSurge(intensity: number = 1.0): void {
         this.warpSurge = intensity * 10.0;
+    }
+
+    setTargetCombo(combo: number): void {
+        // Build up energy smoothly based on combo
+        const targetEnergy = Math.min(combo * 0.25, 2.5); // Max out at combo 10 (2.5 energy)
+        if (this.comboEnergy < targetEnergy) {
+            this.comboEnergy += (targetEnergy - this.comboEnergy) * 0.2;
+        }
     }
 }
