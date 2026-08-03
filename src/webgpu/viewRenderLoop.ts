@@ -363,6 +363,9 @@ function updateRenderUniforms(view: WebGPUViewHost, time: number, result: FrameU
   view._f32_1[0] = view.visualEffects.backgroundResonance || 0.0;
   view.device.queue.writeBuffer(view.backgroundUniformBuffer, 80, view._f32_1);
 
+  view._f32_1[0] = view.visualEffects.comboEnergy;
+  view.device.queue.writeBuffer(view.backgroundUniformBuffer, 84, view._f32_1);
+
   // Fragment block uniforms (time@32, glitch@36, movementFlash@96, magnet@104, etc.)
   // are written in viewUniforms.updateFrameUniforms with pbrBlocks.ts layout.
   // Do NOT write time/glitch at byte 48 — that slot is metallic in FragmentUniforms.

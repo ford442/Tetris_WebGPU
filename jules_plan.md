@@ -67,3 +67,13 @@ This document outlines the optimizations and game-feel improvements made in the 
   * Verified that current input buffer windows (`MOVE_BUFFER_WINDOW` and `ROTATE_BUFFER_WINDOW`) are already optimized at 50ms, achieving the target sub-50ms latency.
   * Verified that no `// TODO: Polish`, `// TODO: GameFeel`, or `// FIX: Latency` tags exist in the input codebase, meaning all previous game feel polish tasks have been successfully resolved.
 * **Metrics**: Maintained responsive input buffering.
+
+### 9. Combo Escalation (Continuous Game Feel)
+**Objective**: Introduce continuous game-feel intensity mapping from the player's active combo count into the WebGPU render loop and shaders.
+* **Files**: `src/game.ts`, `src/webgpu/effects.ts`, `src/webgpu/shaders/background.ts`, `src/webgpu/shaders/wgsl/block/fragmentMain.wgsl`
+* **Changes**:
+  * Exposed `currentCombo` via `GameState` snapshots.
+  * Created `comboEnergy` in `VisualEffects`, mapped to uniform offset 196 (replacing unused `padAudio`).
+  * In the background shader, `comboEnergy` escalates parallax scrolling speed and global ambient pulses.
+  * In the block shader, `comboEnergy` intensifies and accelerates the core neon block breathing pulse.
+* **Metrics**: Converts integer-based discrete combo events into a smooth, decaying continuous shader driver, making high-combo plays feel frantically 'juiced'.
