@@ -60,3 +60,4 @@
 - "Capped max global particles in the WebGPU renderer strictly to 5000 in `particleBudgetForQuality()` to ensure heavy explosive effects don't lag the browser, fulfilling the Neon Bricklayer performance verification clause."
 - "Added Dynamic Particle Rotation in the WGSL particle shader! Explosions and hard drops now look much more chaotic and impactful as the debris spins and rotates dynamically based on its lifetime, rather than just being static quads stretched along velocity."
 - "Implemented 'Combo Escalation': Passed a continuous 'comboEnergy' value from Game Logic into the WebGPU pipeline! As the player's combo count grows, the background parallax speed exponentially accelerates, the global ambient pulse intensifies, and the blocks themselves throb with escalating neon emissive energy!"
+- "Added Danger Vignette that pulses red when the board is full to both enhanced and material-aware post processing passes."
