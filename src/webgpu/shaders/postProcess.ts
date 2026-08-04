@@ -272,7 +272,7 @@ export const PostProcessShaders = () => {
             if (danger > 0.01) {
                 let dangerInner = 0.28 - danger * 0.26; // contracts toward 0.02 when full (deeper red encroachment)
                 let dangerOuter = 1.35;
-                let dangerVig = 1.0 - clamp((distFromCenterSq - dangerInner) / (dangerOuter - dangerInner), 0.0, 1.0);
+                let dangerVig = clamp((distFromCenterSq - dangerInner) / (dangerOuter - dangerInner), 0.0, 1.0);
                 let red = vec3<f32>(0.55, 0.04, 0.04); // deep red
                 let dangerOpacity = danger * 0.9;
                 if (danger > 0.75) {
