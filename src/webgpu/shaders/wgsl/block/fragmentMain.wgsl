@@ -269,6 +269,14 @@
                     let edgeFresnel = 1.0 - NdotV;
                     let edge3 = edgeFresnel * edgeFresnel * edgeFresnel;
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
+
+                    // NEON BRICKLAYER: Environment Refraction for authored glass
+                    let refractDir = refract(-V, N, 1.0 / 1.15); // Approximate IOR for glass
+                    let refractEnv = proceduralEnvReflect(refractDir, time);
+                    let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
+                    let refractedColor = refractEnv * glassTint;
+                    finalColor = mix(finalColor, refractedColor, glassMask * 0.45); // Mix in refraction
+
                 }
 
                 // Gold frame opaque; glass center opacity from CPU (reserved2.xy = min/max, .z = Fresnel power).
