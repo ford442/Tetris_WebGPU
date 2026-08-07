@@ -156,8 +156,8 @@ export const Materials: Record<string, Material> = {
     clearcoat: 0.1,
     anisotropic: 0.0,
     dispersion: 0.0,
-    authoredGlassMin: 0.15,
-    authoredGlassMax: 0.70,
+    authoredGlassMin: 0.05,
+    authoredGlassMax: 0.60,
     authoredGlassFresnelPower: 2.0,
   },
 
