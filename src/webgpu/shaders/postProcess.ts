@@ -359,6 +359,12 @@ export const PostProcessShaders = () => {
                 color = mix(vec3<f32>(luma), color, 1.0 + satBoost);
             }
 
+            // NEON BRICKLAYER: Neon Hyper-Inversion
+            let invTime = uniforms.neonHyperInversionTime;
+            if (invTime > 0.001) {
+                color = mix(color, vec3<f32>(1.0) - color, clamp(invTime, 0.0, 1.0));
+            }
+
             // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
             return vec4<f32>(color * a, a);
         }

@@ -123,6 +123,7 @@ export default class Game implements ModeGameHooks {
 
   private useWasmCollision = true;
   private wasmBoardId = 0;
+  private neonHyperInversionFlag = false;
 
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: false
@@ -157,6 +158,7 @@ export default class Game implements ModeGameHooks {
     effectCounter: 0,
     effectFlag: false,
     neonBurstFlag: false,
+    neonHyperInversionFlag: false,
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
@@ -485,6 +487,8 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.effectCounter = this.effectCounter;
     this.gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
     this.gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
+    this.gameStateCache.neonHyperInversionFlag = this.neonHyperInversionFlag;
+    this.neonHyperInversionFlag = false; // Reset after sending to view
     this.gameStateCache.lastDropPos = this.lastDropPos;
     this.gameStateCache.lastDropDistance = this.lastDropDistance;
     this.gameStateCache.scoreEvent = this.scoreEvent;

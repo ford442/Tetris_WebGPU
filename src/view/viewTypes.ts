@@ -77,6 +77,7 @@ export interface WebGPUParticleSystemLike extends ParticleSystemLike {
 export interface WebGPUViewHost extends ViewEventHost {
   device: GPUDevice;
   startTime: number;
+  _neonHyperInversionTimer?: number;
   visualX: number;
   visualY: number;
   visualX2?: number;

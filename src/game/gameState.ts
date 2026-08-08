@@ -45,6 +45,7 @@ export interface GameState {
   effectCounter: number;
   effectFlag: boolean;
   neonBurstFlag: boolean;
+  neonHyperInversionFlag: boolean;
   lastDropPos: { x: number; y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
@@ -87,6 +88,7 @@ export function createEmptyGameState(): GameState {
     effectCounter: 0,
     effectFlag: false,
     neonBurstFlag: false,
+    neonHyperInversionFlag: false,
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,

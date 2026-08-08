@@ -45,6 +45,18 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
     }
   }
 
+  if (view.state && view.state.neonHyperInversionFlag) {
+    view.state.neonHyperInversionFlag = false;
+    view._neonHyperInversionTimer = 1.0;
+  }
+
+  if (view._neonHyperInversionTimer && view._neonHyperInversionTimer > 0) {
+    view._neonHyperInversionTimer *= Math.exp(-dt * 5.0);
+    if (view._neonHyperInversionTimer < 0.01) {
+      view._neonHyperInversionTimer = 0.0;
+    }
+  }
+
   // Decay the neon burst (3x speed decay)
   if (view.neonBurstUniform && view.neonBurstUniform[0] > 0) {
     view.neonBurstUniform[0] *= Math.exp(-dt * 10.0);
@@ -435,6 +447,7 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.hardDropBoost = view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0.0;
 
   view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
+  view._postProcessParams.neonHyperInversionTime = view._neonHyperInversionTimer || 0.0;
   view._postProcessParams.saturationBoost = view.visualEffects.saturationBoost || 0.0;
   view._postProcessParams.chromaticIntensity = view.visualEffects.baseChromaticIntensity || 0.0;
 
