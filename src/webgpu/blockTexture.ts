@@ -198,8 +198,8 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   useProceduralFallback: true,
   maskChannel: 'auto',
   // Reference curve matching block.png gold frame + crystal interior.
-  authoredGlassMin: 0.15,
-  authoredGlassMax: 0.70,
+  authoredGlassMin: 0.05,
+  authoredGlassMax: 0.60,
   authoredGlassFresnelPower: 2.0,
 
   // Extractor heuristic defaults
@@ -218,8 +218,8 @@ export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
   metalThresholdLow: 0.40,
   metalThresholdHigh: 0.55,
   useProceduralFallback: true,
-  authoredGlassMin: 0.15,
-  authoredGlassMax: 0.70,
+  authoredGlassMin: 0.05,
+  authoredGlassMax: 0.60,
   authoredGlassFresnelPower: 2.0,
 
   // Extractor heuristic defaults
