@@ -77,3 +77,10 @@ This document outlines the optimizations and game-feel improvements made in the 
   * In the background shader, `comboEnergy` escalates parallax scrolling speed and global ambient pulses.
   * In the block shader, `comboEnergy` intensifies and accelerates the core neon block breathing pulse.
 * **Metrics**: Converts integer-based discrete combo events into a smooth, decaying continuous shader driver, making high-combo plays feel frantically 'juiced'.
+
+### 10. Shader Mask Sharpening Optimization (Texture Fetch Reduction)
+**Objective**: Reduce the number of texture fetches per fragment in the hot path.
+* **Files**: `src/webgpu/shaders/wgsl/block/fragmentMain.wgsl`
+* **Changes**:
+  * Optimized the mask sharpening sampling pass from an expensive 3x3 (9-tap) `textureSampleLevel` lookup to a 5-tap cross pattern (center, up, down, left, right).
+* **Metrics**: Saves 4 texture fetches per fragment across the entire playfield during PBR block rendering, substantially reducing memory bandwidth overhead while maintaining mask sharpness.

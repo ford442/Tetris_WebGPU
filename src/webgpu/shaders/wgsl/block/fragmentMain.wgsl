@@ -83,19 +83,14 @@
                 let texel = 1.0 / max(dims, vec2<f32>(1.0));
                 let r = texel * 1.0;
 
-                let a0 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x, -r.y), 0.0).a;
                 let a1 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0, -r.y), 0.0).a;
-                let a2 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x, -r.y), 0.0).a;
+                let a2 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  r.y), 0.0).a;
                 let a3 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x,  0.0), 0.0).a;
-                let a4 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  0.0), 0.0).a;
-                let a5 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  0.0), 0.0).a;
-                let a6 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x,  r.y), 0.0).a;
-                let a7 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  r.y), 0.0).a;
-                let a8 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  r.y), 0.0).a;
+                let a4 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  0.0), 0.0).a;
 
                 metalSoftBaked = max(
                     metalSoftBaked0,
-                    max(a0, max(a1, max(a2, max(a3, max(a4, max(a5, max(a6, max(a7, a8))))))))
+                    max(a1, max(a2, max(a3, a4)))
                 );
             }
 
