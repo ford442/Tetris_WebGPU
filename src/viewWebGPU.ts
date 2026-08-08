@@ -289,6 +289,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   lastEffectCounter = -1;
   lastScore = -1;
   _hardDropBoostTimer: number = 0;
+  _neonHyperInversionTimer: number = 0;
 
   // Pre-allocated object for post process parameters to avoid GC
   _postProcessParams = {
@@ -315,6 +316,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     lineClearLaserY: [0, 0, 0, 0] as [number, number, number, number],
     lineClearLaserIntensity: 0,
     neonBurst: 0,        // hard-drop radial glow/distortion (Neon Bricklayer)
+    neonHyperInversionTime: 0, // Inversion effect on Tetris
   };
 
   constructor(element: HTMLElement, width: number, height: number, rows: number, coloms: number, nextPieceContext: CanvasRenderingContext2D, holdPieceContext: CanvasRenderingContext2D) {

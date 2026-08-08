@@ -72,7 +72,7 @@ struct PostProcessUniforms {
     neonBurst: f32,               // 176 - hard-drop radial glow/distortion
     saturationBoost: f32,         // 180 - Line Clear Escalation
     chromaticIntensity: f32,      // 184 - Music/Event driven chromatic aberration
-    _padTail2: f32,               // 188
+    neonHyperInversionTime: f32,  // 188 - Inversion effect on Tetris
 };
 `;
 
@@ -134,6 +134,9 @@ export interface PostProcessUniformData {
 
   // Music/Event driven chromatic aberration
   chromaticIntensity?: number;
+
+  // Inversion effect on Tetris
+  neonHyperInversionTime?: number;
 }
 
 export class PostProcessUniformManager {
@@ -170,6 +173,7 @@ export class PostProcessUniformManager {
     blackHoleCenter: [0.5, 0.5],
     saturationBoost: 0,
     chromaticIntensity: 0,
+    neonHyperInversionTime: 0,
   };
 
   /**
@@ -241,7 +245,7 @@ export class PostProcessUniformManager {
     this.data[44] = v.neonBurst ?? 0; // neonBurst @ 176
     this.data[45] = v.saturationBoost ?? 0; // saturationBoost @ 180
     this.data[46] = v.chromaticIntensity ?? 0; // chromaticIntensity @ 184
-    // floats 47: WGSL struct tail padding (192B)
+    this.data[47] = (v as any).neonHyperInversionTime || 0; // neonHyperInversionTime @ 188
 
     return this.data;
   }
