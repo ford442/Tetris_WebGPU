@@ -548,6 +548,9 @@ export default class Game implements ModeGameHooks {
             result.linesCleared.push(linesScore[i]);
         }
         result.tSpin = wasTSpin;
+        if (linesScore.length >= 4) {
+            this.neonHyperInversionFlag = true;
+        }
         this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
         if (wasTSpin) this.triggerTSpinReactive('normal');
         if (isAllClear) this.view?.onPerfectClearReactive?.();
