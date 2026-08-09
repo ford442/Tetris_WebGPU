@@ -249,6 +249,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         const uvY = 0.5 - (worldY - camY) / visibleHeight;
         view.visualEffects.triggerShockwave([0.5, uvY], 0.4, 0.2, 0.1, 3.0);
         view.visualEffects.triggerGlitch(1.0);
+        view.visualEffects.triggerBlackHole([0.5, uvY]);
       }
     }
   });
