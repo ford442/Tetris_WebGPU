@@ -12,6 +12,10 @@ import type { HighScoreManager } from '../game/scoring.js';
 import type { PostProcessUniformData } from '../webgpu/postProcessUniforms.js';
 import type { IView } from './IView.js';
 import type * as Matrix from 'gl-matrix';
+import type { GameSettings } from '../config/gameSettings.js';
+import type { GpuPassTimers } from '../webgpu/gpuPassTimers.js';
+import type { AdaptiveQualityControllerState } from '../webgpu/adaptiveQuality.js';
+import type { PerfOverlay, PerfOverlayAdapterInfo } from '../webgpu/perfOverlay.js';
 
 /** Minimal particle API used by viewGameEvents across render backends. */
 export interface ParticleSystemLike {
@@ -36,6 +40,14 @@ export interface ParticleSystemLike {
   metrics?: {
     beginDispatch(): void;
     endDispatch(ran: boolean, pendingAfter: number): void;
+    snapshot?(): {
+      aliveEstimate: number;
+      pendingEmits: number;
+      lastDispatchMs: number;
+      dispatchCount: number;
+      skipCount: number;
+      droppedEmits: number;
+    };
   };
 }
 
@@ -153,7 +165,13 @@ export interface WebGPUViewHost extends ViewEventHost {
       videoTexture: GPUExternalTexture | null,
     ): void;
   };
-  postProcessor: { render(encoder: GPUCommandEncoder, vpMatrix: Float32Array): void };
+  postProcessor: {
+    render(
+      encoder: GPUCommandEncoder,
+      vpMatrix: Float32Array,
+      passTimers?: GpuPassTimers,
+    ): void;
+  };
   gridPipeline: GPURenderPipeline;
   gridVertexBuffer: GPUBuffer;
   gridVertexCount: number;
@@ -170,7 +188,21 @@ export interface WebGPUViewHost extends ViewEventHost {
   postProcessBindGroup: GPUBindGroup;
   neonBurstUniform?: Float32Array;
   setFresnelBoost(boost: number): void;
-  dispatchLineClearAndDissolve(commandEncoder: GPUCommandEncoder, dt: number): void;
+  dispatchLineClearAndDissolve(
+    commandEncoder: GPUCommandEncoder,
+    dt: number,
+    passTimers?: GpuPassTimers,
+  ): void;
   updateMaterialUniforms(): void;
   updateFrostedGlassUniforms(): void;
+  passTimers?: GpuPassTimers | null;
+  adaptiveState?: AdaptiveQualityControllerState | null;
+  perfOverlay?: PerfOverlay | null;
+  userGameSettings?: GameSettings | null;
+  frameBudgetMs: number;
+  adaptiveParticleCap?: number;
+  gpuAdapterInfo?: PerfOverlayAdapterInfo | null;
+  renderScale: number;
+  applyGameSettings?(settings: GameSettings): void;
+  applyAdaptiveSettings?(settings: GameSettings, particleCap: number): void;
 }

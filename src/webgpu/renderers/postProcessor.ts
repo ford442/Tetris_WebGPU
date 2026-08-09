@@ -18,6 +18,17 @@ type PostProcessView = {
   recreateRenderTargets: () => void;
 };
 
+type PassTimerLike = {
+  beginRegion(
+    encoder: GPUCommandEncoder | GPUComputePassEncoder | GPURenderPassEncoder,
+    region: 'postProcess' | 'bloom',
+  ): void;
+  endRegion(
+    encoder: GPUCommandEncoder | GPUComputePassEncoder | GPURenderPassEncoder,
+    region: 'postProcess' | 'bloom',
+  ): void;
+};
+
 export class PostProcessor {
   constructor(private readonly view: PostProcessView) {}
 
@@ -27,7 +38,7 @@ export class PostProcessor {
     this.view.recreateRenderTargets();
   }
 
-  render(commandEncoder: GPUCommandEncoder, viewMatrix?: Float32Array) {
+  render(commandEncoder: GPUCommandEncoder, viewMatrix?: Float32Array, passTimers?: PassTimerLike) {
     if (viewMatrix) {
       void viewMatrix;
     }
@@ -37,18 +48,22 @@ export class PostProcessor {
       ppColorAttachment0.view = this.view._bloomInputTexture.createView();
 
       const ppPassEncoder = commandEncoder.beginRenderPass(this.view._ppPassDescriptor);
+      passTimers?.beginRegion(ppPassEncoder, 'postProcess');
       ppPassEncoder.setPipeline(this.view.postProcessPipeline);
       ppPassEncoder.setBindGroup(0, this.view.postProcessBindGroup);
       ppPassEncoder.setVertexBuffer(0, this.view.backgroundVertexBuffer);
       ppPassEncoder.draw(6);
+      passTimers?.endRegion(ppPassEncoder, 'postProcess');
       ppPassEncoder.end();
 
       const textureViewScreen = this.view.ctxWebGPU.getCurrentTexture().createView();
+      passTimers?.beginRegion(commandEncoder, 'bloom');
       this.view.bloomSystem.render(
         this.view._bloomInputTexture.createView(),
         textureViewScreen,
         commandEncoder,
       );
+      passTimers?.endRegion(commandEncoder, 'bloom');
       return;
     }
 
@@ -57,10 +72,12 @@ export class PostProcessor {
     ppColorAttachment0.view = textureViewScreen;
 
     const ppPassEncoder = commandEncoder.beginRenderPass(this.view._ppPassDescriptor);
+    passTimers?.beginRegion(ppPassEncoder, 'postProcess');
     ppPassEncoder.setPipeline(this.view.postProcessPipeline);
     ppPassEncoder.setBindGroup(0, this.view.postProcessBindGroup);
     ppPassEncoder.setVertexBuffer(0, this.view.backgroundVertexBuffer);
     ppPassEncoder.draw(6);
+    passTimers?.endRegion(ppPassEncoder, 'postProcess');
     ppPassEncoder.end();
   }
 }

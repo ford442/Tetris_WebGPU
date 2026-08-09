@@ -14,6 +14,9 @@ import { updateBorderAudioGlow } from './viewPlayfield.js';
 import type { WebGPUViewHost } from '../view/viewTypes.js';
 import type { FrameUniforms } from './viewUniforms.js';
 import type { Piece } from '../game/pieces.js';
+import {
+  tickAdaptiveQuality,
+} from './adaptiveQuality.js';
 
 const glMatrix = Matrix;
 
@@ -24,6 +27,8 @@ const glMatrix = Matrix;
  */
 export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   if (!view.device) return;
+
+  const wallStart = performance.now();
 
   // Safety cap dt to prevent massive jumps on lag spikes
   const clampedDt = Math.min(dt, 0.1);
@@ -90,15 +95,18 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 
   const result = updateFrameUniforms(view, dt, time);
   const commandEncoder = result.commandEncoder;
+  const passTimers = view.passTimers;
   
   // Execute compute pass if particles are active
   const ps = view.particleSystem;
   if (ps.metrics) ps.metrics.beginDispatch();
   if (result.hasActiveParticles) {
     const computePass = commandEncoder.beginComputePass();
+    passTimers?.beginRegion(computePass, 'particleCompute');
     computePass.setPipeline(view.particleComputePipeline);
     computePass.setBindGroup(0, view.particleComputeBindGroup);
     computePass.dispatchWorkgroups(Math.ceil(ps.maxParticles / 64));
+    passTimers?.endRegion(computePass, 'particleCompute');
     computePass.end();
     if (ps.metrics) ps.metrics.endDispatch(true, ps.pendingUploadCount);
   } else if (ps.metrics) {
@@ -107,7 +115,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 
   // GPU line-clear + dissolve: compute writes the per-cell fade buffer the block
   // fragment shader samples. Self-gated; only runs during the ~300ms post-clear window.
-  view.dispatchLineClearAndDissolve?.(commandEncoder, clampedDt);
+  view.dispatchLineClearAndDissolve?.(commandEncoder, clampedDt, passTimers ?? undefined);
 
   // Update render uniforms
   updateRenderUniforms(view, time, result);
@@ -117,9 +125,17 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   view.updateMaterialUniforms?.();
 
   // Execute render passes
-  executeRenderPasses(view, commandEncoder, result);
+  executeRenderPasses(view, commandEncoder, result, passTimers ?? undefined);
 
+  passTimers?.resolveAfterSubmit(view.device, commandEncoder);
   view.device.queue.submit([commandEncoder.finish()]);
+
+  const wallMs = performance.now() - wallStart;
+  const timerSnap = passTimers?.snapshot();
+  const gpuFrameMs = timerSnap && timerSnap.frameMs > 0 ? timerSnap.frameMs : wallMs;
+
+  updateAdaptiveQuality(view, gpuFrameMs);
+  updatePerfOverlay(view, gpuFrameMs, timerSnap ?? null);
 }
 
 /**
@@ -533,7 +549,12 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
 /**
  * Execute all render passes (background, main, post-process)
  */
-function executeRenderPasses(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder, result: FrameUniforms) {
+function executeRenderPasses(
+  view: WebGPUViewHost,
+  commandEncoder: GPUCommandEncoder,
+  result: FrameUniforms,
+  passTimers?: WebGPUViewHost['passTimers'],
+) {
   // 1. Background (Video or Shader)
   renderBackgroundPass(view, commandEncoder);
 
@@ -541,10 +562,10 @@ function executeRenderPasses(view: WebGPUViewHost, commandEncoder: GPUCommandEnc
   renderFrostedGlassPass(view, commandEncoder);
 
   // 3. Main scene (Blocks, Grid, Particles)
-  renderMainPass(view, commandEncoder, result);
+  renderMainPass(view, commandEncoder, result, passTimers);
 
   // 4. Post-process
-  renderPostProcessPass(view, commandEncoder);
+  renderPostProcessPass(view, commandEncoder, passTimers);
 }
 
 /**
@@ -595,8 +616,14 @@ function renderFrostedGlassPass(view: WebGPUViewHost, commandEncoder: GPUCommand
 /**
  * Render main scene pass (blocks, grid, particles)
  */
-function renderMainPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder, result: FrameUniforms) {
+function renderMainPass(
+  view: WebGPUViewHost,
+  commandEncoder: GPUCommandEncoder,
+  result: FrameUniforms,
+  passTimers?: WebGPUViewHost['passTimers'],
+) {
   const passEncoder = commandEncoder.beginRenderPass(view._mainPassDescriptor);
+  passTimers?.beginRegion(passEncoder, 'mainBlocks');
 
   const split = view.splitScreen?.active && view.splitScreen.stateB;
   if (!split) {
@@ -619,12 +646,16 @@ function renderMainPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder,
     }
   }
 
+  passTimers?.endRegion(passEncoder, 'mainBlocks');
+
   // Particles (only if active and enabled)
   if (view.useParticles !== false && result.hasActiveParticles) {
+    passTimers?.beginRegion(passEncoder, 'particleDraw');
     passEncoder.setPipeline(view.particlePipeline);
     passEncoder.setBindGroup(0, view.particleRenderBindGroup);
     passEncoder.setVertexBuffer(0, view.particleStorageBuffer);
     passEncoder.draw(6, view.particleSystem.maxParticles, 0, 0);
+    passTimers?.endRegion(passEncoder, 'particleDraw');
   }
 
   passEncoder.end();
@@ -633,6 +664,67 @@ function renderMainPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder,
 /**
  * Render post-process pass
  */
-function renderPostProcessPass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder) {
-  view.postProcessor.render(commandEncoder, view.vpMatrix as Float32Array);
+function renderPostProcessPass(
+  view: WebGPUViewHost,
+  commandEncoder: GPUCommandEncoder,
+  passTimers?: WebGPUViewHost['passTimers'],
+) {
+  view.postProcessor.render(commandEncoder, view.vpMatrix as Float32Array, passTimers ?? undefined);
+}
+
+function updateAdaptiveQuality(view: WebGPUViewHost, frameMs: number): void {
+  const adaptive = view.adaptiveState;
+  const baseline = view.userGameSettings;
+  if (!adaptive || !baseline) return;
+
+  const tick = tickAdaptiveQuality(adaptive, {
+    frameMs,
+    lockQuality: baseline.lockQuality,
+    adaptiveEnabled: baseline.adaptiveQuality,
+    baseline,
+    splitScreenActive: view.splitScreen?.active ?? false,
+    config: { budgetMs: view.frameBudgetMs },
+  });
+
+  if (tick.changed && view.applyAdaptiveSettings) {
+    view.applyAdaptiveSettings(tick.settings, tick.particleCap);
+  } else if (view.adaptiveParticleCap !== tick.particleCap) {
+    view.particleSystem.maxParticles = tick.particleCap;
+    view.adaptiveParticleCap = tick.particleCap;
+  }
+}
+
+function updatePerfOverlay(
+  view: WebGPUViewHost,
+  frameEmaMs: number,
+  timerSnap: ReturnType<NonNullable<WebGPUViewHost['passTimers']>['snapshot']> | null,
+): void {
+  const overlay = view.perfOverlay;
+  if (!overlay?.isVisible()) return;
+
+  const metrics = view.particleSystem.metrics?.snapshot?.() ?? null;
+  overlay.update({
+    frameEmaMs: view.adaptiveState?.emaMs ?? frameEmaMs,
+    budgetMs: view.frameBudgetMs,
+    adaptiveStep: view.adaptiveState?.stepIndex ?? 0,
+    adaptiveLocked: view.userGameSettings?.lockQuality ?? false,
+    passTimers: timerSnap ?? {
+      enabled: false,
+      frameMs: frameEmaMs,
+      regions: {
+        particleCompute: 0,
+        dissolveCompute: 0,
+        mainBlocks: 0,
+        particleDraw: 0,
+        postProcess: 0,
+        bloom: 0,
+      },
+    },
+    particles: metrics,
+    particleCap: view.adaptiveParticleCap ?? view.particleSystem.maxParticles,
+    aliveParticles: metrics?.aliveEstimate ?? 0,
+    adapter: view.gpuAdapterInfo ?? null,
+    renderScale: view.renderScale,
+    splitScreen: view.splitScreen?.active ?? false,
+  });
 }

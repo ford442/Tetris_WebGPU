@@ -76,6 +76,16 @@ import {
 import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
 import { acquireGpuContext, resizeGpuContext, pushGpuErrorScopes, popGpuErrorScopes } from './webgpu/gpuContext.js';
 import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
+import { GpuPassTimers } from './webgpu/gpuPassTimers.js';
+import {
+  createAdaptiveControllerState,
+  budgetMsForTarget,
+  detectFrameBudgetTarget,
+  type AdaptiveQualityControllerState,
+} from './webgpu/adaptiveQuality.js';
+import { PerfOverlay, isPerfOverlayEnabled } from './webgpu/perfOverlay.js';
+import type { PerfOverlayAdapterInfo } from './webgpu/perfOverlay.js';
+import { loadGameSettings } from './config/gameSettings.js';
 
 export default class View implements IView, ViewEventHost, WebGPUViewHost {
   readonly rendererName = 'webgpu' as const;
@@ -263,6 +273,15 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // NEW: Multi-pass Bloom System
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
+
+  // GPU pass timers + adaptive quality + perf overlay
+  passTimers: GpuPassTimers | null = null;
+  adaptiveState: AdaptiveQualityControllerState | null = null;
+  perfOverlay: PerfOverlay | null = null;
+  userGameSettings: GameSettings | null = null;
+  frameBudgetMs: number = budgetMsForTarget('FPS_60');
+  adaptiveParticleCap: number = 0;
+  gpuAdapterInfo: PerfOverlayAdapterInfo | null = null;
 
   // === SHOCKWAVE EFFECT (as requested) ===
   shockwaveParams: any = {
@@ -490,6 +509,17 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     const presentationFormat = await acquireGpuContext(this);
     if (!presentationFormat) return;
 
+    this.passTimers = new GpuPassTimers(this.device);
+    this.adaptiveState = createAdaptiveControllerState();
+    this.userGameSettings = loadGameSettings();
+    this.frameBudgetMs = budgetMsForTarget(detectFrameBudgetTarget());
+
+    const showPerf = this.userGameSettings.showPerfOverlay || isPerfOverlayEnabled();
+    this.perfOverlay = new PerfOverlay(this.element);
+    this.perfOverlay.setVisible(showPerf);
+
+    await this.captureGpuAdapterInfo();
+
     await loadBlockTexture(this);
 
     // Scope pipeline/buffer creation so WGSL + allocation failures are logged
@@ -499,6 +529,35 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       await initGpuResources(this, presentationFormat);
     } finally {
       await popGpuErrorScopes(this);
+    }
+
+    if (this.userGameSettings) {
+      this.applyGameSettings(this.userGameSettings);
+    }
+  }
+
+  private async captureGpuAdapterInfo(): Promise<void> {
+    if (!navigator.gpu) return;
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) return;
+      type AdapterInfoCapable = GPUAdapter & {
+        requestAdapterInfo?: () => Promise<GPUAdapterInfo>;
+        info?: GPUAdapterInfo;
+      };
+      const capable = adapter as AdapterInfoCapable;
+      const info = capable.requestAdapterInfo
+        ? await capable.requestAdapterInfo()
+        : capable.info;
+      if (!info) return;
+      this.gpuAdapterInfo = {
+        vendor: info.vendor,
+        architecture: info.architecture,
+        device: info.device,
+        description: info.description,
+      };
+    } catch {
+      /* adapter info is optional for overlay */
     }
   }
 
@@ -629,15 +688,21 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   }
 
   // Run line-clear + dissolve compute while the post-clear fade is active.
-  dispatchLineClearAndDissolve(commandEncoder: GPUCommandEncoder, dt: number) {
+  dispatchLineClearAndDissolve(
+    commandEncoder: GPUCommandEncoder,
+    dt: number,
+    passTimers?: GpuPassTimers,
+  ) {
     if (!this.gpuLineClearReady || this._lineClearActiveTimer <= 0) return;
     this._lineClearActiveTimer = Math.max(0, this._lineClearActiveTimer - dt);
     this.writeLineClearUniforms(dt);
 
     const pass = commandEncoder.beginComputePass({ label: 'line-clear dissolve pass' });
+    passTimers?.beginRegion(pass, 'dissolveCompute');
     pass.setPipeline(this.lineClearComputePipeline);
     pass.setBindGroup(0, this.lineClearComputeBindGroup);
     pass.dispatchWorkgroups(Math.ceil(200 / 64));
+    passTimers?.endRegion(pass, 'dissolveCompute');
     pass.end();
   }
 
@@ -705,5 +770,24 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   setBloomIntensity(intensity: number) { setBloomIntensityImpl(this as ViewLike, intensity); }
   toggleMultiPassBloom() { return toggleMultiPassBloomImpl(this as ViewLike); }
   setBloomParameters(params: Partial<BloomParameters>) { setBloomParametersImpl(this as ViewLike, params); }
-  applyGameSettings(settings: GameSettings) { applyGameSettingsImpl(this as ViewLike, settings); }
+  applyGameSettings(settings: GameSettings) {
+    this.userGameSettings = { ...settings };
+    if (this.adaptiveState) {
+      this.adaptiveState.stepIndex = 0;
+      this.adaptiveState.emaMs = 0;
+      this.adaptiveState.consecutiveOver = 0;
+      this.adaptiveState.consecutiveUnder = 0;
+    }
+    if (this.perfOverlay) {
+      this.perfOverlay.setVisible(settings.showPerfOverlay || isPerfOverlayEnabled());
+    }
+    applyGameSettingsImpl(this as ViewLike, settings);
+  }
+
+  /** Runtime adaptive reductions — does not mutate saved user baseline or adaptive step. */
+  applyAdaptiveSettings(settings: GameSettings, particleCap: number) {
+    applyGameSettingsImpl(this as ViewLike, settings);
+    this.particleSystem.maxParticles = particleCap;
+    this.adaptiveParticleCap = particleCap;
+  }
 }

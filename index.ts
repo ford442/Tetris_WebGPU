@@ -207,6 +207,9 @@ uiContainer.innerHTML = `
           <label class="settings-toggle"><input type="checkbox" id="settings-reactive-video" checked> Reactive video</label>
           <label class="settings-toggle"><input type="checkbox" id="settings-glitch"> Glitch FX</label>
           <label class="settings-toggle"><input type="checkbox" id="settings-film-grain" checked> Film grain</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-adaptive-quality" checked> Adaptive quality</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-lock-quality"> Lock quality</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-perf-overlay"> Perf overlay</label>
         </div>
 
         <div class="settings-group settings-gpu-row">
