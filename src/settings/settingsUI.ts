@@ -71,6 +71,9 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
   const toggleReactiveVideo = document.getElementById('settings-reactive-video') as HTMLInputElement | null;
   const toggleGlitch = document.getElementById('settings-glitch') as HTMLInputElement | null;
   const toggleFilmGrain = document.getElementById('settings-film-grain') as HTMLInputElement | null;
+  const toggleAdaptiveQuality = document.getElementById('settings-adaptive-quality') as HTMLInputElement | null;
+  const toggleLockQuality = document.getElementById('settings-lock-quality') as HTMLInputElement | null;
+  const togglePerfOverlay = document.getElementById('settings-perf-overlay') as HTMLInputElement | null;
   const gpuPowerSelect = document.getElementById('settings-gpu-power') as HTMLSelectElement | null;
   const colorPaletteSelect = document.getElementById('settings-color-palette') as HTMLSelectElement | null;
   const reducedMotionSelect = document.getElementById('settings-reduced-motion') as HTMLSelectElement | null;
@@ -104,6 +107,9 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
     if (toggleReactiveVideo) toggleReactiveVideo.checked = settings.reactiveVideo;
     if (toggleGlitch) toggleGlitch.checked = settings.glitch;
     if (toggleFilmGrain) toggleFilmGrain.checked = settings.filmGrain;
+    if (toggleAdaptiveQuality) toggleAdaptiveQuality.checked = settings.adaptiveQuality;
+    if (toggleLockQuality) toggleLockQuality.checked = settings.lockQuality;
+    if (togglePerfOverlay) togglePerfOverlay.checked = settings.showPerfOverlay;
     if (gpuPowerSelect) gpuPowerSelect.value = settings.gpuPower;
     if (colorPaletteSelect) colorPaletteSelect.value = settings.colorPalette;
     if (reducedMotionSelect) reducedMotionSelect.value = settings.reducedMotion;
@@ -136,6 +142,9 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
       reactiveVideo: toggleReactiveVideo?.checked ?? settings.reactiveVideo,
       glitch: toggleGlitch?.checked ?? settings.glitch,
       filmGrain: toggleFilmGrain?.checked ?? settings.filmGrain,
+      adaptiveQuality: toggleAdaptiveQuality?.checked ?? settings.adaptiveQuality,
+      lockQuality: toggleLockQuality?.checked ?? settings.lockQuality,
+      showPerfOverlay: togglePerfOverlay?.checked ?? settings.showPerfOverlay,
     };
     settings.quality = inferQualityFromToggles(settings);
     persistAndApply(settings);
@@ -155,6 +164,9 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
   toggleReactiveVideo?.addEventListener('change', onIndividualToggleChange);
   toggleGlitch?.addEventListener('change', onIndividualToggleChange);
   toggleFilmGrain?.addEventListener('change', onIndividualToggleChange);
+  toggleAdaptiveQuality?.addEventListener('change', onIndividualToggleChange);
+  toggleLockQuality?.addEventListener('change', onIndividualToggleChange);
+  togglePerfOverlay?.addEventListener('change', onIndividualToggleChange);
 
   gpuPowerSelect?.addEventListener('change', () => {
     if (suppressEvents) return;

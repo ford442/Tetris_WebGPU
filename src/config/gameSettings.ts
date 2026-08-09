@@ -47,6 +47,12 @@ export interface GameSettings {
   colorPalette: ColorPaletteId;
   /** Reduced motion: auto follows OS, on/off override. */
   reducedMotion: ReducedMotionPref;
+  /** Auto-reduce quality when frame time exceeds budget (runtime only, not persisted as cuts). */
+  adaptiveQuality: boolean;
+  /** When true, adaptive controller never changes quality; user preset is fixed. */
+  lockQuality: boolean;
+  /** Show GPU/frame perf overlay (also enabled via <code>?perf=1</code>). */
+  showPerfOverlay: boolean;
 }
 
 export const SETTINGS_STORAGE_KEY = 'tetris_settings';
@@ -122,6 +128,9 @@ export function settingsFromPreset(
     ghostDropTrail: GHOST_CONFIG.DROP_TRAIL,
     colorPalette: 'default',
     reducedMotion: 'auto',
+    adaptiveQuality: true,
+    lockQuality: false,
+    showPerfOverlay: false,
   };
 }
 
@@ -195,6 +204,9 @@ export function parseGameSettings(raw: unknown, fallback: GameSettings = createD
       typeof o.colorPalette === 'string' ? o.colorPalette : fallback.colorPalette,
     ),
     reducedMotion: parseReducedMotion(o.reducedMotion, fallback.reducedMotion),
+    adaptiveQuality: parseBool(o.adaptiveQuality, fallback.adaptiveQuality),
+    lockQuality: parseBool(o.lockQuality, fallback.lockQuality),
+    showPerfOverlay: parseBool(o.showPerfOverlay, fallback.showPerfOverlay),
   };
 
   if (settings.quality === 'custom') {
