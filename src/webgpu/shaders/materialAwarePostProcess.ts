@@ -97,7 +97,7 @@ export const MaterialAwarePostProcessShaders = () => {
         fn filmGrain(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
             let time = uniforms.time;
             let grain = fract(sin(uv.x * 12.9898 + uv.y * 78.233 + time) * 43758.5453);
-            let grainAmount = 0.03;
+            let grainAmount = 0.03 + (uniforms.dangerLevel * 0.15); // JUICE: Increase grain when near top-out
             let grainSize = 1.5;
             let noise = (grain - 0.5) * grainAmount;
             return color + noise * (1.0 - color) * grainSize;
