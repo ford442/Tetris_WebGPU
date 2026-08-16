@@ -177,7 +177,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   postProcessPipeline!: GPURenderPipeline;
   postProcessBindGroup!: GPUBindGroup;
   postProcessUniformBuffer!: GPUBuffer;
-  shockwaveParamsUniformBuffer!: GPUBuffer;
   offscreenTexture!: GPUTexture;
   depthTexture!: GPUTexture;
   _bloomInputTexture: GPUTexture | null = null;
@@ -283,16 +282,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   adaptiveParticleCap: number = 0;
   gpuAdapterInfo: PerfOverlayAdapterInfo | null = null;
 
-  // === SHOCKWAVE EFFECT (as requested) ===
-  shockwaveParams: any = {
-    center: new Float32Array([0.5, 0.5]),
-    strength: 0.0,
-    radius: 0.0,
-  };
-
-  // NEW: Explicit uniform binding for hard drop shockwave
-  shockwaveParamsUniform: Float32Array = new Float32Array([0, 0, 0, 0]);
-
   // NEW: Explicit uniform binding for Neon Burst (Neon Bricklayer)
   neonBurstUniform: Float32Array = new Float32Array([0]);
 
@@ -330,7 +319,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     materialAwareBloom: 0,
     screenResolution: [0, 0] as [number, number],
     aberrationPulse: 0,  // hard drop 300ms chromatic spike -> u_aberrationPulse
-    hardDropBoost: 0,    // NEW: hard drop shockwave explicitly driven boost
+    hardDropBoost: 0,
     dangerLevel: 0,      // board height fill ratio 0-1 for danger vignette (postProcess)
     lineClearLaserY: [0, 0, 0, 0] as [number, number, number, number],
     lineClearLaserIntensity: 0,

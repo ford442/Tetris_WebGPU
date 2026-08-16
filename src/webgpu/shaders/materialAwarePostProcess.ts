@@ -41,7 +41,6 @@ export const MaterialAwarePostProcessShaders = () => {
         @binding(1) @group(0) var mySampler: sampler;
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
         @binding(3) @group(0) var blockTexture: texture_2d<f32>;
-        @binding(4) @group(0) var<uniform> shockwaveParamsUniform: vec4<f32>;
 
         // FXAA 3.11 implementation (simplified for performance)
         // Restructured to avoid non-uniform control flow with textureSample
@@ -263,7 +262,7 @@ export const MaterialAwarePostProcessShaders = () => {
             let time = uniforms.shockwaveTime;
             let glitchStrength = uniforms.useGlitch;
             let params = uniforms.shockwaveParams;
-            let hardDropBoostFromBuffer = shockwaveParamsUniform.x; // Use binding 4
+            let hardDropBoostFromBuffer = uniforms.hardDropBoost;
             let level = uniforms.level;
 
             var shockwaveAberration = 0.0;

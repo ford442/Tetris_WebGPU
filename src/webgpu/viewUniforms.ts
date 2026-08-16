@@ -193,7 +193,7 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
     materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,
     screenResolution: [view.canvasWebGPU.width, view.canvasWebGPU.height],
     aberrationPulse: view.visualEffects.hardDropAberrationPulse || 0,
-    hardDropBoost: view._postProcessParams.hardDropBoost || (view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0),
+    hardDropBoost: view._postProcessParams.hardDropBoost,
     // dangerLevel computed identically to the renderloop path for both uniform update sites
     dangerLevel: (() => {
       let d = 0.0;
@@ -213,9 +213,6 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
     levelUpFlashIntensity: view.visualEffects.levelUpFlashIntensity || 0,
   });
   device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
-  if (view.shockwaveParamsUniformBuffer && view.shockwaveParamsUniform) {
-    device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
-  }
 
   return { lockPercent, ghostUVX, ghostUVW, hasActiveParticles, commandEncoder, dt, time };
 }

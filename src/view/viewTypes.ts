@@ -129,8 +129,6 @@ export interface WebGPUViewHost extends ViewEventHost {
   fragmentUniformBuffer: GPUBuffer;
   postProcessUniformBuffer: GPUBuffer;
   vertexUniformBuffer_border?: GPUBuffer;
-  shockwaveParamsUniformBuffer?: GPUBuffer;
-  shockwaveParamsUniform: Float32Array;
   _postProcessParams: PostProcessUniformData;
   _offscreenTextureView: GPUTextureView;
   _uniformBatchBuffer: Float32Array;

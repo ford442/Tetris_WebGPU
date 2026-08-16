@@ -36,7 +36,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   // Neon Bricklayer explicitly routed hardDropBoost via effectFlag
   if (view.state && view.state.effectFlag && view.state.effectCounter !== view.lastEffectCounter) {
     view.lastEffectCounter = view.state.effectCounter;
-    view.shockwaveParamsUniform[0] = 1.0;
+    view._hardDropBoostTimer = 1.0;
 
     if (typeof view.setFresnelBoost === 'function') {
       view.setFresnelBoost(1.0);
@@ -70,10 +70,10 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
     }
   }
 
-  if (view.shockwaveParamsUniform && view.shockwaveParamsUniform[0] > 0) {
-    view.shockwaveParamsUniform[0] *= Math.exp(-dt * 10.0);
-    if (view.shockwaveParamsUniform[0] < 0.01) {
-      view.shockwaveParamsUniform[0] = 0.0;
+  if (view._hardDropBoostTimer > 0) {
+    view._hardDropBoostTimer *= Math.exp(-dt * 10.0);
+    if (view._hardDropBoostTimer < 0.01) {
+      view._hardDropBoostTimer = 0.0;
     }
   }
 
@@ -460,7 +460,7 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;
 
   // NEW: explicitly driven shockwave boost uniform mapping for Neon Bricklayer implementation
-  view._postProcessParams.hardDropBoost = view.shockwaveParamsUniform ? view.shockwaveParamsUniform[0] : 0.0;
+  view._postProcessParams.hardDropBoost = view._hardDropBoostTimer || 0.0;
 
   view._postProcessParams.neonBurst = view.neonBurstUniform ? view.neonBurstUniform[0] : 0.0;
   view._postProcessParams.neonHyperInversionTime = view._neonHyperInversionTimer || 0.0;
@@ -540,10 +540,6 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
 
   const ppUniforms = postProcessUniforms.pack(view._postProcessParams);
   view.device.queue.writeBuffer(view.postProcessUniformBuffer, 0, ppUniforms);
-
-  if (view.shockwaveParamsUniformBuffer && view.shockwaveParamsUniform) {
-    view.device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
-  }
 }
 
 /**
