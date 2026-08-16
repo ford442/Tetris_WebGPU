@@ -279,7 +279,8 @@
                 let glassMin = fUniforms.reserved2.x;
                 let glassMax = fUniforms.reserved2.y;
                 let glassPower = max(fUniforms.reserved2.z, 0.001);
-                let glassFresnel = pow(edgeFresnel, glassPower);
+                let edge2 = edgeFresnel * edgeFresnel;
+                let glassFresnel = select(pow(edgeFresnel, glassPower), edge2, abs(glassPower - 2.0) < 0.001);
                 let glassOpacity = mix(glassMin, glassMax, glassFresnel);
                 finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
