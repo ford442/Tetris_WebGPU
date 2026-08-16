@@ -62,3 +62,4 @@
 - "Implemented 'Combo Escalation': Passed a continuous 'comboEnergy' value from Game Logic into the WebGPU pipeline! As the player's combo count grows, the background parallax speed exponentially accelerates, the global ambient pulse intensifies, and the blocks themselves throb with escalating neon emissive energy!"
 - "Added Danger Vignette that pulses red when the board is full to both enhanced and material-aware post processing passes."
 - "Modified filmGrain in post processing shaders to scale with dangerLevel, creating a tactile TV static failure effect when nearing top-out."
+- "Neon Bricklayer feature set complete; no further juice tasks."
