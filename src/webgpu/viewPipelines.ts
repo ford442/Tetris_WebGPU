@@ -286,11 +286,6 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   });
 
   view.postProcessUniformBuffer = device.createBuffer({ size: UNIFORM_BUFFER_SIZES.POST_PROCESS, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  view.shockwaveParamsUniformBuffer = device.createBuffer({
-    size: UNIFORM_BUFFER_SIZES.SHOCKWAVE_PARAMS,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(view.shockwaveParamsUniformBuffer, 0, view.shockwaveParamsUniform);
   view.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
 
   view.offscreenTexture = device.createTexture({
@@ -367,10 +362,6 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   });
   const materialDefaults = new Float32Array([0.5, 0.3, 0.0, 0.0]);
   device.queue.writeBuffer(view.materialUniformBuffer, 0, materialDefaults);
-
-  // Pass it explicitly to the post-process pipeline.
-  view.postProcessUniforms = view.postProcessUniforms || {};
-  view.postProcessUniforms.shockwaveParams = view.shockwaveParams;
 
   // --- GPU line-clear + dissolve field (compute writes, block fragment reads) ---
   view.dissolveBuffer = device.createBuffer({
