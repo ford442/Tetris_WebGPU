@@ -82,22 +82,10 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   const textureMix = view.authoredBlockTextureLoaded ? 0.94 : 0.55;
   const enablePBR = view.usePremiumMaterials ? 1.0 : 0.0;
   const scratch = new Float32Array(1);
-  scratch[0] = 0.0;
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.particleIntensity, scratch);
   scratch[0] = enablePBR;
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.enablePBR, scratch);
   scratch[0] = textureMix;
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.textureMix, scratch);
-
-  // KNOWN BUG: written every frame but block/fragmentMain.wgsl.ts never reads
-  // fUniforms.particleMaterialType — the gold/chrome/cyber tinted-particle-hit
-  // visual this was meant to drive doesn't run. Left in place (harmless write)
-  // since fixing the shader behavior needs visual review, not a plumbing PR.
-  view.device.queue.writeBuffer(
-    view.fragmentUniformBuffer,
-    offs.particleMaterialType,
-    new Uint32Array([materialTypeIndex]),
-  );
 
   // Authored imageSampled glass opacity curve params.
   // Stored in FragmentUniforms.reserved2 (vec4f at byte offset 120).
