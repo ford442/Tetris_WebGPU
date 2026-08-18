@@ -22,9 +22,7 @@ struct FragmentUniforms {
     magnetWorldX  : f32,        // 104
     magnetWorldY  : f32,        // 108
     magnetStrength: f32,        // 112
-    // KNOWN BUG: written every frame by viewMaterials.ts but never read in
-    // fragmentMain.wgsl's main() — see the comment at that write site.
-    particleMaterialType: u32,  // 116
+    _pad116       : u32,        // 116
     reserved2     : vec4f,      // 120-127
     padHeights    : vec4f,      // 128-143 (underwater flash timers at 128/132)
     columnHeights : array<f32, 10>, // 144

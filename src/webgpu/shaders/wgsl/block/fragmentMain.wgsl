@@ -387,7 +387,7 @@
             // NEW: Apply particle-material interaction
             let particleIntensity = fUniforms.particleIntensity;
             if (particleIntensity > 0.0) {
-                var pMatType = fUniforms.particleMaterialType;
+                var pMatType = materialType;
                 // If using authored PBR texture (type 0), infer from masks
                 if (pMatType == 0u && fUniforms.enablePBR > 0.5) {
                     if (glassMask > 0.5) {
