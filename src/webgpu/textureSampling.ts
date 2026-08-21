@@ -78,27 +78,6 @@ export function getTextureSamplingWGSL(): string {
 // Auto-generated based on BlockTextureConfig
 // ============================================================================
 
-// Sampling mode: ${config.samplingMode}
-const TEXTURE_MODE_SINGLE = 0u;
-const TEXTURE_MODE_ATLAS = 1u;
-const TEXTURE_MODE_SUBREGION = 2u;
-
-// Current texture sampling mode
-const textureSamplingMode: u32 = ${getModeValue(config.samplingMode)}u;
-
-// Atlas configuration (used when mode is ATLAS)
-const ATLAS_COLUMNS: f32 = ${config.atlasColumns ?? 1}.0;
-const ATLAS_ROWS: f32 = ${config.atlasRows ?? 1}.0;
-const ATLAS_TILE_COL: f32 = ${config.atlasTileColumn ?? 0}.0;
-const ATLAS_TILE_ROW: f32 = ${config.atlasTileRow ?? 0}.0;
-const ATLAS_INSET: f32 = ${config.atlasTileInset ?? 0.0};
-
-// Subregion configuration (used when mode is SUBREGION)
-const SUBREGION_X: f32 = ${config.subregionX ?? 0.0};
-const SUBREGION_Y: f32 = ${config.subregionY ?? 0.0};
-const SUBREGION_W: f32 = ${config.subregionWidth ?? 1.0};
-const SUBREGION_H: f32 = ${config.subregionHeight ?? 1.0};
-
 // Material detection configuration
 const MATERIAL_MODE_LUMINANCE = 0u;
 const MATERIAL_MODE_COLOR_SIGNAL = 1u;
@@ -114,39 +93,12 @@ const METAL_THRESHOLD_HIGH: f32 = ${config.metalThresholdHigh ?? 0.55};
 // ============================================================================
 
 /**
- * Transform UV coordinates based on the current sampling mode
- * - Single mode: use UVs as-is (with Y-flip for correct orientation)
- * - Atlas mode: map to specific tile within the atlas
- * - Subregion mode: map to specific subregion
+ * Transform UV coordinates based on the single tile sampling mode
+ * Tile extraction and scaling is strictly handled on the CPU side during init.
  */
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
     // Flip Y for correct image orientation (WebGPU vs image coordinates)
-    var texUV = vec2<f32>(uv.x, 1.0 - uv.y);
-    
-    switch textureSamplingMode {
-        case TEXTURE_MODE_SINGLE: {
-            // Single texture: use as-is
-            return texUV;
-        }
-        case TEXTURE_MODE_ATLAS: {
-            // Atlas: map to specific tile with inset to avoid bleeding
-            let atlasTiles = vec2<f32>(ATLAS_COLUMNS, ATLAS_ROWS);
-            let atlasTile = vec2<f32>(ATLAS_TILE_COL, ATLAS_TILE_ROW);
-            let atlasInset = vec2<f32>(ATLAS_INSET, ATLAS_INSET);
-            return (clamp(texUV, vec2<f32>(0.0), vec2<f32>(1.0)) * 
-                    (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
-        }
-        case TEXTURE_MODE_SUBREGION: {
-            // Subregion: map to specific area
-            return vec2<f32>(
-                SUBREGION_X + texUV.x * SUBREGION_W,
-                SUBREGION_Y + texUV.y * SUBREGION_H
-            );
-        }
-        default: {
-            return texUV;
-        }
-    }
+    return clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
 /**
@@ -203,57 +155,19 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
  * Returns the transform parameters that can be applied to UVs
  */
 fn getAtlasTransform() -> vec4<f32> {
-    // Returns: vec4(scaleX, scaleY, offsetX, offsetY)
-    if (textureSamplingMode == TEXTURE_MODE_ATLAS) {
-        let scaleX = 1.0 / ATLAS_COLUMNS;
-        let scaleY = 1.0 / ATLAS_ROWS;
-        let offsetX = ATLAS_TILE_COL / ATLAS_COLUMNS;
-        let offsetY = ATLAS_TILE_ROW / ATLAS_ROWS;
-        return vec4<f32>(scaleX, scaleY, offsetX, offsetY);
-    }
+    // Legacy stub - extraction handled by CPU now
     return vec4<f32>(1.0, 1.0, 0.0, 0.0);
 }
 `;
 }
 
-/**
- * Get simplified texture sampling WGSL for basic shaders
- * This version includes just the essential sampling logic
- */
+
 export function getSimpleTextureSamplingWGSL(): string {
   const config = getBlockTextureConfig();
   const materialMaskLogic = getMaterialMaskLogicWGSL(config);
 
-  // For simple shaders, we inline the constants directly
-  if (config.samplingMode === 'subregion') {
-    const sx = config.subregionX ?? 0.0;
-    const sy = config.subregionY ?? 0.0;
-    const sw = config.subregionWidth ?? 1.0;
-    const sh = config.subregionHeight ?? 1.0;
-    const inset = config.subregionInset ?? 0.0;
-    return `
-// Texture sampling: SUBREGION mode (${sx.toFixed(3)},${sy.toFixed(3)}) ${(sw * 100).toFixed(1)}%x${(sh * 100).toFixed(1)}%
-fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
-    let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
-    let inset = ${inset};
-    let innerUV = texUV * (1.0 - inset * 2.0) + inset;
-    return vec2<f32>(
-        ${sx} + innerUV.x * ${sw},
-        ${sy} + innerUV.y * ${sh}
-    );
-}
-
-fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
-    return vec2<f32>(metalMask, 1.0 - metalMask);
-}
-
-${MATERIAL_COMPOSE_WGSL}
-`;
-  }
-
-  if (config.samplingMode === 'single') {
-    return `
-// Texture sampling: SINGLE mode
+  return `
+// Texture sampling: SINGLE mode (CPU extracted tile)
 fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
     return clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
 }
@@ -264,43 +178,10 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
 
 ${MATERIAL_COMPOSE_WGSL}
 `;
-  }
-  
-  // Atlas mode
-  return `
-// Texture sampling: ATLAS mode (${config.atlasColumns}x${config.atlasRows}, tile ${config.atlasTileColumn},${config.atlasTileRow})
-const ATLAS_COLUMNS: f32 = ${config.atlasColumns ?? 4}.0;
-const ATLAS_ROWS: f32 = ${config.atlasRows ?? 3}.0;
-const ATLAS_TILE_COL: f32 = ${config.atlasTileColumn ?? 1}.0;
-const ATLAS_TILE_ROW: f32 = ${config.atlasTileRow ?? 1}.0;
-const ATLAS_INSET: f32 = ${config.atlasTileInset ?? 0.03};
-
-fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
-    let texUV = clamp(vec2<f32>(uv.x, 1.0 - uv.y), vec2<f32>(0.0), vec2<f32>(1.0));
-    let atlasTiles = vec2<f32>(ATLAS_COLUMNS, ATLAS_ROWS);
-    let atlasTile = vec2<f32>(ATLAS_TILE_COL, ATLAS_TILE_ROW);
-    let atlasInset = vec2<f32>(ATLAS_INSET, ATLAS_INSET);
-    return (texUV * (vec2<f32>(1.0) - atlasInset * 2.0) + atlasInset + atlasTile) / atlasTiles;
 }
 
-fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {${materialMaskLogic}
-    return vec2<f32>(metalMask, 1.0 - metalMask);
-}
-
-${MATERIAL_COMPOSE_WGSL}
-`;
-}
 
 // Helper functions
-function getModeValue(mode: string): number {
-  switch (mode) {
-    case 'single': return 0;
-    case 'atlas': return 1;
-    case 'subregion': return 2;
-    default: return 0;
-  }
-}
-
 function getMaterialModeValue(mode?: string): number {
   switch (mode) {
     case 'luminance': return 0;
@@ -321,12 +202,7 @@ export function getTextureSamplingDefines(): string {
   
   return `
 // Texture sampling defines
-#define TEXTURE_MODE_${config.samplingMode.toUpperCase()}
-#define ATLAS_COLUMNS ${config.atlasColumns ?? 1}
-#define ATLAS_ROWS ${config.atlasRows ?? 1}
-#define ATLAS_TILE_COLUMN ${config.atlasTileColumn ?? 0}
-#define ATLAS_TILE_ROW ${config.atlasTileRow ?? 0}
-#define ATLAS_TILE_INSET ${config.atlasTileInset ?? 0.0}
+#define TEXTURE_MODE_SINGLE
 #define MATERIAL_DETECTION_${(config.materialDetectionMode ?? 'color_signal').toUpperCase()}
 `;
 }
