@@ -38,6 +38,7 @@ export interface GameState {
   modeShowHighScore: boolean;
   modeHighScoreLabel: string;
   elapsedMs: number;
+  pendingGarbageRows?: number;
   playfield: ProjectedPlayfield;
   lockTimer: number;
   lockDelayTime: number;
