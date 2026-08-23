@@ -280,7 +280,19 @@
                 let glassMax = fUniforms.reserved2.y;
                 let glassPower = max(fUniforms.reserved2.z, 0.001);
                 let edge2 = edgeFresnel * edgeFresnel;
-                let glassFresnel = select(pow(edgeFresnel, glassPower), edge2, abs(glassPower - 2.0) < 0.001);
+                let edge4 = edge2 * edge2;
+
+                // fast path approximation for common powers instead of expensive pow()
+                var fresnelVal = 0.0;
+                if (abs(glassPower - 2.0) < 0.001) {
+                    fresnelVal = edge2;
+                } else if (abs(glassPower - 5.0) < 0.001) {
+                    fresnelVal = edge4 * edgeFresnel;
+                } else {
+                    fresnelVal = pow(edgeFresnel, glassPower);
+                }
+
+                let glassFresnel = fresnelVal;
                 let glassOpacity = mix(glassMin, glassMax, glassFresnel);
                 finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
