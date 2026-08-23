@@ -16,6 +16,7 @@ type PostProcessView = {
   };
   canvasWebGPU: HTMLCanvasElement;
   recreateRenderTargets: () => void;
+  hdrPlayfield?: boolean;
 };
 
 type PassTimerLike = {
@@ -43,7 +44,8 @@ export class PostProcessor {
       void viewMatrix;
     }
 
-    if (this.view.useMultiPassBloom && this.view.bloomEnabled && this.view._bloomInputTexture) {
+    if ((this.view.useMultiPassBloom && this.view.bloomEnabled && this.view._bloomInputTexture)
+      || (this.view.hdrPlayfield && this.view._bloomInputTexture)) {
       const ppColorAttachment0 = (this.view._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
       ppColorAttachment0.view = this.view._bloomInputTexture.createView();
 

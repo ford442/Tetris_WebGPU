@@ -138,7 +138,8 @@ export function createProceduralFallbackTexture(device: GPUDevice): GPUTexture {
 export async function recreateRenderTargets(view: any) {
   const device: GPUDevice = view.device;
   if (!device) return;
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+  const presentationFormat = (view.sceneColorFormat as GPUTextureFormat | undefined)
+    ?? navigator.gpu.getPreferredCanvasFormat();
 
   // Wait for GPU to finish all pending work before destroying old textures
   // This prevents "destroyed texture used in submit" errors

@@ -53,16 +53,17 @@ export interface AdaptiveStepEffect {
   disableFilmGrain: boolean;
   particleCap: number | null;
   disableReactiveVideo: boolean;
+  disableIbl: boolean;
 }
 
 /** Each step applies on top of the user's baseline settings. */
 export const ADAPTIVE_STEPS: readonly AdaptiveStepEffect[] = [
-  { renderScaleDelta: -0.1, disableCrt: false, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false },
-  { renderScaleDelta: -0.15, disableCrt: false, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false },
-  { renderScaleDelta: -0.2, disableCrt: true, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false },
-  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: null, disableReactiveVideo: false },
-  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: 1500, disableReactiveVideo: false },
-  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: 800, disableReactiveVideo: true },
+  { renderScaleDelta: -0.1, disableCrt: false, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false, disableIbl: false },
+  { renderScaleDelta: -0.15, disableCrt: false, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false, disableIbl: false },
+  { renderScaleDelta: -0.2, disableCrt: true, disableFilmGrain: false, particleCap: null, disableReactiveVideo: false, disableIbl: true },
+  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: null, disableReactiveVideo: false, disableIbl: true },
+  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: 1500, disableReactiveVideo: false, disableIbl: true },
+  { renderScaleDelta: 0, disableCrt: true, disableFilmGrain: true, particleCap: 800, disableReactiveVideo: true, disableIbl: true },
 ];
 
 export interface BudgetSampleInput {
@@ -164,6 +165,15 @@ export function applyAdaptiveStep(options: ApplyAdaptiveStepOptions): GameSettin
   };
 
   return next;
+}
+
+/** True when the current adaptive step (or any prior cumulative step) dropped IBL. */
+export function adaptiveDisablesIbl(stepIndex: number): boolean {
+  const step = Math.max(0, Math.min(stepIndex, ADAPTIVE_STEP_COUNT - 1));
+  for (let i = 0; i <= step; i++) {
+    if (ADAPTIVE_STEPS[i].disableIbl) return true;
+  }
+  return false;
 }
 
 /** Effective particle cap after adaptive step + versus split cap. */

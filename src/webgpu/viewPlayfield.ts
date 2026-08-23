@@ -420,6 +420,9 @@ export function renderPlayfieldBorder(
   NORMALMATRIX: Matrix.mat4,
   dissolveBuffer: GPUBuffer,
   fresnelParamsUniform: GPUBuffer,
+  iblSpecularTexture: GPUTexture,
+  iblBrdfLutTexture: GPUTexture,
+  iblSampler: GPUSampler,
   worldOffsetX = 0,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
@@ -449,6 +452,9 @@ export function renderPlayfieldBorder(
           blockSampler,
           dissolveBuffer,
           fresnelParamsUniform,
+          iblSpecularTexture,
+          iblBrdfLutTexture,
+          iblSampler,
         }),
       });
 
