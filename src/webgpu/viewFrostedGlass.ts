@@ -23,9 +23,10 @@ export interface FrostedGlassResources {
 export async function initFrostedGlassBackboard(
   device: GPUDevice,
   canvas: HTMLCanvasElement,
-  createGPUBuffer: (device: GPUDevice, data: Float32Array) => GPUBuffer
+  createGPUBuffer: (device: GPUDevice, data: Float32Array) => GPUBuffer,
+  colorFormat?: GPUTextureFormat,
 ): Promise<FrostedGlassResources> {
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+  const presentationFormat = colorFormat ?? navigator.gpu.getPreferredCanvasFormat();
   const frostedShader = FrostedGlassShaders();
 
   const frostedGlassPipeline = device.createRenderPipeline({

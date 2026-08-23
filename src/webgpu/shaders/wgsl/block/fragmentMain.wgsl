@@ -236,17 +236,41 @@
                 let specularStrength = mix(0.04, 0.18, metalMask);
                 finalColor = baseColor * lightFactor + vec3f(tightSpec * specularStrength);
 
-                if (metalMask > 0.2 && fUniforms.metallic > 0.3) {
+                if (metalMask > 0.05) {
+                    let mip0 = texColor.rgb;
+                    let mip3 = textureSampleLevel(blockTexture, blockSampler, texUV, 3.0).rgb;
+                    let lumaVar = length(mip0 - mip3);
+                    var pixelRough = mix(0.12, 0.35, 1.0 - metalMask);
+                    pixelRough = clamp(pixelRough + lumaVar * 0.18 * metalMask, 0.08, 0.45);
+                    let metalAmt = max(fUniforms.metallic, metalMask);
+                    let F0 = mix(vec3f(0.04), metalColor, metalMask * metalAmt);
+                    let anisoAmt = max(fUniforms.anisotropic, 0.4) * metalMask;
+                    let NdotHcl = max(NdotH, 0.0);
+                    var specDirect = 0.0;
+                    if (anisoAmt > 0.05) {
+                        specDirect = anisotropicSpecular(V, L, N, pixelRough, anisoAmt, vWorldPos.xyz, vUV);
+                    } else {
+                        let D = distributionGGX(NdotHcl, pixelRough);
+                        let G = geometrySmith(NdotV, NdotL, pixelRough);
+                        specDirect = (D * G) / max(4.0 * NdotV * NdotL, 0.001);
+                    }
+                    let F = fresnelSchlick(NdotV, F0);
+                    finalColor += specDirect * F * NdotL * metalMask;
+
+                    let iblOn = fUniforms.iblEnable;
                     let R = reflect(-V, N);
-                    let warmEnv = proceduralEnvReflect(R, time) * vec3f(1.15, 0.92, 0.55);
-                    let fresnel = 1.0 - NdotV;
-                    let fresnel3 = fresnel * fresnel * fresnel;
-                    finalColor += warmEnv * fresnel3 * metalMask * fUniforms.metallic * 0.85;
-                    let metalRough = max(fUniforms.roughness, 0.08);
-                    let D = distributionGGX(NdotH, metalRough);
-                    let G = geometrySmith(NdotV, NdotL, metalRough);
-                    let metalSpec = (D * G) / max(4.0 * NdotV * NdotL, 0.001);
-                    finalColor += vec3f(metalSpec) * metalMask * 0.35;
+                    var envSpec: vec3f;
+                    if (iblOn > 0.5) {
+                        envSpec = splitSumSpecular(N, V, F0, pixelRough, metalMask);
+                    } else {
+                        envSpec = proceduralEnvReflect(R, time) * F * metalMask * metalAmt;
+                    }
+                    finalColor += envSpec;
+
+                    let coatAmt = max(fUniforms.clearcoat, 0.3) * metalMask;
+                    if (coatAmt > 0.01) {
+                        finalColor += clearcoatSpecular(NdotHcl, NdotV, NdotL, coatAmt);
+                    }
                 }
 
                 if (glassMask > 0.2) {
@@ -300,7 +324,7 @@
 
                 var specular = 0.0;
                 if (fUniforms.anisotropic > 0.0 && metalMask > 0.5) {
-                    specular = anisotropicSpecular(V, L, N, roughness, fUniforms.anisotropic);
+                    specular = anisotropicSpecular(V, L, N, roughness, fUniforms.anisotropic, vWorldPos.xyz, vUV);
                 } else {
                     let D = distributionGGX(NdotH, roughness);
                     let G = geometrySmith(NdotV, NdotL, roughness);
@@ -469,7 +493,7 @@
                 finalColor += vec3f(borderBoost);
             }
 
-            finalColor = clamp(finalColor, vec3f(0.0), vec3f(1.0));
+            // Keep HDR energy for bloom; ACES tonemap runs in the bloom composite.
 
             // === GPU CLEAR-DISSOLVE GLOW ===
             // Sample the compute-written per-cell dissolve field (0..1, decays ~300ms).

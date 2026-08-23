@@ -119,6 +119,7 @@ export interface WebGPUViewHost extends ViewEventHost {
   PROJMATRIX: Matrix.mat4;
   vpMatrix: Float32Array | Matrix.mat4;
   canvasWebGPU: HTMLCanvasElement;
+  iblEnabled: boolean;
   particleStorageBuffer: GPUBuffer;
   particleComputeUniformBuffer: GPUBuffer;
   particleComputePipeline: GPUComputePipeline;

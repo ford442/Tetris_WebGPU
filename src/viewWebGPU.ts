@@ -81,6 +81,7 @@ import {
   createAdaptiveControllerState,
   budgetMsForTarget,
   detectFrameBudgetTarget,
+  adaptiveDisablesIbl,
   type AdaptiveQualityControllerState,
 } from './webgpu/adaptiveQuality.js';
 import { PerfOverlay, isPerfOverlayEnabled } from './webgpu/perfOverlay.js';
@@ -182,6 +183,13 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   _bloomInputTexture: GPUTexture | null = null;
   sampler!: GPUSampler;
   postProcessor!: PostProcessor;
+  iblSpecularTexture!: GPUTexture;
+  iblBrdfLutTexture!: GPUTexture;
+  iblSampler!: GPUSampler;
+  iblEnabled: boolean = true;
+  hdrPlayfield: boolean = false;
+  sceneColorFormat!: GPUTextureFormat;
+  gpuPowerPreference?: GPUPowerPreference;
 
   // Render pass caching - GC optimized (lazy init pattern)
   _offscreenTextureView!: GPUTextureView;
@@ -560,7 +568,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // Frosted glass backboard (delegated to viewFrostedGlass.ts)
   async initFrostedGlassBackboard() {
     if (!this.device) return;
-    const res = await initFrostedGlassImpl(this.device, this.canvasWebGPU, this.CreateGPUBuffer);
+    const res = await initFrostedGlassImpl(this.device, this.canvasWebGPU, this.CreateGPUBuffer, this.sceneColorFormat);
     this.frostedGlassPipeline = res.frostedGlassPipeline;
     this.frostedGlassVertexBuffer = res.frostedGlassVertexBuffer;
     this.frostedGlassUniformBuffer = res.frostedGlassUniformBuffer;
@@ -778,5 +786,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     applyGameSettingsImpl(this as ViewLike, settings);
     this.particleSystem.maxParticles = particleCap;
     this.adaptiveParticleCap = particleCap;
+    const step = this.adaptiveState?.stepIndex ?? 0;
+    this.iblEnabled = !(this.gpuPowerPreference === 'low-power' || settings.quality === 'low' || adaptiveDisablesIbl(step));
   }
 }

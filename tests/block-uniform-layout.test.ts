@@ -38,9 +38,9 @@ describe('TS block-shader uniform layout (WGSL text vs CPU offsets)', () => {
   });
 
   it('BLOCK_FRAGMENT_UNIFORM_SIZE is a 16-byte-aligned multiple that fits the last field', () => {
-    // _structPad (vec2f, 8 bytes) is WGSL-only tail padding, not in BLOCK_FRAGMENT_UNIFORM_OFFSETS.
-    expect(parsed._structPad).toBe(200);
-    expect(BLOCK_FRAGMENT_UNIFORM_SIZE).toBeGreaterThanOrEqual(parsed._structPad + 8);
+    expect(parsed.iblEnable).toBe(200);
+    expect(parsed._structPad).toBe(204);
+    expect(BLOCK_FRAGMENT_UNIFORM_SIZE).toBeGreaterThanOrEqual(parsed._structPad + 4);
     expect(BLOCK_FRAGMENT_UNIFORM_SIZE % 16).toBe(0);
   });
 });

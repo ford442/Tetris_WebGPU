@@ -20,6 +20,8 @@ export const DESIRED_OPTIONAL_FEATURES: GPUFeatureName[] = [
   'texture-compression-astc',
   'texture-compression-etc2',
   'shader-f16',
+  'rg11b10ufloat-renderable',
+  'float32-filterable',
 ];
 
 /** Minimal host for device-loss recovery and uncaptured-error logging. */
@@ -51,6 +53,8 @@ export interface GpuContextHost extends GpuDeviceLifecycleHost {
   playfildInnerWidth: number;
   playfildInnerHeight: number;
   preRender(): Promise<void>;
+  gpuPowerPreference?: GPUPowerPreference;
+  enabledGpuFeatures?: GPUFeatureName[];
 }
 
 export interface RequestGpuDeviceOptions {
@@ -285,6 +289,8 @@ export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextur
   if (!bundle) return null;
 
   view.device = bundle.device;
+  view.gpuPowerPreference = bundle.powerPreference;
+  view.enabledGpuFeatures = bundle.enabledFeatures;
   attachDeviceLifecycleHandlers(view);
 
   const dpr = window.devicePixelRatio || 1;

@@ -82,7 +82,7 @@ it('premultiplies post-process output for the premultiplied-alpha canvas', () =>
 });
 
 it('preserves alpha in the multi-pass bloom composite for glass transparency', () => {
-  expect(CompositeShader).toContain('return vec4<f32>(result * alpha, alpha);');
+  expect(CompositeShader).toContain('return vec4<f32>(mapped * alpha, alpha);');
 });
   
 });

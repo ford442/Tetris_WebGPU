@@ -22,7 +22,6 @@ import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
   createBlockTextureSamplerDescriptor,
-  createBlockTextureBindingView,
   setBlockTextureConfig,
   getBlockTextureConfig,
   applyBlockTextureConfigForImageDimensions,
@@ -36,6 +35,14 @@ import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
 import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js';
 import { DebugTextureShaders } from './debug_shaders.js';
 import { BloomSystem } from './bloomSystem.js';
+import { createBlockBindGroupEntries } from './shaders/block/bindings.js';
+import {
+  loadIblResources,
+  resolvePlayfieldColorFormat,
+  shouldEnableHdrPlayfield,
+  shouldEnableIbl,
+} from './ibl/iblResources.js';
+import { adaptiveDisablesIbl } from './adaptiveQuality.js';
 import {
   generateMipmaps as generateMipmapsUtil,
   createSolidFallbackTexture,
@@ -139,6 +146,23 @@ export async function loadBlockTexture(view: any): Promise<void> {
  */
 export async function initGpuResources(view: any, presentationFormat: GPUTextureFormat): Promise<void> {
   const device: GPUDevice = view.device;
+  const quality = view.userGameSettings?.quality as string | undefined;
+  const hdr = shouldEnableHdrPlayfield({
+    powerPreference: view.gpuPowerPreference,
+    quality,
+  });
+  view.hdrPlayfield = hdr;
+  view.sceneColorFormat = resolvePlayfieldColorFormat(device, hdr, presentationFormat);
+  const sceneFormat = view.sceneColorFormat as GPUTextureFormat;
+  view.iblEnabled = shouldEnableIbl({
+    powerPreference: view.gpuPowerPreference,
+    quality,
+    adaptiveDisableIbl: adaptiveDisablesIbl(view.adaptiveState?.stepIndex ?? 0),
+  });
+  const ibl = await loadIblResources(device);
+  view.iblSpecularTexture = ibl.specularTexture;
+  view.iblBrdfLutTexture = ibl.brdfLutTexture;
+  view.iblSampler = ibl.sampler;
 
   const shaderMain = PBRBlockShaders();
   let vertexCode = shaderMain.vertex;
@@ -184,7 +208,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
       { arrayStride: 12, attributes: [{ shaderLocation: 1, format: 'float32x3', offset: 0 }] },
       { arrayStride: 8, attributes: [{ shaderLocation: 2, format: 'float32x2', offset: 0 }] },
     ]},
-    fragment: { module: fragmentModule, entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
+    fragment: { module: fragmentModule, entryPoint: 'main', targets: [{ format: sceneFormat, blend: {
       // Canvas uses alphaMode='premultiplied', so blocks must output premultiplied RGB.
       color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
       alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
@@ -199,7 +223,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   view.backgroundPipeline = device.createRenderPipeline({
     label: 'background pipeline', layout: 'auto',
     vertex: { module: device.createShaderModule({ code: backgroundShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-    fragment: { module: device.createShaderModule({ code: backgroundShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
+    fragment: { module: device.createShaderModule({ code: backgroundShader.fragment }), entryPoint: 'main', targets: [{ format: sceneFormat }] },
     primitive: { topology: 'triangle-list' },
   });
 
@@ -210,7 +234,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   view.videoBackgroundPipeline = device.createRenderPipeline({
     label: 'video background pipeline', layout: 'auto',
     vertex: { module: device.createShaderModule({ code: videoBgShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-    fragment: { module: device.createShaderModule({ code: videoBgShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
+    fragment: { module: device.createShaderModule({ code: videoBgShader.fragment }), entryPoint: 'main', targets: [{ format: sceneFormat }] },
     primitive: { topology: 'triangle-list' },
   });
   view.videoCoverScaleUniformBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -229,7 +253,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   view.gridPipeline = device.createRenderPipeline({
     label: 'grid pipeline', layout: 'auto',
     vertex: { module: device.createShaderModule({ code: gridShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-    fragment: { module: device.createShaderModule({ code: gridShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
+    fragment: { module: device.createShaderModule({ code: gridShader.fragment }), entryPoint: 'main', targets: [{ format: sceneFormat, blend: {
       color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
       alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
     }}]},
@@ -265,7 +289,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         { shaderLocation: 5, format: 'float32x3', offset: 16 },
       ],
     }]},
-    fragment: { module: device.createShaderModule({ code: particleShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat, blend: {
+    fragment: { module: device.createShaderModule({ code: particleShader.fragment }), entryPoint: 'main', targets: [{ format: sceneFormat, blend: {
       color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
       alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
     }}]},
@@ -281,7 +305,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   view.postProcessPipeline = device.createRenderPipeline({
     label: 'post process pipeline', layout: 'auto',
     vertex: { module: device.createShaderModule({ code: ppShader.vertex }), entryPoint: 'main', buffers: [{ arrayStride: 12, attributes: [{ shaderLocation: 0, format: 'float32x3', offset: 0 }] }] },
-    fragment: { module: device.createShaderModule({ code: ppShader.fragment }), entryPoint: 'main', targets: [{ format: presentationFormat }] },
+    fragment: { module: device.createShaderModule({ code: ppShader.fragment }), entryPoint: 'main', targets: [{ format: sceneFormat }] },
     primitive: { topology: 'triangle-list' },
   });
 
@@ -290,13 +314,13 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
 
   view.offscreenTexture = device.createTexture({
     size: [view.canvasWebGPU.width, view.canvasWebGPU.height, 1],
-    format: presentationFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    format: sceneFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
   view._offscreenTextureView = view.offscreenTexture.createView();
   view.depthTexture = device.createTexture({ size: [view.canvasWebGPU.width, view.canvasWebGPU.height, 1], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
   view._bloomInputTexture = device.createTexture({
     size: [view.canvasWebGPU.width, view.canvasWebGPU.height, 1],
-    format: presentationFormat,
+    format: sceneFormat,
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
   view._depthTextureView = view.depthTexture.createView();
@@ -322,7 +346,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   view.bloomSystem = new BloomSystem(device, view.canvasWebGPU.width, view.canvasWebGPU.height);
   // Conservative values to prevent block washout.
   view.bloomSystem.setParameters({
-    threshold: 0.72,
+    threshold: view.hdrPlayfield ? 1.05 : 0.72,
     intensity: view.bloomIntensity,
     scatter: 0.52,
     clamp: 65472,
@@ -419,14 +443,18 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   for (let i = 0; i < maxBlocks; i++) {
     const bindGroup = device.createBindGroup({
       label: `block_bindgroup_${i}`, layout: view.pipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: view.vertexUniformBuffer, offset: i * 256, size: 208 } },
-        { binding: 1, resource: { buffer: view.fragmentUniformBuffer, offset: 0, size: UNIFORM_BUFFER_SIZES.FRAGMENT } },
-        { binding: 2, resource: createBlockTextureBindingView(view.blockTexture) },
-        { binding: 3, resource: view.blockSampler },
-        { binding: 5, resource: { buffer: view.dissolveBuffer } },
-        { binding: 6, resource: { buffer: view.fresnelParamsUniform } },
-      ],
+      entries: createBlockBindGroupEntries({
+        vertexUniformBuffer: view.vertexUniformBuffer,
+        vertexUniformOffset: i * 256,
+        fragmentUniformBuffer: view.fragmentUniformBuffer,
+        blockTexture: view.blockTexture,
+        blockSampler: view.blockSampler,
+        dissolveBuffer: view.dissolveBuffer,
+        fresnelParamsUniform: view.fresnelParamsUniform,
+        iblSpecularTexture: view.iblSpecularTexture,
+        iblBrdfLutTexture: view.iblBrdfLutTexture,
+        iblSampler: view.iblSampler,
+      }),
     });
     view.uniformBindGroup_CACHE.push(bindGroup);
   }
