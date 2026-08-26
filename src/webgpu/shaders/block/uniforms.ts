@@ -41,6 +41,7 @@ export const BLOCK_FRAGMENT_UNIFORM_OFFSETS = {
   midLevel: 188,
   trebleLevel: 192,
   comboEnergy: 196,
+  iblEnable: 200,
 } as const;
 
 export const BLOCK_FRAGMENT_UNIFORM_SIZE = 224;

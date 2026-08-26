@@ -56,14 +56,12 @@ export function showFloatingText(_view: ViewEventHost, text: string, subText: st
 export function triggerComboOverdrive(view: ViewEventHost, combo: number): void {
   view.visualEffects.triggerNeonBloomFlash(2.5 + combo * 0.3);
   view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
-  view.visualEffects.triggerSaturationBoost(1.5 + combo * 0.5);
   view.visualEffects.triggerBlackHole([0.5, 0.5]); // short duration pull
   view.visualEffects.triggerChromaticSpike(2.0); // NEON BRICKLAYER
 }
 
 export function triggerEnergyWave(view: ViewEventHost, combo: number): void {
   view.visualEffects.triggerWarpSurge(4.0 + combo * 1.0);
-  view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerSaturationBoost(0.8 + combo * 0.2);
   view.visualEffects.triggerAberration(1.5 + combo * 0.3);
   view.visualEffects.triggerHardDropAberrationPulse(1.5);
@@ -154,12 +152,6 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
 
   if (lines.length >= 4 || tSpin) {
     view.visualEffects.triggerSaturationBoost(1.5);
-    view.visualEffects.triggerHardDropAberrationPulse(1.5);
-  }
-
-  if (lines.length >= 4 || tSpin) {
-    view.visualEffects.triggerSaturationBoost(1.5);
-    view.visualEffects.triggerHardDropAberrationPulse(1.5);
   }
 
   // JUICE: Supernova Line Clear Laser
@@ -238,7 +230,6 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
         const uvY = 0.5 - (worldY - camY) / visibleHeight;
         view.visualEffects.triggerShockwave([0.5, uvY], 0.3, 0.15, 0.1, 3.0);
-        view.visualEffects.triggerGlitch(0.5);
       }
 
       if (lines.length === 4 && c === 5) {
@@ -248,7 +239,6 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
         const uvY = 0.5 - (worldY - camY) / visibleHeight;
         view.visualEffects.triggerShockwave([0.5, uvY], 0.4, 0.2, 0.1, 3.0);
-        view.visualEffects.triggerGlitch(1.0);
         view.visualEffects.triggerBlackHole([0.5, uvY]);
       }
     }
@@ -630,9 +620,7 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
     if (state.effectCounter !== view.lastEffectCounter && state.scoreEvent?.text) {
       showFloatingText(view, state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
 
-      if (state.scoreEvent.backToBack) {
-        view.visualEffects.triggerGlitch(0.3);
-      }
+      // Removed glitch on Back-to-Back to reduce vestibular load
 
       view.lastEffectCounter = state.effectCounter;
     }

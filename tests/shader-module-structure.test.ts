@@ -55,15 +55,27 @@ describe('authoritative block shader structure', () => {
   });
 
   it('createBlockBindGroupEntries supplies every active pipeline binding', () => {
+    const dummyTex = { createView: () => ({}) } as unknown as GPUTexture;
     const entries = createBlockBindGroupEntries({
       vertexUniformBuffer: {} as GPUBuffer,
       fragmentUniformBuffer: {} as GPUBuffer,
-      blockTexture: { createView: () => ({}) } as unknown as GPUTexture,
+      blockTexture: dummyTex,
       blockSampler: {} as GPUSampler,
       dissolveBuffer: {} as GPUBuffer,
       fresnelParamsUniform: {} as GPUBuffer,
+      iblSpecularTexture: dummyTex,
+      iblBrdfLutTexture: dummyTex,
+      iblSampler: {} as GPUSampler,
     });
     expect(entries.map((e) => e.binding)).toEqual(BLOCK_PIPELINE_BINDINGS);
-    expect(BLOCK_PIPELINE_BINDINGS).toEqual([0, 1, 2, 3, 5, 6]);
+    expect(BLOCK_PIPELINE_BINDINGS).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it('authored metal path uses split-sum IBL and does not clamp HDR before bloom', () => {
+    const { fragment } = createBlockShaders();
+    expect(fragment).toContain('splitSumSpecular');
+    expect(fragment).toContain('iblSpecular');
+    expect(fragment).toContain('clearcoatSpecular');
+    expect(fragment).not.toContain('clamp(finalColor');
   });
 });

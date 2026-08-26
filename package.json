@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "signaling:dev": "node scripts/dev-signaling-server.mjs"
+    "ibl:prefilter": "node scripts/prefilter-ibl.mjs"
   },
   "dependencies": {
     "gl-matrix": "^3.4.4"

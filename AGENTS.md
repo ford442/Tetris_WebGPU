@@ -16,7 +16,7 @@
 
 The project follows a classic **MVC** pattern:
 
-* **Model (`src/game.ts` + `src/game/`)**: Manages the 10×20 playfield, piece generation (7-bag randomizer), SRS rotation with wall kicks, collision detection, lock delay (extended placement / Infinity-like behavior with up to 25 resets), T-spin detection, scoring, combos, back-to-backs, and all-clears.
+* **Model (`src/game.ts` + `src/game/`)**: Manages the 10×20 playfield, piece generation (7-bag randomizer), SRS rotation with wall kicks, collision detection, lock delay (extended placement / Infinity-like behavior with up to 15 resets), T-spin detection, scoring, combos, back-to-backs, and all-clears.
 * **View (`src/viewWebGPU.ts` + `src/webgpu/` + `src/view/`)**: Handles render loop selection via `createView()`. Default path is WebGPU; WebGL2 and opt-in C++ (`src/viewCpp/EmscriptenView.ts`) implement the shared `IView` contract.
 * **Controller (`src/controller.ts` + `src/input/`)**: Bridges input and game logic. Runs a `requestAnimationFrame` loop, handles DAS/ARR (Delayed Auto Shift / Auto Repeat Rate), input buffering, SOCD cleaning, and touch controls for mobile devices.
 

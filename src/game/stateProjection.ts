@@ -25,7 +25,11 @@ export function buildPlayfieldProjection({
   if (playfield2D.length !== playfieldHeight) {
     playfield2D.length = 0;
     for (let y = 0; y < playfieldHeight; y++) {
-      playfield2D.push(new Array(playfieldWidth).fill(0));
+      const row: number[] = new Array(playfieldWidth);
+      for (let x = 0; x < playfieldWidth; x++) {
+        row[x] = 0;
+      }
+      playfield2D.push(row);
     }
   } else {
     // Ensure inner arrays match length

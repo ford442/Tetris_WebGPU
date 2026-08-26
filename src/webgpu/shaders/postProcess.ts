@@ -4,6 +4,7 @@
  */
 
 import { PostProcessUniformsWGSL } from '../postProcessUniforms.js';
+import { ShockwaveWGSL } from './wgsl/postprocess/shockwave.js';
 
 export const PostProcessShaders = () => {
     const vertex = `
@@ -29,6 +30,7 @@ export const PostProcessShaders = () => {
         @binding(2) @group(0) var myTexture: texture_2d<f32>;
         @binding(3) @group(0) var blockTexture: texture_2d<f32>;
 
+        ${ShockwaveWGSL}
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             // Lens Distortion (Barrel)
@@ -85,10 +87,6 @@ export const PostProcessShaders = () => {
             let hardDropBoostFromBuffer = uniforms.hardDropBoost;
             let level = uniforms.level;
 
-            // === EXPLICIT SHOCKWAVE EFFECT AS REQUESTED ===
-            // Shockwave Logic
-            var shockwaveAberration = 0.0;
-            var glassOverlay = 0.0;
 
             // Shockwave distortion effect for hard drops
             if (params.y > 0.0) {
@@ -146,16 +144,17 @@ export const PostProcessShaders = () => {
                     let distortion = cos(angle) * strength * 0.5 * (1.0 - time);
                     finalUV -= dir * distortion;
                 }
+            let center = uniforms.shockwaveCenter;
+            let time = uniforms.shockwaveTime;
+            let glitchStrength = uniforms.useGlitch;
+            let params = uniforms.shockwaveParams;
+            let hardDropBoostFromBuffer = uniforms.hardDropBoost;
+            let level = uniforms.level;
 
-                // Third ring (Ripple)
-                let echoRadius2 = radius * 0.6;
-                let echoDiff2 = abs(dist - echoRadius2);
-                if (echoDiff2 < width * 0.5) {
-                    let angle = (echoDiff2 / (width * 0.5)) * 3.14159;
-                    let distortion = cos(angle) * strength * 0.25 * (1.0 - time);
-                    finalUV -= dir * distortion;
-                }
-            }
+            let swResult = applyShockwave(finalUV, center, time, params, hardDropBoostFromBuffer, blockTexture, mySampler);
+            finalUV = swResult.uv;
+            var shockwaveAberration = swResult.aberration;
+            var glassOverlay = swResult.glassOverlay;
 
             // Global Chromatic Aberration (Glitch + Shockwave + Edge Vignette + Level Stress)
             let centeredFromCenter = uv - vec2<f32>(0.5);

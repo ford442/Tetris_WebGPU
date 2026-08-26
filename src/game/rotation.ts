@@ -35,7 +35,11 @@ export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, target
   if (temp.length !== length) {
     temp.length = 0;
     for (let i = 0; i < length; i++) {
-      temp.push(new Array(length).fill(0));
+      const row: number[] = new Array(length);
+      for (let j = 0; j < length; j++) {
+        row[j] = 0;
+      }
+      temp.push(row);
     }
   } else {
     // Ensure inner arrays match length

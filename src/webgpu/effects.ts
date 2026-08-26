@@ -272,6 +272,7 @@ export class VisualEffects {
 
 
     triggerParticleHit(strength: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.particleHitTimer += strength;
         this.particleHitTimer = Math.min(this.particleHitTimer, 2.0); // Cap
     }
@@ -374,6 +375,7 @@ export class VisualEffects {
     }
 
     triggerSaturationBoost(strength: number = 1.0): void {
+        if (this.reducedMotion) return;
         this.saturationBoost += strength;
         this.saturationBoost = Math.min(this.saturationBoost, 3.0);
     }
@@ -408,6 +410,7 @@ export class VisualEffects {
     }
 
     triggerGlitch(intensity: number): void {
+        if (this.reducedMotion) return;
         this.glitchIntensity = intensity;
     }
 
@@ -425,6 +428,7 @@ export class VisualEffects {
     }
 
     triggerBlackHole(center: number[]): void {
+        if (this.reducedMotion) return;
         this.blackHoleCenter = center;
         this.blackHoleTime = 0.01;
     }

@@ -27,11 +27,13 @@ export interface BlockBindGroupResources {
   blockSampler: GPUSampler;
   dissolveBuffer: GPUBuffer;
   fresnelParamsUniform: GPUBuffer;
+  iblSpecularTexture: GPUTexture;
+  iblBrdfLutTexture: GPUTexture;
+  iblSampler: GPUSampler;
 }
 
 /**
  * Build bind-group entries for the production block pipeline.
- * Bindings 0,1,2,3,5,6 — binding 4 is intentionally unused (historical gap).
  */
 export function createBlockBindGroupEntries(
   resources: BlockBindGroupResources,
@@ -56,8 +58,11 @@ export function createBlockBindGroupEntries(
     },
     { binding: 2, resource: createBlockTextureBindingView(resources.blockTexture) },
     { binding: 3, resource: resources.blockSampler },
+    { binding: 4, resource: resources.iblSpecularTexture.createView() },
     { binding: 5, resource: { buffer: resources.dissolveBuffer } },
     { binding: 6, resource: { buffer: resources.fresnelParamsUniform } },
+    { binding: 7, resource: resources.iblBrdfLutTexture.createView() },
+    { binding: 8, resource: resources.iblSampler },
   ];
 }
 

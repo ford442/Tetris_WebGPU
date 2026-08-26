@@ -128,6 +128,38 @@ export function renderPlayfieldBlocks(
     }
   }
 
+  // =========================================================================
+  // INCOMING GARBAGE TELEGRAPH (Versus Mode)
+  // Renders a red danger bar on the left side of the playfield indicating pending rows.
+  // =========================================================================
+  if (state.pendingGarbageRows && state.pendingGarbageRows > 0) {
+    const dangerColor = [1.0, 0.1, 0.1, 0.8]; // Pulsing red
+    const pulse = (Math.sin(Date.now() / 150) * 0.5 + 0.5) * 0.5 + 0.5; // Fast pulse
+    dangerColor[3] *= pulse;
+
+    for (let r = 0; r < state.pendingGarbageRows; r++) {
+      if (blockIndex >= uniformBindGroup_CACHE.length) break;
+
+      const rowIdx = 19 - r; // Start from bottom
+      const colIdx = -1; // Just outside the left border
+
+      _f32_4[0] = dangerColor[0]; _f32_4[1] = dangerColor[1]; _f32_4[2] = dangerColor[2]; _f32_4[3] = dangerColor[3];
+
+      Matrix.mat4.identity(MODELMATRIX);
+      Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, [worldX(visualX + colIdx), boardWorldY(visualY + rowIdx), 0]);
+      Matrix.mat4.multiply(MODELMATRIX, vpMatrix as Matrix.mat4, MODELMATRIX);
+
+      Matrix.mat4.identity(NORMALMATRIX);
+
+      batchBuffer.set(MODELMATRIX, batchOffset);
+      batchBuffer.set(NORMALMATRIX, batchOffset + 16);
+      batchBuffer.set(_f32_4, batchOffset + 32);
+
+      uniformBindGroup_ARRAY[arrayLength++] = uniformBindGroup_CACHE[blockIndex++];
+      batchOffset += 36;
+    }
+  }
+
   // Single large buffer write instead of many small ones
   if (batchOffset > 0) {
     device.queue.writeBuffer(vertexUniformBuffer, 0, batchBuffer.subarray(0, batchOffset));
@@ -388,6 +420,9 @@ export function renderPlayfieldBorder(
   NORMALMATRIX: Matrix.mat4,
   dissolveBuffer: GPUBuffer,
   fresnelParamsUniform: GPUBuffer,
+  iblSpecularTexture: GPUTexture,
+  iblBrdfLutTexture: GPUTexture,
+  iblSampler: GPUSampler,
   worldOffsetX = 0,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
@@ -417,6 +452,9 @@ export function renderPlayfieldBorder(
           blockSampler,
           dissolveBuffer,
           fresnelParamsUniform,
+          iblSpecularTexture,
+          iblBrdfLutTexture,
+          iblSampler,
         }),
       });
 

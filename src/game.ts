@@ -479,6 +479,7 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.modeShowHighScore = hud.showHighScore;
     this.gameStateCache.modeHighScoreLabel = hud.highScoreLabel;
     this.gameStateCache.elapsedMs = this.modeElapsedMs;
+    this.gameStateCache.pendingGarbageRows = this.pendingGarbageRows;
 
     this.gameStateCache.playfield = playfield2D;
     this.gameStateCache.lockTimer = this.lockTimer;

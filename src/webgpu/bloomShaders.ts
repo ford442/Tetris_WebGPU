@@ -409,24 +409,23 @@ fn vsMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = input.uv;
 
-  // Sample original color + alpha (glass blocks need alpha for video portal reveal)
   let originalSample = textureSample(originalTexture, originalSampler, uv);
   let original = originalSample.rgb;
   let alpha = originalSample.a;
 
-  // Sample bloom (already upsampled to full res)
   let bloom = textureSample(bloomTexture, bloomSampler, uv).rgb;
 
-  // Screen-blend instead of pure additive: result = a + b*(1-a).
-  // When original approaches 1.0, bloom contribution approaches 0,
-  // keeping the result in [0,1] and preventing white-out clipping.
-  var result = original + bloom * params.intensity * (1.0 - original);
+  // HDR additive bloom, then ACES. Threshold already isolated specular peaks.
+  var hdr = original + bloom * params.intensity;
+  hdr = min(hdr, vec3<f32>(params.clamp));
 
-  // Reinhard tone mapping: maps [0,∞) → [0,1) asymptotically,
-  // preserving relative brightness ratios without harsh clipping.
-  result = result / (result + vec3<f32>(1.0));
+  let a = 2.51;
+  let b = 0.03;
+  let c = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  var mapped = clamp((hdr * (a * hdr + b)) / (hdr * (c * hdr + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
 
-  // Canvas uses alphaMode: 'premultiplied' — preserve glass transparency.
-  return vec4<f32>(result * alpha, alpha);
+  return vec4<f32>(mapped * alpha, alpha);
 }
 `;

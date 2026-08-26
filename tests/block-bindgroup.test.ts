@@ -21,18 +21,22 @@ describe('block bind group layout', () => {
   });
 
   it('createBlockBindGroupEntries matches shader binding indices', () => {
+    const dummyTex = { createView: () => ({}) } as unknown as GPUTexture;
     const entries = createBlockBindGroupEntries({
       vertexUniformBuffer: {} as GPUBuffer,
       vertexUniformOffset: 256,
       fragmentUniformBuffer: {} as GPUBuffer,
-      blockTexture: { createView: () => ({}) } as unknown as GPUTexture,
+      blockTexture: dummyTex,
       blockSampler: {} as GPUSampler,
       dissolveBuffer: {} as GPUBuffer,
       fresnelParamsUniform: {} as GPUBuffer,
+      iblSpecularTexture: dummyTex,
+      iblBrdfLutTexture: dummyTex,
+      iblSampler: {} as GPUSampler,
     });
 
     expect(entries).toHaveLength(BLOCK_PIPELINE_BINDINGS.length);
-    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 5, 6]);
+    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     const vertexEntry = entries[0].resource as GPUBufferBinding;
     expect(vertexEntry.offset).toBe(256);
   });
