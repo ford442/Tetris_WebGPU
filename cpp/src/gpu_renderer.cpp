@@ -36,6 +36,13 @@ struct UniformData {
   float eye_pos[4];
 };
 
+struct PostProcessUniformData {
+  float time;
+  float intensity;
+  float aberration;
+  float pad1;
+};
+
 struct GpuState {
   WGPUInstance instance = nullptr;
   WGPUDevice device = nullptr;
@@ -53,6 +60,16 @@ struct GpuState {
   WGPUSampler block_sampler = nullptr;
   WGPUTexture depth_texture = nullptr;
   WGPUTextureView depth_view = nullptr;
+
+  WGPUTexture offscreen_texture = nullptr;
+  WGPUTextureView offscreen_view = nullptr;
+
+  WGPURenderPipeline post_pipeline = nullptr;
+  WGPUBindGroup post_bind_group = nullptr;
+  WGPUBindGroupLayout post_bind_group_layout = nullptr;
+  WGPUSampler post_sampler = nullptr;
+  WGPUBuffer post_uniform_buffer = nullptr;
+
   WGPUTextureFormat surface_format = WGPUTextureFormat_BGRA8Unorm;
   bool draw_blocks = false;
   bool texture_ready = false;
@@ -112,7 +129,7 @@ static WGPUBuffer create_buffer(const void* data, size_t size, WGPUBufferUsage u
   return buffer;
 }
 
-static void release_depth() {
+static void release_render_targets() {
   if (g_gpu.depth_view) {
     wgpuTextureViewRelease(g_gpu.depth_view);
     g_gpu.depth_view = nullptr;
@@ -121,18 +138,33 @@ static void release_depth() {
     wgpuTextureRelease(g_gpu.depth_texture);
     g_gpu.depth_texture = nullptr;
   }
+  if (g_gpu.offscreen_view) {
+    wgpuTextureViewRelease(g_gpu.offscreen_view);
+    g_gpu.offscreen_view = nullptr;
+  }
+  if (g_gpu.offscreen_texture) {
+    wgpuTextureRelease(g_gpu.offscreen_texture);
+    g_gpu.offscreen_texture = nullptr;
+  }
 }
 
-static void create_depth() {
-  release_depth();
+static void create_render_targets() {
+  release_render_targets();
   if (!g_gpu.device || g_gpu.width <= 0 || g_gpu.height <= 0) return;
 
-  WGPUTextureDescriptor tex_desc = {};
-  tex_desc.size = {static_cast<uint32_t>(g_gpu.width), static_cast<uint32_t>(g_gpu.height), 1};
-  tex_desc.format = WGPUTextureFormat_Depth24Plus;
-  tex_desc.usage = WGPUTextureUsage_RenderAttachment;
-  g_gpu.depth_texture = wgpuDeviceCreateTexture(g_gpu.device, &tex_desc);
+  WGPUTextureDescriptor depth_desc = {};
+  depth_desc.size = {static_cast<uint32_t>(g_gpu.width), static_cast<uint32_t>(g_gpu.height), 1};
+  depth_desc.format = WGPUTextureFormat_Depth24Plus;
+  depth_desc.usage = WGPUTextureUsage_RenderAttachment;
+  g_gpu.depth_texture = wgpuDeviceCreateTexture(g_gpu.device, &depth_desc);
   g_gpu.depth_view = wgpuTextureCreateView(g_gpu.depth_texture, nullptr);
+
+  WGPUTextureDescriptor offscreen_desc = {};
+  offscreen_desc.size = {static_cast<uint32_t>(g_gpu.width), static_cast<uint32_t>(g_gpu.height), 1};
+  offscreen_desc.format = g_gpu.surface_format;
+  offscreen_desc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
+  g_gpu.offscreen_texture = wgpuDeviceCreateTexture(g_gpu.device, &offscreen_desc);
+  g_gpu.offscreen_view = wgpuTextureCreateView(g_gpu.offscreen_texture, nullptr);
 }
 
 static void configure_surface() {
@@ -164,7 +196,7 @@ static void create_surface() {
   surf_desc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&from_canvas);
   g_gpu.surface = wgpuInstanceCreateSurface(g_gpu.instance, &surf_desc);
   configure_surface();
-  create_depth();
+  create_render_targets();
 }
 
 static void get_piece_color(int index, float* rgba) {
@@ -259,6 +291,18 @@ static void update_uniforms(float dt) {
   uniforms.eye_pos[2] = kCameraZ;
 
   wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.uniform_buffer, 0, &uniforms, sizeof(uniforms));
+
+  static float time_acc = 0.0f;
+  time_acc += dt;
+
+  PostProcessUniformData post_uniforms = {};
+  post_uniforms.time = time_acc;
+  post_uniforms.intensity = 1.0f; // Could be mapped to a game state param later
+  post_uniforms.aberration = 0.01f; // Base aberration
+
+  if (g_gpu.post_uniform_buffer) {
+    wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.post_uniform_buffer, 0, &post_uniforms, sizeof(post_uniforms));
+  }
 }
 
 // kBlockWgsl (tetris::shaders namespace) generated from cpp/src/shaders/block/block.wgsl
@@ -314,6 +358,45 @@ static bool create_placeholder_block_texture() {
   return g_gpu.block_texture_view && g_gpu.block_sampler;
 }
 
+static bool recreate_post_bind_group() {
+  if (g_gpu.post_bind_group) {
+    wgpuBindGroupRelease(g_gpu.post_bind_group);
+    g_gpu.post_bind_group = nullptr;
+  }
+  if (!g_gpu.post_pipeline || !g_gpu.post_uniform_buffer || !g_gpu.offscreen_view) {
+    return false;
+  }
+
+  if (!g_gpu.post_sampler) {
+    WGPUSamplerDescriptor samp_desc = {};
+    samp_desc.magFilter = WGPUFilterMode_Linear;
+    samp_desc.minFilter = WGPUFilterMode_Linear;
+    samp_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+    g_gpu.post_sampler = wgpuDeviceCreateSampler(g_gpu.device, &samp_desc);
+  }
+
+  WGPUBindGroupLayout layout = g_gpu.post_bind_group_layout;
+  if (!layout) {
+    layout = wgpuRenderPipelineGetBindGroupLayout(g_gpu.post_pipeline, 0);
+  }
+
+  WGPUBindGroupEntry entries[3] = {};
+  entries[0].binding = 0;
+  entries[0].buffer = g_gpu.post_uniform_buffer;
+  entries[0].size = sizeof(PostProcessUniformData);
+  entries[1].binding = 1;
+  entries[1].sampler = g_gpu.post_sampler;
+  entries[2].binding = 2;
+  entries[2].textureView = g_gpu.offscreen_view;
+
+  WGPUBindGroupDescriptor bg_desc = {};
+  bg_desc.layout = layout;
+  bg_desc.entryCount = 3;
+  bg_desc.entries = entries;
+  g_gpu.post_bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
+  return g_gpu.post_bind_group != nullptr;
+}
+
 static bool recreate_bind_group() {
   if (g_gpu.bind_group) {
     wgpuBindGroupRelease(g_gpu.bind_group);
@@ -343,6 +426,61 @@ static bool recreate_bind_group() {
   bg_desc.entries = entries;
   g_gpu.bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
   return g_gpu.bind_group != nullptr;
+}
+
+static bool create_post_pipeline() {
+  if (g_gpu.post_pipeline) return true;
+
+  WGPUShaderModule shader = create_shader(tetris::shaders::kPostprocessWgsl);
+  if (!shader) return false;
+
+  WGPUBindGroupLayoutEntry bgl_entries[3] = {};
+  bgl_entries[0].binding = 0;
+  bgl_entries[0].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+
+  bgl_entries[1].binding = 1;
+  bgl_entries[1].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[1].sampler.type = WGPUSamplerBindingType_Filtering;
+
+  bgl_entries[2].binding = 2;
+  bgl_entries[2].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[2].texture.sampleType = WGPUTextureSampleType_Float;
+  bgl_entries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+  WGPUBindGroupLayoutDescriptor bgl_desc = {};
+  bgl_desc.entryCount = 3;
+  bgl_desc.entries = bgl_entries;
+  g_gpu.post_bind_group_layout = wgpuDeviceCreateBindGroupLayout(g_gpu.device, &bgl_desc);
+
+  WGPUPipelineLayoutDescriptor layout_desc = {};
+  layout_desc.bindGroupLayoutCount = 1;
+  layout_desc.bindGroupLayouts = &g_gpu.post_bind_group_layout;
+  WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(g_gpu.device, &layout_desc);
+
+  WGPUColorTargetState color_target = {};
+  color_target.format = g_gpu.surface_format;
+  color_target.writeMask = WGPUColorWriteMask_All;
+
+  WGPUFragmentState fragment = {};
+  fragment.module = shader;
+  fragment.entryPoint = make_stringview("fs_main");
+  fragment.targetCount = 1;
+  fragment.targets = &color_target;
+
+  WGPURenderPipelineDescriptor pipe_desc = {};
+  pipe_desc.layout = layout;
+  pipe_desc.vertex.module = shader;
+  pipe_desc.vertex.entryPoint = make_stringview("vs_main");
+  pipe_desc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+  pipe_desc.multisample.count = 1;
+  pipe_desc.fragment = &fragment;
+
+  g_gpu.post_pipeline = wgpuDeviceCreateRenderPipeline(g_gpu.device, &pipe_desc);
+
+  wgpuPipelineLayoutRelease(layout);
+  wgpuShaderModuleRelease(shader);
+  return g_gpu.post_pipeline != nullptr;
 }
 
 static bool create_pipeline() {
@@ -481,10 +619,11 @@ static bool create_mesh_buffers() {
   g_gpu.index_buffer = create_buffer(cube_indices, sizeof(cube_indices), WGPUBufferUsage_Index);
   g_gpu.instance_buffer = create_buffer(nullptr, sizeof(BlockInstance) * kMaxInstances, WGPUBufferUsage_Vertex);
   g_gpu.uniform_buffer = create_buffer(nullptr, sizeof(UniformData), WGPUBufferUsage_Uniform);
+  g_gpu.post_uniform_buffer = create_buffer(nullptr, sizeof(PostProcessUniformData), WGPUBufferUsage_Uniform);
 
   if (!create_placeholder_block_texture()) return false;
-  return recreate_bind_group() &&
-         g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer;
+  return recreate_bind_group() && recreate_post_bind_group() &&
+         g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer && g_gpu.post_uniform_buffer;
 }
 
 } // namespace
@@ -521,7 +660,7 @@ int gpu_renderer_init(const char* canvas_selector, int width, int height) {
   g_gpu.active = true;
   g_gpu.draw_blocks = false;
 
-  if (create_pipeline() && create_mesh_buffers()) {
+  if (create_pipeline() && create_post_pipeline() && create_mesh_buffers()) {
     g_gpu.draw_blocks = true;
     EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU instanced textured block pipeline ready'); });
   } else {
@@ -537,10 +676,17 @@ void gpu_renderer_resize(int width, int height) {
   g_gpu.width = width > 0 ? width : 1;
   g_gpu.height = height > 0 ? height : 1;
   configure_surface();
-  create_depth();
+  create_render_targets();
+  recreate_post_bind_group();
 }
 
 void gpu_renderer_shutdown(void) {
+  if (g_gpu.post_bind_group) wgpuBindGroupRelease(g_gpu.post_bind_group);
+  if (g_gpu.post_bind_group_layout) wgpuBindGroupLayoutRelease(g_gpu.post_bind_group_layout);
+  if (g_gpu.post_uniform_buffer) wgpuBufferRelease(g_gpu.post_uniform_buffer);
+  if (g_gpu.post_pipeline) wgpuRenderPipelineRelease(g_gpu.post_pipeline);
+  if (g_gpu.post_sampler) wgpuSamplerRelease(g_gpu.post_sampler);
+
   if (g_gpu.bind_group) wgpuBindGroupRelease(g_gpu.bind_group);
   if (g_gpu.bind_group_layout) wgpuBindGroupLayoutRelease(g_gpu.bind_group_layout);
   if (g_gpu.uniform_buffer) wgpuBufferRelease(g_gpu.uniform_buffer);
@@ -549,7 +695,7 @@ void gpu_renderer_shutdown(void) {
   if (g_gpu.vertex_buffer) wgpuBufferRelease(g_gpu.vertex_buffer);
   if (g_gpu.pipeline) wgpuRenderPipelineRelease(g_gpu.pipeline);
   release_block_texture();
-  release_depth();
+  release_render_targets();
   if (g_gpu.surface) wgpuSurfaceRelease(g_gpu.surface);
   if (g_gpu.queue) wgpuQueueRelease(g_gpu.queue);
   if (g_gpu.device) wgpuDeviceRelease(g_gpu.device);
@@ -579,11 +725,12 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   WGPUTextureView color_view = wgpuTextureCreateView(surface_tex.texture, nullptr);
   WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(g_gpu.device, nullptr);
 
-  WGPURenderPassColorAttachment color_att = {};
-  color_att.view = color_view;
-  color_att.loadOp = WGPULoadOp_Clear;
-  color_att.storeOp = WGPUStoreOp_Store;
-  color_att.clearValue = kClearColorTransparent;
+  // Pass 1: Render blocks to offscreen texture
+  WGPURenderPassColorAttachment block_color_att = {};
+  block_color_att.view = g_gpu.offscreen_view;
+  block_color_att.loadOp = WGPULoadOp_Clear;
+  block_color_att.storeOp = WGPUStoreOp_Store;
+  block_color_att.clearValue = kClearColorTransparent;
 
   WGPURenderPassDepthStencilAttachment depth_att = {};
   depth_att.view = g_gpu.depth_view;
@@ -591,29 +738,52 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   depth_att.depthStoreOp = WGPUStoreOp_Store;
   depth_att.depthClearValue = 1.0f;
 
-  WGPURenderPassDescriptor pass_desc = {};
-  pass_desc.colorAttachmentCount = 1;
-  pass_desc.colorAttachments = &color_att;
-  pass_desc.depthStencilAttachment = g_gpu.depth_view ? &depth_att : nullptr;
+  WGPURenderPassDescriptor block_pass_desc = {};
+  block_pass_desc.colorAttachmentCount = 1;
+  block_pass_desc.colorAttachments = &block_color_att;
+  block_pass_desc.depthStencilAttachment = g_gpu.depth_view ? &depth_att : nullptr;
 
-  WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+  WGPURenderPassEncoder block_pass = wgpuCommandEncoderBeginRenderPass(encoder, &block_pass_desc);
 
   if (instance_count > 0 && g_gpu.draw_blocks && g_gpu.pipeline) {
-    wgpuRenderPassEncoderSetPipeline(pass, g_gpu.pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, g_gpu.bind_group, 0, nullptr);
-    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, g_gpu.vertex_buffer, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderSetVertexBuffer(pass, 1, g_gpu.instance_buffer, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderSetIndexBuffer(pass, g_gpu.index_buffer, WGPUIndexFormat_Uint16, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderDrawIndexed(pass, 36, static_cast<uint32_t>(instance_count), 0, 0, 0);
+    wgpuRenderPassEncoderSetPipeline(block_pass, g_gpu.pipeline);
+    wgpuRenderPassEncoderSetBindGroup(block_pass, 0, g_gpu.bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetVertexBuffer(block_pass, 0, g_gpu.vertex_buffer, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderSetVertexBuffer(block_pass, 1, g_gpu.instance_buffer, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderSetIndexBuffer(block_pass, g_gpu.index_buffer, WGPUIndexFormat_Uint16, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderDrawIndexed(block_pass, 36, static_cast<uint32_t>(instance_count), 0, 0, 0);
+  }
+  wgpuRenderPassEncoderEnd(block_pass);
+  wgpuRenderPassEncoderRelease(block_pass);
+
+  // Pass 2: Post-processing to surface texture
+  WGPURenderPassColorAttachment post_color_att = {};
+  post_color_att.view = color_view;
+  post_color_att.loadOp = WGPULoadOp_Clear;
+  post_color_att.storeOp = WGPUStoreOp_Store;
+  post_color_att.clearValue = kClearColorTransparent;
+
+  WGPURenderPassDescriptor post_pass_desc = {};
+  post_pass_desc.colorAttachmentCount = 1;
+  post_pass_desc.colorAttachments = &post_color_att;
+  // No depth attachment for post-process pass
+
+  WGPURenderPassEncoder post_pass = wgpuCommandEncoderBeginRenderPass(encoder, &post_pass_desc);
+
+  if (g_gpu.post_pipeline && g_gpu.post_bind_group) {
+    wgpuRenderPassEncoderSetPipeline(post_pass, g_gpu.post_pipeline);
+    wgpuRenderPassEncoderSetBindGroup(post_pass, 0, g_gpu.post_bind_group, 0, nullptr);
+    wgpuRenderPassEncoderDraw(post_pass, 3, 1, 0, 0);
   }
 
-  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderEnd(post_pass);
+  wgpuRenderPassEncoderRelease(post_pass);
+
   WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, nullptr);
   wgpuQueueSubmit(g_gpu.queue, 1, &cmd);
 
   wgpuCommandBufferRelease(cmd);
   wgpuCommandEncoderRelease(encoder);
-  wgpuRenderPassEncoderRelease(pass);
   wgpuTextureViewRelease(color_view);
   wgpuTextureRelease(surface_tex.texture);
   wgpuSurfacePresent(g_gpu.surface);
