@@ -3,6 +3,8 @@
  * Large hit targets, swipe gestures on the playfield, optional haptics.
  */
 
+import { INPUT_CONFIG } from '../config/gameConfig.js';
+
 export type TouchAction = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold' | 'pause';
 
 export interface TouchControlConfig {
@@ -215,7 +217,7 @@ export class TouchControls {
 
   private startRepeat(action: TouchAction): void {
     this.stopRepeat();
-    this.repeatTimer = setInterval(() => this.fire(action, 4), 50);
+    this.repeatTimer = setInterval(() => this.fire(action, 4), INPUT_CONFIG.ARR || 16);
   }
 
   private attachEventListeners(): void {
@@ -232,7 +234,7 @@ export class TouchControls {
       const press = () => {
         this.fire(action, haptic);
         if (repeat && (action === 'left' || action === 'right' || action === 'down')) {
-          setTimeout(() => this.startRepeat(action), 130);
+          setTimeout(() => this.startRepeat(action), INPUT_CONFIG.DAS);
         }
       };
 

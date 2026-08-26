@@ -104,9 +104,9 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 | Feature | Details |
 |---------|---------|
 | Rotation | SRS (Standard Rotation System) with wall kicks |
-| DAS | 130ms delay, 10ms repeat rate |
-| Lock delay | Extended placement with up to 20 resets (coyote time) |
-| Input buffer | 150ms window for failed actions |
+| DAS | 100ms delay, 0ms repeat rate |
+| Lock delay | Extended placement with up to 15 resets (coyote time) |
+| Input buffer | 50ms window for failed actions |
 | SOCD | Last-input-priority cleaning |
 | Scoring | Single/Double/Triple/Tetris + T-Spin + Combo + B2B + All-Clear |
 
