@@ -100,6 +100,7 @@ export const PostProcessShaders = () => {
                 // NEON BRICKLAYER: Use speed from params.w
                 let speed = max(params.w, 0.1);
                 let radius = time * speed;
+                // Shockwave params implemented for distortion effect
                 let width = params.x * 1.5; // JUICE: Wider shockwave
                 // NEW: explicitly apply the Neon Bricklayer Hard Drop Boost to shockwave intensity!
                 let strength = (params.y * 1.55) * (1.0 + hardDropBoostFromBuffer * 0.6);
