@@ -125,7 +125,7 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
         case MATERIAL_MODE_COLOR_SIGNAL: {
             // Color signal: gold metal has high R+G, lower B
             let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-            metalMask = smoothstep(0.50, 1.0, goldSignal);
+            metalMask = smoothstep(0.40, 1.0, goldSignal);
         }
         case MATERIAL_MODE_WARMTH: {
             let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));

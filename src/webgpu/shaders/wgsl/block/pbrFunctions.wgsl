@@ -67,9 +67,24 @@ fn proceduralEnvReflect(R: vec3f, time: f32) -> vec3f {
     let Rn = normalize(R);
     let up = Rn.y * 0.5 + 0.5;
     var env = mix(vec3f(0.20, 0.11, 0.045), vec3f(1.25, 0.98, 0.62), up);
-    let key = pow(max(dot(Rn, normalize(vec3f(0.28, 0.62, 0.72))), 0.0), 48.0);
-    let fill = pow(max(dot(Rn, normalize(vec3f(-0.55, 0.35, 0.55))), 0.0), 14.0);
-    let rim = pow(max(dot(Rn, normalize(vec3f(0.1, 0.05, -0.9))), 0.0), 10.0);
+
+    let k_dot = max(dot(Rn, normalize(vec3f(0.28, 0.62, 0.72))), 0.0);
+    let k2 = k_dot * k_dot;
+    let k4 = k2 * k2;
+    let k8 = k4 * k4;
+    let k16 = k8 * k8;
+    let key = k16 * k16 * k16;
+
+    let f_dot = max(dot(Rn, normalize(vec3f(-0.55, 0.35, 0.55))), 0.0);
+    let f2 = f_dot * f_dot;
+    let f4 = f2 * f2;
+    let fill = f4 * f4 * f4 * f2;
+
+    let r_dot = max(dot(Rn, normalize(vec3f(0.1, 0.05, -0.9))), 0.0);
+    let r2 = r_dot * r_dot;
+    let r4 = r2 * r2;
+    let rim = r4 * r4 * r2;
+
     env += vec3f(5.8, 4.6, 2.8) * key;
     env += vec3f(1.6, 1.05, 0.5) * fill;
     env += vec3f(1.1, 0.8, 0.45) * rim;

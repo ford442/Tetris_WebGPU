@@ -1,0 +1,12 @@
+--- src/game/rotation.ts
++++ src/game/rotation.ts
+@@ -25,7 +25,8 @@
+   if (temp.length !== length) {
+     temp.length = 0;
+     for (let i = 0; i < length; i++) {
+-      const row: number[] = new Array(length);
++      const row: number[] = [];
++      row.length = length;
+       for (let j = 0; j < length; j++) {
+         row[j] = 0;
+       }
