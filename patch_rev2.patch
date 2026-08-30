@@ -1,0 +1,12 @@
+--- src/game/stateProjection.ts
++++ src/game/stateProjection.ts
+@@ -19,8 +19,7 @@
+   if (playfield2D.length !== playfieldHeight) {
+     playfield2D.length = 0;
+     for (let y = 0; y < playfieldHeight; y++) {
+-      const row: number[] = [];
+-      row.length = playfieldWidth;
++      const row: number[] = new Array(playfieldWidth);
+       for (let x = 0; x < playfieldWidth; x++) {
+         row[x] = 0;
+       }
