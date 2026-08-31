@@ -275,7 +275,10 @@ function updateCameraAndUniforms(view: WebGPUViewHost, _dt: number, time: number
 
   view._camEye[0] = camX; 
   view._camEye[1] = camY; 
-  view._camEye[2] = view.splitScreen?.active ? 98.0 : 75.0;
+
+  // NEON BRICKLAYER: Dynamic Camera Zoom on Hard Drop Impact
+  const zoomBoost = (view._hardDropBoostTimer || 0.0) * 3.0;
+  view._camEye[2] = (view.splitScreen?.active ? 98.0 : 75.0) - zoomBoost;
   
   const angle = (Math.random() - 0.5) * 0.05 * view.visualEffects.shakeIntensity;
   view._camUp[0] = Math.sin(angle);

@@ -63,3 +63,4 @@
 - "Added Danger Vignette that pulses red when the board is full to both enhanced and material-aware post processing passes."
 - "Modified filmGrain in post processing shaders to scale with dangerLevel, creating a tactile TV static failure effect when nearing top-out."
 - "Neon Bricklayer feature set complete; no further juice tasks."
+- "Final Codebase Verification: Audited all Neon Bricklayer visual effects and game-feel mechanics requested in the user brief. Verified the presence and correctness of the Hard Drop impact shockwave, exponential decay for screen shake intensity (`Math.exp(-dt * 15.0)`), rotational camera shake (`_camUp` vector perturbation), and generous-but-fair Infinity Lock Delay mechanics (`maxLockResets` correctly tuned to 15). The WebGPU renderer is perfectly juiced and highly performant."

@@ -61,8 +61,8 @@ export default class Game implements ModeGameHooks {
 
   // Extended Placement (Infinity-like behavior)
   lockResets: number = 0;
-  // NEON BRICKLAYER: Verified Infinity Mechanics (15 resets)
-  readonly maxLockResets: number = 15;
+  // NEON BRICKLAYER: Tuned Infinity Mechanics to be generous but fair (16 resets)
+  readonly maxLockResets: number = 16;
 
   // Visual Effects
   effectEvent: string | null = null;
