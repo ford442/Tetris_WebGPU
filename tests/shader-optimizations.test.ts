@@ -56,7 +56,7 @@ it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('var finalAlpha = 1.0;');
   // Opacity uses hard metal mask derived from baked texColor.a.
-  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMaskForAlpha);');
+  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
 });
 
 it('composes gold frame and tinted glass using geometric UV frame mask', () => {
