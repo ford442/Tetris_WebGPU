@@ -109,11 +109,11 @@
 
             let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
             let crystalBright = smoothstep(0.15, 0.90, luma);
-            let crystalHi = max(luma - 0.65, 0.0) * 2.5;
-            let metalColor = texColor.rgb * 1.38 + vec3f(0.04, 0.018, 0.0);
-            let glassColor = texColor.rgb * (0.70 + crystalBright * 0.30)
-                           + vColor.rgb * 0.22 * crystalBright
-                           + vec3f(crystalHi * 0.40);
+            let crystalHi = max(luma - 0.55, 0.0) * 3.0;
+            let metalColor = texColor.rgb * 1.5 + vec3f(0.08, 0.03, 0.0);
+            let glassColor = texColor.rgb * (0.60 + crystalBright * 0.40)
+                           + vColor.rgb * 0.35 * crystalBright
+                           + vec3f(crystalHi * 0.50);
             // Authored block.png blend: glass interior vs metal frame, driven by baked mask.
             // (When not using authored sampling, this value is unused.)
             let authoredBase = mix(glassColor, metalColor, metalMaskBakedSoft);
