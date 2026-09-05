@@ -65,7 +65,7 @@ it('composes gold frame and tinted glass using geometric UV frame mask', () => {
   expect(fragment).toContain('useAuthoredSampling');
   // Outer ring force is slightly expanded to reduce halo risk.
   expect(fragment).toContain('borderThickness = 0.14');
-  expect(fragment).toContain('let metalColor = texColor.rgb * 1.38');
+  expect(fragment).toContain('let metalColor = texColor.rgb * 1.5');
   expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
   // Baked mask drives opacity (no square UV metal mask blending anymore).
   expect(fragment).toContain('let metalSoftBaked0 = clamp(texColor.a, 0.0, 1.0);');

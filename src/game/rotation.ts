@@ -33,13 +33,13 @@ export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, target
 
   // Initialize or resize target array avoiding GC if possible
   if (temp.length !== length) {
-    temp.length = 0;
+    temp.length = length;
     for (let i = 0; i < length; i++) {
       const row: number[] = new Array(length);
       for (let j = 0; j < length; j++) {
         row[j] = 0;
       }
-      temp.push(row);
+      temp[i] = row;
     }
   } else {
     // Ensure inner arrays match length
