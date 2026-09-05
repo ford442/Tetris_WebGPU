@@ -117,6 +117,7 @@ uiContainer.innerHTML = `
             <button id="bloom-button">BLOOM: ON</button>
             <button id="wire-button">WIRE: OFF</button>
             <button id="video-toggle" class="toggle-btn">VIDEO: ON</button>
+            <button id="image-sampled-theme" class="toggle-btn">HI-RES THEME</button>
           </div>
           
           <div class="panel-box music-controls">
@@ -544,6 +545,17 @@ void (async () => {
     view.applyGameSettings?.(settingsUI.settings);
     updateVideoToggle(next);
     videoToggle.blur();
+  });
+
+  document.getElementById('image-sampled-theme')!.addEventListener('click', (e) => {
+      localStorage.removeItem('tetris_theme_class');
+      localStorage.setItem('tetris_theme_class', 'image-sampled-theme');
+      localStorage.setItem('tetris_theme_name', 'imageSampled');
+      document.body.className = 'image-sampled-theme';
+      view.setTheme('imageSampled');
+      view.setMaterialTheme?.('imageSampled', 1);
+      setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
+      (e.target as HTMLButtonElement).blur();
   });
 
   // -------------------------------------------------------------------
