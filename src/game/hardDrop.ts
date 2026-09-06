@@ -7,8 +7,11 @@ export interface HardDropResult {
   tSpin: boolean;
 }
 
+import type { RunStats } from './runStats.js';
+
 export interface HardDropHost {
   activPiece: Piece;
+  runStats: RunStats;
   isTSpin: boolean;
   effectEvent: string | null;
   effectCounter: number;
@@ -68,6 +71,8 @@ export async function performHardDrop(
     host.lastDropPos.y = host.activPiece.y;
   }
   host.lastDropDistance = distance;
+
+  host.runStats.recordHardDrop();
 
   host.lockPiece();
   result.locked = true;

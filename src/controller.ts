@@ -668,6 +668,7 @@ export default class Controller {
   }
 
   async performHardDropAsync(): Promise<void> {
+      this.game.runStats.recordHardDrop();
       const ghostY = this.game.getGhostY();
       const dropDist = ghostY - this.game.activPiece.y;
       const currentX = this.game.activPiece.x;
