@@ -164,6 +164,9 @@ export const BackgroundShaders = () => {
           let warningColor = vec3<f32>(1.5, 0.3, 0.0); // Aggressive Red-Orange
           let calmBlue = vec3<f32>(0.0, 0.5, 1.0); // Calm blue at Level 1
 
+          let calmCyan = vec3<f32>(0.0, 1.0, 1.0); // Calm cyan
+
+
           // Shift aggressively with level
           // Level 0-5: Blue/Cyan -> Purple
           // Level 5-10: Purple -> Red/Orange
@@ -171,8 +174,8 @@ export const BackgroundShaders = () => {
           // Smooth mapping from level 1 to 10
           let levelRatio = clamp((level - 1.0) / 9.0, 0.0, 1.0);
 
-          neonCyan = mix(calmBlue, dangerColor, levelRatio);
-          neonBlue = mix(vec3<f32>(0.1, 0.2, 1.0), vec3<f32>(0.8, 0.0, 0.0), levelRatio);
+          neonCyan = mix(calmCyan, dangerColor, levelRatio);
+          neonBlue = mix(calmBlue, vec3<f32>(0.8, 0.0, 0.0), levelRatio);
           neonPurple = mix(vec3<f32>(0.3, 0.1, 0.8), warningColor, levelRatio);
 
           let gridColor = mix(neonCyan, mix(neonPurple, neonBlue, colorCycle), colorCycle);
