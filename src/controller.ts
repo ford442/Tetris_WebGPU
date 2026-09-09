@@ -693,7 +693,13 @@ export default class Controller {
       const result = await this.game.hardDropAsync();
       this.soundManager.playHardDrop();
 
-      this.viewWebGPU.onHardDrop?.(currentX, ghostY, dropDist, colorIdx);
+      // Prefer the lock coordinate written by performHardDrop (host.lastDropPos).
+      // gameStateCache.lastDropPos is the same object after the first getState(),
+      // but the host field is updated immediately and does not depend on a cache sync.
+      const finalGhostY = this.game.lastDropPos?.y
+        ?? this.game.gameStateCache.lastDropPos?.y
+        ?? ghostY;
+      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx);
 
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;
