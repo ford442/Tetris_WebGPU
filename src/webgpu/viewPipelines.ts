@@ -90,7 +90,7 @@ export async function loadBlockTexture(view: any): Promise<void> {
     applyBlockTextureConfigForImageDimensions(img.width, img.height);
 
     // Authored tile is uploaded as a SINGLE texture, so the shader uses SINGLE mode.
-    setBlockTextureConfig({ samplingMode: 'single' });
+    setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 
     const cfg = getBlockTextureConfig();
     let maskImg: HTMLImageElement | null = null;

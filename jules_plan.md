@@ -47,3 +47,24 @@ This document outlines the optimizations and game-feel improvements made in the 
 * All unit tests pass (`npm test`).
 * WebGPU type checking verifies shader correctness (`npm run typecheck`).
 * No raw art assets or fundamental game rules were modified.
+
+---
+
+# Weekly Performance Optimization and Game-Feel Polish (New Report)
+
+## Graphical & Performance Optimizations
+- Checked WGSL shaders: Optimizations were already in place (fast path approximation for `pow` common powers, cross pattern texture sampling in post-processing).
+- Explored dynamic array allocation in `src/game/rotation.ts` and `src/game/stateProjection.ts`. Confirmed these already pre-allocate nested arrays.
+- Verified UI decays in `effects.ts` and `viewRenderLoop.ts`. Realized that they purposefully use true exponential decay `Math.exp` per memory rule for a snappier "juice" game feel.
+- **Proactive Optimizations Suggested:** In the future, we could explore moving some particle logic (like spatial hashing for collisions if they exist) to a separate WebWorker or compute shader to further reduce main-thread CPU load, as well as optimizing vertex buffer streaming using ring buffers for particles and dynamic geometry.
+
+## Image Sampled Block Rendering
+- Configured the imageSampled block textures to use thresholds (`metalThresholdLow: 0.75, metalThresholdHigh: 1.15`) in `src/webgpu/viewPipelines.ts` to properly extract metal hinges and visual details directly from `block.png`, resolving washed-out colors and improving transparency.
+- Verified that `textureScale` was correctly set to `0.98` in `src/webgpu/geometry.ts` to avoid blurry tile edges when sampling from texture atlases.
+
+## Playability & Game Feel
+- Left `MOVE_BUFFER_WINDOW` and `ROTATE_BUFFER_WINDOW` in `src/config/gameConfig.ts` untouched at `50ms` per the rigid constraint forbidding tuning without explicit playtest complaints.
+- Evaluated codebase for any missing `// TODO: Polish`, `// TODO: GameFeel`, or `// FIX: Latency` comments and found none.
+
+## Overall
+- Re-tested visual and rendering pipelines to ensure backward compatibility and zero artifacts via pre-commit steps.
