@@ -25,9 +25,13 @@ describe('Texture Sampling WGSL Generation', () => {
       expect(code).toContain('composeMaterialBaseColor');
     });
 
-    it('uses color-signal-based gold/crystal separation by default', () => {
+    it('uses warmth-based gold/crystal separation by default', () => {
+      // The default detection mode is 'warmth' (see DEFAULT_BLOCK_TEXTURE_CONFIG):
+      // color_signal read the bright warm crystal as metal on this atlas.
       const code = getSimpleTextureSamplingWGSL();
-      expect(code).toContain('goldSignal');
+      expect(code).toContain('let warmth = texColor.r - texColor.b;');
+      // And it must use the warmth band, not the color_signal thresholds.
+      expect(code).toContain('smoothstep(0.05, 0.2, warmth)');
       expect(code).toContain('smoothstep');
     });
   });

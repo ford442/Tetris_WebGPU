@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { DEFAULT_AUTHORED_BLOCK_MATERIAL } from '../src/webgpu/blockMaterial.js';
 import { join } from 'node:path';
 import {
   DEFAULT_BLOCK_TEXTURE_CONFIG,
@@ -94,8 +95,12 @@ describe('WebGL2 matches TS authored alpha', () => {
     expect(wgsl).toContain('finalColor *= outAlpha');
     expect(wgsl).toContain('gradeGoldMetalAlbedo');
     expect(glsl).toContain('gradeGoldMetalAlbedo');
-    expect(wgsl).toContain('vec3f(0.90, 0.68, 0.22)');
-    expect(glsl).toContain('vec3(0.90, 0.68, 0.22)');
+    // The jewelry tint is authored now: the shared WGSL keeps it as the *default*
+    // constant, and both fragment shaders read it from the material contract.
+    expect(wgsl).toContain('kGoldJewelryAlbedo = vec3f(0.90, 0.68, 0.22)');
+    expect(wgsl).toContain('materialParams.goldTint.rgb');
+    expect(glsl).toContain('u_goldTint.rgb');
+    expect(DEFAULT_AUTHORED_BLOCK_MATERIAL.gold.tint).toEqual([0.9, 0.68, 0.22]);
     expect(glsl).toContain('* outAlpha, outAlpha');
     const tolerance = Math.abs(
       evalAuthoredOutAlpha(0, 1, DEFAULT_GLASS_PARAMS) -

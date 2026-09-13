@@ -44,6 +44,7 @@ find_program(NODE_EXECUTABLE node REQUIRED)
 add_custom_target(generate_cpp_shaders ALL
   COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-shaders.mjs"
   COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-uniforms.mjs"
+  COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-material.mjs"
   WORKING_DIRECTORY "${TETRIS_REPO_ROOT}"
   COMMENT "Generating cpp/src/generated/ (embedded WGSL + block uniform struct)"
   VERBATIM
@@ -59,7 +60,7 @@ target_link_options(tetris_renderer PRIVATE
   "-sEXPORT_NAME=createTetrisRendererModule"
   "-sENVIRONMENT=web"
   "-sALLOW_MEMORY_GROWTH=1"
-  "-sEXPORTED_FUNCTIONS=[_init_renderer,_resize_renderer,_render_frame,_update_playfield,_get_playfield_ptr,_get_playfield_len,_get_piece_state_ptr,_update_piece_state,_get_renderer_backend,_is_gpu_renderer_active,_is_canvas_fallback_active,_set_block_texture_rgba,_malloc,_free]"
+  "-sEXPORTED_FUNCTIONS=[_init_renderer,_resize_renderer,_render_frame,_update_playfield,_get_playfield_ptr,_get_playfield_len,_get_piece_state_ptr,_update_piece_state,_get_renderer_backend,_is_gpu_renderer_active,_is_canvas_fallback_active,_set_block_texture_rgba,_set_block_material_map_rgba,_malloc,_free]"
   "-sEXPORTED_RUNTIME_METHODS=[ccall,cwrap,HEAP8,HEAPU8]"
 )
 

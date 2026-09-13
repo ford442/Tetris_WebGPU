@@ -21,13 +21,19 @@ function getMaterialMaskLogicWGSL(config: BlockTextureConfig): string {
   const high = config.metalThresholdHigh ?? 0.55;
 
   if (config.materialDetectionMode === 'warmth') {
+    // metalThresholdLow/High are tuned for the color_signal range (r + g - 0.5b, up to
+    // ~2.5) and are meaningless against warmth (r - b, at most 1.0): the atlas preset's
+    // 0.75/1.20 would smoothstep every pixel to zero metal. Warmth uses its own band,
+    // the same 0.05/0.20 the WebGL2 port uses, so the three renderers agree.
+    const warmthLow = config.warmthSignalClampMin ?? 0.05;
+    const warmthHigh = config.warmthSignalClampMax ?? 0.20;
     return `
     // Gold frame: mid-luminance AND warm hue (R > B).
     // Crystal interior: cool/neutral (B >= R) — pixel analysis of block.png.
     let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
     let warmth = texColor.r - texColor.b;
-    let lumaBand = smoothstep(0.25, 0.55, luma) * (1.0 - smoothstep(0.82, 0.95, luma));
-    let warmthSignal = smoothstep(${low}, ${high}, warmth);
+    let lumaBand = smoothstep(${config.warmthLumaBandA0 ?? 0.25}, ${config.warmthLumaBandA1 ?? 0.55}, luma) * (1.0 - smoothstep(${config.warmthLumaBandB0 ?? 0.82}, ${config.warmthLumaBandB1 ?? 0.95}, luma));
+    let warmthSignal = smoothstep(${warmthLow}, ${warmthHigh}, warmth);
     let metalMask = clamp(lumaBand * warmthSignal * 3.0, 0.0, 1.0);
     `;
   }

@@ -29,6 +29,24 @@ struct FresnelParams {
 // by the glass path so the crystal bends the *real* background instead of a sine gradient.
 @binding(11) @group(0) var backdropTexture : texture_2d<f32>;
 @binding(12) @group(0) var backdropSampler : sampler;
+
+// Authored packed material map (see src/webgpu/blockMaterialMaps.ts):
+//   R = tangent normal.x, G = tangent normal.y, B = roughness, A = metallic
+// Always bound — a 1x1 flat texel stands in before/without a bake, and
+// materialParams.mapParams.y tells the shader which one it got.
+@binding(13) @group(0) var blockMaterialMap : texture_2d<f32>;
+
+// The visual contract, as uniforms (src/webgpu/blockMaterial.ts):
+//   goldTint  : rgb = jewelry tint, w = grade mix
+//   goldShade : x = shadeMin, y = shadeMax, z = metal roughness, w = glass roughness
+//   mapParams : x = normal strength, y = material-map enable, z = roughness detail,
+//               w = debug view (MaterialDebugView)
+struct AuthoredMaterialParams {
+    goldTint  : vec4f,
+    goldShade : vec4f,
+    mapParams : vec4f,
+};
+@binding(14) @group(0) var<uniform> materialParams : AuthoredMaterialParams;
 `;
 
 /** Required @group(0) bindings for the block render pipeline. */
@@ -49,6 +67,8 @@ export const BLOCK_FRAGMENT_BINDING_SPECS = [
   { binding: 10, kind: 'sampler', wgsl: '@binding(10) @group(0) var blockSamplerMask' },
   { binding: 11, kind: 'texture', wgsl: '@binding(11) @group(0) var backdropTexture' },
   { binding: 12, kind: 'sampler', wgsl: '@binding(12) @group(0) var backdropSampler' },
+  { binding: 13, kind: 'texture', wgsl: '@binding(13) @group(0) var blockMaterialMap' },
+  { binding: 14, kind: 'uniform', wgsl: '@binding(14) @group(0) var<uniform> materialParams' },
 ] as const;
 
 export const BLOCK_PIPELINE_BINDING_SPECS = [

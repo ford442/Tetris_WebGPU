@@ -26,6 +26,7 @@ const SHADERS_DIR = join(ROOT, 'cpp', 'src', 'shaders');
  * Identifiers are prefixed `kShared*` to mark them as coming from src/.
  */
 const SHARED_TS_SHADERS = [
+  { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'authoredMaterial.wgsl'), identifier: 'kSharedAuthoredMaterialWgsl' },
   { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'authoredGlass.wgsl'), identifier: 'kSharedAuthoredGlassWgsl' },
   { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'pbrCore.wgsl'), identifier: 'kSharedPbrCoreWgsl' },
 ];

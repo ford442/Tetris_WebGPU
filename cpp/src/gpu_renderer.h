@@ -24,6 +24,13 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
 /** Upload RGBA8 block atlas pixels (e.g. block.png). Returns 1 on success. */
 int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len);
 
+/**
+ * Upload the packed authored material map (R=normal.x, G=normal.y, B=roughness,
+ * A=metallic) baked from the same extracted tile. Returns 1 on success; on failure
+ * the renderer keeps a flat 1x1 stand-in and the shader uses the contract fallback.
+ */
+int gpu_renderer_set_block_material_map(const uint8_t* data, int width, int height, int byte_len);
+
 #ifdef __cplusplus
 }
 #endif

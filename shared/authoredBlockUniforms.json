@@ -10,31 +10,192 @@
     "Names that also exist in the TS FragmentUniforms (src/webgpu/shaders/block/uniforms.ts)",
     "carry `tsField`, and the test asserts the semantics line up. The C++ block is a strict",
     "subset: it omits TS-only state (dissolve field, column heights, audio levels) that the",
-    "C++ path has no producer for yet."
+    "C++ path has no producer for yet.",
+    "",
+    "goldTint/goldShade/mapParams mirror the TS AuthoredMaterialParams block (@binding(14)). TS keeps them in a separate uniform buffer because its fragment uniforms are already at their binding-size limit; the C++ path folds every uniform into binding 0, so they live here. Values are generated from public/block-material.json into authored_block_material.h, which is where both renderers get them from."
   ],
   "structName": "AuthoredBlockUniforms",
   "wgslStruct": "AuthoredBlockUniforms",
-  "size": 176,
+  "size": 224,
   "fields": [
-    { "name": "viewProjection", "type": "mat4x4<f32>", "offset": 0, "cppType": "float", "cppCount": 16 },
-    { "name": "lightPosition", "type": "vec4<f32>", "offset": 64, "cppType": "float", "cppCount": 4, "tsField": "lightPosition" },
-    { "name": "eyePosition", "type": "vec4<f32>", "offset": 80, "cppType": "float", "cppCount": 4, "tsField": "eyePosition" },
-    { "name": "glassParams", "type": "vec4<f32>", "offset": 96, "cppType": "float", "cppCount": 4, "tsField": "glassParams", "$comment": "x=min y=max z=fresnelPower w=unused (TS GlassParams, flattened)" },
-    { "name": "blockHalfSize", "type": "f32", "offset": 112, "cppType": "float", "cppCount": 1 },
-    { "name": "time", "type": "f32", "offset": 116, "cppType": "float", "cppCount": 1, "tsField": "time" },
-    { "name": "textureMix", "type": "f32", "offset": 120, "cppType": "float", "cppCount": 1, "tsField": "textureMix" },
-    { "name": "metallic", "type": "f32", "offset": 124, "cppType": "float", "cppCount": 1, "tsField": "metallic" },
-    { "name": "roughness", "type": "f32", "offset": 128, "cppType": "float", "cppCount": 1, "tsField": "roughness" },
-    { "name": "clearcoat", "type": "f32", "offset": 132, "cppType": "float", "cppCount": 1, "tsField": "clearcoat" },
-    { "name": "anisotropic", "type": "f32", "offset": 136, "cppType": "float", "cppCount": 1, "tsField": "anisotropic" },
-    { "name": "glassIor", "type": "f32", "offset": 140, "cppType": "float", "cppCount": 1, "tsField": "glassIor" },
-    { "name": "glassThickness", "type": "f32", "offset": 144, "cppType": "float", "cppCount": 1, "tsField": "glassThickness" },
-    { "name": "dispersion", "type": "f32", "offset": 148, "cppType": "float", "cppCount": 1, "tsField": "dispersion" },
-    { "name": "iblEnable", "type": "f32", "offset": 152, "cppType": "float", "cppCount": 1, "tsField": "iblEnable" },
-    { "name": "refractEnable", "type": "f32", "offset": 156, "cppType": "float", "cppCount": 1, "tsField": "refractEnable" },
-    { "name": "lockFlash", "type": "f32", "offset": 160, "cppType": "float", "cppCount": 1 },
-    { "name": "_pad164", "type": "f32", "offset": 164, "cppType": "float", "cppCount": 1 },
-    { "name": "_pad168", "type": "f32", "offset": 168, "cppType": "float", "cppCount": 1 },
-    { "name": "_pad172", "type": "f32", "offset": 172, "cppType": "float", "cppCount": 1 }
+    {
+      "name": "viewProjection",
+      "type": "mat4x4<f32>",
+      "offset": 0,
+      "cppType": "float",
+      "cppCount": 16
+    },
+    {
+      "name": "lightPosition",
+      "type": "vec4<f32>",
+      "offset": 64,
+      "cppType": "float",
+      "cppCount": 4,
+      "tsField": "lightPosition"
+    },
+    {
+      "name": "eyePosition",
+      "type": "vec4<f32>",
+      "offset": 80,
+      "cppType": "float",
+      "cppCount": 4,
+      "tsField": "eyePosition"
+    },
+    {
+      "name": "glassParams",
+      "type": "vec4<f32>",
+      "offset": 96,
+      "cppType": "float",
+      "cppCount": 4,
+      "tsField": "glassParams",
+      "$comment": "x=min y=max z=fresnelPower w=unused (TS GlassParams, flattened)"
+    },
+    {
+      "name": "blockHalfSize",
+      "type": "f32",
+      "offset": 112,
+      "cppType": "float",
+      "cppCount": 1
+    },
+    {
+      "name": "time",
+      "type": "f32",
+      "offset": 116,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "time"
+    },
+    {
+      "name": "textureMix",
+      "type": "f32",
+      "offset": 120,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "textureMix"
+    },
+    {
+      "name": "metallic",
+      "type": "f32",
+      "offset": 124,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "metallic"
+    },
+    {
+      "name": "roughness",
+      "type": "f32",
+      "offset": 128,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "roughness"
+    },
+    {
+      "name": "clearcoat",
+      "type": "f32",
+      "offset": 132,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "clearcoat"
+    },
+    {
+      "name": "anisotropic",
+      "type": "f32",
+      "offset": 136,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "anisotropic"
+    },
+    {
+      "name": "glassIor",
+      "type": "f32",
+      "offset": 140,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "glassIor"
+    },
+    {
+      "name": "glassThickness",
+      "type": "f32",
+      "offset": 144,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "glassThickness"
+    },
+    {
+      "name": "dispersion",
+      "type": "f32",
+      "offset": 148,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "dispersion"
+    },
+    {
+      "name": "iblEnable",
+      "type": "f32",
+      "offset": 152,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "iblEnable"
+    },
+    {
+      "name": "refractEnable",
+      "type": "f32",
+      "offset": 156,
+      "cppType": "float",
+      "cppCount": 1,
+      "tsField": "refractEnable"
+    },
+    {
+      "name": "lockFlash",
+      "type": "f32",
+      "offset": 160,
+      "cppType": "float",
+      "cppCount": 1
+    },
+    {
+      "name": "_pad164",
+      "type": "f32",
+      "offset": 164,
+      "cppType": "float",
+      "cppCount": 1
+    },
+    {
+      "name": "_pad168",
+      "type": "f32",
+      "offset": 168,
+      "cppType": "float",
+      "cppCount": 1
+    },
+    {
+      "name": "_pad172",
+      "type": "f32",
+      "offset": 172,
+      "cppType": "float",
+      "cppCount": 1
+    },
+    {
+      "name": "goldTint",
+      "type": "vec4<f32>",
+      "offset": 176,
+      "cppType": "float",
+      "cppCount": 4,
+      "$comment": "rgb = jewelry tint, w = grade mix (block-material.json gold.*)"
+    },
+    {
+      "name": "goldShade",
+      "type": "vec4<f32>",
+      "offset": 192,
+      "cppType": "float",
+      "cppCount": 4,
+      "$comment": "x=shadeMin y=shadeMax z=metal roughness w=glass roughness"
+    },
+    {
+      "name": "mapParams",
+      "type": "vec4<f32>",
+      "offset": 208,
+      "cppType": "float",
+      "cppCount": 4,
+      "$comment": "x=normal strength y=material-map enable z=roughness detail w=debug view"
+    }
   ]
 }

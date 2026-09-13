@@ -81,10 +81,14 @@ describe('block fragment shader backdrop refraction', () => {
       fragment.indexOf('// Gold frame opaque'),
     );
     expect(glassBlock).toContain('refractBackdrop(');
-    // The ghost path early-returns well before any of this.
-    const ghostReturn = fragment.indexOf('let isGhost = vColor.w < 0.4;');
+    // Inside the entry point, the ghost early-return comes before the authored
+    // shading dispatch, so a ghost block never pays for refraction.
+    const entry = fragment.slice(fragment.indexOf('@fragment'));
+    const ghostReturn = entry.indexOf('return renderGhostBlock(');
+    const authoredDispatch = entry.indexOf('let shaded = shadeAuthoredBlock(');
     expect(ghostReturn).toBeGreaterThan(0);
-    expect(ghostReturn).toBeLessThan(fragment.indexOf('if (glassMask > 0.2) {'));
+    expect(authoredDispatch).toBeGreaterThan(0);
+    expect(ghostReturn).toBeLessThan(authoredDispatch);
   });
 });
 

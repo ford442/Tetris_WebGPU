@@ -7,6 +7,12 @@ import { themes, type ThemeColors } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
 import { getGlassParams, getGlassRefractionParams, glassParamsToVec4 } from './blockTexture.js';
+import {
+  getAuthoredBlockMaterial,
+  materialParamsToFloat32Array,
+  MaterialDebugView,
+  type MaterialDebugViewName,
+} from './blockMaterial.js';
 import { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from './shaders/block/bindings.js';
 
 export interface MaterialViewLike {
@@ -29,6 +35,12 @@ export interface MaterialViewLike {
   };
   useWireframe: boolean;
   authoredBlockTextureLoaded?: boolean;
+  /** AuthoredMaterialParams uniform buffer (@binding(14)). */
+  materialParamsBuffer?: GPUBuffer;
+  /** True when a baked packed material map is bound instead of the flat fallback. */
+  authoredMaterialMapLoaded?: boolean;
+  /** Active dev material inspector view (0 = off). */
+  materialDebugView?: number;
 }
 
 export function setMaterialTheme(view: MaterialViewLike, _themeName?: string, _pieceType = 1) {
@@ -93,6 +105,8 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   const glassParams = glassParamsToVec4(getGlassParams());
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.glassParams, glassParams);
 
+  writeMaterialParams(view);
+
   // Authored crystal refraction — named uniforms, written as one contiguous
   // vec3-worth of floats at glassIor/glassThickness/refractEnable (204/208/212).
   const refraction = getGlassRefractionParams();
@@ -105,6 +119,32 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
       view.backdropRefractionEnabled === false ? 0.0 : 1.0,
     ]),
   );
+}
+
+/**
+ * Push the authored material contract (gold grade, roughness band, normal strength,
+ * debug view) to @binding(14). One uniform block, written from one source of truth,
+ * so a content pack can restyle the brick without a shader edit.
+ */
+export function writeMaterialParams(view: MaterialViewLike): void {
+  if (!view.device || !view.materialParamsBuffer) return;
+  view.device.queue.writeBuffer(
+    view.materialParamsBuffer,
+    0,
+    materialParamsToFloat32Array(getAuthoredBlockMaterial(), {
+      materialMapEnabled: view.authoredMaterialMapLoaded === true,
+      debugView: view.materialDebugView ?? 0,
+    }),
+  );
+}
+
+/** Dev material inspector: albedo / metal / glass / roughness / normals / final. */
+export function setMaterialDebugView(
+  view: MaterialViewLike,
+  mode: number | MaterialDebugViewName,
+): void {
+  view.materialDebugView = typeof mode === 'number' ? mode : MaterialDebugView[mode];
+  writeMaterialParams(view);
 }
 
 export function cycleTheme(view: MaterialViewLike) {

@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "Authored block material contract. ONE declarative field list, read by both:",
+    "  * src/webgpu/blockMaterial.ts   (runtime validation + uniform packing)",
+    "  * scripts/validate-block-material.mjs (prebuild gate on public/block-material.json)",
+    "so a new field cannot be accepted by one and rejected by the other.",
+    "",
+    "`path` is a dotted path into block-material.json. `kind` is one of:",
+    "  number | string | vec3 | boolean. `min`/`max` bound numbers (and each vec3",
+    "component). `required` fields must be present; everything else falls back to",
+    "DEFAULT_AUTHORED_BLOCK_MATERIAL, which encodes the shipped go.1ink.us look.",
+    "",
+    "Map paths are resolved like any other public asset (resolveBlockTextureAssetUrl).",
+    "`maps.albedo` is canonical; `maps.albedoKtx2` is an optional pre-compressed",
+    "upgrade that the runtime only uses when texture-compression-bc is available."
+  ],
+  "version": 1,
+  "fields": [
+    { "path": "version", "kind": "number", "min": 1, "max": 1, "required": true },
+    { "path": "name", "kind": "string" },
+
+    { "path": "maps.albedo", "kind": "string", "required": true },
+    { "path": "maps.albedoKtx2", "kind": "string" },
+    { "path": "maps.metalMask", "kind": "string" },
+    { "path": "maps.material", "kind": "string" },
+    { "path": "maps.normal", "kind": "string" },
+
+    { "path": "glass.min", "kind": "number", "min": 0, "max": 1, "required": true },
+    { "path": "glass.max", "kind": "number", "min": 0, "max": 1, "required": true },
+    { "path": "glass.fresnelPower", "kind": "number", "min": 0.25, "max": 8, "required": true },
+    { "path": "glass.ior", "kind": "number", "min": 1.01, "max": 2.5, "required": true },
+    { "path": "glass.thickness", "kind": "number", "min": 0, "max": 0.25, "required": true },
+
+    { "path": "gold.tint", "kind": "vec3", "min": 0, "max": 1, "required": true },
+    { "path": "gold.mix", "kind": "number", "min": 0, "max": 1, "required": true },
+    { "path": "gold.shadeMin", "kind": "number", "min": 0, "max": 2 },
+    { "path": "gold.shadeMax", "kind": "number", "min": 0, "max": 2 },
+
+    { "path": "roughness.metal", "kind": "number", "min": 0.02, "max": 1 },
+    { "path": "roughness.glass", "kind": "number", "min": 0.01, "max": 1 },
+    { "path": "roughness.detail", "kind": "number", "min": 0, "max": 1 },
+
+    { "path": "normal.strength", "kind": "number", "min": 0, "max": 2 },
+
+    { "path": "contract.borderMetalMin", "kind": "number", "min": 0, "max": 1 },
+    { "path": "contract.centerGlassMin", "kind": "number", "min": 0, "max": 1 },
+    { "path": "contract.haloMaxFraction", "kind": "number", "min": 0, "max": 1 }
+  ],
+  "rules": [
+    { "kind": "lte", "left": "glass.min", "right": "glass.max", "message": "glass.min must be <= glass.max" },
+    { "kind": "lte", "left": "gold.shadeMin", "right": "gold.shadeMax", "message": "gold.shadeMin must be <= gold.shadeMax" },
+    { "kind": "lte", "left": "roughness.glass", "right": "roughness.metal", "message": "crystal must be smoother than the gold frame (roughness.glass <= roughness.metal)" }
+  ]
+}

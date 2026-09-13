@@ -18,7 +18,7 @@
     "build:cpp": "npm run cpp:release",
     "build:all": "npm run asbuild:release && npm run build:cpp && npm run build",
     "pretest": "npm run asbuild:release || true",
-    "prebuild": "node scripts/validate-video-assets.mjs && node scripts/generate-pwa-icons.mjs",
+    "prebuild": "node scripts/validate-video-assets.mjs && node scripts/validate-block-material.mjs && node scripts/generate-pwa-icons.mjs",
     "postbuild": "node scripts/generate-sw.mjs",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
     "video:validate": "node scripts/validate-video-assets.mjs",
@@ -27,7 +27,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "ibl:prefilter": "node scripts/prefilter-ibl.mjs"
+    "ibl:prefilter": "node scripts/prefilter-ibl.mjs",
+    "material:validate": "node scripts/validate-block-material.mjs"
   },
   "dependencies": {
     "gl-matrix": "^3.4.4"

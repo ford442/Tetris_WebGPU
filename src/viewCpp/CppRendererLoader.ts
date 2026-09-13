@@ -25,6 +25,12 @@ import {
   extractBlockTileFromImage,
   loadCompanionMaskImage,
 } from '../webgpu/blockTextureExtract.js';
+import {
+  getAuthoredBlockMaterial,
+  loadAuthoredBlockMaterial,
+  materialGlassConfigOverrides,
+} from '../webgpu/blockMaterial.js';
+import { bakeMaterialMapFromTile } from '../webgpu/blockMaterialCanvas.js';
 import type { GameState } from '../game/gameState.js';
 
 export const PLAYFIELD_BYTES = PLAYFIELD_CELL_COUNT;
@@ -151,6 +157,7 @@ export class CppRendererLoader {
   private static isGpuActiveFn: (() => number) | null = null;
   private static getBackendFn: (() => number) | null = null;
   private static setBlockTextureFn: ((ptr: number, w: number, h: number, len: number) => number) | null = null;
+  private static setMaterialMapFn: ((ptr: number, w: number, h: number, len: number) => number) | null = null;
   private static blockTextureReady = false;
 
   static isLoaded(): boolean {
@@ -196,6 +203,11 @@ export class CppRendererLoader {
     }
 
     try {
+      const materialLoad = await loadAuthoredBlockMaterial();
+      if (!materialLoad.applied && materialLoad.errors.length) {
+        renderLogger.warn('[cpp] block-material.json not applied:', materialLoad.errors.join('; '));
+      }
+
       const url = resolveBlockTextureUrl();
       const res = await fetch(url);
       if (!res.ok) {
@@ -209,6 +221,8 @@ export class CppRendererLoader {
       // texture, so 'single' sampling mode is what the shader must assume.
       applyBlockTextureConfigForImageDimensions(bitmap.width, bitmap.height);
       setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
+      // Authored glass curve / map paths, same contract the TS renderer applies.
+      setBlockTextureConfig(materialGlassConfigOverrides(getAuthoredBlockMaterial()));
 
       const cfg = getBlockTextureConfig();
       const maskImg = await loadCompanionMaskImage(cfg);
@@ -235,12 +249,51 @@ export class CppRendererLoader {
             `[cpp] authored tile uploaded (${extracted.width}x${extracted.height}, ${extracted.scale}x)`,
           );
         }
-        return this.blockTextureReady;
+      } finally {
+        this.module._free(ptr);
+      }
+
+      if (this.blockTextureReady) {
+        // Same bake the TS renderer uploads to @binding(13) — normals, roughness and
+        // metallic from one packed RGBA map, so "polish" is not a TS-only feature.
+        this.uploadMaterialMap(extracted.canvas);
+      }
+      return this.blockTextureReady;
+    } catch (err) {
+      renderLogger.warn('[cpp] block texture upload failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Bake + upload the packed material map from the already-extracted tile.
+   *
+   * Best effort: a failure leaves the C++ renderer on its flat 1x1 stand-in and the
+   * shared contract fallback, which is the same degradation the TS path takes. The
+   * authored tile itself is already bound, so the frame still renders.
+   */
+  private static uploadMaterialMap(tile: HTMLCanvasElement): boolean {
+    if (!this.module || !this.setMaterialMapFn || !this.module._malloc || !this.module._free) {
+      return false;
+    }
+    try {
+      const { bake } = bakeMaterialMapFromTile(tile, getAuthoredBlockMaterial());
+      const bytes = bake.rgba;
+      const ptr = this.module._malloc(bytes.length);
+      try {
+        this.module.HEAPU8.set(bytes, ptr);
+        const ok = this.setMaterialMapFn(ptr, bake.width, bake.height, bytes.length);
+        if (ok === 1) {
+          renderLogger.info(`[cpp] material map uploaded (${bake.width}x${bake.height})`);
+          return true;
+        }
+        renderLogger.warn('[cpp] material map rejected; using contract fallback');
+        return false;
       } finally {
         this.module._free(ptr);
       }
     } catch (err) {
-      renderLogger.warn('[cpp] block texture upload failed:', err);
+      renderLogger.warn('[cpp] material map bake failed:', err);
       return false;
     }
   }
@@ -302,6 +355,12 @@ export class CppRendererLoader {
       ) => void;
       this.isGpuActiveFn = instance.cwrap('is_gpu_renderer_active', 'number', []) as () => number;
       this.getBackendFn = instance.cwrap('get_renderer_backend', 'number', []) as () => number;
+      this.setMaterialMapFn = instance.cwrap('set_block_material_map_rgba', 'number', [
+        'number',
+        'number',
+        'number',
+        'number',
+      ]) as (ptr: number, w: number, h: number, len: number) => number;
       this.setBlockTextureFn = instance.cwrap('set_block_texture_rgba', 'number', [
         'number', 'number', 'number', 'number',
       ]) as (ptr: number, w: number, h: number, len: number) => number;
@@ -430,6 +489,7 @@ export class CppRendererLoader {
     this.isGpuActiveFn = null;
     this.getBackendFn = null;
     this.setBlockTextureFn = null;
+    this.setMaterialMapFn = null;
     this.blockTextureReady = false;
     this.backend = RendererBackend.NONE;
     this.loaded = false;

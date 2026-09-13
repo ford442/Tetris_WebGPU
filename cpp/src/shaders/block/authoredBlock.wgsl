@@ -7,8 +7,9 @@
 //
 //   1. kAuthoredBlockUniformsWgsl  (generated from shared/authoredBlockUniforms.json)
 //   2. kSharedPbrCoreWgsl          (src/webgpu/shaders/wgsl/block/pbrCore.wgsl)
-//   3. kSharedAuthoredGlassWgsl    (src/webgpu/shaders/wgsl/block/authoredGlass.wgsl)
-//   4. this file
+//   3. kSharedAuthoredMaterialWgsl (src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl)
+//   4. kSharedAuthoredGlassWgsl    (src/webgpu/shaders/wgsl/block/authoredGlass.wgsl)
+//   5. this file
 //
 // Bind-group numbering follows cpp/src/block_bindings.h, which documents where the
 // C++ layout matches the TS layout and where it deliberately differs.
@@ -23,6 +24,11 @@
 @binding(3) @group(0) var blockSamplerColor : sampler;
 @binding(9) @group(0) var blockTextureMask : texture_2d<f32>;
 @binding(10) @group(0) var blockSamplerMask : sampler;
+
+// Packed authored material map — the same bake the TS renderer uploads, handed over
+// by CppRendererLoader: R = normal.x, G = normal.y, B = roughness, A = metallic.
+// A 1x1 flat texel stands in until the upload lands (u.mapParams.y == 0).
+@binding(13) @group(0) var blockMaterialMap : texture_2d<f32>;
 
 struct VSOut {
   @builtin(position) position : vec4f,
@@ -57,9 +63,30 @@ fn fs_main(
   @location(2) color : vec4f,
   @location(3) uv : vec2f,
 ) -> @location(0) vec4f {
-  let N = normalize(normal);
+  let faceN = normalize(normal);
   let V = normalize(u.eyePosition.xyz - worldPos);
   let L = normalize(u.lightPosition.xyz - worldPos);
+
+  // No atlas transform: the uploaded tile is already the extracted block face.
+  // Flip V to match the TS tile orientation.
+  let texUV = clamp(vec2f(uv.x, 1.0 - uv.y), vec2f(0.0), vec2f(1.0));
+
+  // Dual sample of the same RGBA tile, mirroring the TS authored path:
+  //   RGB — linear anisotropic;  A — nearest mip 0 (baked metal mask, no halo).
+  let texRgb = textureSample(blockTexture, blockSamplerColor, texUV).rgb;
+  let texMaskA = textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0).a;
+
+  // Authored packed material map, decoded by the shared module.
+  let materialSample = decodeAuthoredMaterial(
+    textureSample(blockMaterialMap, blockSamplerColor, texUV)
+  );
+  let mapEnabled = u.mapParams.y;
+
+  // Tangent-space normal mapping, same shared TBN the TS path uses.
+  let N = applyAuthoredNormal(
+    faceN, worldPos, uv, materialSample.normalXY, u.mapParams.x * mapEnabled
+  );
+
   let H = normalize(L + V);
   let NdotL = max(dot(N, L), 0.0);
   let NdotV = max(dot(N, V), 0.0);
@@ -71,15 +98,6 @@ fn fs_main(
   let nh16 = nh4 * nh4 * nh4 * nh4;
   let tightSpec = nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16;
 
-  // No atlas transform: the uploaded tile is already the extracted block face.
-  // Flip V to match the TS tile orientation.
-  let texUV = clamp(vec2f(uv.x, 1.0 - uv.y), vec2f(0.0), vec2f(1.0));
-
-  // Dual sample of the same RGBA tile, mirroring the TS authored path:
-  //   RGB — linear anisotropic;  A — nearest mip 0 (baked metal mask, no halo).
-  let texRgb = textureSample(blockTexture, blockSamplerColor, texUV).rgb;
-  let texMaskA = textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0).a;
-
   // Only the extracted authored tile has baked-alpha mask semantics. Until the
   // upload lands (textureMix stays 0) fall back to the flat piece color rather
   // than reading alpha as a mask.
@@ -89,10 +107,14 @@ fn fs_main(
   let metalOpaque = step(0.5, metalMask);
   let glassMaskAlpha = 1.0 - metalOpaque;
 
-  let metalColor = gradeGoldMetalAlbedo(texRgb);
+  // Authored gold grade: tint/mix/shade come from public/block-material.json via
+  // generated/authored_block_material.h, so a reskin is a JSON edit in both renderers.
+  let metalColor = gradeGoldMetalAlbedoTinted(
+    texRgb, u.goldTint.rgb, u.goldTint.w, u.goldShade.x, u.goldShade.y
+  );
   let baseColor = select(
     color.rgb,
-    authoredBaseColor(texRgb, color.rgb, metalMask),
+    authoredBaseColor(texRgb, color.rgb, metalColor, metalMask),
     useAuthoredSampling
   );
 
@@ -103,7 +125,12 @@ fn fs_main(
     // Gold frame: GGX direct + procedural studio env + clearcoat. The C++ path has
     // no IBL prefilter yet, so it takes the same `iblEnable == 0` branch the TS
     // shader falls back to on low-power GPUs.
-    let pixelRough = clamp(mix(0.12, 0.35, 1.0 - metalMask), 0.08, 0.45);
+    // Authored roughness: the baked B channel, or the shared contract fallback.
+    let detail = clamp(length(texRgb - textureSampleLevel(blockTexture, blockSamplerColor, texUV, 3.0).rgb) * 2.0, 0.0, 1.0);
+    let pixelRough = authoredRoughness(
+      materialSample.roughness, mapEnabled, metalMask, detail,
+      u.goldShade.z, u.goldShade.w, u.mapParams.z
+    );
     let metalAmt = max(u.metallic, metalMask);
     let F0 = mix(vec3f(0.04), metalColor, metalMask * metalAmt);
     let anisoAmt = max(u.anisotropic, 0.4) * metalMask;

@@ -8,7 +8,20 @@ import {
 } from '../webgpu/blockTextureExtract.js';
 import { createBlockShaderSources } from './blockShadersGLSL.js';
 import { textureLogger } from '../utils/logger.js';
-import { getBlockTextureConfig, getGlassParams, applyBlockTextureConfigForImageDimensions } from '../webgpu/blockTexture.js';
+import {
+  getBlockTextureConfig,
+  getGlassParams,
+  applyBlockTextureConfigForImageDimensions,
+  setBlockTextureConfig,
+} from '../webgpu/blockTexture.js';
+import {
+  getAuthoredBlockMaterial,
+  loadAuthoredBlockMaterial,
+  materialGlassConfigOverrides,
+  materialParamsToFloat32Array,
+} from '../webgpu/blockMaterial.js';
+import { flatMaterialMapPixel } from '../webgpu/blockMaterialMaps.js';
+import { bakeMaterialMapFromTile } from '../webgpu/blockMaterialCanvas.js';
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -62,6 +75,13 @@ export class GLBlockRenderer {
   private u_authoredLoaded!: WebGLUniformLocation;
   private u_blockTexture!: WebGLUniformLocation;
   private u_blockMaskTexture!: WebGLUniformLocation;
+  private u_blockMaterialMap!: WebGLUniformLocation;
+  private u_goldTint!: WebGLUniformLocation;
+  private u_goldShade!: WebGLUniformLocation;
+  private u_mapParams!: WebGLUniformLocation;
+  /** Packed normal/roughness/metallic map; flat 1x1 until the bake lands. */
+  private materialMapTexture!: WebGLTexture;
+  private materialMapLoaded = false;
   private colorSampler!: WebGLSampler;
   private maskSampler!: WebGLSampler;
   private tileWidth = 0;
@@ -96,6 +116,10 @@ export class GLBlockRenderer {
     this.u_authoredLoaded = gl.getUniformLocation(this.program, 'u_authoredLoaded')!;
     this.u_blockTexture = gl.getUniformLocation(this.program, 'u_blockTexture')!;
     this.u_blockMaskTexture = gl.getUniformLocation(this.program, 'u_blockMaskTexture')!;
+    this.u_blockMaterialMap = gl.getUniformLocation(this.program, 'u_blockMaterialMap')!;
+    this.u_goldTint = gl.getUniformLocation(this.program, 'u_goldTint')!;
+    this.u_goldShade = gl.getUniformLocation(this.program, 'u_goldShade')!;
+    this.u_mapParams = gl.getUniformLocation(this.program, 'u_mapParams')!;
 
     const cube = CubeData();
     this.vertexCount = cube.positions.length / 3;
@@ -136,6 +160,19 @@ export class GLBlockRenderer {
     gl.samplerParameteri(this.colorSampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.samplerParameteri(this.colorSampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+    // Material map: linear, mip 0 only. Created up front with the flat fallback so
+    // the sampler is never unbound (same contract as the WebGPU 1x1 stand-in).
+    this.materialMapTexture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, this.materialMapTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      flatMaterialMapPixel(getAuthoredBlockMaterial()),
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
     this.maskSampler = gl.createSampler()!;
     gl.samplerParameteri(this.maskSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.samplerParameteri(this.maskSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -143,10 +180,16 @@ export class GLBlockRenderer {
     gl.samplerParameteri(this.maskSampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
     try {
+      const materialLoad = await loadAuthoredBlockMaterial();
+      if (!materialLoad.applied && materialLoad.errors.length) {
+        textureLogger.warn('[WebGL2] block-material.json not applied:', materialLoad.errors.join('; '));
+      }
+
       const url = resolveBlockTextureUrl(moduleUrl);
       textureLogger.info('[WebGL2] Loading block texture from:', url);
       const image = await loadBlockTextureImage(url);
       applyBlockTextureConfigForImageDimensions(image.width, image.height);
+      setBlockTextureConfig(materialGlassConfigOverrides(getAuthoredBlockMaterial()));
       const cfg = getBlockTextureConfig();
       const maskImg = await loadCompanionMaskImage(cfg);
       const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
@@ -159,6 +202,21 @@ export class GLBlockRenderer {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       this.authoredTextureLoaded = true;
+
+      // Same packed bake as the WebGPU and C++ paths, from the same extracted tile.
+      try {
+        const { bake } = bakeMaterialMapFromTile(extracted.canvas, getAuthoredBlockMaterial());
+        gl.bindTexture(gl.TEXTURE_2D, this.materialMapTexture);
+        gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, bake.width, bake.height, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+          new Uint8Array(bake.rgba.buffer, bake.rgba.byteOffset, bake.rgba.length),
+        );
+        this.materialMapLoaded = true;
+      } catch (mapError) {
+        this.materialMapLoaded = false;
+        textureLogger.warn('[WebGL2] material map bake failed; using contract fallback:', mapError);
+      }
+
       textureLogger.info(
         '[WebGL2] Block tile extracted:',
         `${Math.round(extracted.sourceWidth)}×${Math.round(extracted.sourceHeight)}`,
@@ -204,8 +262,12 @@ export class GLBlockRenderer {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.bindSampler(1, this.maskSampler);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.materialMapTexture);
+    gl.bindSampler(2, this.colorSampler);
     gl.uniform1i(this.u_blockTexture, 0);
     gl.uniform1i(this.u_blockMaskTexture, 1);
+    gl.uniform1i(this.u_blockMaterialMap, 2);
 
     gl.uniformMatrix4fv(this.u_viewProjection, false, viewProjection);
     gl.uniform3f(this.u_lightPos, lightPos[0], lightPos[1], lightPos[2]);
@@ -218,6 +280,14 @@ export class GLBlockRenderer {
     gl.uniform1f(this.u_glassFresnelPower, glass.fresnelPower);
     gl.uniform1f(this.u_authoredLoaded, this.authoredTextureLoaded ? 1.0 : 0.0);
 
+    // The visual contract, in the same packing the WebGPU uniform block uses.
+    const params = materialParamsToFloat32Array(getAuthoredBlockMaterial(), {
+      materialMapEnabled: this.materialMapLoaded,
+    });
+    gl.uniform4fv(this.u_goldTint, params.subarray(0, 4));
+    gl.uniform4fv(this.u_goldShade, params.subarray(4, 8));
+    gl.uniform4fv(this.u_mapParams, params.subarray(8, 12));
+
     for (const inst of instances) {
       gl.uniformMatrix4fv(this.u_model, false, inst.modelMatrix);
       gl.uniformMatrix4fv(this.u_normalMatrix, false, this._identity);
@@ -227,6 +297,7 @@ export class GLBlockRenderer {
 
     gl.bindSampler(0, null);
     gl.bindSampler(1, null);
+    gl.bindSampler(2, null);
     gl.bindVertexArray(null);
   }
   get tileSize(): { width: number; height: number } {

@@ -37,6 +37,8 @@ type BlockView = {
   iblSpecularTexture: GPUTexture;
   iblBrdfLutTexture: GPUTexture;
   iblSampler: GPUSampler;
+  blockMaterialMapTexture: GPUTexture;
+  materialParamsBuffer: GPUBuffer;
 };
 
 export class BlockRenderer {
@@ -66,6 +68,7 @@ export class BlockRenderer {
       this.view.dissolveBuffer, this.view.fresnelParamsUniform,
       this.view.iblSpecularTexture, this.view.iblBrdfLutTexture, this.view.iblSampler,
       this.view.backdropCapture.textureView, this.view.backdropCapture.sampler,
+      this.view.blockMaterialMapTexture, this.view.materialParamsBuffer,
       worldOffsetX,
     );
     this.view.vertexUniformBuffer_border = result.vertexUniformBuffer;

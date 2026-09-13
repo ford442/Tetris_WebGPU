@@ -22,8 +22,11 @@
  * |   10    | blockSamplerMask       | blockSamplerMask        | nearest mip 0                |
  * |   11    | backdropTexture        | absent                  | no backdrop capture in C++   |
  * |   12    | backdropSampler        | absent                  | no backdrop capture in C++   |
+ * |   13    | blockMaterialMap       | blockMaterialMap        | same packed normal/rough/metal|
+ * |   14    | materialParams         | (folded into 0)         | see "uniform merge" below    |
  *
- * Uniform merge: TS splits vertex (binding 0) and fragment (binding 1) uniforms
+ * Uniform merge: TS splits vertex (binding 0), fragment (binding 1) and authored
+ * material (binding 14) uniforms
  * across two buffers because the vertex block is written per draw call. The C++
  * path draws every block in one instanced call, so there is nothing to split —
  * binding 0 carries the whole AuthoredBlockUniforms block and binding 1 is left
@@ -44,6 +47,7 @@ enum BlockBinding {
   kBlockBindingSamplerColor = 3,
   kBlockBindingTextureMask = 9,
   kBlockBindingSamplerMask = 10,
+  kBlockBindingMaterialMap = 13,
 };
 
 } // namespace tetris

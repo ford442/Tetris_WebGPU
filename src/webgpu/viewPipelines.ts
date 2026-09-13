@@ -20,6 +20,7 @@ import { CubeData, FullScreenQuadData, GridData } from './geometry.js';
 import { BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
 import {
   resolveBlockTextureUrl,
+  resolveBlockTextureAssetUrl,
   getTextureMipLevelCount,
   createBlockTextureColorSamplerDescriptor,
   createBlockTextureMaskSamplerDescriptor,
@@ -37,6 +38,7 @@ import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js'
 import { DebugTextureShaders } from './debug_shaders.js';
 import { BloomSystem } from './bloomSystem.js';
 import { createBlockBindGroupEntries } from './shaders/block/bindings.js';
+import { writeMaterialParams, type MaterialViewLike } from './viewMaterials.js';
 import { BackdropCapture } from './backdropCapture.js';
 import { shouldEnableBackdropRefraction } from './glassRefraction.js';
 import {
@@ -51,7 +53,21 @@ import {
   createSolidFallbackTexture,
   createProceduralFallbackTexture,
   createPostProcessBindGroupEntries,
+  createFlatMaterialMapTexture,
+  createMaterialMapTexture,
 } from './viewTextures.js';
+import {
+  AUTHORED_MATERIAL_PARAMS_SIZE,
+  getAuthoredBlockMaterial,
+  loadAuthoredBlockMaterial,
+  materialGlassConfigOverrides,
+} from './blockMaterial.js';
+import { bakeMaterialMapFromTile } from './blockMaterialCanvas.js';
+import { tryLoadKtx2Texture } from './ktx2.js';
+import {
+  checkBlockMaterialContract,
+  measureBlockMaterialContract,
+} from './blockMaterialMaps.js';
 
 /**
  * Load the authored block texture (block.png), extracting the tile and
@@ -61,6 +77,17 @@ export async function loadBlockTexture(view: any): Promise<void> {
   view.blockSamplerColor = view.device.createSampler(createBlockTextureColorSamplerDescriptor());
   view.blockSamplerMask = view.device.createSampler(createBlockTextureMaskSamplerDescriptor());
   view.blockSampler = view.blockSamplerColor;
+
+  // The authored material contract decides the glass curve, the gold grade and
+  // which maps to load, so it has to be applied to the texture config *before* the
+  // tile is extracted. A missing or invalid file keeps the reference material.
+  const materialLoad = await loadAuthoredBlockMaterial();
+  if (materialLoad.applied) {
+    textureLogger.info('Authored block material applied:', materialLoad.material.name);
+  } else if (materialLoad.errors.length) {
+    textureLogger.warn('block-material.json not applied:', materialLoad.errors.join('; '));
+  }
+  setBlockTextureConfig(materialGlassConfigOverrides(materialLoad.material));
 
   try {
     const textureUrl = resolveBlockTextureUrl(import.meta.url);
@@ -97,6 +124,10 @@ export async function loadBlockTexture(view: any): Promise<void> {
     // Authored tile is uploaded as a SINGLE texture, so the shader uses SINGLE mode.
     setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 
+    // Re-apply the authored glass/gold overrides: the dimension probe above resets
+    // the config to an atlas/single-tile preset.
+    setBlockTextureConfig(materialGlassConfigOverrides(getAuthoredBlockMaterial()));
+
     const cfg = getBlockTextureConfig();
     const maskImg = await loadCompanionMaskImage(cfg, textureLoadTimeoutMs);
     if (cfg.maskUrl && !maskImg) {
@@ -104,6 +135,26 @@ export async function loadBlockTexture(view: any): Promise<void> {
     }
 
     const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
+
+    // Optional pre-compressed albedo: BC7 costs ~4x less VRAM than the extracted
+    // RGBA tile, which matters once content packs ship several brick sets. Only taken
+    // when the adapter exposes texture-compression-bc and the container parses;
+    // otherwise the PNG below stays canonical. The metal mask still comes from the
+    // extracted tile's alpha, so the mask semantics are identical either way.
+    const ktx2Path = getAuthoredBlockMaterial().maps.albedoKtx2;
+    if (ktx2Path) {
+      const compressed = await tryLoadKtx2Texture(
+        view.device,
+        resolveBlockTextureAssetUrl(ktx2Path),
+        'block albedo (ktx2)',
+      );
+      if (compressed) {
+        textureLogger.info('Using pre-compressed albedo:', ktx2Path);
+        view.blockAlbedoKtx2Texture = compressed;
+      } else {
+        textureLogger.info('KTX2 albedo unavailable; using the PNG tile:', ktx2Path);
+      }
+    }
 
     const imageBitmap = await createImageBitmap(extracted.canvas, {
       premultiplyAlpha: 'none',
@@ -119,6 +170,35 @@ export async function loadBlockTexture(view: any): Promise<void> {
     generateMipmapsUtil(view.device, view.blockTexture, imageBitmap.width, imageBitmap.height, view.blockTexture.mipLevelCount);
     await view.device.queue.onSubmittedWorkDone();
     view.authoredBlockTextureLoaded = true;
+
+    // Bake + upload the packed material map (normal.xy / roughness / metallic) from
+    // the same extracted tile, then assert the authored tile still satisfies the
+    // visual contract. A contract failure is logged, not thrown: the frame should
+    // still render, but the regression has to be visible in the console and in CI
+    // (scripts/validate-block-material.mjs runs the same check on the PNGs).
+    try {
+      const material = getAuthoredBlockMaterial();
+      const { bake, canvas } = bakeMaterialMapFromTile(extracted.canvas, material);
+      view.blockMaterialMapTexture = await createMaterialMapTexture(view.device, canvas);
+      view.authoredMaterialMapLoaded = true;
+
+      const ctx = extracted.canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        const albedo = ctx.getImageData(0, 0, extracted.width, extracted.height).data;
+        const contract = checkBlockMaterialContract(
+          measureBlockMaterialContract(albedo, extracted.width, extracted.height, bake.rgba),
+          material,
+        );
+        if (contract.ok) {
+          textureLogger.info('Block material contract satisfied', contract.metrics);
+        } else {
+          textureLogger.warn('Block material contract FAILED:', contract.failures.join(' | '));
+        }
+      }
+    } catch (mapError) {
+      view.authoredMaterialMapLoaded = false;
+      textureLogger.warn('Material map bake failed; using contract fallback:', mapError);
+    }
     textureLogger.info(
       'Loaded extracted tile:',
       Math.round(extracted.sourceWidth), 'x', Math.round(extracted.sourceHeight),
@@ -163,6 +243,18 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   // created once and hold @binding(11)/@binding(12) for the lifetime of the device.
   view.backdropCapture?.destroy?.();
   view.backdropCapture = new BackdropCapture(device);
+
+  // @binding(13)/@binding(14) are held for the lifetime of every block bind group,
+  // so both must exist before the first one is built (including the border's).
+  if (!view.blockMaterialMapTexture) {
+    view.blockMaterialMapTexture = createFlatMaterialMapTexture(device, getAuthoredBlockMaterial());
+    view.authoredMaterialMapLoaded = false;
+  }
+  view.materialParamsBuffer = device.createBuffer({
+    label: 'AuthoredMaterialParams',
+    size: AUTHORED_MATERIAL_PARAMS_SIZE,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
   view.backdropRefractionEnabled = shouldEnableBackdropRefraction({
     powerPreference: view.gpuPowerPreference,
     quality,
@@ -458,6 +550,7 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         vertexUniformOffset: i * 256,
         fragmentUniformBuffer: view.fragmentUniformBuffer,
         blockTexture: view.blockTexture,
+        blockColorTexture: view.blockAlbedoKtx2Texture,
         blockSamplerColor: view.blockSamplerColor,
         blockSamplerMask: view.blockSamplerMask,
         dissolveBuffer: view.dissolveBuffer,
@@ -467,8 +560,16 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         iblSampler: view.iblSampler,
         backdropTextureView: view.backdropCapture.textureView,
         backdropSampler: view.backdropCapture.sampler,
+        blockMaterialMapTexture: view.blockMaterialMapTexture,
+        materialParamsBuffer: view.materialParamsBuffer,
       }),
     });
     view.uniformBindGroup_CACHE.push(bindGroup);
   }
+
+  // Write the authored material contract once here. updateMaterialUniforms() also
+  // pushes it, but that only runs on setTheme — without this, a session that never
+  // switches theme would render with a zeroed AuthoredMaterialParams block (no gold
+  // grade, no normal mapping).
+  writeMaterialParams(view as MaterialViewLike);
 }

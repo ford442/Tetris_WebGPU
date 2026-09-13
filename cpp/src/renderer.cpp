@@ -113,6 +113,11 @@ int set_block_texture_rgba(const uint8_t* data, int width, int height, int byte_
 }
 
 EMSCRIPTEN_KEEPALIVE
+int set_block_material_map_rgba(const uint8_t* data, int width, int height, int byte_len) {
+  return gpu_renderer_set_block_material_map(data, width, height, byte_len);
+}
+
+EMSCRIPTEN_KEEPALIVE
 int get_renderer_backend() {
   return g_backend;
 }
