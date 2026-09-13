@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -45,7 +46,7 @@ describe('TS block-shader uniform layout (WGSL text vs CPU offsets)', () => {
   });
 });
 
-/** Minimal size table — only the WGSL scalar/vector types actually used in cpp/src/shaders/block/block.wgsl. */
+/** Minimal size table — only the WGSL scalar/vector types the generated struct uses. */
 const WGSL_TYPE_SIZES: Record<string, number> = {
   'mat4x4<f32>': 64,
   'vec4<f32>': 16,
@@ -58,10 +59,10 @@ function parseCStructByteSize(source: string, structName: string): number {
   const bodyMatch = source.match(new RegExp(`struct ${structName}\\s*\\{([^}]*)\\};`));
   if (!bodyMatch) throw new Error(`struct ${structName} not found`);
   let bytes = 0;
-  const fieldLine = /float\s+\w+\[(\d+)\];/g;
+  const fieldLine = /float\s+\w+(?:\[(\d+)\])?;/g;
   let m: RegExpExecArray | null;
   while ((m = fieldLine.exec(bodyMatch[1])) !== null) {
-    bytes += Number(m[1]) * 4;
+    bytes += (m[1] ? Number(m[1]) : 1) * 4;
   }
   return bytes;
 }
@@ -84,14 +85,40 @@ function parseWgslStructByteSize(source: string, structName: string): number {
   return bytes;
 }
 
-describe('C++ block-shader uniform layout (UniformData struct vs Uniforms WGSL struct)', () => {
-  const cppSource = readFileSync(join(ROOT, 'cpp/src/gpu_renderer.cpp'), 'utf8');
-  const wgslSource = readFileSync(join(ROOT, 'cpp/src/shaders/block/block.wgsl'), 'utf8');
+/**
+ * The C++ block uniform struct and its WGSL declaration are both generated from
+ * shared/authoredBlockUniforms.json, so they cannot disagree by construction —
+ * but only if the generator keeps emitting both from the same field list.
+ */
+describe('C++ block-shader uniform layout (generated from the shared contract)', () => {
+  const generated = (() => {
+    execFileSync(process.execPath, [join(ROOT, 'scripts/generate-cpp-uniforms.mjs')], {
+      cwd: ROOT,
+      stdio: 'pipe',
+    });
+    return readFileSync(join(ROOT, 'cpp/src/generated/authored_block_uniforms.h'), 'utf8');
+  })();
 
-  it('UniformData (C++) and Uniforms (WGSL) describe the same byte size', () => {
-    const cppBytes = parseCStructByteSize(cppSource, 'UniformData');
-    const wgslBytes = parseWgslStructByteSize(wgslSource, 'Uniforms');
+  const contract = JSON.parse(
+    readFileSync(join(ROOT, 'shared/authoredBlockUniforms.json'), 'utf8'),
+  ) as { size: number };
+
+  it('the generated C++ struct and WGSL struct describe the same byte size', () => {
+    // Both structs share a name in the same header, so scope the WGSL parse to the
+    // raw-string literal the shader concatenates.
+    const wgslLiteral = generated.slice(generated.indexOf('R"WGSL('));
+    const cppBytes = parseCStructByteSize(generated, 'AuthoredBlockUniforms');
+    const wgslBytes = parseWgslStructByteSize(wgslLiteral, 'AuthoredBlockUniforms');
     expect(cppBytes).toBe(wgslBytes);
-    expect(cppBytes).toBe(128);
+    expect(cppBytes).toBe(contract.size);
+  });
+
+  it('validates declared offsets against WGSL packing rather than trusting them', () => {
+    // The generator refuses to emit a header when an offset contradicts WGSL
+    // uniform packing, so a hand-edited contract fails the build instead of
+    // silently shifting bytes under the C++ renderer.
+    const generator = readFileSync(join(ROOT, 'scripts/generate-cpp-uniforms.mjs'), 'utf8');
+    expect(generator).toContain('WGSL packing puts it at');
+    expect(generator).toContain('function validate(');
   });
 });

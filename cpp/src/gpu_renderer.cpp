@@ -5,16 +5,21 @@
 
 #include "gpu_renderer.h"
 
+#include "block_bindings.h"
 #include "board_metrics.h"
+#include "generated/authored_block_uniforms.h"
 #include "generated/shader_sources.h"
 #include "math_utils.h"
 
 #include <string.h>
+#include <string>
 
 #if defined(TETRIS_ENABLE_WEBGPU)
 
 #include <emscripten/emscripten.h>
 #include <webgpu/webgpu.h>
+
+#include "block_sampler.h"
 
 namespace {
 
@@ -23,18 +28,28 @@ using namespace tetris;
 constexpr int kMaxInstances = kPlayfieldBytes;
 constexpr float kPi = 3.14159265358979323846f;
 
+// Authored material defaults. These mirror the values the TS renderer writes into
+// FragmentUniforms for the authored block.png path; the C++ path has no per-theme
+// material UI yet, so they are constants rather than a second tuning surface.
+constexpr float kAuthoredGlassMin = 0.28f;
+constexpr float kAuthoredGlassMax = 0.92f;
+constexpr float kAuthoredGlassFresnelPower = 2.0f;
+constexpr float kAuthoredMetallic = 0.9f;
+constexpr float kAuthoredRoughness = 0.18f;
+constexpr float kAuthoredClearcoat = 0.35f;
+constexpr float kAuthoredAnisotropic = 0.4f;
+constexpr float kAuthoredGlassIor = 1.45f;
+constexpr float kAuthoredGlassThickness = 0.035f;
+constexpr float kAuthoredDispersion = 0.015f;
+
 struct BlockInstance {
   float pos[3];
   float color[4];
 };
 
-struct UniformData {
-  float view_proj[16];
-  float params0[4];  // halfSize, lockFlash, ambient, diffuse
-  float params1[4];  // textureMix, pad...
-  float light_dir[4];
-  float eye_pos[4];
-};
+// Uniform block layout is generated from shared/authoredBlockUniforms.json — the
+// same contract the TS renderer's offsets are checked against. See block_bindings.h.
+using UniformData = tetris::AuthoredBlockUniforms;
 
 struct PostProcessUniformData {
   float time;
@@ -57,7 +72,10 @@ struct GpuState {
   WGPUBindGroupLayout bind_group_layout = nullptr;
   WGPUTexture block_texture = nullptr;
   WGPUTextureView block_texture_view = nullptr;
+  WGPUTextureView block_texture_mask_view = nullptr;
   WGPUSampler block_sampler = nullptr;
+  WGPUSampler block_sampler_mask = nullptr;
+  uint32_t block_texture_mips = 1;
   WGPUTexture depth_texture = nullptr;
   WGPUTextureView depth_view = nullptr;
 
@@ -73,6 +91,7 @@ struct GpuState {
   WGPUTextureFormat surface_format = WGPUTextureFormat_BGRA8Unorm;
   bool draw_blocks = false;
   bool texture_ready = false;
+  float lock_flash = 0.0f;
   char canvas_selector[64] = "canvaswebgpu";
   int width = 1;
   int height = 1;
@@ -276,24 +295,48 @@ static void update_uniforms(float dt) {
                0.0f, 1.0f, 0.0f);
   mat4_multiply(&vp, &proj, &view);
 
-  UniformData uniforms = {};
-  memcpy(uniforms.view_proj, vp.m, sizeof(vp.m));
-  uniforms.params0[0] = kBlockHalfWorldSize;
-  uniforms.params0[1] = 0.0f;
-  uniforms.params0[2] = 0.35f;  // ambient
-  uniforms.params0[3] = 0.85f;  // diffuse
-  uniforms.params1[0] = g_gpu.texture_ready ? 1.0f : 0.0f;
-  uniforms.light_dir[0] = 0.35f;
-  uniforms.light_dir[1] = 0.85f;
-  uniforms.light_dir[2] = 0.45f;
-  uniforms.eye_pos[0] = 0.0f;
-  uniforms.eye_pos[1] = cam_y;
-  uniforms.eye_pos[2] = kCameraZ;
-
-  wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.uniform_buffer, 0, &uniforms, sizeof(uniforms));
-
   static float time_acc = 0.0f;
   time_acc += dt;
+
+  UniformData uniforms = {};
+  memcpy(uniforms.viewProjection, vp.m, sizeof(vp.m));
+
+  // Point light, not a direction: the shared authored path normalizes
+  // (lightPosition - worldPos), same as the TS fragment shader.
+  uniforms.lightPosition[0] = kBoardWorldCenterX + 6.0f;
+  uniforms.lightPosition[1] = kBoardWorldCenterY + 18.0f;
+  uniforms.lightPosition[2] = kCameraZ + 10.0f;
+  uniforms.lightPosition[3] = 1.0f;
+
+  uniforms.eyePosition[0] = 0.0f;
+  uniforms.eyePosition[1] = cam_y;
+  uniforms.eyePosition[2] = kCameraZ;
+  uniforms.eyePosition[3] = 1.0f;
+
+  // GlassParams defaults mirror the TS authored crystal curve (min/max/fresnelPower).
+  uniforms.glassParams[0] = kAuthoredGlassMin;
+  uniforms.glassParams[1] = kAuthoredGlassMax;
+  uniforms.glassParams[2] = kAuthoredGlassFresnelPower;
+
+  uniforms.blockHalfSize = kBlockHalfWorldSize;
+  uniforms.time = time_acc;
+  uniforms.textureMix = g_gpu.texture_ready ? 1.0f : 0.0f;
+  uniforms.metallic = kAuthoredMetallic;
+  uniforms.roughness = kAuthoredRoughness;
+  uniforms.clearcoat = kAuthoredClearcoat;
+  uniforms.anisotropic = kAuthoredAnisotropic;
+  uniforms.glassIor = kAuthoredGlassIor;
+  uniforms.glassThickness = kAuthoredGlassThickness;
+  uniforms.dispersion = kAuthoredDispersion;
+  // No IBL prefilter and no backdrop capture on this path yet: take the exact
+  // fallback branches the shared TS shader already has for both.
+  uniforms.iblEnable = 0.0f;
+  uniforms.refractEnable = 0.0f;
+  // Reserved: the active-piece lock flash is applied per instance in
+  // build_instances (same as TS), so the shader does not read this yet.
+  uniforms.lockFlash = g_gpu.lock_flash;
+
+  wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.uniform_buffer, 0, &uniforms, sizeof(uniforms));
 
   PostProcessUniformData post_uniforms = {};
   post_uniforms.time = time_acc;
@@ -305,23 +348,85 @@ static void update_uniforms(float dt) {
   }
 }
 
-// kBlockWgsl (tetris::shaders namespace) generated from cpp/src/shaders/block/block.wgsl
-// by scripts/generate-cpp-shaders.mjs — see generated/shader_sources.h.
-using tetris::shaders::kBlockWgsl;
+/**
+ * Compose the authored block shader from its generated pieces, in the order
+ * cpp/src/shaders/block/authoredBlock.wgsl documents:
+ *   uniforms (from shared/authoredBlockUniforms.json)
+ *     + shared binding-free PBR core (src/webgpu/shaders/wgsl/block/pbrCore.wgsl)
+ *     + shared authored material (src/webgpu/shaders/wgsl/block/authoredGlass.wgsl)
+ *     + the C++-owned bindings / vertex / fragment plumbing.
+ * Everything but the last piece is byte-identical to what the TS renderer compiles,
+ * so the two paths cannot grade gold or curve glass differently.
+ */
+static std::string compose_authored_block_wgsl() {
+  std::string out;
+  out += tetris::kAuthoredBlockUniformsWgsl;
+  out += "\n";
+  out += tetris::shaders::kSharedPbrCoreWgsl;
+  out += "\n";
+  out += tetris::shaders::kSharedAuthoredGlassWgsl;
+  out += "\n";
+  out += tetris::shaders::kAuthoredBlockWgsl;
+  return out;
+}
+
+/** (Re)create the color + mask samplers for the currently bound texture's mip count. */
+static bool create_block_samplers() {
+  if (g_gpu.block_sampler) {
+    wgpuSamplerRelease(g_gpu.block_sampler);
+    g_gpu.block_sampler = nullptr;
+  }
+  if (g_gpu.block_sampler_mask) {
+    wgpuSamplerRelease(g_gpu.block_sampler_mask);
+    g_gpu.block_sampler_mask = nullptr;
+  }
+  WGPUSamplerDescriptor color_desc = blockColorSamplerDescriptor(g_gpu.block_texture_mips);
+  g_gpu.block_sampler = wgpuDeviceCreateSampler(g_gpu.device, &color_desc);
+  WGPUSamplerDescriptor mask_desc = blockMaskSamplerDescriptor();
+  g_gpu.block_sampler_mask = wgpuDeviceCreateSampler(g_gpu.device, &mask_desc);
+  return g_gpu.block_sampler != nullptr && g_gpu.block_sampler_mask != nullptr;
+}
+
+/** Color view (full mip chain) + mask view (mip 0), matching the TS binding views. */
+static bool create_block_texture_views() {
+  if (g_gpu.block_texture_view) {
+    wgpuTextureViewRelease(g_gpu.block_texture_view);
+    g_gpu.block_texture_view = nullptr;
+  }
+  if (g_gpu.block_texture_mask_view) {
+    wgpuTextureViewRelease(g_gpu.block_texture_mask_view);
+    g_gpu.block_texture_mask_view = nullptr;
+  }
+  if (!g_gpu.block_texture) return false;
+  WGPUTextureViewDescriptor color_view = blockColorViewDescriptor(g_gpu.block_texture_mips);
+  g_gpu.block_texture_view = wgpuTextureCreateView(g_gpu.block_texture, &color_view);
+  WGPUTextureViewDescriptor mask_view = blockMaskViewDescriptor();
+  g_gpu.block_texture_mask_view = wgpuTextureCreateView(g_gpu.block_texture, &mask_view);
+  return g_gpu.block_texture_view != nullptr && g_gpu.block_texture_mask_view != nullptr;
+}
 
 static void release_block_texture() {
   if (g_gpu.block_texture_view) {
     wgpuTextureViewRelease(g_gpu.block_texture_view);
     g_gpu.block_texture_view = nullptr;
   }
+  if (g_gpu.block_texture_mask_view) {
+    wgpuTextureViewRelease(g_gpu.block_texture_mask_view);
+    g_gpu.block_texture_mask_view = nullptr;
+  }
   if (g_gpu.block_sampler) {
     wgpuSamplerRelease(g_gpu.block_sampler);
     g_gpu.block_sampler = nullptr;
+  }
+  if (g_gpu.block_sampler_mask) {
+    wgpuSamplerRelease(g_gpu.block_sampler_mask);
+    g_gpu.block_sampler_mask = nullptr;
   }
   if (g_gpu.block_texture) {
     wgpuTextureRelease(g_gpu.block_texture);
     g_gpu.block_texture = nullptr;
   }
+  g_gpu.block_texture_mips = 1;
   g_gpu.texture_ready = false;
 }
 
@@ -347,15 +452,8 @@ static bool create_placeholder_block_texture() {
   WGPUExtent3D size = {1, 1, 1};
   wgpuQueueWriteTexture(g_gpu.queue, &dest, white_rgba, 4, &layout, &size);
 
-  g_gpu.block_texture_view = wgpuTextureCreateView(g_gpu.block_texture, nullptr);
-
-  WGPUSamplerDescriptor samp_desc = {};
-  samp_desc.magFilter = WGPUFilterMode_Linear;
-  samp_desc.minFilter = WGPUFilterMode_Linear;
-  samp_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
-  g_gpu.block_sampler = wgpuDeviceCreateSampler(g_gpu.device, &samp_desc);
-
-  return g_gpu.block_texture_view && g_gpu.block_sampler;
+  g_gpu.block_texture_mips = 1;
+  return create_block_texture_views() && create_block_samplers();
 }
 
 static bool recreate_post_bind_group() {
@@ -402,7 +500,8 @@ static bool recreate_bind_group() {
     wgpuBindGroupRelease(g_gpu.bind_group);
     g_gpu.bind_group = nullptr;
   }
-  if (!g_gpu.pipeline || !g_gpu.uniform_buffer || !g_gpu.block_texture_view || !g_gpu.block_sampler) {
+  if (!g_gpu.pipeline || !g_gpu.uniform_buffer || !g_gpu.block_texture_view ||
+      !g_gpu.block_texture_mask_view || !g_gpu.block_sampler || !g_gpu.block_sampler_mask) {
     return false;
   }
 
@@ -411,18 +510,24 @@ static bool recreate_bind_group() {
     layout = wgpuRenderPipelineGetBindGroupLayout(g_gpu.pipeline, 0);
   }
 
-  WGPUBindGroupEntry entries[3] = {};
-  entries[0].binding = 0;
+  // Binding indices come from block_bindings.h and match the TS renderer's
+  // numbering — resources TS has and this path does not are left as holes.
+  WGPUBindGroupEntry entries[5] = {};
+  entries[0].binding = kBlockBindingUniforms;
   entries[0].buffer = g_gpu.uniform_buffer;
   entries[0].size = sizeof(UniformData);
-  entries[1].binding = 1;
+  entries[1].binding = kBlockBindingTextureColor;
   entries[1].textureView = g_gpu.block_texture_view;
-  entries[2].binding = 2;
+  entries[2].binding = kBlockBindingSamplerColor;
   entries[2].sampler = g_gpu.block_sampler;
+  entries[3].binding = kBlockBindingTextureMask;
+  entries[3].textureView = g_gpu.block_texture_mask_view;
+  entries[4].binding = kBlockBindingSamplerMask;
+  entries[4].sampler = g_gpu.block_sampler_mask;
 
   WGPUBindGroupDescriptor bg_desc = {};
   bg_desc.layout = layout;
-  bg_desc.entryCount = 3;
+  bg_desc.entryCount = 5;
   bg_desc.entries = entries;
   g_gpu.bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
   return g_gpu.bind_group != nullptr;
@@ -484,7 +589,9 @@ static bool create_post_pipeline() {
 }
 
 static bool create_pipeline() {
-  WGPUShaderModule shader = create_shader(kBlockWgsl);
+  const std::string block_wgsl = compose_authored_block_wgsl();
+  WGPUShaderModule shader = create_shader(block_wgsl.c_str());
+  if (!shader) return false;
 
   WGPUVertexAttribute attrs[] = {
       {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 0},
@@ -509,21 +616,30 @@ static bool create_pipeline() {
       },
   };
 
-  WGPUBindGroupLayoutEntry bgl_entries[3] = {};
-  bgl_entries[0].binding = 0;
+  WGPUBindGroupLayoutEntry bgl_entries[5] = {};
+  bgl_entries[0].binding = kBlockBindingUniforms;
   bgl_entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
   bgl_entries[0].buffer.type = WGPUBufferBindingType_Uniform;
   bgl_entries[0].buffer.minBindingSize = sizeof(UniformData);
-  bgl_entries[1].binding = 1;
+  bgl_entries[1].binding = kBlockBindingTextureColor;
   bgl_entries[1].visibility = WGPUShaderStage_Fragment;
   bgl_entries[1].texture.sampleType = WGPUTextureSampleType_Float;
   bgl_entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
-  bgl_entries[2].binding = 2;
+  bgl_entries[2].binding = kBlockBindingSamplerColor;
   bgl_entries[2].visibility = WGPUShaderStage_Fragment;
   bgl_entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
+  bgl_entries[3].binding = kBlockBindingTextureMask;
+  bgl_entries[3].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[3].texture.sampleType = WGPUTextureSampleType_Float;
+  bgl_entries[3].texture.viewDimension = WGPUTextureViewDimension_2D;
+  // Nearest-only mask sampler: NonFiltering, so a filtering sampler can never be
+  // bound over the baked alpha and reintroduce the halo TS avoids.
+  bgl_entries[4].binding = kBlockBindingSamplerMask;
+  bgl_entries[4].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[4].sampler.type = WGPUSamplerBindingType_NonFiltering;
 
   WGPUBindGroupLayoutDescriptor bgl_desc = {};
-  bgl_desc.entryCount = 3;
+  bgl_desc.entryCount = 5;
   bgl_desc.entries = bgl_entries;
   g_gpu.bind_group_layout = wgpuDeviceCreateBindGroupLayout(g_gpu.device, &bgl_desc);
 
@@ -713,6 +829,7 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
     wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.instance_buffer, 0, instances,
                          static_cast<size_t>(instance_count) * sizeof(BlockInstance));
   }
+  g_gpu.lock_flash = piece_state ? piece_state->lock_flash : 0.0f;
   update_uniforms(dt);
 
   WGPUSurfaceTexture surface_tex = {};
@@ -817,16 +934,8 @@ int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, i
   WGPUExtent3D size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
   wgpuQueueWriteTexture(g_gpu.queue, &dest, data, expected, &layout, &size);
 
-  g_gpu.block_texture_view = wgpuTextureCreateView(g_gpu.block_texture, nullptr);
-  if (!g_gpu.block_sampler) {
-    WGPUSamplerDescriptor samp_desc = {};
-    samp_desc.magFilter = WGPUFilterMode_Linear;
-    samp_desc.minFilter = WGPUFilterMode_Linear;
-    samp_desc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
-    g_gpu.block_sampler = wgpuDeviceCreateSampler(g_gpu.device, &samp_desc);
-  }
-
-  g_gpu.texture_ready = g_gpu.block_texture_view != nullptr && g_gpu.block_sampler != nullptr;
+  g_gpu.block_texture_mips = 1;
+  g_gpu.texture_ready = create_block_texture_views() && create_block_samplers();
   if (g_gpu.texture_ready && !recreate_bind_group()) {
     g_gpu.texture_ready = false;
     return 0;
@@ -835,7 +944,7 @@ int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, i
   if (g_gpu.texture_ready) {
     EM_ASM({
       if (typeof console !== 'undefined' && console.info) {
-        console.info('[cpp renderer] block.png uploaded to GPU texture');
+        console.info('[cpp renderer] authored block tile uploaded to GPU texture');
       }
     });
   }

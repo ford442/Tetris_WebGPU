@@ -3,12 +3,9 @@
             return clamp((color * (a * color + b)) / (color * (c * color + d) + e), vec3f(0.0), vec3f(1.0));
         }
 
-        // Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
-        fn gradeGoldMetalAlbedo(texRgb: vec3f) -> vec3f {
-            let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
-            let gold = vec3f(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
-            return mix(texRgb, gold, 0.78);
-        }
+        // gradeGoldMetalAlbedo / authoredGlassAlbedo / authoredBaseColor / authoredGlassOpacity
+        // come from the shared authored-material module (wgsl/block/authoredGlass.wgsl),
+        // which the C++ renderer embeds verbatim so both paths grade gold identically.
 
         @fragment
         fn main(@location(0) vWorldPos : vec4f,
@@ -85,15 +82,10 @@
             let metalOpaque = step(0.5, metalMask);
             let glassMaskAlpha = 1.0 - metalOpaque;
 
-            let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
-            let crystalBright = smoothstep(0.15, 0.90, luma);
-            let crystalHi = max(luma - 0.55, 0.0) * 3.0;
             let metalColor = gradeGoldMetalAlbedo(texColor.rgb);
-            let glassColor = texColor.rgb * (0.60 + crystalBright * 0.40)
-                           + vColor.rgb * 0.35 * crystalBright
-                           + vec3f(crystalHi * 0.50);
+            let glassColor = authoredGlassAlbedo(texColor.rgb, vColor.rgb);
             // Authored block.png blend: glass interior vs metal frame, driven by baked mask.
-            let authoredBase = mix(glassColor, metalColor, metalMask);
+            let authoredBase = authoredBaseColor(texColor.rgb, vColor.rgb, metalMask);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
@@ -209,9 +201,7 @@
 
             if (useAuthoredSampling) {
                 // Authored block.png path: gold frame + stained-glass crystal (reference build)
-                let lightFactor = 0.38 + NdotL * 0.62;
-                let specularStrength = mix(0.04, 0.18, metalMask);
-                finalColor = baseColor * lightFactor + vec3f(tightSpec * specularStrength);
+                finalColor = authoredDirectLighting(baseColor, NdotL, tightSpec, metalMask);
 
                 if (metalMask > 0.05) {
                     let mip0 = texColor.rgb;
@@ -288,25 +278,12 @@
                 }
 
                 // Gold frame opaque; glass center from CPU GlassParams (min/max/fresnelPower).
-                let edgeFresnel = 1.0 - NdotV;
-                let glassMin = fUniforms.glassParams.min;
-                let glassMax = fUniforms.glassParams.max;
-                let glassPower = max(fUniforms.glassParams.fresnelPower, 0.001);
-                let edge2 = edgeFresnel * edgeFresnel;
-                let edge4 = edge2 * edge2;
-
-                // fast path approximation for common powers instead of expensive pow()
-                var fresnelVal = 0.0;
-                if (abs(glassPower - 2.0) < 0.001) {
-                    fresnelVal = edge2;
-                } else if (abs(glassPower - 5.0) < 0.001) {
-                    fresnelVal = edge4 * edgeFresnel;
-                } else {
-                    fresnelVal = pow(edgeFresnel, glassPower);
-                }
-
-                let glassFresnel = fresnelVal;
-                let glassOpacity = mix(glassMin, glassMax, glassFresnel);
+                let glassOpacity = authoredGlassOpacity(
+                    NdotV,
+                    fUniforms.glassParams.min,
+                    fUniforms.glassParams.max,
+                    fUniforms.glassParams.fresnelPower,
+                );
                 finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
             } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
                 // Classic mode

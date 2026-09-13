@@ -58,12 +58,23 @@ describe('build-cpp outputs', () => {
     expect(cmake).toContain('generate_cpp_shaders');
   });
 
-  it('gpu_renderer.cpp consumes the generated header instead of a hand-copied WGSL string', () => {
-    const blockWgsl = readFileSync(join(ROOT, 'cpp/src/shaders/block/block.wgsl'), 'utf8');
+  it('gpu_renderer.cpp consumes the generated headers instead of hand-copied WGSL or offsets', () => {
+    const blockWgsl = readFileSync(join(ROOT, 'cpp/src/shaders/block/authoredBlock.wgsl'), 'utf8');
     const cppSrc = readFileSync(join(ROOT, 'cpp/src/gpu_renderer.cpp'), 'utf8');
     expect(cppSrc).toContain('generated/shader_sources.h');
-    expect(cppSrc).not.toContain('struct Uniforms {'); // that struct now lives only in block.wgsl
-    expect(blockWgsl).toContain('struct Uniforms {');
+    expect(cppSrc).toContain('generated/authored_block_uniforms.h');
+    // The uniform struct is generated from shared/authoredBlockUniforms.json; neither
+    // the C++ source nor the shader may declare its own copy.
+    expect(cppSrc).not.toContain('struct AuthoredBlockUniforms {');
+    expect(blockWgsl).not.toContain('struct AuthoredBlockUniforms {');
+    expect(blockWgsl).toContain('var<uniform> u : AuthoredBlockUniforms');
+  });
+
+  it('generates the block uniform struct from the shared contract in both build paths', () => {
+    const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
+    expect(src).toContain('generate-cpp-uniforms.mjs');
+    const cmake = readFileSync(join(ROOT, 'cpp/CMakeLists.txt'), 'utf8');
+    expect(cmake).toContain('generate-cpp-uniforms.mjs');
   });
 
   it('emits build-info.json with backend metadata when emcc ran', () => {

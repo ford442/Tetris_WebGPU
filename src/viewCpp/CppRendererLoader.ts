@@ -14,7 +14,17 @@ import {
   PIECE_STATE_BYTES,
   PLAYFIELD_CELL_COUNT,
 } from './cppPlayfieldSync.js';
-import { resolveBlockTextureUrl } from '../webgpu/blockTexture.js';
+import {
+  applyBlockTextureConfigForImageDimensions,
+  getBlockTextureConfig,
+  resolveBlockTextureUrl,
+  setBlockTextureConfig,
+} from '../webgpu/blockTexture.js';
+import {
+  BLOCK_TILE_EXTRACT_SCALE,
+  extractBlockTileFromImage,
+  loadCompanionMaskImage,
+} from '../webgpu/blockTextureExtract.js';
 import type { GameState } from '../game/gameState.js';
 
 export const PLAYFIELD_BYTES = PLAYFIELD_CELL_COUNT;
@@ -168,7 +178,14 @@ export class CppRendererLoader {
     return this.blockTextureReady;
   }
 
-  /** Decode block.png in TS and upload RGBA pixels into the C++ bind group texture. */
+  /**
+   * Upload the *extracted authored tile* into the C++ bind-group texture.
+   *
+   * This runs the same CPU pipeline the TS renderer uses (crop the authored tile
+   * out of the atlas, upscale it, bake the metal frame into alpha), so the C++
+   * shader receives post-extract RGBA and needs no atlas UV math of its own —
+   * see cpp/src/shaders/block/authoredBlock.wgsl.
+   */
   static async uploadBlockTexture(): Promise<boolean> {
     if (!this.module || !this.setBlockTextureFn || this.backend !== RendererBackend.WEBGPU) {
       return false;
@@ -187,26 +204,36 @@ export class CppRendererLoader {
       }
       const blob = await res.blob();
       const bitmap = await createImageBitmap(blob);
-      const canvas = typeof OffscreenCanvas !== 'undefined'
-        ? new OffscreenCanvas(bitmap.width, bitmap.height)
-        : document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext('2d');
+
+      // Same config handshake as viewPipelines.ts: the uploaded tile is a single
+      // texture, so 'single' sampling mode is what the shader must assume.
+      applyBlockTextureConfigForImageDimensions(bitmap.width, bitmap.height);
+      setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
+
+      const cfg = getBlockTextureConfig();
+      const maskImg = await loadCompanionMaskImage(cfg);
+      if (cfg.maskUrl && !maskImg) {
+        renderLogger.warn('[cpp] block mask load failed; using heuristic mask bake');
+      }
+
+      const extracted = extractBlockTileFromImage(bitmap, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
+      const ctx = extracted.canvas.getContext('2d');
       if (!ctx) {
-        renderLogger.warn('[cpp] 2D context unavailable for block texture decode');
+        renderLogger.warn('[cpp] 2D context unavailable for extracted tile readback');
         return false;
       }
-      ctx.drawImage(bitmap, 0, 0);
-      const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+      const imageData = ctx.getImageData(0, 0, extracted.width, extracted.height);
       const bytes = imageData.data;
+
       const ptr = this.module._malloc(bytes.length);
       try {
         this.module.HEAPU8.set(bytes, ptr);
-        const ok = this.setBlockTextureFn(ptr, bitmap.width, bitmap.height, bytes.length);
+        const ok = this.setBlockTextureFn(ptr, extracted.width, extracted.height, bytes.length);
         this.blockTextureReady = ok === 1;
         if (this.blockTextureReady) {
-          renderLogger.info(`[cpp] block texture uploaded (${bitmap.width}x${bitmap.height})`);
+          renderLogger.info(
+            `[cpp] authored tile uploaded (${extracted.width}x${extracted.height}, ${extracted.scale}x)`,
+          );
         }
         return this.blockTextureReady;
       } finally {
