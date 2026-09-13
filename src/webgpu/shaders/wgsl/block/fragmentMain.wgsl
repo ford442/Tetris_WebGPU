@@ -3,6 +3,13 @@
             return clamp((color * (a * color + b)) / (color * (c * color + d) + e), vec3f(0.0), vec3f(1.0));
         }
 
+        // Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
+        fn gradeGoldMetalAlbedo(texRgb: vec3f) -> vec3f {
+            let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
+            let gold = vec3f(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
+            return mix(texRgb, gold, 0.78);
+        }
+
         @fragment
         fn main(@location(0) vWorldPos : vec4f,
                 @location(1) vNormal : vec3f,
@@ -42,23 +49,12 @@
                 }
             }
 
-            // Sample the authored block image from its sharpest mip. The 3D block faces
-            // are small enough on screen that implicit LOD selection can soften the gold/glass detail.
-            let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
-
-            // Per-pixel warmth masks (used for low-mix / PBR fallback paths).
-            let textureMasks = extractMaterialMask(texColor.rgb);
-            let textureMetalMask = textureMasks.x;
-            let textureGlassMask = textureMasks.y;
-
-            // Outer ring force in UV space (keeps the authored frame structure solid).
-            // The bulk of metal/glass separation now comes from baked texColor.a.
-            let distX = min(vUV.x, 1.0 - vUV.x);
-            let distY = min(vUV.y, 1.0 - vUV.y);
-            let distEdge = min(distX, distY);
-            let borderThickness = 0.14;
-            let geoGlassMask = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
-            let geoMetalForce = 1.0 - geoGlassMask;
+            // Dual sample of the same RGBA tile:
+            //   RGB  — linear anisotropic (optional albedo LOD bias)
+            //   A    — nearest mip 0 (baked metal mask; no linear-filter halo)
+            let texColorRgb = textureSampleBias(blockTexture, blockSamplerColor, texUV, 0.0);
+            let texMaskA = textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0).a;
+            let texColor = vec4f(texColorRgb.rgb, texMaskA);
 
             let textureMix = fUniforms.textureMix;
             // Border frame always samples block.png gold/crystal detail at full strength
@@ -70,53 +66,33 @@
             let effectiveTextureMix = max(textureMix, select(0.0, 0.94, isBorderBlock && authoredLoaded));
             let useAuthoredSampling = effectiveTextureMix > 0.8;
 
-            // Baked mask: extractBlockTileFromImage stores a feathered metal mask into texColor.a.
-            // - metalSoft: used for shading detail.
-            // - metalOpaque: hard-thresholded for opacity to prevent halos / partial metal.
-            let metalSoftBaked0 = clamp(texColor.a, 0.0, 1.0);
-
-            // Mask sharpen: max-pool a small neighborhood around texColor.a at mip 0.
-            // This prevents fractional boundary pixels from creating halo transparency.
-            var metalSoftBaked = metalSoftBaked0;
+            // Authored path: metalMask is baked alpha (extractor dilate + nearest sample).
+            // Geometric hinge force is an extractor option (maskOuterForce), not a shader UV square.
+            // Fallback path: runtime RGB heuristic when the authored tile is missing.
+            var metalMask: f32;
+            var glassMask: f32;
+            var textureMetalMask: f32 = 0.5;
             if (useAuthoredSampling) {
-                let dims = vec2<f32>(textureDimensions(blockTexture, 0));
-                let texel = 1.0 / max(dims, vec2<f32>(1.0));
-                let r = texel * 1.0;
-
-                let a1 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0, -r.y), 0.0).a;
-                let a2 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( 0.0,  r.y), 0.0).a;
-                let a3 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>(-r.x,  0.0), 0.0).a;
-                let a4 = textureSampleLevel(blockTexture, blockSampler, texUV + vec2<f32>( r.x,  0.0), 0.0).a;
-
-                metalSoftBaked = max(
-                    metalSoftBaked0,
-                    max(a1, max(a2, max(a3, a4)))
-                );
+                metalMask = clamp(texColor.a, 0.0, 1.0);
+                glassMask = 1.0 - metalMask;
+            } else {
+                let textureMasks = extractMaterialMask(texColor.rgb);
+                textureMetalMask = textureMasks.x;
+                metalMask = textureMasks.x;
+                glassMask = textureMasks.y;
             }
-
-            let metalOpaqueBaked = smoothstep(0.45, 0.65, metalSoftBaked);
-
-            let metalMaskBakedSoft = max(metalSoftBaked, geoMetalForce);
-            let metalMaskBakedOpaque = max(metalOpaqueBaked, geoMetalForce);
-            let glassMaskBakedSoft = 1.0 - metalMaskBakedSoft;
-            let glassMaskAlpha = 1.0 - metalMaskBakedOpaque;
-
-            // Use baked alpha-derived masks only when the authored extracted tile
-            // is active; otherwise fall back to runtime RGB heuristic masks.
-            let metalMask = select(textureMetalMask, metalMaskBakedSoft, useAuthoredSampling);
-            let metalMaskForAlpha = select(textureMetalMask, metalMaskBakedOpaque, useAuthoredSampling);
-            let glassMask = select(textureGlassMask, glassMaskBakedSoft, useAuthoredSampling);
+            let metalOpaque = step(0.5, metalMask);
+            let glassMaskAlpha = 1.0 - metalOpaque;
 
             let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
             let crystalBright = smoothstep(0.15, 0.90, luma);
             let crystalHi = max(luma - 0.55, 0.0) * 3.0;
-            let metalColor = texColor.rgb * 1.5 + vec3f(0.08, 0.03, 0.0);
+            let metalColor = gradeGoldMetalAlbedo(texColor.rgb);
             let glassColor = texColor.rgb * (0.60 + crystalBright * 0.40)
                            + vColor.rgb * 0.35 * crystalBright
                            + vec3f(crystalHi * 0.50);
             // Authored block.png blend: glass interior vs metal frame, driven by baked mask.
-            // (When not using authored sampling, this value is unused.)
-            let authoredBase = mix(glassColor, metalColor, metalMaskBakedSoft);
+            let authoredBase = mix(glassColor, metalColor, metalMask);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
@@ -238,7 +214,7 @@
 
                 if (metalMask > 0.05) {
                     let mip0 = texColor.rgb;
-                    let mip3 = textureSampleLevel(blockTexture, blockSampler, texUV, 3.0).rgb;
+                    let mip3 = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 3.0).rgb;
                     let lumaVar = length(mip0 - mip3);
                     var pixelRough = mix(0.12, 0.35, 1.0 - metalMask);
                     pixelRough = clamp(pixelRough + lumaVar * 0.18 * metalMask, 0.08, 0.45);
@@ -298,11 +274,11 @@
 
                 }
 
-                // Gold frame opaque; glass center opacity from CPU (reserved2.xy = min/max, .z = Fresnel power).
+                // Gold frame opaque; glass center from CPU GlassParams (min/max/fresnelPower).
                 let edgeFresnel = 1.0 - NdotV;
-                let glassMin = fUniforms.reserved2.x;
-                let glassMax = fUniforms.reserved2.y;
-                let glassPower = max(fUniforms.reserved2.z, 0.001);
+                let glassMin = fUniforms.glassParams.min;
+                let glassMax = fUniforms.glassParams.max;
+                let glassPower = max(fUniforms.glassParams.fresnelPower, 0.001);
                 let edge2 = edgeFresnel * edgeFresnel;
                 let edge4 = edge2 * edge2;
 
@@ -520,8 +496,8 @@
                 }
             }
 
-            // Use the hard metal mask for opacity so the frame never becomes semi-transparent.
-            let materialAlpha = mix(finalAlpha, 1.0, metalMask);
+            // Gold hinges stay alpha 1.0 (no video bleed). Use the hard threshold, not soft mask.
+            let materialAlpha = mix(finalAlpha, 1.0, metalOpaque);
             let outAlpha = materialAlpha * vColor.w;
             // Premultiply RGB for premultiplied-alpha blending.
             finalColor *= outAlpha;

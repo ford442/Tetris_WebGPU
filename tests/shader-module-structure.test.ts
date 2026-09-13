@@ -60,7 +60,8 @@ describe('authoritative block shader structure', () => {
       vertexUniformBuffer: {} as GPUBuffer,
       fragmentUniformBuffer: {} as GPUBuffer,
       blockTexture: dummyTex,
-      blockSampler: {} as GPUSampler,
+      blockSamplerColor: {} as GPUSampler,
+      blockSamplerMask: {} as GPUSampler,
       dissolveBuffer: {} as GPUBuffer,
       fresnelParamsUniform: {} as GPUBuffer,
       iblSpecularTexture: dummyTex,
@@ -68,7 +69,7 @@ describe('authoritative block shader structure', () => {
       iblSampler: {} as GPUSampler,
     });
     expect(entries.map((e) => e.binding)).toEqual(BLOCK_PIPELINE_BINDINGS);
-    expect(BLOCK_PIPELINE_BINDINGS).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(BLOCK_PIPELINE_BINDINGS).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it('authored metal path uses split-sum IBL and does not clamp HDR before bloom', () => {

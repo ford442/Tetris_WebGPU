@@ -36,12 +36,12 @@ export const DebugTextureShaders = () => {
   // Debug mode 1: Show raw texture
   const fragmentRawTexture = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                let texColor = textureSample(blockTexture, blockSamplerColor, texUV);
                 
                 // Show raw texture color
                 return vec4<f32>(texColor.rgb, 1.0);
@@ -50,12 +50,12 @@ export const DebugTextureShaders = () => {
   // Debug mode 2: Show luminance/brightness
   const fragmentLuminance = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                let texColor = textureSample(blockTexture, blockSamplerColor, texUV);
                 
                 let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
                 
@@ -66,12 +66,12 @@ export const DebugTextureShaders = () => {
   // Debug mode 3: Show metal/glass mask
   const fragmentMask = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
                 let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSample(blockTexture, blockSampler, texUV);
+                let texColor = textureSample(blockTexture, blockSamplerColor, texUV);
                 
                 let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));
                 let isMetal = smoothstep(0.4, 0.5, luma);
@@ -96,43 +96,48 @@ export const DebugTextureShaders = () => {
                 return vec4<f32>(vColor.rgb, 1.0);
             }`;
 
+  // Nearest mip-0 alpha (matches production mask sampler; no linear halo).
+  const bakedMaskSample = `
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let dims = textureDimensions(blockTexture, 0);
+                let px = vec2<i32>(vec2<f32>(dims) * clamp(texUV, vec2<f32>(0.0), vec2<f32>(0.9999)));
+                let texMaskA = textureLoad(blockTexture, px, 0).a;
+`;
+
   // Debug mode 6: Show baked metal-frame alpha (stored in texColor.a)
   const fragmentBakedMetalAlpha = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
-                return vec4<f32>(vec3<f32>(texColor.a), 1.0);
+                ${bakedMaskSample}
+                return vec4<f32>(vec3<f32>(texMaskA), 1.0);
             }`;
 
   // Debug mode 7: Show baked glass mask derived from alpha channel
   const fragmentGlassMask = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
-                let glass = 1.0 - texColor.a;
+                ${bakedMaskSample}
+                let glass = 1.0 - texMaskA;
                 return vec4<f32>(vec3<f32>(glass), 1.0);
             }`;
 
   // Debug mode 8: Approximate final alpha (glass opacity driven by baked glass mask)
   const fragmentFinalAlphaApprox = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
-            @binding(3) @group(0) var blockSampler: sampler;
+            @binding(3) @group(0) var blockSamplerColor: sampler;
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
+                ${bakedMaskSample}
 
-                // Match authored path constants (pbrBlocks.ts).
-                let metalOpaque = smoothstep(0.45, 0.65, texColor.a);
+                // Match authored path: metalOpaque = step(0.5, metalMask)
+                let metalOpaque = step(0.5, texMaskA);
                 let glassMaskAlpha = 1.0 - metalOpaque;
 
                 // Approximate NdotV using a fixed camera position (debug only).
@@ -143,8 +148,8 @@ export const DebugTextureShaders = () => {
                 let edgeFresnel = 1.0 - NdotV;
                 let fresnelSq = edgeFresnel * edgeFresnel;
 
-                let glassMin = 0.38;
-                let glassMax = 0.78;
+                let glassMin = 0.05;
+                let glassMax = 0.60;
                 let glassOpacity = mix(glassMin, glassMax, fresnelSq);
 
                 let finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);

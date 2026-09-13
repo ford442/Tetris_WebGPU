@@ -234,9 +234,11 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   themes: Themes = themes;
   currentTheme: ThemeColors = themes.imageSampled;
 
-  // Block Texture and Sampler
+  // Block Texture and Samplers (linear color + nearest mask on the same RGBA tile)
   blockTexture!: GPUTexture;
   blockSampler!: GPUSampler;
+  blockSamplerColor!: GPUSampler;
+  blockSamplerMask!: GPUSampler;
   /** True when block.png loaded; false when procedural/solid fallback is in use. */
   authoredBlockTextureLoaded: boolean = false;
 

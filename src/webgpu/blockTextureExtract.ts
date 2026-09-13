@@ -1,5 +1,6 @@
 import {
   getBlockTextureConfig,
+  resolveBlockTextureAssetUrl,
   type BlockTextureConfig,
 } from './blockTexture.js';
 
@@ -17,8 +18,9 @@ export interface ExtractedBlockTile {
 }
 
 /**
- * Crop the authored middle block tile from the full block.png atlas and upscale it.
- * Default 2× turns the ~696×685 source crop into ~1392×1370 for sharper face sampling.
+ * Crop the authored middle crystal tile (gold hinges on the border) from the
+ * full block.png atlas and upscale it. Default 2× with inset 0.01 turns the
+ * ~682×671 source crop into ~1364×1343 for sharper face sampling.
  */
 export function extractBlockTileFromImage(
   image: CanvasImageSource & { width: number; height: number },
@@ -242,8 +244,10 @@ function bakeMetalFrameMaskIntoAlpha(
       }
     }
 
-    const featherPx = Math.max(1, Math.round(config.maskFeatherPx ?? 1));
-    applyFeatheredAlpha(ctx, imageData, width, height, keep, featherPx);
+    const dilatePx = Math.max(0, Math.round(config.maskDilatePx ?? 1));
+    const dilated = dilateBinaryMask(keep, width, height, dilatePx);
+    const featherPx = Math.max(0, Math.round(config.maskFeatherPx ?? 1));
+    applyFeatheredAlpha(ctx, imageData, width, height, dilated, featherPx);
     return;
   }
 
@@ -328,7 +332,9 @@ function bakeMetalFrameMaskIntoAlpha(
         keep[idx] = distEdge < outerForce ? 1 : 0;
       }
     }
-    applyFeatheredAlpha(ctx, imageData, width, height, keep, Math.max(1, Math.round(config.maskFeatherPx ?? 1)));
+    const dilatePx = Math.max(0, Math.round(config.maskDilatePx ?? 1));
+    const dilated = dilateBinaryMask(keep, width, height, dilatePx);
+    applyFeatheredAlpha(ctx, imageData, width, height, dilated, Math.max(0, Math.round(config.maskFeatherPx ?? 1)));
     return;
   }
 
@@ -457,8 +463,66 @@ function bakeMetalFrameMaskIntoAlpha(
     }
   }
 
-  const featherPx = Math.max(1, Math.round(config.maskFeatherPx ?? 1));
-  applyFeatheredAlpha(ctx, imageData, width, height, keep, featherPx);
+  const dilatePx = Math.max(0, Math.round(config.maskDilatePx ?? 1));
+  const dilated = dilateBinaryMask(keep, width, height, dilatePx);
+  const featherPx = Math.max(0, Math.round(config.maskFeatherPx ?? 1));
+  applyFeatheredAlpha(ctx, imageData, width, height, dilated, featherPx);
+}
+
+export function dilateBinaryMask(
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radiusPx: number,
+): Uint8Array {
+  if (radiusPx <= 0) return src;
+  let current = src;
+  for (let pass = 0; pass < radiusPx; pass++) {
+    const out = new Uint8Array(current.length);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let on = 0;
+        for (let dy = -1; dy <= 1 && !on; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= height) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= width) continue;
+            if (current[yy * width + xx]) {
+              on = 1;
+              break;
+            }
+          }
+        }
+        out[y * width + x] = on;
+      }
+    }
+    current = out;
+  }
+  return current;
+}
+
+/**
+ * Histogram of baked mask alpha: metal (>=128), glass (<128), mid-band halo (1–254).
+ * Used to assert hinges stay opaque and crystal stays transmissive without fringe.
+ */
+export function maskAlphaHistogram(
+  alphaOrRgba: Uint8Array | Uint8ClampedArray,
+  bytesPerPixel = 1,
+): { metal: number; glass: number; halo: number; total: number } {
+  const step = bytesPerPixel;
+  const alphaOffset = bytesPerPixel === 4 ? 3 : 0;
+  let metal = 0;
+  let glass = 0;
+  let halo = 0;
+  const total = alphaOrRgba.length / step;
+  for (let i = 0; i < total; i++) {
+    const a = alphaOrRgba[i * step + alphaOffset];
+    if (a >= 128) metal++;
+    else glass++;
+    if (a > 0 && a < 255) halo++;
+  }
+  return { metal, glass, halo, total };
 }
 
 function applyFeatheredAlpha(
@@ -552,6 +616,20 @@ export function loadBlockTextureImage(url: string, timeoutMs = 10000): Promise<H
 
     img.src = url;
   });
+}
+
+/** Load cfg.maskUrl if set. Returns null when absent or the fetch fails (heuristic bake). */
+export async function loadCompanionMaskImage(
+  config: BlockTextureConfig = getBlockTextureConfig(),
+  timeoutMs = 10000,
+): Promise<HTMLImageElement | null> {
+  const maskUrl = config.maskUrl;
+  if (!maskUrl) return null;
+  try {
+    return await loadBlockTextureImage(resolveBlockTextureAssetUrl(maskUrl), timeoutMs);
+  } catch {
+    return null;
+  }
 }
 
 export async function extractBlockTileFromUrl(

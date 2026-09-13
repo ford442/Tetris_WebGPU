@@ -27,7 +27,8 @@ describe('block bind group layout', () => {
       vertexUniformOffset: 256,
       fragmentUniformBuffer: {} as GPUBuffer,
       blockTexture: dummyTex,
-      blockSampler: {} as GPUSampler,
+      blockSamplerColor: {} as GPUSampler,
+      blockSamplerMask: {} as GPUSampler,
       dissolveBuffer: {} as GPUBuffer,
       fresnelParamsUniform: {} as GPUBuffer,
       iblSpecularTexture: dummyTex,
@@ -36,7 +37,7 @@ describe('block bind group layout', () => {
     });
 
     expect(entries).toHaveLength(BLOCK_PIPELINE_BINDINGS.length);
-    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     const vertexEntry = entries[0].resource as GPUBufferBinding;
     expect(vertexEntry.offset).toBe(256);
   });

@@ -32,21 +32,27 @@ function appendBlockTextureCacheBust(url: string): string {
   return `${url}${sep}v=${key}`;
 }
 
-/** Resolve block.png against the Vite deployment base (e.g. /tetris-webgpu/block.png). */
-export function resolveBlockTextureUrl(_moduleUrl?: string): string {
-  const configured = currentTextureConfig.url;
-  // Absolute URLs and data URLs are used as-is.
-  if (/^(https?:|data:)/.test(configured)) {
-    return appendBlockTextureCacheBust(configured);
+/** Resolve an explicit public-asset path (color tile, companion mask, etc.). */
+export function resolveBlockTextureAssetUrl(assetPath: string): string {
+  if (/^(https?:|data:)/.test(assetPath)) {
+    return appendBlockTextureCacheBust(assetPath);
   }
-  if (configured.startsWith('/')) {
-    return appendBlockTextureCacheBust(configured);
+  if (assetPath.startsWith('/')) {
+    return appendBlockTextureCacheBust(assetPath);
   }
   const base =
     (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  const asset = configured.replace(/^\.\//, '');
+  const asset = assetPath.replace(/^\.\//, '');
   return appendBlockTextureCacheBust(`${normalizedBase}${asset}`);
+}
+
+/**
+ * Resolve the active color tile URL.
+ * `moduleUrl` is legacy (ignored); companion masks must use `resolveBlockTextureAssetUrl(cfg.maskUrl)`.
+ */
+export function resolveBlockTextureUrl(_moduleUrl?: string): string {
+  return resolveBlockTextureAssetUrl(currentTextureConfig.url);
 }
 
 /** Default authored block texture URL (honours Vite base path). */
@@ -142,8 +148,16 @@ export interface BlockTextureConfig {
    *
    * Higher => thicker forced frame region (more conservative "metal stays metal").
    * Lower  => thinner forced frame region (more aggressive glassing near edges).
+   *
+   * This is the geometric hinge force — it lives in the extractor, not the shader.
    */
   maskOuterForce?: number;
+
+  /**
+   * Morphological dilate of the binary metal mask (extracted pixels) before feathering.
+   * 1px is enough to keep gold hinges opaque under nearest sampling at cube edges.
+   */
+  maskDilatePx?: number;
 
   /**
    * Warmth-based heuristic shaping (used when materialDetectionMode='warmth' and no maskImage).
@@ -162,13 +176,11 @@ export interface BlockTextureConfig {
 
   /**
    * Authored sampled-block glass opacity tuning.
-   * These params define the reference translucency curve:
-   *   glassOpacity = mix(glassMin, glassMax, pow(edgeFresnel, glassFresnelPower))
-   * where edgeFresnel = 1 - NdotV.
+   * Written to the GPU as GlassParams (see getGlassParams).
+   *   glassOpacity = mix(min, max, pow(1 - NdotV, fresnelPower))
    *
-   * Higher glassMax => more visible through-glass at face-on and edges
-   * Higher glassMin => less opaque even at face-on
-   * Higher glassFresnelPower => sharper increase toward grazing angles.
+   * Lower min => more transmissive face-on crystal.
+   * Higher max => thicker glass at grazing angles.
    */
   authoredGlassMin?: number;
   authoredGlassMax?: number;
@@ -176,13 +188,60 @@ export interface BlockTextureConfig {
 }
 
 /**
+ * Named glass opacity curve. CPU writes this once from getBlockTextureConfig();
+ * the fragment shader reads FragmentUniforms.glassParams (not a generic reserved slot).
+ */
+export interface GlassParams {
+  min: number;
+  max: number;
+  fresnelPower: number;
+}
+
+/** Reference curve matching go.1ink.us/tetris — transmissive face-on, Fresnel edges. */
+export const DEFAULT_GLASS_PARAMS: GlassParams = {
+  min: 0.05,
+  max: 0.60,
+  fresnelPower: 2.0,
+};
+
+/**
+ * Jewelry gold albedo used to grade atlas metal (which is often silver-chrome).
+ * Mix 0.78 keeps hinge shading (dark valleys) while forcing a warm brass hue.
+ * Must stay in sync with `gradeGoldMetalAlbedo` in fragmentMain.wgsl and GLSL.
+ */
+export const GOLD_JEWELRY_ALBEDO = [0.90, 0.68, 0.22] as const;
+export const GOLD_GRADE_MIX = 0.78;
+export const GOLD_GRADE_SHADE_MIN = 0.38;
+export const GOLD_GRADE_SHADE_MAX = 1.23;
+
+/** CPU copy of the shader gold grade (unit-testable). */
+export function gradeGoldMetalAlbedo(r: number, g: number, b: number): [number, number, number] {
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  const shade = GOLD_GRADE_SHADE_MIN + (GOLD_GRADE_SHADE_MAX - GOLD_GRADE_SHADE_MIN) * Math.max(0, Math.min(1, luma));
+  const gr = GOLD_JEWELRY_ALBEDO[0] * shade;
+  const gg = GOLD_JEWELRY_ALBEDO[1] * shade;
+  const gb = GOLD_JEWELRY_ALBEDO[2] * shade;
+  const t = GOLD_GRADE_MIX;
+  return [r + (gr - r) * t, g + (gg - g) * t, b + (gb - b) * t];
+}
+
+/** Optional albedo LOD bias (negative = sharper). Mask sampling never uses this. */
+export const BLOCK_COLOR_LOD_BIAS = 0.0;
+
+export const BLOCK_TEXTURE_CONFIG_JSON = 'blockTextureConfig.json';
+
+/**
  * Default configuration for block.png — subregion mode picking the middle crystal block.
  *
- * Pixel analysis of the 2816×1536 image located dark hinge valleys at:
+ * Pixel analysis of the 2816×1536 image located gold hinge valleys at:
  *   columns: x ≈ 344, 1037, 1733, 2430
  *   rows:    y ≈ 296, 981
- * The middle full block occupies x=[1037,1733], y=[296,981] (≈695×685 px, nearly square).
+ * The middle full block occupies x=[1037,1733], y=[296,981] (≈696×685 px, nearly square).
  * Normalised: x=1037/2816≈0.368, y=296/1536≈0.193, w=696/2816≈0.247, h=685/1536≈0.446
+ *
+ * Inset 0.01 keeps those gold hinge strips on the tile border (inset 0.04 shaved
+ * them off and left silver-chrome inner metal). Do not crop the top atlas row
+ * as a square — the horizontal gold bar at y≈296 would sit in the glass.
  */
 export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   url: 'block.png',
@@ -191,19 +250,20 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionY: 0.193,
   subregionWidth: 0.247,
   subregionHeight: 0.446,
-  subregionInset: 0.04,
+  subregionInset: 0.01,
   materialDetectionMode: 'color_signal',
   metalThresholdLow: 0.75,
   metalThresholdHigh: 1.20,
   useProceduralFallback: true,
   maskChannel: 'auto',
-  // Reference curve matching block.png gold frame + crystal interior.
-  authoredGlassMin: 0.05,
-  authoredGlassMax: 0.60,
-  authoredGlassFresnelPower: 2.0,
+  authoredGlassMin: DEFAULT_GLASS_PARAMS.min,
+  authoredGlassMax: DEFAULT_GLASS_PARAMS.max,
+  authoredGlassFresnelPower: DEFAULT_GLASS_PARAMS.fresnelPower,
 
-  // Extractor heuristic defaults
+  // Extractor heuristic defaults (geometric hinge force lives here, not in the shader)
   maskOuterForce: 0.13,
+  maskDilatePx: 1,
+  maskFeatherPx: 1,
   warmthLumaBandA0: 0.25,
   warmthLumaBandA1: 0.55,
   warmthLumaBandB0: 0.82,
@@ -218,12 +278,14 @@ export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
   metalThresholdLow: 0.40,
   metalThresholdHigh: 0.55,
   useProceduralFallback: true,
-  authoredGlassMin: 0.05,
-  authoredGlassMax: 0.60,
-  authoredGlassFresnelPower: 2.0,
+  authoredGlassMin: DEFAULT_GLASS_PARAMS.min,
+  authoredGlassMax: DEFAULT_GLASS_PARAMS.max,
+  authoredGlassFresnelPower: DEFAULT_GLASS_PARAMS.fresnelPower,
 
   // Extractor heuristic defaults
   maskOuterForce: 0.13,
+  maskDilatePx: 1,
+  maskFeatherPx: 1,
   warmthLumaBandA0: 0.25,
   warmthLumaBandA1: 0.55,
   warmthLumaBandB0: 0.82,
@@ -249,6 +311,125 @@ export function getBlockTextureConfig(): BlockTextureConfig {
 }
 
 /**
+ * Single opacity curve for TS WebGPU + WebGL2. Reads authored fields from the
+ * active BlockTextureConfig only — no 0.38/0.78 material/shader fallbacks.
+ */
+export function getGlassParams(config: BlockTextureConfig = getBlockTextureConfig()): GlassParams {
+  return {
+    min: config.authoredGlassMin ?? DEFAULT_GLASS_PARAMS.min,
+    max: config.authoredGlassMax ?? DEFAULT_GLASS_PARAMS.max,
+    fresnelPower: config.authoredGlassFresnelPower ?? DEFAULT_GLASS_PARAMS.fresnelPower,
+  };
+}
+
+/** Pack GlassParams into the vec4 written at FragmentUniforms.glassParams (offset 120). */
+export function glassParamsToVec4(params: GlassParams = getGlassParams()): Float32Array {
+  return new Float32Array([params.min, params.max, params.fresnelPower, 0.0]);
+}
+
+/**
+ * Shader-identical authored alpha:
+ *   metalOpaque = step(0.5, metalMask)
+ *   glassOpacity = mix(min, max, pow(1-NdotV, power))
+ *   finalAlpha = mix(1, glassOpacity, 1-metalOpaque)
+ *   materialAlpha = mix(finalAlpha, 1, metalOpaque)
+ */
+export function evalAuthoredOutAlpha(
+  metalMask: number,
+  ndotV: number,
+  params: GlassParams = getGlassParams(),
+  vertexAlpha = 1,
+): number {
+  const metalOpaque = metalMask >= 0.5 ? 1 : 0;
+  const edgeFresnel = 1 - Math.max(0, Math.min(1, ndotV));
+  const power = Math.max(params.fresnelPower, 0.001);
+  const glassFresnel = Math.pow(edgeFresnel, power);
+  const glassOpacity = params.min + (params.max - params.min) * glassFresnel;
+  const finalAlpha = 1 + (glassOpacity - 1) * (1 - metalOpaque);
+  const materialAlpha = finalAlpha + (1 - finalAlpha) * metalOpaque;
+  return materialAlpha * vertexAlpha;
+}
+
+/** Glass / extractor fields that are valid on both atlas and single-tile images. */
+function pickGlassMaskTuning(config: BlockTextureConfig): Partial<BlockTextureConfig> {
+  return {
+    url: config.url,
+    authoredGlassMin: config.authoredGlassMin,
+    authoredGlassMax: config.authoredGlassMax,
+    authoredGlassFresnelPower: config.authoredGlassFresnelPower,
+    maskOuterForce: config.maskOuterForce,
+    maskDilatePx: config.maskDilatePx,
+    maskFeatherPx: config.maskFeatherPx,
+    maskUrl: config.maskUrl,
+    maskChannel: config.maskChannel,
+    maskThreshold: config.maskThreshold,
+    warmthLumaBandA0: config.warmthLumaBandA0,
+    warmthLumaBandA1: config.warmthLumaBandA1,
+    warmthLumaBandB0: config.warmthLumaBandB0,
+    warmthLumaBandB1: config.warmthLumaBandB1,
+    warmthSignalClampMin: config.warmthSignalClampMin,
+    warmthSignalClampMax: config.warmthSignalClampMax,
+  };
+}
+
+/** Atlas-only crop / detection — must not clobber the 768×768 single-tile path. */
+function pickAtlasTuning(config: BlockTextureConfig): Partial<BlockTextureConfig> {
+  return {
+    ...pickGlassMaskTuning(config),
+    materialDetectionMode: config.materialDetectionMode,
+    metalThresholdLow: config.metalThresholdLow,
+    metalThresholdHigh: config.metalThresholdHigh,
+    subregionInset: config.subregionInset,
+  };
+}
+
+/** Resolve blockTextureConfig.json against the Vite deployment base. */
+export function resolveBlockTextureConfigUrl(): string {
+  const base =
+    (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return appendBlockTextureCacheBust(`${normalizedBase}${BLOCK_TEXTURE_CONFIG_JSON}`);
+}
+
+/** Bound so a stalled blockTextureConfig.json cannot hang `index.ts` before createView. */
+export const AUTH_CONFIG_FETCH_TIMEOUT_MS = 4000;
+
+/**
+ * Load persisted BlockTextureConfig JSON next to the tile (public/blockTextureConfig.json).
+ * Returns true when a file was applied; false keeps DEFAULT_BLOCK_TEXTURE_CONFIG.
+ */
+export async function loadAuthoredBlockTextureConfig(
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = AUTH_CONFIG_FETCH_TIMEOUT_MS,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const aborted = new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      controller.signal.removeEventListener('abort', onAbort);
+      reject(Object.assign(new Error('Authored config fetch timed out'), { name: 'AbortError' }));
+    };
+    controller.signal.addEventListener('abort', onAbort);
+  });
+  try {
+    const url = resolveBlockTextureConfigUrl();
+    const res = await Promise.race([
+      fetchImpl(url, { signal: controller.signal }),
+      aborted,
+    ]);
+    if (!res.ok) return false;
+    const json: unknown = await res.json();
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+    setBlockTextureConfig(json as Partial<BlockTextureConfig>);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Reset to default configuration
  */
 export function resetBlockTextureConfig(): void {
@@ -263,7 +444,7 @@ export function resetBlockTextureConfig(): void {
 export function applyBlockTextureConfigForImageDimensions(width: number, height: number): void {
   const maxDim = Math.max(width, height);
   if (maxDim >= 2000) {
-    setBlockTextureConfig({ ...DEFAULT_BLOCK_TEXTURE_CONFIG });
+    setBlockTextureConfig({ ...DEFAULT_BLOCK_TEXTURE_CONFIG, ...pickAtlasTuning(getBlockTextureConfig()) });
     return;
   }
 
@@ -277,6 +458,7 @@ export function applyBlockTextureConfigForImageDimensions(width: number, height:
     materialDetectionMode: 'warmth',
     metalThresholdLow: 0.75,
     metalThresholdHigh: 1.15,
+    ...pickGlassMaskTuning(getBlockTextureConfig()),
   });
 }
 
@@ -305,7 +487,8 @@ export function getTextureMipLevelCount(width: number, height: number): number {
   return Math.floor(Math.log2(Math.max(width, height))) + 1;
 }
 
-export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
+/** Linear anisotropic sampler for albedo. Mask alpha must not use this. */
+export function createBlockTextureColorSamplerDescriptor(): GPUSamplerDescriptor {
   return {
     magFilter: 'linear',
     minFilter: 'linear',
@@ -318,14 +501,53 @@ export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
   };
 }
 
-/** Bind view for authored block.png — mip 0 only (shader uses textureSampleLevel(..., 0.0)). */
-export function createBlockTextureBindingView(texture: GPUTexture): GPUTextureView {
+/** Nearest mip-0 sampler for baked metal/glass alpha — prevents linear-filter halos. */
+export function createBlockTextureMaskSamplerDescriptor(): GPUSamplerDescriptor {
+  return {
+    magFilter: 'nearest',
+    minFilter: 'nearest',
+    mipmapFilter: 'nearest',
+    addressModeU: 'clamp-to-edge',
+    addressModeV: 'clamp-to-edge',
+    lodMinClamp: 0,
+    lodMaxClamp: 0,
+  };
+}
+
+/** @deprecated Use createBlockTextureColorSamplerDescriptor */
+export function createBlockTextureSamplerDescriptor(): GPUSamplerDescriptor {
+  return createBlockTextureColorSamplerDescriptor();
+}
+
+function textureMipCount(texture: GPUTexture): number {
+  const count = texture.mipLevelCount ?? 1;
+  return Math.max(1, count);
+}
+
+/** Color view: full mip chain so anisotropy and mip-3 roughness variance work. */
+export function createBlockTextureColorBindingView(texture: GPUTexture): GPUTextureView {
+  const mips = Math.min(textureMipCount(texture), BLOCK_TEXTURE_MAX_LOD + 1);
+  return texture.createView({
+    format: 'rgba8unorm',
+    dimension: '2d',
+    baseMipLevel: 0,
+    mipLevelCount: mips,
+  });
+}
+
+/** Mask view: mip 0 only of the same RGBA tile. */
+export function createBlockTextureMaskBindingView(texture: GPUTexture): GPUTextureView {
   return texture.createView({
     format: 'rgba8unorm',
     dimension: '2d',
     baseMipLevel: 0,
     mipLevelCount: 1,
   });
+}
+
+/** @deprecated Use createBlockTextureColorBindingView for albedo. */
+export function createBlockTextureBindingView(texture: GPUTexture): GPUTextureView {
+  return createBlockTextureColorBindingView(texture);
 }
 
 export function getProceduralBlockTextureGradientStops(): GradientStop[] {

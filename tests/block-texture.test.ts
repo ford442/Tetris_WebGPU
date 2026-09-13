@@ -4,12 +4,16 @@ import {
   getTextureMipLevelCount,
   paintProceduralBlockTexture,
   resolveBlockTextureUrl,
+  resolveBlockTextureAssetUrl,
   setBlockTextureConfig,
   getBlockTextureConfig,
   resetBlockTextureConfig,
   getAtlasSamplingParams,
+  applyBlockTextureConfigForImageDimensions,
   createBlockTextureSamplerDescriptor,
-  createBlockTextureBindingView,
+  createBlockTextureColorBindingView,
+  createBlockTextureMaskBindingView,
+  createBlockTextureMaskSamplerDescriptor,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
   type BlockTexturePainter,
@@ -67,11 +71,23 @@ describe('block texture helpers', () => {
     expect(getTextureMipLevelCount(2816, 1536)).toBe(12);
   });
 
-  it('creates a mip-0-only binding view for block texture sampling', () => {
-    const view = createBlockTextureBindingView({
+  it('creates a full-mip color binding view and a mip-0 mask view', () => {
+    const colorView = createBlockTextureColorBindingView({
+      mipLevelCount: 12,
       createView: (desc: GPUTextureViewDescriptor) => desc,
     } as unknown as GPUTexture);
-    expect(view).toEqual({
+    expect(colorView).toEqual({
+      format: 'rgba8unorm',
+      dimension: '2d',
+      baseMipLevel: 0,
+      mipLevelCount: 5,
+    });
+
+    const maskView = createBlockTextureMaskBindingView({
+      mipLevelCount: 12,
+      createView: (desc: GPUTextureViewDescriptor) => desc,
+    } as unknown as GPUTexture);
+    expect(maskView).toEqual({
       format: 'rgba8unorm',
       dimension: '2d',
       baseMipLevel: 0,
@@ -79,7 +95,7 @@ describe('block texture helpers', () => {
     });
   });
 
-  it('creates a sharp clamped sampler descriptor for authored block images', () => {
+  it('creates linear color and nearest mask sampler descriptors', () => {
     expect(createBlockTextureSamplerDescriptor()).toEqual({
       magFilter: 'linear',
       minFilter: 'linear',
@@ -89,6 +105,15 @@ describe('block texture helpers', () => {
       lodMinClamp: 0,
       lodMaxClamp: 4,
       maxAnisotropy: 16,
+    });
+    expect(createBlockTextureMaskSamplerDescriptor()).toEqual({
+      magFilter: 'nearest',
+      minFilter: 'nearest',
+      mipmapFilter: 'nearest',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+      lodMinClamp: 0,
+      lodMaxClamp: 0,
     });
   });
 
@@ -124,6 +149,7 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBeCloseTo(0.193, 3);
     expect(config.subregionWidth).toBeCloseTo(0.247, 3);
     expect(config.subregionHeight).toBeCloseTo(0.446, 3);
+    expect(config.subregionInset).toBeCloseTo(0.01, 3);
     expect(config.materialDetectionMode).toBe('color_signal');
   });
 
@@ -181,6 +207,37 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBe(0.25);
     expect(config.subregionWidth).toBe(0.5);
     expect(config.subregionHeight).toBe(0.5);
+  });
+
+  it('keeps Mask Lab inset on the 2816 atlas path', () => {
+    setBlockTextureConfig({ subregionInset: 0.01, authoredGlassMin: 0.08 });
+    applyBlockTextureConfigForImageDimensions(2816, 1536);
+    const config = getBlockTextureConfig();
+    expect(config.subregionX).toBeCloseTo(0.368, 3);
+    expect(config.subregionY).toBeCloseTo(0.193, 3);
+    expect(config.subregionInset).toBeCloseTo(0.01, 3);
+    expect(config.authoredGlassMin).toBeCloseTo(0.08, 5);
+  });
+
+  it('does not apply atlas crop or color_signal detection to a 768 single tile', () => {
+    setBlockTextureConfig({
+      samplingMode: 'subregion',
+      subregionX: 0.368,
+      subregionY: 0.193,
+      subregionWidth: 0.247,
+      subregionHeight: 0.446,
+      subregionInset: 0.01,
+      materialDetectionMode: 'color_signal',
+      authoredGlassMin: 0.08,
+    });
+    applyBlockTextureConfigForImageDimensions(768, 768);
+    const config = getBlockTextureConfig();
+    expect(config.samplingMode).toBe('single');
+    expect(config.subregionX).toBe(0);
+    expect(config.subregionWidth).toBe(1);
+    expect(config.subregionInset).toBeCloseTo(0.04, 5);
+    expect(config.materialDetectionMode).toBe('warmth');
+    expect(config.authoredGlassMin).toBeCloseTo(0.08, 5);
   });
 
   it('can configure material detection thresholds', () => {
@@ -260,5 +317,12 @@ describe('block texture configuration', () => {
     const url = resolveBlockTextureUrl();
     expect(url.startsWith('/new-texture.png')).toBe(true);
     expect(url).toMatch(/[?&]v=[0-9a-f]{8}$/);
+  });
+
+  it('resolves a companion mask path without using the color tile URL', () => {
+    setBlockTextureConfig({ url: 'block.png' });
+    const mask = resolveBlockTextureAssetUrl('hinge-mask.png');
+    expect(mask.startsWith('/hinge-mask.png')).toBe(true);
+    expect(resolveBlockTextureUrl()).toMatch(/^\/block\.png/);
   });
 });

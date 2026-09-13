@@ -1,7 +1,7 @@
 /**
- * WebGL2 block shaders — samples a 2× extracted block.png tile at mip 0.
- * Gold frame + stained glass colours come from the texture (warmth mask)
- * blended with a geometric UV frame for stable edges.
+ * WebGL2 block shaders — dual-sample the extracted block.png tile.
+ * RGB: linear albedo. A: nearest baked metal mask (no halo).
+ * Glass opacity uses the same GlassParams curve as the TS WebGPU path.
  */
 
 export function createBlockShaderSources(): { vertex: string; fragment: string } {
@@ -44,12 +44,21 @@ uniform vec3 u_eyePos;
 uniform float u_glassMin;
 uniform float u_glassMax;
 uniform float u_glassFresnelPower;
+uniform float u_authoredLoaded;
 uniform sampler2D u_blockTexture;
+uniform sampler2D u_blockMaskTexture;
 
 out vec4 outColor;
 
 vec2 transformUVForSampling(vec2 uv) {
   return clamp(vec2(uv.x, 1.0 - uv.y), 0.0, 1.0);
+}
+
+// Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
+vec3 gradeGoldMetalAlbedo(vec3 texRgb) {
+  float luma = dot(texRgb, vec3(0.299, 0.587, 0.114));
+  vec3 gold = vec3(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
+  return mix(texRgb, gold, 0.78);
 }
 
 float extractTextureMetalMask(vec3 rgb) {
@@ -70,35 +79,37 @@ void main() {
   float NdotH = max(dot(N, H), 0.0);
 
   vec2 texUV = transformUVForSampling(vUV);
-  vec4 texColor = texture(u_blockTexture, texUV);
+  vec3 texRgb = texture(u_blockTexture, texUV).rgb;
+  float texMaskA = texture(u_blockMaskTexture, texUV).a;
 
-  float distX = min(vUV.x, 1.0 - vUV.x);
-  float distY = min(vUV.y, 1.0 - vUV.y);
-  float distEdge = min(distX, distY);
-  float borderThickness = 0.15;
-  float glassMaskGeo = smoothstep(borderThickness - 0.02, borderThickness, distEdge);
-
-  float textureMetal = extractTextureMetalMask(texColor.rgb);
-  float metalMask = clamp(max(1.0 - glassMaskGeo, textureMetal * 0.92), 0.0, 1.0);
+  float metalMask;
+  if (u_authoredLoaded > 0.5) {
+    metalMask = clamp(texMaskA, 0.0, 1.0);
+  } else {
+    metalMask = extractTextureMetalMask(texRgb);
+  }
   float glassMask = 1.0 - metalMask;
+  float metalOpaque = step(0.5, metalMask);
+  float glassMaskAlpha = 1.0 - metalOpaque;
 
-  float luma = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
+  float luma = dot(texRgb, vec3(0.299, 0.587, 0.114));
   float crystalBright = smoothstep(0.15, 0.90, luma);
   float crystalHi = max(luma - 0.65, 0.0) * 2.5;
 
-  vec3 metalColor = texColor.rgb * 1.38 + vec3(0.04, 0.018, 0.0);
-  vec3 glassColor = texColor.rgb * (0.70 + crystalBright * 0.30)
+  vec3 metalColor = gradeGoldMetalAlbedo(texRgb);
+  vec3 glassColor = texRgb * (0.70 + crystalBright * 0.30)
                   + vColor.rgb * 0.22 * crystalBright
                   + vec3(crystalHi * 0.40);
   vec3 baseColor = mix(glassColor, metalColor, metalMask);
 
-  float lightFactor = 0.42 + NdotL * 0.58;
+  float lightFactor = mix(0.42 + NdotL * 0.58, 0.50 + NdotL * 0.42, metalMask);
   float nh2 = NdotH * NdotH;
   float nh4 = nh2 * nh2;
   float nh16 = nh4 * nh4;
   float tightSpec = nh16 * nh16 * nh16 * nh16;
   float specularStrength = mix(0.06, 0.22, metalMask);
-  vec3 finalColor = baseColor * lightFactor + vec3(tightSpec * specularStrength);
+  vec3 specColor = mix(vec3(1.0), vec3(1.0, 0.88, 0.50), metalMask);
+  vec3 finalColor = baseColor * lightFactor + specColor * (tightSpec * specularStrength);
 
   if (glassMask > 0.15) {
     float iridescence = sin(NdotV * 7.0) * 0.5 + 0.5;
@@ -111,11 +122,15 @@ void main() {
   }
 
   float edgeFresnel = 1.0 - NdotV;
-  float fresnelSq = edgeFresnel * edgeFresnel;
-  float glassOpacity = mix(0.82, 0.97, fresnelSq);
-  float alpha = mix(1.0, glassOpacity, glassMask) * vColor.a;
+  float glassPower = max(u_glassFresnelPower, 0.001);
+  float glassFresnel = pow(edgeFresnel, glassPower);
+  float glassOpacity = mix(u_glassMin, u_glassMax, glassFresnel);
+  float finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
+  float materialAlpha = mix(finalAlpha, 1.0, metalOpaque);
+  float outAlpha = materialAlpha * vColor.a;
 
-  outColor = vec4(clamp(finalColor, 0.0, 1.0), alpha);
+  // Premultiply for canvas premultipliedAlpha: true (matches TS WebGPU path).
+  outColor = vec4(clamp(finalColor, 0.0, 1.0) * outAlpha, outAlpha);
 }`;
 
   return { vertex, fragment };

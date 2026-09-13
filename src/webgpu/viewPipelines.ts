@@ -21,7 +21,8 @@ import { BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
 import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
-  createBlockTextureSamplerDescriptor,
+  createBlockTextureColorSamplerDescriptor,
+  createBlockTextureMaskSamplerDescriptor,
   setBlockTextureConfig,
   getBlockTextureConfig,
   applyBlockTextureConfigForImageDimensions,
@@ -29,7 +30,7 @@ import {
 import {
   BLOCK_TILE_EXTRACT_SCALE,
   extractBlockTileFromImage,
-  loadBlockTextureImage,
+  loadCompanionMaskImage,
 } from './blockTextureExtract.js';
 import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
 import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js';
@@ -55,7 +56,9 @@ import {
  * generating mipmaps. Falls back to a procedural then solid texture on error.
  */
 export async function loadBlockTexture(view: any): Promise<void> {
-  view.blockSampler = view.device.createSampler(createBlockTextureSamplerDescriptor());
+  view.blockSamplerColor = view.device.createSampler(createBlockTextureColorSamplerDescriptor());
+  view.blockSamplerMask = view.device.createSampler(createBlockTextureMaskSamplerDescriptor());
+  view.blockSampler = view.blockSamplerColor;
 
   try {
     const textureUrl = resolveBlockTextureUrl(import.meta.url);
@@ -93,15 +96,9 @@ export async function loadBlockTexture(view: any): Promise<void> {
     setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 
     const cfg = getBlockTextureConfig();
-    let maskImg: HTMLImageElement | null = null;
-    if (cfg.maskUrl) {
-      const resolvedMaskUrl = resolveBlockTextureUrl(cfg.maskUrl);
-      try {
-        maskImg = await loadBlockTextureImage(resolvedMaskUrl, textureLoadTimeoutMs);
-      } catch (maskErr) {
-        textureLogger.warn('Failed to load block mask; using heuristic mask bake', maskErr);
-        maskImg = null;
-      }
+    const maskImg = await loadCompanionMaskImage(cfg, textureLoadTimeoutMs);
+    if (cfg.maskUrl && !maskImg) {
+      textureLogger.warn('Failed to load block mask; using heuristic mask bake');
     }
 
     const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
@@ -448,7 +445,8 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         vertexUniformOffset: i * 256,
         fragmentUniformBuffer: view.fragmentUniformBuffer,
         blockTexture: view.blockTexture,
-        blockSampler: view.blockSampler,
+        blockSamplerColor: view.blockSamplerColor,
+        blockSamplerMask: view.blockSamplerMask,
         dissolveBuffer: view.dissolveBuffer,
         fresnelParamsUniform: view.fresnelParamsUniform,
         iblSpecularTexture: view.iblSpecularTexture,

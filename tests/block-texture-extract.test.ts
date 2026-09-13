@@ -15,7 +15,8 @@ describe('block texture extraction', () => {
     const cropW = sw * (1.0 - inset * 2.0);
     const cropH = sh * (1.0 - inset * 2.0);
 
-    expect(Math.round(cropW * BLOCK_TILE_EXTRACT_SCALE)).toBe(1280);
-    expect(Math.round(cropH * BLOCK_TILE_EXTRACT_SCALE)).toBe(1261);
+    // inset 0.01 keeps gold hinge strips; 2× of ~682×671.
+    expect(Math.round(cropW * BLOCK_TILE_EXTRACT_SCALE)).toBe(1363);
+    expect(Math.round(cropH * BLOCK_TILE_EXTRACT_SCALE)).toBe(1343);
   });
 });

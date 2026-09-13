@@ -4,10 +4,11 @@ import {
   BLOCK_TILE_EXTRACT_SCALE,
   extractBlockTileFromImage,
   loadBlockTextureImage,
+  loadCompanionMaskImage,
 } from '../webgpu/blockTextureExtract.js';
 import { createBlockShaderSources } from './blockShadersGLSL.js';
 import { textureLogger } from '../utils/logger.js';
-import { getBlockTextureConfig } from '../webgpu/blockTexture.js';
+import { getBlockTextureConfig, getGlassParams, applyBlockTextureConfigForImageDimensions } from '../webgpu/blockTexture.js';
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -58,6 +59,11 @@ export class GLBlockRenderer {
   private u_glassMin!: WebGLUniformLocation;
   private u_glassMax!: WebGLUniformLocation;
   private u_glassFresnelPower!: WebGLUniformLocation;
+  private u_authoredLoaded!: WebGLUniformLocation;
+  private u_blockTexture!: WebGLUniformLocation;
+  private u_blockMaskTexture!: WebGLUniformLocation;
+  private colorSampler!: WebGLSampler;
+  private maskSampler!: WebGLSampler;
   private tileWidth = 0;
   private tileHeight = 0;
 
@@ -87,6 +93,9 @@ export class GLBlockRenderer {
     this.u_glassMin = gl.getUniformLocation(this.program, 'u_glassMin')!;
     this.u_glassMax = gl.getUniformLocation(this.program, 'u_glassMax')!;
     this.u_glassFresnelPower = gl.getUniformLocation(this.program, 'u_glassFresnelPower')!;
+    this.u_authoredLoaded = gl.getUniformLocation(this.program, 'u_authoredLoaded')!;
+    this.u_blockTexture = gl.getUniformLocation(this.program, 'u_blockTexture')!;
+    this.u_blockMaskTexture = gl.getUniformLocation(this.program, 'u_blockMaskTexture')!;
 
     const cube = CubeData();
     this.vertexCount = cube.positions.length / 3;
@@ -121,18 +130,32 @@ export class GLBlockRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+    this.colorSampler = gl.createSampler()!;
+    gl.samplerParameteri(this.colorSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(this.colorSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(this.colorSampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.samplerParameteri(this.colorSampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    this.maskSampler = gl.createSampler()!;
+    gl.samplerParameteri(this.maskSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(this.maskSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(this.maskSampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.samplerParameteri(this.maskSampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
     try {
       const url = resolveBlockTextureUrl(moduleUrl);
       textureLogger.info('[WebGL2] Loading block texture from:', url);
       const image = await loadBlockTextureImage(url);
-      const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE);
+      applyBlockTextureConfigForImageDimensions(image.width, image.height);
+      const cfg = getBlockTextureConfig();
+      const maskImg = await loadCompanionMaskImage(cfg);
+      const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
       this.tileWidth = extracted.width;
       this.tileHeight = extracted.height;
 
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, extracted.canvas);
-      // Mip 0 only — preserve 2× extracted gold/glass detail from block.png
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       this.authoredTextureLoaded = true;
@@ -154,7 +177,7 @@ export class GLBlockRenderer {
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     return this.authoredTextureLoaded;
   }
@@ -174,30 +197,36 @@ export class GLBlockRenderer {
     const gl = this.gl;
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
+
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.bindSampler(0, this.colorSampler);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.bindSampler(1, this.maskSampler);
+    gl.uniform1i(this.u_blockTexture, 0);
+    gl.uniform1i(this.u_blockMaskTexture, 1);
 
     gl.uniformMatrix4fv(this.u_viewProjection, false, viewProjection);
     gl.uniform3f(this.u_lightPos, lightPos[0], lightPos[1], lightPos[2]);
     gl.uniform3f(this.u_eyePos, eyePos[0], eyePos[1], eyePos[2]);
     if (this.u_materialType) gl.uniform1i(this.u_materialType, materialType);
 
-    for (const inst of instances) {
-      // Keep glass opacity curve in sync with current texture config.
-      const cfg = getBlockTextureConfig();
-      const glassMin = cfg.authoredGlassMin ?? 0.38;
-      const glassMax = cfg.authoredGlassMax ?? 0.78;
-      const glassPower = cfg.authoredGlassFresnelPower ?? 2.0;
-      gl.uniform1f(this.u_glassMin, glassMin);
-      gl.uniform1f(this.u_glassMax, glassMax);
-      gl.uniform1f(this.u_glassFresnelPower, glassPower);
+    const glass = getGlassParams();
+    gl.uniform1f(this.u_glassMin, glass.min);
+    gl.uniform1f(this.u_glassMax, glass.max);
+    gl.uniform1f(this.u_glassFresnelPower, glass.fresnelPower);
+    gl.uniform1f(this.u_authoredLoaded, this.authoredTextureLoaded ? 1.0 : 0.0);
 
+    for (const inst of instances) {
       gl.uniformMatrix4fv(this.u_model, false, inst.modelMatrix);
       gl.uniformMatrix4fv(this.u_normalMatrix, false, this._identity);
       gl.uniform4f(this.u_color, inst.color[0], inst.color[1], inst.color[2], inst.color[3]);
       gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
     }
 
+    gl.bindSampler(0, null);
+    gl.bindSampler(1, null);
     gl.bindVertexArray(null);
   }
   get tileSize(): { width: number; height: number } {

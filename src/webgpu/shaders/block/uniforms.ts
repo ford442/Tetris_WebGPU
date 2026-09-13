@@ -34,7 +34,7 @@ export const BLOCK_FRAGMENT_UNIFORM_OFFSETS = {
   magnetWorldY: 108,
   magnetStrength: 112,
   _pad116: 116,
-  reserved2: 120,
+  glassParams: 120,
   padHeights: 128,
   columnHeights: 144,
   bassLevel: 184,

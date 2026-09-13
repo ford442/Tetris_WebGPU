@@ -4,6 +4,8 @@
  * All textures generated procedurally - no external dependencies
  */
 
+import { DEFAULT_GLASS_PARAMS } from './blockTexture.js';
+
 export interface Material {
   name: string;
   baseColor: [number, number, number];
@@ -156,9 +158,9 @@ export const Materials: Record<string, Material> = {
     clearcoat: 0.3,
     anisotropic: 0.45,
     dispersion: 0.0,
-    authoredGlassMin: 0.05,
-    authoredGlassMax: 0.60,
-    authoredGlassFresnelPower: 2.0,
+    authoredGlassMin: DEFAULT_GLASS_PARAMS.min,
+    authoredGlassMax: DEFAULT_GLASS_PARAMS.max,
+    authoredGlassFresnelPower: DEFAULT_GLASS_PARAMS.fresnelPower,
   },
 
   // Lava - high emissive red-orange glow, starts smooth/hot, cools (rougher) as piece falls

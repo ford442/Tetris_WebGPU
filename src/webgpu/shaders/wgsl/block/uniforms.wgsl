@@ -1,3 +1,10 @@
+struct GlassParams {
+    min          : f32,         // face-on glass opacity (authoredGlassMin)
+    max          : f32,         // grazing glass opacity (authoredGlassMax)
+    fresnelPower : f32,         // pow(1-NdotV, power)
+    _pad         : f32,
+};
+
 struct FragmentUniforms {
     lightPosition : vec4f,      // 0-15
     eyePosition   : vec4f,      // 16-31
@@ -23,7 +30,7 @@ struct FragmentUniforms {
     magnetWorldY  : f32,        // 108
     magnetStrength: f32,        // 112
     _pad116       : u32,        // 116
-    reserved2     : vec4f,      // 120-127
+    glassParams   : GlassParams, // 120-127
     padHeights    : vec4f,      // 128-143 (underwater flash timers at 128/132)
     columnHeights : array<f32, 10>, // 144
     bassLevel     : f32,        // 184
