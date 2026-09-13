@@ -206,11 +206,15 @@ export const BLOCK_TEXTURE_CONFIG_JSON = 'blockTextureConfig.json';
 /**
  * Default configuration for block.png — subregion mode picking the middle crystal block.
  *
- * Pixel analysis of the 2816×1536 image located dark hinge valleys at:
+ * Pixel analysis of the 2816×1536 image located gold hinge valleys at:
  *   columns: x ≈ 344, 1037, 1733, 2430
  *   rows:    y ≈ 296, 981
- * The middle full block occupies x=[1037,1733], y=[296,981] (≈695×685 px, nearly square).
+ * The middle full block occupies x=[1037,1733], y=[296,981] (≈696×685 px, nearly square).
  * Normalised: x=1037/2816≈0.368, y=296/1536≈0.193, w=696/2816≈0.247, h=685/1536≈0.446
+ *
+ * Inset 0.01 keeps those gold hinge strips on the tile border (inset 0.04 shaved
+ * them off and left silver-chrome inner metal). Do not crop the top atlas row
+ * as a square — the horizontal gold bar at y≈296 would sit in the glass.
  */
 export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   url: 'block.png',
@@ -219,7 +223,7 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionY: 0.193,
   subregionWidth: 0.247,
   subregionHeight: 0.446,
-  subregionInset: 0.04,
+  subregionInset: 0.01,
   materialDetectionMode: 'color_signal',
   metalThresholdLow: 0.75,
   metalThresholdHigh: 1.20,
@@ -340,6 +344,8 @@ function pickAuthoredTuning(config: BlockTextureConfig): Partial<BlockTextureCon
     warmthLumaBandB1: config.warmthLumaBandB1,
     warmthSignalClampMin: config.warmthSignalClampMin,
     warmthSignalClampMax: config.warmthSignalClampMax,
+    // Atlas crop stays DEFAULT for large images; inset is Mask Lab–tunable.
+    subregionInset: config.subregionInset,
   };
 }
 

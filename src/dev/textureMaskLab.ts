@@ -379,7 +379,7 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
           </div>
           <div class="masklab-row">
             <label>Subregion inset</label>
-            <input id="masklab-inset" type="range" min="0" max="0.12" step="0.001" value="0.04"/>
+            <input id="masklab-inset" type="range" min="0" max="0.12" step="0.001" value="0.01"/>
           </div>
           <div style="font-size:12px; opacity:0.85; margin-top:8px; margin-bottom:6px;">Subregion (normalized)</div>
           <div class="masklab-row">

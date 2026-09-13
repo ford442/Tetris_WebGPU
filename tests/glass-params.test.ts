@@ -85,6 +85,7 @@ describe('WebGL2 matches TS authored alpha', () => {
     expect(glsl).toContain('step(0.5, metalMask)');
     expect(wgsl).toContain('finalColor *= outAlpha');
     expect(glsl).toContain('* outAlpha, outAlpha');
+    expect(glsl).toContain('texRgb * 1.5 + vec3(0.08, 0.03, 0.0)');
     const tolerance = Math.abs(
       evalAuthoredOutAlpha(0, 1, DEFAULT_GLASS_PARAMS) -
       evalAuthoredOutAlpha(0, 1, getGlassParams()),
@@ -95,9 +96,23 @@ describe('WebGL2 matches TS authored alpha', () => {
   it('public JSON next to the tile matches authored glass defaults', () => {
     const json = JSON.parse(
       readFileSync(join(process.cwd(), 'public/blockTextureConfig.json'), 'utf8'),
-    ) as { authoredGlassMin: number; authoredGlassMax: number; maskDilatePx: number };
+    ) as {
+      authoredGlassMin: number;
+      authoredGlassMax: number;
+      maskDilatePx: number;
+      subregionX: number;
+      subregionY: number;
+      subregionWidth: number;
+      subregionHeight: number;
+      subregionInset: number;
+    };
     expect(json.authoredGlassMin).toBeCloseTo(0.05, 5);
     expect(json.authoredGlassMax).toBeCloseTo(0.60, 5);
     expect(json.maskDilatePx).toBe(1);
+    expect(json.subregionX).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionX ?? 0, 3);
+    expect(json.subregionY).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionY ?? 0, 3);
+    expect(json.subregionWidth).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionWidth ?? 1, 3);
+    expect(json.subregionHeight).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionHeight ?? 1, 3);
+    expect(json.subregionInset).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionInset ?? 0, 3);
   });
 });

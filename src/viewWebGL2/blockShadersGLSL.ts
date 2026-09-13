@@ -89,7 +89,7 @@ void main() {
   float crystalBright = smoothstep(0.15, 0.90, luma);
   float crystalHi = max(luma - 0.65, 0.0) * 2.5;
 
-  vec3 metalColor = texRgb * 1.38 + vec3(0.04, 0.018, 0.0);
+  vec3 metalColor = texRgb * 1.5 + vec3(0.08, 0.03, 0.0);
   vec3 glassColor = texRgb * (0.70 + crystalBright * 0.30)
                   + vColor.rgb * 0.22 * crystalBright
                   + vec3(crystalHi * 0.40);

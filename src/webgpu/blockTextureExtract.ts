@@ -17,8 +17,9 @@ export interface ExtractedBlockTile {
 }
 
 /**
- * Crop the authored middle block tile from the full block.png atlas and upscale it.
- * Default 2× turns the ~696×685 source crop into ~1392×1370 for sharper face sampling.
+ * Crop the authored middle crystal tile (gold hinges on the border) from the
+ * full block.png atlas and upscale it. Default 2× with inset 0.01 turns the
+ * ~682×671 source crop into ~1364×1343 for sharper face sampling.
  */
 export function extractBlockTileFromImage(
   image: CanvasImageSource & { width: number; height: number },

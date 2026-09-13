@@ -8,6 +8,7 @@ import {
   getBlockTextureConfig,
   resetBlockTextureConfig,
   getAtlasSamplingParams,
+  applyBlockTextureConfigForImageDimensions,
   createBlockTextureSamplerDescriptor,
   createBlockTextureColorBindingView,
   createBlockTextureMaskBindingView,
@@ -147,6 +148,7 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBeCloseTo(0.193, 3);
     expect(config.subregionWidth).toBeCloseTo(0.247, 3);
     expect(config.subregionHeight).toBeCloseTo(0.446, 3);
+    expect(config.subregionInset).toBeCloseTo(0.01, 3);
     expect(config.materialDetectionMode).toBe('color_signal');
   });
 
@@ -204,6 +206,16 @@ describe('block texture configuration', () => {
     expect(config.subregionY).toBe(0.25);
     expect(config.subregionWidth).toBe(0.5);
     expect(config.subregionHeight).toBe(0.5);
+  });
+
+  it('keeps Mask Lab inset on the 2816 atlas path', () => {
+    setBlockTextureConfig({ subregionInset: 0.01, authoredGlassMin: 0.08 });
+    applyBlockTextureConfigForImageDimensions(2816, 1536);
+    const config = getBlockTextureConfig();
+    expect(config.subregionX).toBeCloseTo(0.368, 3);
+    expect(config.subregionY).toBeCloseTo(0.193, 3);
+    expect(config.subregionInset).toBeCloseTo(0.01, 3);
+    expect(config.authoredGlassMin).toBeCloseTo(0.08, 5);
   });
 
   it('can configure material detection thresholds', () => {
