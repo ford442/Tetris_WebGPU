@@ -11,7 +11,10 @@ struct VertexOutput {
     @location(0) vWorldPos      : vec4f,
     @location(1) vNormal        : vec3f,
     @location(2) vColor         : vec4f,
-    @location(3) vUV            : vec2f
+    @location(3) vUV            : vec2f,
+    // Clip-space position, forwarded so the fragment stage can derive screen-space
+    // UVs for backdrop refraction without a viewport-size uniform.
+    @location(4) vClipPos       : vec4f
 };
 
 @vertex
@@ -25,6 +28,7 @@ fn main(
     out.vWorldPos        = worldPos;
     out.vNormal          = (vUniforms.normalMatrix * normal).xyz;
     out.Position         = vUniforms.viewProjectionMatrix * worldPos;
+    out.vClipPos         = out.Position;
     out.vColor           = vUniforms.colorVertex;
     out.vUV              = uv;
     return out;

@@ -6,13 +6,15 @@ import type { Piece } from '../game/pieces.js';
 import { themes, type ThemeColors } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
-import { getGlassParams, glassParamsToVec4 } from './blockTexture.js';
+import { getGlassParams, getGlassRefractionParams, glassParamsToVec4 } from './blockTexture.js';
 import { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from './shaders/block/bindings.js';
 
 export interface MaterialViewLike {
   device: GPUDevice;
   currentTheme: ThemeColors;
   usePremiumMaterials: boolean;
+  /** Screen-space backdrop refraction on the glass path (quality/adaptive gated). */
+  backdropRefractionEnabled?: boolean;
   currentMaterial: any;
   fragmentUniformBuffer: GPUBuffer;
   materialUniformBuffer: GPUBuffer;
@@ -90,6 +92,19 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   // Authored glass opacity curve — GlassParams at byte offset 120 (not a reserved slot).
   const glassParams = glassParamsToVec4(getGlassParams());
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.glassParams, glassParams);
+
+  // Authored crystal refraction — named uniforms, written as one contiguous
+  // vec3-worth of floats at glassIor/glassThickness/refractEnable (204/208/212).
+  const refraction = getGlassRefractionParams();
+  view.device.queue.writeBuffer(
+    view.fragmentUniformBuffer,
+    offs.glassIor,
+    new Float32Array([
+      refraction.ior,
+      refraction.thickness,
+      view.backdropRefractionEnabled === false ? 0.0 : 1.0,
+    ]),
+  );
 }
 
 export function cycleTheme(view: MaterialViewLike) {

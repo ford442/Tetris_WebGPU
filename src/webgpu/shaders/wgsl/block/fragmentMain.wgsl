@@ -14,7 +14,8 @@
         fn main(@location(0) vWorldPos : vec4f,
                 @location(1) vNormal : vec3f,
                 @location(2) vColor : vec4f,
-                @location(3) vUV : vec2f) -> @location(0) vec4f {
+                @location(3) vUV : vec2f,
+                @location(4) vClipPos : vec4f) -> @location(0) vec4f {
 
             let time = fUniforms.time;
             let N = normalize(vNormal);
@@ -265,10 +266,22 @@
                     let edge3 = edgeFresnel * edgeFresnel * edgeFresnel;
                     finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
 
-                    // NEON BRICKLAYER: Environment Refraction for authored glass
-                    let refractDir = refract(-V, N, 1.0 / 1.15); // Approximate IOR for glass
-                    let refractEnv = proceduralEnvReflect(refractDir, time);
+                    // Refraction of the *real* background through the crystal.
+                    // When the backdrop capture is available we bend the captured
+                    // scene (procedural bg + video portal); otherwise we fall back
+                    // to the procedural studio env so the look degrades, not breaks.
                     let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
+                    var refractEnv: vec3f;
+                    if (fUniforms.refractEnable > 0.5) {
+                        refractEnv = refractBackdrop(
+                            vClipPos, N, V,
+                            fUniforms.glassIor,
+                            fUniforms.glassThickness,
+                            fUniforms.dispersion,
+                        );
+                    } else {
+                        refractEnv = proceduralEnvReflect(refract(-V, N, 1.0 / max(fUniforms.glassIor, 1.01)), time);
+                    }
                     let refractedColor = refractEnv * glassTint;
                     finalColor = mix(finalColor, refractedColor, glassMask * 0.45); // Mix in refraction
 
@@ -339,8 +352,17 @@
                     let glassOpacity = mix(0.15, 0.60, fresnel);
                     finalAlpha = mix(1.0, glassOpacity, transmission * glassMask);
 
-                    let refractDir = refract(-V, N, 1.0 / max(fUniforms.ior, 1.01));
-                    let refractEnv = proceduralEnvReflect(refractDir, time);
+                    var refractEnv: vec3f;
+                    if (fUniforms.refractEnable > 0.5) {
+                        refractEnv = refractBackdrop(
+                            vClipPos, N, V,
+                            max(fUniforms.ior, 1.01),
+                            fUniforms.glassThickness,
+                            fUniforms.dispersion,
+                        );
+                    } else {
+                        refractEnv = proceduralEnvReflect(refract(-V, N, 1.0 / max(fUniforms.ior, 1.01)), time);
+                    }
                     let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
                     let refractedColor = refractEnv * glassTint;
                     let glassReflect = envColor * fresnel * 0.28 * glassMask;

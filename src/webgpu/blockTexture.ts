@@ -185,6 +185,14 @@ export interface BlockTextureConfig {
   authoredGlassMin?: number;
   authoredGlassMax?: number;
   authoredGlassFresnelPower?: number;
+
+  /**
+   * Authored sampled-block screen-space refraction tuning (see GlassRefractionParams).
+   * `authoredGlassIor` bends the captured background behind the crystal;
+   * `authoredGlassThickness` scales the screen-space offset that bend produces.
+   */
+  authoredGlassIor?: number;
+  authoredGlassThickness?: number;
 }
 
 /**
@@ -202,6 +210,27 @@ export const DEFAULT_GLASS_PARAMS: GlassParams = {
   min: 0.05,
   max: 0.60,
   fresnelPower: 2.0,
+};
+
+/**
+ * Named screen-space refraction curve for the authored crystal. CPU writes this
+ * once from getBlockTextureConfig(); the fragment shader reads
+ * FragmentUniforms.glassIor / .glassThickness (not a generic reserved slot).
+ */
+export interface GlassRefractionParams {
+  /** Index of refraction used for `refract(-V, N, 1/ior)`. */
+  ior: number;
+  /** Screen-space offset scale (UV units) applied to the refracted direction. */
+  thickness: number;
+}
+
+/**
+ * block.png is stained glass over a video portal, not a thick window: a modest
+ * IOR keeps the bend readable without tearing the frame off the background.
+ */
+export const DEFAULT_GLASS_REFRACTION_PARAMS: GlassRefractionParams = {
+  ior: 1.22,
+  thickness: 0.035,
 };
 
 /**
@@ -259,6 +288,8 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   authoredGlassMin: DEFAULT_GLASS_PARAMS.min,
   authoredGlassMax: DEFAULT_GLASS_PARAMS.max,
   authoredGlassFresnelPower: DEFAULT_GLASS_PARAMS.fresnelPower,
+  authoredGlassIor: DEFAULT_GLASS_REFRACTION_PARAMS.ior,
+  authoredGlassThickness: DEFAULT_GLASS_REFRACTION_PARAMS.thickness,
 
   // Extractor heuristic defaults (geometric hinge force lives here, not in the shader)
   maskOuterForce: 0.13,
@@ -281,6 +312,8 @@ export const SINGLE_TILE_TEXTURE_CONFIG: BlockTextureConfig = {
   authoredGlassMin: DEFAULT_GLASS_PARAMS.min,
   authoredGlassMax: DEFAULT_GLASS_PARAMS.max,
   authoredGlassFresnelPower: DEFAULT_GLASS_PARAMS.fresnelPower,
+  authoredGlassIor: DEFAULT_GLASS_REFRACTION_PARAMS.ior,
+  authoredGlassThickness: DEFAULT_GLASS_REFRACTION_PARAMS.thickness,
 
   // Extractor heuristic defaults
   maskOuterForce: 0.13,
@@ -325,6 +358,23 @@ export function getGlassParams(config: BlockTextureConfig = getBlockTextureConfi
 /** Pack GlassParams into the vec4 written at FragmentUniforms.glassParams (offset 120). */
 export function glassParamsToVec4(params: GlassParams = getGlassParams()): Float32Array {
   return new Float32Array([params.min, params.max, params.fresnelPower, 0.0]);
+}
+
+/**
+ * Screen-space refraction curve for the authored crystal, from the same config
+ * source as {@link getGlassParams}. Values are clamped to the range the shader
+ * can use: an IOR at or below 1 makes `refract` degenerate, and an unbounded
+ * thickness would sample the backdrop far outside the block.
+ */
+export function getGlassRefractionParams(
+  config: BlockTextureConfig = getBlockTextureConfig(),
+): GlassRefractionParams {
+  const ior = config.authoredGlassIor ?? DEFAULT_GLASS_REFRACTION_PARAMS.ior;
+  const thickness = config.authoredGlassThickness ?? DEFAULT_GLASS_REFRACTION_PARAMS.thickness;
+  return {
+    ior: Math.min(2.5, Math.max(1.01, ior)),
+    thickness: Math.min(0.25, Math.max(0.0, thickness)),
+  };
 }
 
 /**

@@ -42,6 +42,9 @@ export const BLOCK_FRAGMENT_UNIFORM_OFFSETS = {
   trebleLevel: 192,
   comboEnergy: 196,
   iblEnable: 200,
+  glassIor: 204,
+  glassThickness: 208,
+  refractEnable: 212,
 } as const;
 
 export const BLOCK_FRAGMENT_UNIFORM_SIZE = 224;

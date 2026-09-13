@@ -2,6 +2,7 @@
  * View-layer shared types beyond the public IView contract.
  */
 
+import type { BackdropCapture } from '../webgpu/backdropCapture.js';
 import type { VisualEffects } from '../webgpu/effects.js';
 import type { ReactiveVideoBackground } from '../webgpu/reactiveVideo.js';
 import type { ThemeColors } from '../webgpu/themes.js';
@@ -120,6 +121,10 @@ export interface WebGPUViewHost extends ViewEventHost {
   vpMatrix: Float32Array | Matrix.mat4;
   canvasWebGPU: HTMLCanvasElement;
   iblEnabled: boolean;
+  /** Screen-space backdrop refraction on the glass path (quality/adaptive gated). */
+  backdropRefractionEnabled: boolean;
+  /** Scene-backdrop capture sampled by the glass path. */
+  backdropCapture: BackdropCapture;
   particleStorageBuffer: GPUBuffer;
   particleComputeUniformBuffer: GPUBuffer;
   particleComputePipeline: GPUComputePipeline;

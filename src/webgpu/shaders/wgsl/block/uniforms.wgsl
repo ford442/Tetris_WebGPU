@@ -38,5 +38,8 @@ struct FragmentUniforms {
     trebleLevel   : f32,        // 192
     comboEnergy   : f32,        // 196 (replaces padAudio)
     iblEnable     : f32,        // 200
-    _structPad    : f32,        // 204 (WGSL pads struct to 224B minBindingSize)
+    glassIor      : f32,        // 204 (authored crystal IOR for screen-space refraction)
+    glassThickness: f32,        // 208 (screen-space refraction offset scale, UV units)
+    refractEnable : f32,        // 212 (1 = sample captured backdrop, 0 = procedural env)
+    _structPad    : f32,        // 216 (WGSL pads struct to 224B minBindingSize)
 };

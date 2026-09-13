@@ -23,6 +23,12 @@ struct FresnelParams {
 @binding(8) @group(0) var iblSampler : sampler;
 @binding(9) @group(0) var blockTextureMask : texture_2d<f32>;
 @binding(10) @group(0) var blockSamplerMask : sampler;
+
+// Captured scene backdrop (procedural background + video portal + frosted backboard),
+// blitted to a fixed-size texture after the background passes. Sampled in screen space
+// by the glass path so the crystal bends the *real* background instead of a sine gradient.
+@binding(11) @group(0) var backdropTexture : texture_2d<f32>;
+@binding(12) @group(0) var backdropSampler : sampler;
 `;
 
 /** Required @group(0) bindings for the block render pipeline. */
@@ -41,6 +47,8 @@ export const BLOCK_FRAGMENT_BINDING_SPECS = [
   { binding: 8, kind: 'sampler', wgsl: '@binding(8) @group(0) var iblSampler' },
   { binding: 9, kind: 'texture', wgsl: '@binding(9) @group(0) var blockTextureMask' },
   { binding: 10, kind: 'sampler', wgsl: '@binding(10) @group(0) var blockSamplerMask' },
+  { binding: 11, kind: 'texture', wgsl: '@binding(11) @group(0) var backdropTexture' },
+  { binding: 12, kind: 'sampler', wgsl: '@binding(12) @group(0) var backdropSampler' },
 ] as const;
 
 export const BLOCK_PIPELINE_BINDING_SPECS = [

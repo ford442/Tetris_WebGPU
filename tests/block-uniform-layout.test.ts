@@ -39,7 +39,7 @@ describe('TS block-shader uniform layout (WGSL text vs CPU offsets)', () => {
 
   it('BLOCK_FRAGMENT_UNIFORM_SIZE is a 16-byte-aligned multiple that fits the last field', () => {
     expect(parsed.iblEnable).toBe(200);
-    expect(parsed._structPad).toBe(204);
+    expect(parsed._structPad).toBe(216);
     expect(BLOCK_FRAGMENT_UNIFORM_SIZE).toBeGreaterThanOrEqual(parsed._structPad + 4);
     expect(BLOCK_FRAGMENT_UNIFORM_SIZE % 16).toBe(0);
   });

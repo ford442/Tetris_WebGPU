@@ -424,6 +424,8 @@ export function renderPlayfieldBorder(
   iblSpecularTexture: GPUTexture,
   iblBrdfLutTexture: GPUTexture,
   iblSampler: GPUSampler,
+  backdropTextureView: GPUTextureView,
+  backdropSampler: GPUSampler,
   worldOffsetX = 0,
 ): { vertexUniformBuffer: GPUBuffer; bindGroups: GPUBindGroup[] } {
   const state_Border = {
@@ -457,6 +459,8 @@ export function renderPlayfieldBorder(
           iblSpecularTexture,
           iblBrdfLutTexture,
           iblSampler,
+          backdropTextureView,
+          backdropSampler,
         }),
       });
 
