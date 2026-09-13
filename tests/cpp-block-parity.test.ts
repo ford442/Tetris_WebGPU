@@ -5,6 +5,7 @@
  * materials: the shared WGSL, the bind-group numbering, and the uniform offsets.
  */
 import { describe, expect, it } from 'vitest';
+import { createBlockShaders } from '../src/webgpu/shaders/block/blockShader.js';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -38,17 +39,51 @@ describe('shared authored-material WGSL', () => {
   });
 
   it('supplies the look functions both fragment shaders call', () => {
-    const shared = read('src/webgpu/shaders/wgsl/block/authoredGlass.wgsl');
-    const tsFragment = read('src/webgpu/shaders/wgsl/block/fragmentMain.wgsl');
+    const glass = read('src/webgpu/shaders/wgsl/block/authoredGlass.wgsl');
+    const material = read('src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl');
+    // The TS entry point dispatches to split modules, so parity is asserted against
+    // the composed fragment the renderer actually compiles, not one source file.
+    const tsFragment = createBlockShaders().fragment;
     const cppFragment = read('cpp/src/shaders/block/authoredBlock.wgsl');
 
-    for (const fn of ['gradeGoldMetalAlbedo', 'authoredBaseColor', 'authoredGlassOpacity']) {
-      expect(shared).toContain(`fn ${fn}(`);
-      expect(tsFragment).toContain(`${fn}(`);
-      expect(cppFragment).toContain(`${fn}(`);
+    const sharedFns: Array<[string, string]> = [
+      ['authoredBaseColor', glass],
+      ['authoredGlassOpacity', glass],
+      ['authoredDirectLighting', glass],
+      ['gradeGoldMetalAlbedoTinted', material],
+      ['applyAuthoredNormal', material],
+      ['authoredRoughness', material],
+      ['decodeAuthoredMaterial', material],
+    ];
+    for (const [fn, source] of sharedFns) {
+      expect(source, `${fn} must be declared in a shared module`).toContain(`fn ${fn}(`);
+      expect(tsFragment, `TS fragment must call ${fn}`).toContain(`${fn}(`);
+      expect(cppFragment, `C++ fragment must call ${fn}`).toContain(`${fn}(`);
     }
+    // authoredGlassAlbedo is reached through authoredBaseColor rather than called
+    // directly by both, so assert it is shared and that the TS path still uses it for
+    // the ghost piece (which composes the crystal albedo on its own).
+    expect(glass).toContain('fn authoredGlassAlbedo(');
+    expect(tsFragment).toContain('authoredGlassAlbedo(');
+
     // The old C++ fork sampled a 4x3 atlas; the extracted tile makes that wrong.
     expect(cppFragment).not.toContain('ATLAS_COLUMNS');
+  });
+
+  it('binds the packed material map at the same index in both renderers', () => {
+    const cppFragment = read('cpp/src/shaders/block/authoredBlock.wgsl');
+    const tsBindings = read('src/webgpu/shaders/block/bindings.wgsl.ts');
+    expect(tsBindings).toContain('@binding(13) @group(0) var blockMaterialMap');
+    expect(cppFragment).toContain('@binding(13) @group(0) var blockMaterialMap');
+    expect(read('cpp/src/block_bindings.h')).toContain('kBlockBindingMaterialMap = 13');
+  });
+
+  it('takes the authored gold/glass numbers from block-material.json, not C++ constants', () => {
+    const renderer = read('cpp/src/gpu_renderer.cpp');
+    // These used to be hardcoded here (0.28f/0.92f) against the TS renderer's values.
+    expect(renderer).not.toMatch(/constexpr float kAuthoredGlassMin\s*=/);
+    expect(renderer).toContain('fill_authored_material_uniforms(');
+    expect(renderer).toContain('generated/authored_block_material.h');
   });
 });
 

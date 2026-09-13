@@ -1,7 +1,14 @@
 /**
- * WebGL2 block shaders — dual-sample the extracted block.png tile.
+ * WebGL2 block shaders — dual-sample the extracted block.png tile plus the packed
+ * authored material map (R=normal.x, G=normal.y, B=roughness, A=metallic).
+ *
  * RGB: linear albedo. A: nearest baked metal mask (no halo).
- * Glass opacity uses the same GlassParams curve as the TS WebGPU path.
+ * Glass opacity, gold grade, TBN and roughness are hand-ports of the shared WGSL
+ * modules (src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl and authoredGlass.wgsl)
+ * that the TS and C++ renderers compose verbatim. GLSL cannot include WGSL, so these
+ * are the one place the look is duplicated — tests/block-material-parity.test.ts pins
+ * the constants and the function bodies against the WGSL source so a change to one
+ * without the other fails the suite.
  */
 
 export function createBlockShaderSources(): { vertex: string; fragment: string } {
@@ -47,6 +54,11 @@ uniform float u_glassFresnelPower;
 uniform float u_authoredLoaded;
 uniform sampler2D u_blockTexture;
 uniform sampler2D u_blockMaskTexture;
+uniform sampler2D u_blockMaterialMap;
+// The visual contract (block-material.json), mirroring AuthoredMaterialParams.
+uniform vec4 u_goldTint;   // rgb = jewelry tint, w = grade mix
+uniform vec4 u_goldShade;  // x = shadeMin, y = shadeMax, z = metal rough, w = glass rough
+uniform vec4 u_mapParams;  // x = normal strength, y = map enable, z = rough detail, w = unused
 
 out vec4 outColor;
 
@@ -54,11 +66,56 @@ vec2 transformUVForSampling(vec2 uv) {
   return clamp(vec2(uv.x, 1.0 - uv.y), 0.0, 1.0);
 }
 
-// Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
-vec3 gradeGoldMetalAlbedo(vec3 texRgb) {
+// Port of gradeGoldMetalAlbedoTinted (authoredMaterial.wgsl).
+vec3 gradeGoldMetalAlbedoTinted(vec3 texRgb, vec3 tint, float gradeMix, float shadeMin, float shadeMax) {
   float luma = dot(texRgb, vec3(0.299, 0.587, 0.114));
-  vec3 gold = vec3(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
-  return mix(texRgb, gold, 0.78);
+  vec3 gold = tint * mix(shadeMin, shadeMax, clamp(luma, 0.0, 1.0));
+  return mix(texRgb, gold, clamp(gradeMix, 0.0, 1.0));
+}
+
+// Port of blockTangentBasis (authoredMaterial.wgsl) — screen-space TBN (Mikkelsen).
+mat3 blockTangentBasis(vec3 N, vec3 worldPos, vec2 uv) {
+  vec3 dp1 = dFdx(worldPos);
+  vec3 dp2 = dFdy(worldPos);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+
+  vec3 dp2perp = cross(dp2, N);
+  vec3 dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+  float maxLen = max(dot(T, T), dot(B, B));
+  if (maxLen < 1.0e-12) {
+    return mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), N);
+  }
+  float invmax = inversesqrt(maxLen);
+  return mat3(T * invmax, B * invmax, N);
+}
+
+// Port of applyAuthoredNormal (authoredMaterial.wgsl).
+vec3 applyAuthoredNormal(vec3 N, vec3 worldPos, vec2 uv, vec2 packedNormalXY, float strength) {
+  if (strength <= 0.001) {
+    return N;
+  }
+  vec2 nxy = (packedNormalXY * 2.0 - vec2(1.0)) * strength;
+  float nz = sqrt(max(1.0 - dot(nxy, nxy), 1.0e-4));
+  return normalize(blockTangentBasis(N, worldPos, uv) * vec3(nxy, nz));
+}
+
+// Port of authoredRoughnessFallback / authoredRoughness (authoredMaterial.wgsl).
+float authoredRoughnessFallback(float metalMask, float detail, float metalRough, float glassRough, float detailScale) {
+  if (metalMask < 0.5) {
+    return clamp(glassRough, 0.02, 0.08);
+  }
+  return clamp(metalRough * (1.0 - detailScale * detail), 0.04, 1.0);
+}
+
+float authoredRoughness(float packedRough, float mapEnabled, float metalMask, float detail,
+                        float metalRough, float glassRough, float detailScale) {
+  float baked = clamp(packedRough, 0.02, 1.0);
+  float fallback = authoredRoughnessFallback(metalMask, detail, metalRough, glassRough, detailScale);
+  return mapEnabled > 0.5 ? baked : fallback;
 }
 
 float extractTextureMetalMask(vec3 rgb) {
@@ -70,17 +127,23 @@ float extractTextureMetalMask(vec3 rgb) {
 }
 
 void main() {
-  vec3 N = normalize(vNormal);
+  vec3 faceN = normalize(vNormal);
   vec3 V = normalize(u_eyePos - vWorldPos);
   vec3 L = normalize(u_lightPos - vWorldPos);
-  vec3 H = normalize(L + V);
-  float NdotL = max(dot(N, L), 0.0);
-  float NdotV = max(dot(N, V), 0.0);
-  float NdotH = max(dot(N, H), 0.0);
 
   vec2 texUV = transformUVForSampling(vUV);
   vec3 texRgb = texture(u_blockTexture, texUV).rgb;
   float texMaskA = texture(u_blockMaskTexture, texUV).a;
+
+  // Packed authored material map: normal.xy / roughness / metallic.
+  vec4 materialPacked = texture(u_blockMaterialMap, texUV);
+  float mapEnabled = u_mapParams.y;
+
+  vec3 N = applyAuthoredNormal(faceN, vWorldPos, vUV, materialPacked.rg, u_mapParams.x * mapEnabled);
+  vec3 H = normalize(L + V);
+  float NdotL = max(dot(N, L), 0.0);
+  float NdotV = max(dot(N, V), 0.0);
+  float NdotH = max(dot(N, H), 0.0);
 
   float metalMask;
   if (u_authoredLoaded > 0.5) {
@@ -96,7 +159,8 @@ void main() {
   float crystalBright = smoothstep(0.15, 0.90, luma);
   float crystalHi = max(luma - 0.65, 0.0) * 2.5;
 
-  vec3 metalColor = gradeGoldMetalAlbedo(texRgb);
+  vec3 metalColor = gradeGoldMetalAlbedoTinted(
+    texRgb, u_goldTint.rgb, u_goldTint.w, u_goldShade.x, u_goldShade.y);
   vec3 glassColor = texRgb * (0.70 + crystalBright * 0.30)
                   + vColor.rgb * 0.22 * crystalBright
                   + vec3(crystalHi * 0.40);
@@ -107,7 +171,12 @@ void main() {
   float nh4 = nh2 * nh2;
   float nh16 = nh4 * nh4;
   float tightSpec = nh16 * nh16 * nh16 * nh16;
-  float specularStrength = mix(0.06, 0.22, metalMask);
+  // Authored roughness drives highlight tightness: the polished hinge detail the
+  // packed map encodes is what makes the frame read as jewelry rather than plastic.
+  float detail = clamp(length(texRgb - vec3(luma)) * 2.0, 0.0, 1.0);
+  float roughness = authoredRoughness(materialPacked.b, mapEnabled, metalMask, detail,
+                                      u_goldShade.z, u_goldShade.w, u_mapParams.z);
+  float specularStrength = mix(0.06, 0.22, metalMask) * (1.0 - roughness * 0.5);
   vec3 specColor = mix(vec3(1.0), vec3(1.0, 0.88, 0.50), metalMask);
   vec3 finalColor = baseColor * lightFactor + specColor * (tightSpec * specularStrength);
 

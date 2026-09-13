@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "Reference gold + crystal",
+  "maps": {
+    "albedo": "block.png"
+  },
+  "glass": {
+    "min": 0.05,
+    "max": 0.6,
+    "fresnelPower": 2.0,
+    "ior": 1.22,
+    "thickness": 0.035
+  },
+  "gold": {
+    "tint": [0.9, 0.68, 0.22],
+    "mix": 0.78,
+    "shadeMin": 0.38,
+    "shadeMax": 1.23
+  },
+  "roughness": {
+    "metal": 0.12,
+    "glass": 0.05,
+    "detail": 0.18
+  },
+  "normal": {
+    "strength": 0.35
+  },
+  "contract": {
+    "borderMetalMin": 0.85,
+    "centerGlassMin": 0.6,
+    "haloMaxFraction": 0.12
+  }
+}

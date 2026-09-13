@@ -40,6 +40,9 @@ src/
 │   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
 │   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
 ├── viewWebGL2/              # WebGL2 fallback renderer
+├── dev/
+│   ├── textureMaskLab.ts    # Mask/material authoring UI (?masklab)
+│   └── materialDebugHotkey.ts # Shift+M material inspector
 └── webgpu/                  # WebGPU rendering subsystem
     ├── shaders/             # WGSL shader modules (split by purpose)
     │   ├── index.ts         # Re-exports all shader functions
@@ -56,6 +59,13 @@ src/
     ├── particles.ts         # Particle system (GPU-driven)
     ├── effects.ts           # Effect parameter wrappers (shockwave, glitch)
     ├── geometry.ts          # 3D mesh data (cube, quad, grid)
+    ├── blockMaterial.ts     # Authored material contract (block-material.json)
+    ├── blockMaterialMaps.ts # Pure bakers: packed normal/roughness/metallic + metrics
+    ├── blockMaterialCanvas.ts # Browser glue for the bakers
+    ├── blockMaskBake.ts     # Pure metal/glass mask bake (canvas-free)
+    ├── blockTileCpu.ts      # Canvas-free tile extraction (for CPU contract tests)
+    ├── ktx2.ts              # Optional BC7/KTX2 albedo upgrade (PNG stays canonical)
+    ├── materialModifiers.ts # Variant deltas on the authored material
     ├── themes.ts            # Color palette definitions
     ├── debug_shaders.ts     # Debug visualization shaders
     └── renderMetrics.ts     # Render coordinate constants
@@ -83,6 +93,23 @@ index.html                   # HTML bootstrap
 - **Artifacts:** `public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`)
 - **Fallback:** cpp → TS WebGPU → WebGL2 if wasm missing or init fails
 - **Docs:** `cpp/README.md`
+
+### Authored block material (the visual contract)
+The go.1ink.us look is **data**, not shader constants:
+- `public/block-material.json` — glass curve, gold grade, roughness band, normal
+  strength, map paths, contract thresholds. Validated against
+  `shared/blockMaterialSchema.json` by both the runtime loader and `prebuild`.
+- Packed material map: one RGBA texture, `R/G` = tangent normal, `B` = roughness,
+  `A` = metallic. Baked from the extracted tile by `blockMaterialMaps.ts`; bound at
+  `@binding(13)` in TS and C++, `u_blockMaterialMap` in WebGL2.
+- `AuthoredMaterialParams` (`@binding(14)`; folded into binding 0 on the C++ path)
+  carries the contract to the GPU.
+- Shared WGSL: `authoredMaterial.wgsl` (TBN, normal mapping, roughness, gold grade) and
+  `authoredGlass.wgsl` (glass albedo, opacity curve, direct lighting) are composed
+  verbatim by TS and C++; WebGL2 hand-ports them and `tests/block-material-parity.test.ts`
+  pins the port against the WGSL source.
+- **A new brick is a PNG + JSON, never a shader edit.** See
+  `docs/block-material-contract.md`.
 
 ### Data Flow
 ```
@@ -124,6 +151,7 @@ npm run test             # Run tests (Vitest)
 npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
 npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc)
 npm run cpp:debug        # Debug Emscripten build
+npm run material:validate # Validate public/block-material.json + authored maps
 ```
 
 **Try C++ renderer:** `npm run cpp:release` then open `?renderer=webgpu-cpp`
@@ -131,6 +159,14 @@ npm run cpp:debug        # Debug Emscripten build
 ## File Size Guidelines
 
 - **Keep all files under 1000 lines**
+- The block fragment shader is split by stage in `src/webgpu/shaders/wgsl/block/`:
+  - `fragmentMain.wgsl` — thin entry point: sample, classify, dispatch
+  - `authoredPath.wgsl` — authored gold + crystal composition
+  - `fallbackPath.wgsl` — classic + generic PBR
+  - `ghost.wgsl` — ghost-piece hologram
+  - `blockFx.wgsl` — rim, lock tension, pulses, shadow, dissolve
+  - `authoredMaterial.wgsl` / `authoredGlass.wgsl` — shared, binding-free look modules
+    (also embedded by the C++ renderer; never add a `@binding` to these)
 - Shaders live in `src/webgpu/shaders/` split by category:
   - `postProcess.ts` — Post-processing effects
   - `particle.ts` — Particle shaders
@@ -153,3 +189,8 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `game-utils.test.ts` — Utility functions
 - `render-metrics.test.ts` — Render coordinate math
 - `renderer-preference.test.ts` — `webgpu-cpp` preference parsing
+- `block-material-contract.test.ts` — the visual contract, measured on `public/block.png`
+- `block-material-maps.test.ts` — packed-map bakers
+- `block-material-schema.test.ts` — material validation + uniform packing
+- `block-material-parity.test.ts` — TS / WebGL2 / C++ material parity + shader split
+- `validate-block-material.test.ts` — the `prebuild` gate

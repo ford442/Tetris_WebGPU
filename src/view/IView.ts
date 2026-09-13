@@ -35,6 +35,12 @@ export interface IView {
   toggleGlitch?(): void;
   toggleBloom?(enabled?: boolean): void;
   setWireframe?(enabled: boolean): void;
+  /**
+   * Dev material inspector: 0 = final frame, 1 = albedo, 2 = metal mask,
+   * 3 = glass mask, 4 = roughness, 5 = shading normals (MaterialDebugView).
+   * Implemented by renderers that consume the authored material maps.
+   */
+  setMaterialDebugView?(mode: number): void;
 
   onLineClear?(
     lines: number[],

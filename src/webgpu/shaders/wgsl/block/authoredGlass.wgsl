@@ -9,12 +9,25 @@
 //   * No texture sampling — callers sample and pass the resulting colors in.
 // That keeps "what the material looks like" in one file while "where the data comes
 // from" stays renderer-specific.
+//
+// Composition order: authoredMaterial.wgsl must be prepended BEFORE this file — the
+// gold grade below delegates to gradeGoldMetalAlbedoTinted() declared there.
+
+/// Reference jewelry grade — the shipped go.1ink.us gold. Kept as named constants so
+/// the hard-coded default and the authored `gold.*` contract cannot drift apart.
+const kGoldJewelryAlbedo = vec3f(0.90, 0.68, 0.22);
+const kGoldGradeMix = 0.78;
+const kGoldShadeMin = 0.38;
+const kGoldShadeMax = 1.23;
 
 /// Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
+/// Callers with an authored material should use `gradeGoldMetalAlbedoTinted`
+/// (authoredMaterial.wgsl) so block-material.json can reskin the frame; this wrapper is
+/// the untinted default and the two must stay numerically identical at the defaults.
 fn gradeGoldMetalAlbedo(texRgb: vec3f) -> vec3f {
-    let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
-    let gold = vec3f(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
-    return mix(texRgb, gold, 0.78);
+    return gradeGoldMetalAlbedoTinted(
+        texRgb, kGoldJewelryAlbedo, kGoldGradeMix, kGoldShadeMin, kGoldShadeMax,
+    );
 }
 
 /// Stained-glass crystal albedo: authored tile detail tinted by the piece color.
@@ -28,8 +41,10 @@ fn authoredGlassAlbedo(texRgb: vec3f, pieceRgb: vec3f) -> vec3f {
 }
 
 /// Authored base color: glass interior vs gold frame, driven by the baked alpha mask.
-fn authoredBaseColor(texRgb: vec3f, pieceRgb: vec3f, metalMask: f32) -> vec3f {
-    return mix(authoredGlassAlbedo(texRgb, pieceRgb), gradeGoldMetalAlbedo(texRgb), metalMask);
+/// `metalRgb` is the already-graded frame color, so the caller decides whether the
+/// grade is the untinted default or the authored tint from block-material.json.
+fn authoredBaseColor(texRgb: vec3f, pieceRgb: vec3f, metalRgb: vec3f, metalMask: f32) -> vec3f {
+    return mix(authoredGlassAlbedo(texRgb, pieceRgb), metalRgb, metalMask);
 }
 
 /// pow(1 - NdotV, power) with fast paths for the two powers the CPU actually ships.

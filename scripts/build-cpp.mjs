@@ -23,7 +23,9 @@
  *     the WGSL shared with the TS renderer — via scripts/generate-cpp-shaders.mjs,
  *     runs even without emcc)
  *   cpp/src/generated/authored_block_uniforms.h  (block uniform struct generated
- *     from shared/authoredBlockUniforms.json — via scripts/generate-cpp-uniforms.mjs)
+ *     from shared/authoredBlockUniforms.json — via scripts/generate-cpp-uniforms.mjs,
+ *     and the authored material constants from public/block-material.json — via
+ *     scripts/generate-cpp-material.mjs)
  */
 
 import { spawnSync } from 'node:child_process';
@@ -71,6 +73,7 @@ const EXPORTED_FUNCTIONS = [
   '_is_gpu_renderer_active',
   '_is_canvas_fallback_active',
   '_set_block_texture_rgba',
+  '_set_block_material_map_rgba',
   '_malloc',
   '_free',
 ];
@@ -398,6 +401,7 @@ function runGenerator(script) {
 function generateShaderHeaders() {
   runGenerator('generate-cpp-shaders.mjs');
   runGenerator('generate-cpp-uniforms.mjs');
+  runGenerator('generate-cpp-material.mjs');
 }
 
 function main() {

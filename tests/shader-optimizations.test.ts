@@ -65,7 +65,10 @@ it('composes gold frame and tinted glass using authored baked alpha', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('composeMaterialBaseColor');
   expect(fragment).toContain('useAuthoredSampling');
-  expect(fragment).toContain('let metalColor = gradeGoldMetalAlbedo(texColor.rgb)');
+  // Gold grading now reads the authored tint from block-material.json, so the call
+  // site is the tinted variant; the untinted wrapper stays as the shared default.
+  expect(fragment).toContain('gradeGoldMetalAlbedoTinted(');
+  expect(fragment).toContain('materialParams.goldTint.rgb');
   // Opacity curve moved into the shared authored module (also embedded by the C++
   // renderer); the fragment shader calls it instead of inlining the mix.
   expect(fragment).toContain('let glassOpacity = authoredGlassOpacity(');

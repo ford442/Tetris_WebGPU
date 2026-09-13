@@ -280,7 +280,12 @@ export const DEFAULT_BLOCK_TEXTURE_CONFIG: BlockTextureConfig = {
   subregionWidth: 0.247,
   subregionHeight: 0.446,
   subregionInset: 0.01,
-  materialDetectionMode: 'color_signal',
+  // 'warmth' (the gold's r-b signal inside a mid-luma band), not 'color_signal'.
+  // color_signal (r + g - 0.5b) reads the bright warm crystal as metal on this atlas
+  // and floods ~60% of the window: tests/block-material-contract.test.ts measured a
+  // centre glass mean of 0.37 against the contract's 0.6 minimum. Warmth segments the
+  // same tile into a clean hinge frame plus a fully transmissive well.
+  materialDetectionMode: 'warmth',
   metalThresholdLow: 0.75,
   metalThresholdHigh: 1.20,
   useProceduralFallback: true,

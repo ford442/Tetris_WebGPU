@@ -8,6 +8,7 @@
 #include "block_bindings.h"
 #include "board_metrics.h"
 #include "generated/authored_block_uniforms.h"
+#include "generated/authored_block_material.h"
 #include "generated/shader_sources.h"
 #include "math_utils.h"
 
@@ -28,18 +29,18 @@ using namespace tetris;
 constexpr int kMaxInstances = kPlayfieldBytes;
 constexpr float kPi = 3.14159265358979323846f;
 
-// Authored material defaults. These mirror the values the TS renderer writes into
-// FragmentUniforms for the authored block.png path; the C++ path has no per-theme
-// material UI yet, so they are constants rather than a second tuning surface.
-constexpr float kAuthoredGlassMin = 0.28f;
-constexpr float kAuthoredGlassMax = 0.92f;
-constexpr float kAuthoredGlassFresnelPower = 2.0f;
+// Authored glass/gold/roughness values are NOT declared here: they come from
+// generated/authored_block_material.h, generated from public/block-material.json —
+// the same file the TS and WebGL2 renderers fetch. This file used to carry its own
+// kAuthoredGlassMin = 0.28f against the TS renderer's 0.05, which is exactly the
+// silent look drift the visual contract exists to prevent.
+//
+// What remains local is the generic-PBR state the contract does not describe and the
+// C++ path has no producer for yet.
 constexpr float kAuthoredMetallic = 0.9f;
 constexpr float kAuthoredRoughness = 0.18f;
 constexpr float kAuthoredClearcoat = 0.35f;
 constexpr float kAuthoredAnisotropic = 0.4f;
-constexpr float kAuthoredGlassIor = 1.45f;
-constexpr float kAuthoredGlassThickness = 0.035f;
 constexpr float kAuthoredDispersion = 0.015f;
 
 struct BlockInstance {
@@ -73,6 +74,10 @@ struct GpuState {
   WGPUTexture block_texture = nullptr;
   WGPUTextureView block_texture_view = nullptr;
   WGPUTextureView block_texture_mask_view = nullptr;
+  /** Packed authored material map (normal.xy / roughness / metallic), @binding(13). */
+  WGPUTexture material_map_texture = nullptr;
+  WGPUTextureView material_map_view = nullptr;
+  bool material_map_ready = false;
   WGPUSampler block_sampler = nullptr;
   WGPUSampler block_sampler_mask = nullptr;
   uint32_t block_texture_mips = 1;
@@ -314,9 +319,9 @@ static void update_uniforms(float dt) {
   uniforms.eyePosition[3] = 1.0f;
 
   // GlassParams defaults mirror the TS authored crystal curve (min/max/fresnelPower).
-  uniforms.glassParams[0] = kAuthoredGlassMin;
-  uniforms.glassParams[1] = kAuthoredGlassMax;
-  uniforms.glassParams[2] = kAuthoredGlassFresnelPower;
+  // Glass curve, gold grade, roughness band and normal strength all come from the
+  // authored contract (public/block-material.json -> authored_block_material.h).
+  fill_authored_material_uniforms(uniforms, g_gpu.material_map_ready ? 1.0f : 0.0f);
 
   uniforms.blockHalfSize = kBlockHalfWorldSize;
   uniforms.time = time_acc;
@@ -353,6 +358,7 @@ static void update_uniforms(float dt) {
  * cpp/src/shaders/block/authoredBlock.wgsl documents:
  *   uniforms (from shared/authoredBlockUniforms.json)
  *     + shared binding-free PBR core (src/webgpu/shaders/wgsl/block/pbrCore.wgsl)
+ *     + shared material maps (src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl)
  *     + shared authored material (src/webgpu/shaders/wgsl/block/authoredGlass.wgsl)
  *     + the C++-owned bindings / vertex / fragment plumbing.
  * Everything but the last piece is byte-identical to what the TS renderer compiles,
@@ -363,6 +369,8 @@ static std::string compose_authored_block_wgsl() {
   out += tetris::kAuthoredBlockUniformsWgsl;
   out += "\n";
   out += tetris::shaders::kSharedPbrCoreWgsl;
+  out += "\n";
+  out += tetris::shaders::kSharedAuthoredMaterialWgsl;
   out += "\n";
   out += tetris::shaders::kSharedAuthoredGlassWgsl;
   out += "\n";
@@ -428,6 +436,72 @@ static void release_block_texture() {
   }
   g_gpu.block_texture_mips = 1;
   g_gpu.texture_ready = false;
+}
+
+/** Release the packed material map and its view. */
+static void release_material_map() {
+  if (g_gpu.material_map_view) {
+    wgpuTextureViewRelease(g_gpu.material_map_view);
+    g_gpu.material_map_view = nullptr;
+  }
+  if (g_gpu.material_map_texture) {
+    wgpuTextureRelease(g_gpu.material_map_texture);
+    g_gpu.material_map_texture = nullptr;
+  }
+  g_gpu.material_map_ready = false;
+}
+
+/**
+ * Upload an RGBA8 packed material map into @binding(13).
+ * `width`/`height` must match the uploaded tile; mip 0 only, because filtering a
+ * packed normal/roughness map across mips smears the channels into each other.
+ */
+static bool upload_material_map(const uint8_t* data, int width, int height) {
+  release_material_map();
+  if (!g_gpu.device || !g_gpu.queue) return false;
+
+  WGPUTextureDescriptor tex_desc = {};
+  tex_desc.size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+  tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
+  tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+  tex_desc.mipLevelCount = 1;
+  g_gpu.material_map_texture = wgpuDeviceCreateTexture(g_gpu.device, &tex_desc);
+  if (!g_gpu.material_map_texture) return false;
+
+  const size_t bytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+  WGPUTexelCopyTextureInfo dest = {};
+  dest.texture = g_gpu.material_map_texture;
+  WGPUTexelCopyBufferLayout layout = {};
+  layout.bytesPerRow = static_cast<uint32_t>(width) * 4u;
+  layout.rowsPerImage = static_cast<uint32_t>(height);
+  WGPUExtent3D size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
+  wgpuQueueWriteTexture(g_gpu.queue, &dest, data, bytes, &layout, &size);
+
+  WGPUTextureViewDescriptor view_desc = {};
+  view_desc.format = WGPUTextureFormat_RGBA8Unorm;
+  view_desc.dimension = WGPUTextureViewDimension_2D;
+  view_desc.baseMipLevel = 0;
+  view_desc.mipLevelCount = 1;
+  view_desc.baseArrayLayer = 0;
+  view_desc.arrayLayerCount = 1;
+  g_gpu.material_map_view = wgpuTextureCreateView(g_gpu.material_map_texture, &view_desc);
+  return g_gpu.material_map_view != nullptr;
+}
+
+/**
+ * 1x1 flat stand-in so @binding(13) is never unbound before the bake arrives —
+ * the same trick createFlatMaterialMapTexture() plays on the TS side. The shader
+ * reads u.mapParams.y (0 here) and uses the contract roughness fallback instead.
+ */
+static bool create_flat_material_map() {
+  const uint8_t flat[4] = {
+    128, 128,
+    static_cast<uint8_t>(kAuthoredMetalRoughness * 255.0f + 0.5f),
+    255,
+  };
+  if (!upload_material_map(flat, 1, 1)) return false;
+  g_gpu.material_map_ready = false; // flat fallback, not an authored bake
+  return true;
 }
 
 static bool create_placeholder_block_texture() {
@@ -504,6 +578,8 @@ static bool recreate_bind_group() {
       !g_gpu.block_texture_mask_view || !g_gpu.block_sampler || !g_gpu.block_sampler_mask) {
     return false;
   }
+  // @binding(13) must always resolve; fall back to the flat texel if no bake landed.
+  if (!g_gpu.material_map_view && !create_flat_material_map()) return false;
 
   WGPUBindGroupLayout layout = g_gpu.bind_group_layout;
   if (!layout) {
@@ -512,7 +588,7 @@ static bool recreate_bind_group() {
 
   // Binding indices come from block_bindings.h and match the TS renderer's
   // numbering — resources TS has and this path does not are left as holes.
-  WGPUBindGroupEntry entries[5] = {};
+  WGPUBindGroupEntry entries[6] = {};
   entries[0].binding = kBlockBindingUniforms;
   entries[0].buffer = g_gpu.uniform_buffer;
   entries[0].size = sizeof(UniformData);
@@ -524,10 +600,12 @@ static bool recreate_bind_group() {
   entries[3].textureView = g_gpu.block_texture_mask_view;
   entries[4].binding = kBlockBindingSamplerMask;
   entries[4].sampler = g_gpu.block_sampler_mask;
+  entries[5].binding = kBlockBindingMaterialMap;
+  entries[5].textureView = g_gpu.material_map_view;
 
   WGPUBindGroupDescriptor bg_desc = {};
   bg_desc.layout = layout;
-  bg_desc.entryCount = 5;
+  bg_desc.entryCount = 6;
   bg_desc.entries = entries;
   g_gpu.bind_group = wgpuDeviceCreateBindGroup(g_gpu.device, &bg_desc);
   return g_gpu.bind_group != nullptr;
@@ -616,7 +694,7 @@ static bool create_pipeline() {
       },
   };
 
-  WGPUBindGroupLayoutEntry bgl_entries[5] = {};
+  WGPUBindGroupLayoutEntry bgl_entries[6] = {};
   bgl_entries[0].binding = kBlockBindingUniforms;
   bgl_entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
   bgl_entries[0].buffer.type = WGPUBufferBindingType_Uniform;
@@ -637,9 +715,13 @@ static bool create_pipeline() {
   bgl_entries[4].binding = kBlockBindingSamplerMask;
   bgl_entries[4].visibility = WGPUShaderStage_Fragment;
   bgl_entries[4].sampler.type = WGPUSamplerBindingType_NonFiltering;
+  bgl_entries[5].binding = kBlockBindingMaterialMap;
+  bgl_entries[5].visibility = WGPUShaderStage_Fragment;
+  bgl_entries[5].texture.sampleType = WGPUTextureSampleType_Float;
+  bgl_entries[5].texture.viewDimension = WGPUTextureViewDimension_2D;
 
   WGPUBindGroupLayoutDescriptor bgl_desc = {};
-  bgl_desc.entryCount = 5;
+  bgl_desc.entryCount = 6;
   bgl_desc.entries = bgl_entries;
   g_gpu.bind_group_layout = wgpuDeviceCreateBindGroupLayout(g_gpu.device, &bgl_desc);
 
@@ -738,6 +820,7 @@ static bool create_mesh_buffers() {
   g_gpu.post_uniform_buffer = create_buffer(nullptr, sizeof(PostProcessUniformData), WGPUBufferUsage_Uniform);
 
   if (!create_placeholder_block_texture()) return false;
+  if (!create_flat_material_map()) return false;
   return recreate_bind_group() && recreate_post_bind_group() &&
          g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer && g_gpu.post_uniform_buffer;
 }
@@ -797,6 +880,7 @@ void gpu_renderer_resize(int width, int height) {
 }
 
 void gpu_renderer_shutdown(void) {
+  release_material_map();
   if (g_gpu.post_bind_group) wgpuBindGroupRelease(g_gpu.post_bind_group);
   if (g_gpu.post_bind_group_layout) wgpuBindGroupLayoutRelease(g_gpu.post_bind_group_layout);
   if (g_gpu.post_uniform_buffer) wgpuBufferRelease(g_gpu.post_uniform_buffer);
@@ -906,6 +990,32 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
   wgpuSurfacePresent(g_gpu.surface);
 }
 
+/**
+ * Upload the packed material map baked by CppRendererLoader from the same extracted
+ * tile. Call after set_block_texture_rgba: the bind group is rebuilt here so the new
+ * view is picked up, and u.mapParams.y flips to 1 so the shader reads baked roughness
+ * and normals instead of the contract fallback.
+ */
+int gpu_renderer_set_block_material_map(const uint8_t* data, int width, int height, int byte_len) {
+  if (!g_gpu.active || !g_gpu.device || !g_gpu.queue || !data || width <= 0 || height <= 0) {
+    return 0;
+  }
+  const size_t expected = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+  if (byte_len < 0 || static_cast<size_t>(byte_len) < expected) return 0;
+
+  if (!upload_material_map(data, width, height)) {
+    create_flat_material_map();
+    recreate_bind_group();
+    return 0;
+  }
+  g_gpu.material_map_ready = true;
+  if (!recreate_bind_group()) {
+    g_gpu.material_map_ready = false;
+    return 0;
+  }
+  return 1;
+}
+
 int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len) {
   if (!g_gpu.active || !g_gpu.device || !g_gpu.queue || !data || width <= 0 || height <= 0) {
     return 0;
@@ -983,6 +1093,14 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
 }
 
 int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len) {
+  (void)data;
+  (void)width;
+  (void)height;
+  (void)byte_len;
+  return 0;
+}
+
+int gpu_renderer_set_block_material_map(const uint8_t* data, int width, int height, int byte_len) {
   (void)data;
   (void)width;
   (void)height;

@@ -6,6 +6,20 @@ import {
   DEFAULT_GLASS_REFRACTION_PARAMS,
 } from '../webgpu/blockTexture.js';
 import { extractBlockTileFromImage } from '../webgpu/blockTextureExtract.js';
+import {
+  mergeAuthoredBlockMaterial,
+  type AuthoredBlockMaterial,
+} from '../webgpu/blockMaterial.js';
+import {
+  albedoOnlyCanvas,
+  bakeMaterialMapFromTile,
+  normalMapCanvas,
+  packedMetalRoughnessCanvas,
+} from '../webgpu/blockMaterialCanvas.js';
+import {
+  checkBlockMaterialContract,
+  measureBlockMaterialContract,
+} from '../webgpu/blockMaterialMaps.js';
 
 type MaskLabParams = {
   // Extraction controls
@@ -73,6 +87,37 @@ function debounce<T extends (...args: any[]) => void>(fn: T, waitMs: number): T 
 async function loadImageFromFile(file: File): Promise<ImageBitmap> {
   const bitmap = await createImageBitmap(file);
   return bitmap;
+}
+
+/** Build an AuthoredBlockMaterial from the current Mask Lab sliders. */
+function maskLabMaterial(
+  params: MaskLabParams,
+  albedoName: string,
+  maskName: string,
+): AuthoredBlockMaterial {
+  return mergeAuthoredBlockMaterial({
+    name: albedoName.replace(/_albedo\.png$/, ''),
+    maps: { albedo: albedoName, metalMask: maskName, material: albedoName.replace(/_albedo\.png$/, '_material.png') },
+    glass: {
+      min: params.glassMin,
+      max: params.glassMax,
+      fresnelPower: params.glassFresnelPower,
+      ior: params.glassIor,
+      thickness: params.glassThickness,
+    },
+  });
+}
+
+function downloadText(text: string, filename: string): void {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function downloadCanvas(canvas: HTMLCanvasElement, filename: string): Promise<void> {
@@ -457,6 +502,7 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
         <button class="masklab-btn" id="masklab-bake">Bake / Update</button>
         <button class="masklab-btn" id="masklab-autoOuter">Auto-propose outerForce</button>
         <button class="masklab-btn" id="masklab-export2x">Export 2x tile + mask</button>
+        <button class="masklab-btn" id="masklab-exportMaps">Export material pack</button>
         <button class="masklab-btn" id="masklab-bakeCfg">Bake suggested config</button>
         <button class="masklab-btn" id="masklab-downloadJson">Download JSON</button>
         <label class="masklab-btn" for="masklab-loadJson" style="display:inline-block;cursor:pointer;">Load JSON</label>
@@ -866,6 +912,69 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
     const baseName = (elTexture.files?.[0]?.name ?? 'block').replace(/\.(png|jpg|jpeg)$/i, '');
     await downloadCanvas(extracted2x.canvas, `${baseName}_tile_2x.png`);
     await downloadCanvas(extracted2x.maskCanvas, `${baseName}_metalMask_2x.png`);
+  });
+
+  // Full authored material pack: the maps the renderers sample plus the JSON that
+  // describes them. This is the handoff format for a content pack — a new brick is
+  // these files, never a shader edit.
+  const exportMapsBtn = root.querySelector('#masklab-exportMaps') as HTMLButtonElement;
+  exportMapsBtn.addEventListener('click', async () => {
+    if (!originalBitmap) return;
+    syncParamsFromUI();
+
+    const baseCfg: BlockTextureConfig = {
+      ...SINGLE_TILE_TEXTURE_CONFIG,
+      samplingMode: params.samplingMode,
+      materialDetectionMode: params.materialDetectionMode,
+      maskOuterForce: params.maskOuterForce,
+      maskFeatherPx: params.maskFeatherPx,
+      warmthLumaBandA0: params.warmthLumaBandA0,
+      warmthLumaBandA1: params.warmthLumaBandA1,
+      warmthLumaBandB0: params.warmthLumaBandB0,
+      warmthLumaBandB1: params.warmthLumaBandB1,
+      authoredGlassMin: params.glassMin,
+      authoredGlassMax: params.glassMax,
+      authoredGlassFresnelPower: params.glassFresnelPower,
+      authoredGlassIor: params.glassIor,
+      authoredGlassThickness: params.glassThickness,
+      url: elTexture.files?.[0]?.name ?? 'your-texture.png',
+    };
+
+    const extracted = extractBlockTileFromImage(originalBitmap, 2.0, baseCfg, maskBitmap);
+    if (!extracted.maskCanvas) return;
+
+    const baseName = (elTexture.files?.[0]?.name ?? 'block').replace(/\.(png|jpg|jpeg)$/i, '');
+    const material = maskLabMaterial(params, `${baseName}_albedo.png`, `${baseName}_metalMask.png`);
+    const { bake, canvas: materialMapCanvas } = bakeMaterialMapFromTile(extracted.canvas, material);
+
+    await downloadCanvas(albedoOnlyCanvas(extracted.canvas), `${baseName}_albedo.png`);
+    await downloadCanvas(extracted.maskCanvas, `${baseName}_metalMask.png`);
+    await downloadCanvas(packedMetalRoughnessCanvas(bake), `${baseName}_packedMR.png`);
+    await downloadCanvas(normalMapCanvas(bake), `${baseName}_normal.png`);
+
+    // The packed map the renderers actually bind (normal.xy / roughness / metallic).
+    await downloadCanvas(materialMapCanvas, `${baseName}_material.png`);
+
+    // Report the contract metrics next to the files, so a bad export is obvious here
+    // rather than at build time.
+    const tileCtx = extracted.canvas.getContext('2d', { willReadFrequently: true });
+    let contractNote = '';
+    if (tileCtx) {
+      const albedo = tileCtx.getImageData(0, 0, extracted.width, extracted.height).data;
+      const check = checkBlockMaterialContract(
+        measureBlockMaterialContract(albedo, extracted.width, extracted.height, bake.rgba),
+        material,
+      );
+      contractNote = check.ok
+        ? '// contract: OK'
+        : `// contract FAILED: ${check.failures.join(' | ')}`;
+    }
+
+    downloadText(
+      `${JSON.stringify(material, null, 2)}\n`,
+      'block-material.json',
+    );
+    cfgOut.value = `${contractNote}\n${JSON.stringify(material, null, 2)}`;
   });
 
   const autoOuterBtn = root.querySelector('#masklab-autoOuter') as HTMLButtonElement;

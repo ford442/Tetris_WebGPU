@@ -397,3 +397,28 @@ RENDERER=webgpu-cpp node scripts/screenshot.cjs
 | No lime frame / `C++ WIP` badge | Run `npm run cpp:release`; confirm `public/cpp/*.wasm` exists |
 | Black board on cpp path | Check console for wasm fetch failures; verify Vite serves `/cpp/` |
 | Falls back to WebGPU | Expected when wasm missing or `EmscriptenView.create()` throws |
+
+## Authored material (shared with the TS renderer)
+
+The gold/crystal look is **not** defined in C++. `public/block-material.json` is
+compiled into `cpp/src/generated/authored_block_material.h` by
+`scripts/generate-cpp-material.mjs` (run from `build-cpp.mjs` and CMake), and the WGSL
+that decides how the material looks is shared verbatim from `src/`:
+
+| Generated / shared | Source |
+|---|---|
+| `generated/authored_block_uniforms.h` | `shared/authoredBlockUniforms.json` |
+| `generated/authored_block_material.h` | `public/block-material.json` |
+| `kSharedAuthoredMaterialWgsl` | `src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl` |
+| `kSharedAuthoredGlassWgsl` | `src/webgpu/shaders/wgsl/block/authoredGlass.wgsl` |
+| `kSharedPbrCoreWgsl` | `src/webgpu/shaders/wgsl/block/pbrCore.wgsl` |
+
+`CppRendererLoader` bakes the packed material map (normal.xy / roughness / metallic)
+from the same extracted tile the TS renderer uses and uploads it through
+`set_block_material_map_rgba`, bound at `@binding(13)` — the same index TS uses. Until
+that upload lands the renderer binds a flat 1x1 texel and the shader takes the contract
+fallback, exactly like the TS path.
+
+Never hardcode a material number here. This file previously carried
+`kAuthoredGlassMin = 0.28f` against the TS renderer's `0.05`, which is the drift the
+contract exists to prevent. See `docs/block-material-contract.md`.

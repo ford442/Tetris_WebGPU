@@ -9,6 +9,9 @@ import {
   paintProceduralBlockTexture,
   createBlockTextureBindingView,
 } from './blockTexture.js';
+import type { AuthoredBlockMaterial } from './blockMaterial.js';
+import { getAuthoredBlockMaterial } from './blockMaterial.js';
+import { flatMaterialMapPixel } from './blockMaterialMaps.js';
 
 /**
  * Generate mipmaps for a given GPU texture using a blit shader.
@@ -93,6 +96,48 @@ export function createSolidFallbackTexture(device: GPUDevice): GPUTexture {
     { bytesPerRow: 4 },
     [1, 1, 1]
   );
+  return texture;
+}
+
+/**
+ * 1x1 flat stand-in for @binding(13): flat normal, authored metal roughness, opaque.
+ * The material-map binding is never left unbound — the shader instead reads
+ * materialParams.mapParams.y to know it should use the contract fallback.
+ */
+export function createFlatMaterialMapTexture(
+  device: GPUDevice,
+  material: AuthoredBlockMaterial = getAuthoredBlockMaterial(),
+): GPUTexture {
+  const texture = device.createTexture({
+    label: 'block material map (flat fallback)',
+    size: [1, 1, 1],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+  });
+  device.queue.writeTexture({ texture }, flatMaterialMapPixel(material), { bytesPerRow: 4 }, [1, 1, 1]);
+  return texture;
+}
+
+/**
+ * Upload a baked packed material map (R=normal.x, G=normal.y, B=roughness, A=metallic).
+ * Mip 0 only: filtering a packed normal/roughness map across mips smears the channels
+ * into each other, and the map is sampled at the same UV as the albedo tile anyway.
+ */
+export async function createMaterialMapTexture(
+  device: GPUDevice,
+  source: HTMLCanvasElement,
+): Promise<GPUTexture> {
+  const bitmap = await createImageBitmap(source, {
+    premultiplyAlpha: 'none',
+    colorSpaceConversion: 'none',
+  });
+  const texture = device.createTexture({
+    label: 'block material map (baked)',
+    size: [bitmap.width, bitmap.height, 1],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+  device.queue.copyExternalImageToTexture({ source: bitmap }, { texture }, [bitmap.width, bitmap.height]);
   return texture;
 }
 

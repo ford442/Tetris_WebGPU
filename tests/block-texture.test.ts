@@ -150,7 +150,9 @@ describe('block texture configuration', () => {
     expect(config.subregionWidth).toBeCloseTo(0.247, 3);
     expect(config.subregionHeight).toBeCloseTo(0.446, 3);
     expect(config.subregionInset).toBeCloseTo(0.01, 3);
-    expect(config.materialDetectionMode).toBe('color_signal');
+    // Warmth, not color_signal: see the comment on DEFAULT_BLOCK_TEXTURE_CONFIG —
+    // color_signal classified most of the crystal window as metal on this atlas.
+    expect(config.materialDetectionMode).toBe('warmth');
   });
 
   it('has correct single tile configuration preset', () => {

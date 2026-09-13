@@ -55,6 +55,7 @@ import {
   cycleTheme as cycleThemeImpl,
   renderPiece as renderPieceImpl,
   setWireframe as setWireframeImpl,
+  setMaterialDebugView as setMaterialDebugViewImpl,
 } from './webgpu/viewMaterials.js';
 import {
   generateMipmaps as generateMipmapsUtil,
@@ -245,6 +246,14 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   blockSampler!: GPUSampler;
   blockSamplerColor!: GPUSampler;
   blockSamplerMask!: GPUSampler;
+  /** Optional BC7 albedo from a .ktx2 map; when set it is bound at @binding(2). */
+  blockAlbedoKtx2Texture?: GPUTexture;
+  /** Packed normal/roughness/metallic map @binding(13) (flat 1x1 until baked). */
+  blockMaterialMapTexture!: GPUTexture;
+  /** AuthoredMaterialParams @binding(14) — the visual contract as uniforms. */
+  materialParamsBuffer!: GPUBuffer;
+  /** True when a baked packed material map is bound (not the flat fallback). */
+  authoredMaterialMapLoaded: boolean = false;
   /** True when block.png loaded; false when procedural/solid fallback is in use. */
   authoredBlockTextureLoaded: boolean = false;
 
@@ -759,6 +768,8 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   updateMaterialUniforms() { updateMaterialUniformsImpl(this as MaterialViewLike); }
   cycleTheme() { cycleThemeImpl(this as MaterialViewLike); }
   setWireframe(enabled: boolean) { setWireframeImpl(this as MaterialViewLike, enabled); }  // wireframe for blocks (see viewMaterials)
+  /** Dev material inspector (see MaterialDebugView); 0 restores the final frame. */
+  setMaterialDebugView(mode: number) { setMaterialDebugViewImpl(this as MaterialViewLike, mode); }
 
   // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
   setPremiumVisualsPreset(options: Record<string, unknown> = {}) { setPremiumPresetImpl(this as ViewLike, options); }

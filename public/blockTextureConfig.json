@@ -6,7 +6,7 @@
   "subregionWidth": 0.247,
   "subregionHeight": 0.446,
   "subregionInset": 0.01,
-  "materialDetectionMode": "color_signal",
+  "materialDetectionMode": "warmth",
   "metalThresholdLow": 0.75,
   "metalThresholdHigh": 1.2,
   "useProceduralFallback": true,

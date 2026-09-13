@@ -1,11 +1,41 @@
+        // Block fragment entry point.
+        //
+        // This file is deliberately thin: it samples, classifies metal vs glass, and
+        // dispatches to one of the split shading modules. Anything that decides how a
+        // material *looks* belongs in:
+        //
+        //   authoredGlass.wgsl     gold grading, crystal albedo, glass opacity  (shared with C++)
+        //   authoredMaterial.wgsl  normal/roughness decode, TBN, gold tint      (shared with C++)
+        //   authoredPath.wgsl      authored composition (IBL + backdrop refraction)
+        //   fallbackPath.wgsl      classic + generic PBR materials
+        //   ghost.wgsl             ghost-piece hologram
+        //   blockFx.wgsl           rim, lock tension, pulses, shadow, dissolve
+        //
+        // Keeping the entry point small is what makes the visual contract testable:
+        // tests target the split modules and the CPU bakers, not a 500-line function.
+
         fn acesToneMapping(color: vec3f) -> vec3f {
             let a = 2.51; let b = 0.03; let c = 2.43; let d = 0.59; let e = 0.14;
             return clamp((color * (a * color + b)) / (color * (c * color + d) + e), vec3f(0.0), vec3f(1.0));
         }
 
-        // gradeGoldMetalAlbedo / authoredGlassAlbedo / authoredBaseColor / authoredGlassOpacity
-        // come from the shared authored-material module (wgsl/block/authoredGlass.wgsl),
-        // which the C++ renderer embeds verbatim so both paths grade gold identically.
+        /// Dev visualisation of one material channel (MaterialDebugView in blockMaterial.ts).
+        fn debugMaterialView(
+            mode: u32,
+            texRgb: vec3f,
+            metalMask: f32,
+            roughness: f32,
+            shadingNormal: vec3f,
+        ) -> vec4f {
+            switch (mode) {
+                case 1u: { return vec4f(texRgb, 1.0); }
+                case 2u: { return vec4f(vec3f(metalMask), 1.0); }
+                case 3u: { return vec4f(vec3f(1.0 - metalMask), 1.0); }
+                case 4u: { return vec4f(vec3f(roughness), 1.0); }
+                case 5u: { return vec4f(shadingNormal * 0.5 + vec3f(0.5), 1.0); }
+                default: { return vec4f(texRgb, 1.0); }
+            }
+        }
 
         @fragment
         fn main(@location(0) vWorldPos : vec4f,
@@ -15,13 +45,9 @@
                 @location(4) vClipPos : vec4f) -> @location(0) vec4f {
 
             let time = fUniforms.time;
-            let N = normalize(vNormal);
+            let faceN = normalize(vNormal);
             let V = normalize(fUniforms.eyePosition.xyz - vWorldPos.xyz);
             let L = normalize(fUniforms.lightPosition.xyz - vWorldPos.xyz);
-            let H = normalize(L + V);
-            let NdotL = max(dot(N, L), 0.0);
-            let NdotV = max(dot(N, V), 0.0);
-            let NdotH = max(dot(N, H), 0.0);
 
             // Apply configurable texture sampling
             var texUV = transformUVForSampling(vUV);
@@ -54,6 +80,13 @@
             let texMaskA = textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0).a;
             let texColor = vec4f(texColorRgb.rgb, texMaskA);
 
+            // Authored packed material map: normal.xy / roughness / metallic.
+            // Always bound — a 1×1 flat texel stands in until the bake lands, and
+            // materialParams.mapParams.y says which of the two we got.
+            let materialPacked = textureSample(blockMaterialMap, blockSamplerColor, texUV);
+            let materialSample = decodeAuthoredMaterial(materialPacked);
+            let mapEnabled = materialParams.mapParams.y;
+
             let textureMix = fUniforms.textureMix;
             // Border frame always samples block.png gold/crystal detail at full strength
             let isBorderBlock = vWorldPos.x < -0.8 || vWorldPos.x > 21.0
@@ -82,10 +115,45 @@
             let metalOpaque = step(0.5, metalMask);
             let glassMaskAlpha = 1.0 - metalOpaque;
 
-            let metalColor = gradeGoldMetalAlbedo(texColor.rgb);
+            // Tangent-space normal mapping. Strength is authored (block-material.json)
+            // and kept low so hinges read as jewelry, not as noise, at playfield size.
+            let N = applyAuthoredNormal(
+                faceN, vWorldPos.xyz, vUV,
+                materialSample.normalXY,
+                materialParams.mapParams.x * mapEnabled,
+            );
+
+            let H = normalize(L + V);
+            let NdotL = max(dot(N, L), 0.0);
+            let NdotV = max(dot(N, V), 0.0);
+            let NdotH = max(dot(N, H), 0.0);
+
+            // High-frequency albedo energy: the shader-side stand-in for the Sobel
+            // detail field the CPU baker uses (blockMaterialMaps.ts).
+            let mip3 = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 3.0).rgb;
+            let detail = clamp(length(texColor.rgb - mip3) * 2.0, 0.0, 1.0);
+            let pixelRough = authoredRoughness(
+                materialSample.roughness,
+                mapEnabled,
+                metalMask,
+                detail,
+                materialParams.goldShade.z,
+                materialParams.goldShade.w,
+                materialParams.mapParams.z,
+            );
+
+            // Gold grading is authored: tint/mix/shade come from block-material.json,
+            // so a content pack can reskin the frame without touching WGSL.
+            let metalColor = gradeGoldMetalAlbedoTinted(
+                texColor.rgb,
+                materialParams.goldTint.rgb,
+                materialParams.goldTint.w,
+                materialParams.goldShade.x,
+                materialParams.goldShade.y,
+            );
             let glassColor = authoredGlassAlbedo(texColor.rgb, vColor.rgb);
             // Authored block.png blend: glass interior vs metal frame, driven by baked mask.
-            let authoredBase = authoredBaseColor(texColor.rgb, vColor.rgb, metalMask);
+            let authoredBase = authoredBaseColor(texColor.rgb, vColor.rgb, metalColor, metalMask);
             let textureBase = composeMaterialBaseColor(texColor.rgb, vColor.rgb, textureMetalMask);
 
             var baseColor: vec3f;
@@ -95,102 +163,21 @@
                 baseColor = mix(vColor.rgb, textureBase, clamp(effectiveTextureMix, 0.0, 1.0));
             }
 
-            // === GHOST PIECE - "holographic projection of the real textured block" ===
-            // Must early-return before heavy PBR/lighting to keep ghost rendering cheap.
-            let isGhost = vColor.w < 0.4;
-            if (isGhost) {
-                // Reuse the same metal/glass separation as the authored path.
-                let ghostMetal = metalMask; // shape/hinge fidelity when baked alpha is active
-                let ghostGlass = glassMask;
+            // Dev material inspector (hotkey-driven uniform, no pipeline rebuild).
+            let debugMode = u32(materialParams.mapParams.w + 0.5);
+            if (debugMode > 0u) {
+                return debugMaterialView(debugMode, texColor.rgb, metalMask, pixelRough, N);
+            }
 
-                // Desaturated + brighter + lower-contrast versions of the same split.
-                let lumaMetal = dot(metalColor, vec3f(0.299, 0.587, 0.114));
-                var ghostMetalColor = mix(vec3f(lumaMetal), metalColor, 0.35) * 1.35;
-                ghostMetalColor = mix(vec3f(dot(ghostMetalColor, vec3f(0.333))), ghostMetalColor, 0.85);
-
-                let lumaGlass = dot(glassColor, vec3f(0.299, 0.587, 0.114));
-                var ghostGlassColor = mix(vec3f(lumaGlass), glassColor, 0.25) * 1.18;
-                ghostGlassColor = mix(vec3f(dot(ghostGlassColor, vec3f(0.333))), ghostGlassColor, 0.82);
-
-                // Geometry-driven wireframe respects hinges via ghostMetal.
-                let scanY = fract(vUV.y * 50.0 - time * 15.0);
-                let scan = smoothstep(0.0, 0.1, scanY) * (1.0 - smoothstep(0.9, 1.0, scanY));
-                let edgeDist = max(abs(vUV.x - 0.5), abs(vUV.y - 0.5)) * 2.0;
-                let wire = smoothstep(0.9, 0.98, edgeDist);
-                let innerWire = smoothstep(0.75, 0.85, edgeDist) * 0.4;
-                let beam = smoothstep(0.7, 0.0, abs(vUV.x - 0.5)) * 1.2;
-
-                // Breathing + tension-reactive variation.
-                let lockPercent = fUniforms.lockPercent;
-                let tension = smoothstep(0.25, 1.0, lockPercent);
-                let pulseFreq = 12.0 + tension * 35.0;
-                let baseAlpha = 0.55 + 0.35 * sin(time * pulseFreq);
-                let breath = sin(time * 2.5) * 0.1 + 0.9;
-
-                // Glass interior should be more transparent than the metal frame.
-                // Premultiplied-alpha convention: RGB must be multiplied by outAlpha.
-                let maskAlphaMul = mix(0.42, 1.0, ghostMetal);
-                let outAlpha = clamp(baseAlpha * breath * maskAlphaMul * (0.85 + scan * 0.55), 0.0, 1.0);
-
-                // Extra hologram color overlays.
-                let fresnel = 1.0 - NdotV;
-                let fresnel3 = fresnel * fresnel * fresnel;
-
-                // Multi-overlay composite (scanlines + glitch + breathing glow).
-                // Keep scanlines/breathing/glitch/tension as overlays instead of replacing base texture.
-                var ghostFinal = vec3f(0.0);
-
-                // Metal wire + glass see-through body.
-                ghostFinal += ghostMetalColor * (wire * 7.0 + innerWire * 4.0) * ghostMetal;
-                ghostFinal += ghostGlassColor * (scan * 1.6 + beam * 0.45) * ghostGlass;
-
-                // Shared scanline treatment across the face.
-                ghostFinal += ghostMetalColor * scan * 2.2 * ghostMetal;
-                ghostFinal += ghostGlassColor * scan * 1.2 * ghostGlass;
-
-                // Cyan rim for holographic projection feel.
-                let cyanRim = vec3f(0.4, 0.85, 1.0) * fresnel3 * 4.0;
-                ghostFinal += cyanRim * (0.6 + 0.7 * ghostMetal);
-
-                // Holographic scan drift.
-                let scanEffect = sin(vUV.y * 70.0 + time * 10.0) * 0.12;
-                let horizontalScan = sin(vUV.x * 40.0 - time * 6.0) * 0.08;
-                ghostFinal += vec3f(0.2, 0.8, 1.0) * (scanEffect + horizontalScan) * 5.0;
-
-                // Grid + glitch.
-                let gridX = step(0.92, fract(vUV.x * 6.0));
-                let gridY = step(0.92, fract(vUV.y * 6.0));
-                let gridPattern = max(gridX, gridY) * 0.6;
-                ghostFinal += vec3f(gridPattern) * mix(ghostGlassColor, ghostMetalColor, ghostMetal) * 0.6;
-
-                let glitchAmp = 0.04 + tension * 0.12;
-                let ghostGlitch = sin(vUV.y * 60.0 + time * (25.0 + tension * 40.0)) * glitchAmp;
-                if (tension > 0.4 && fract(time * 12.0) > 0.85) {
-                    ghostFinal += vec3f(ghostGlitch + 0.15);
-                } else {
-                    ghostFinal += vec3f(ghostGlitch);
-                }
-
-                // Digital sparkle.
-                let sparkleNoise = fract(sin(dot(vUV, vec2f(12.9898, 78.233)) + time * 3.0) * 43758.5453);
-                if (sparkleNoise > 0.96) {
-                    ghostFinal += vec3f(2.0);
-                }
-
-                // Tension warning overlay.
-                if (tension > 0.6) {
-                    let warnOverlay = vec3f(1.0, 0.2, 0.0) * tension * 0.3;
-                    ghostFinal += warnOverlay;
-                }
-
-                // Premultiply for alpha blend (canvas alphaMode='premultiplied').
-                ghostFinal *= outAlpha;
-                return vec4f(ghostFinal, outAlpha);
+            // Ghost piece: a holographic projection of the real textured block.
+            // Early-returns before heavy PBR/lighting to keep ghost rendering cheap.
+            if (vColor.w < 0.4) {
+                return renderGhostBlock(
+                    vUV, vColor, NdotV, metalMask, glassMask, metalColor, glassColor, time,
+                );
             }
 
             let materialType = fUniforms.materialType;
-            var finalColor: vec3f;
-            var finalAlpha = 1.0;
 
             // Tight specular (shared across paths)
             let nh2 = NdotH * NdotH;
@@ -199,301 +186,31 @@
             let nh128 = nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16 * nh16;
             let tightSpec = nh128;
 
+            var finalColor: vec3f;
+            var finalAlpha = 1.0;
+
             if (useAuthoredSampling) {
-                // Authored block.png path: gold frame + stained-glass crystal (reference build)
-                finalColor = authoredDirectLighting(baseColor, NdotL, tightSpec, metalMask);
-
-                if (metalMask > 0.05) {
-                    let mip0 = texColor.rgb;
-                    let mip3 = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 3.0).rgb;
-                    let lumaVar = length(mip0 - mip3);
-                    var pixelRough = mix(0.12, 0.35, 1.0 - metalMask);
-                    pixelRough = clamp(pixelRough + lumaVar * 0.18 * metalMask, 0.08, 0.45);
-                    let metalAmt = max(fUniforms.metallic, metalMask);
-                    let F0 = mix(vec3f(0.04), metalColor, metalMask * metalAmt);
-                    let anisoAmt = max(fUniforms.anisotropic, 0.4) * metalMask;
-                    let NdotHcl = max(NdotH, 0.0);
-                    var specDirect = 0.0;
-                    if (anisoAmt > 0.05) {
-                        specDirect = anisotropicSpecular(V, L, N, pixelRough, anisoAmt, vWorldPos.xyz, vUV);
-                    } else {
-                        let D = distributionGGX(NdotHcl, pixelRough);
-                        let G = geometrySmith(NdotV, NdotL, pixelRough);
-                        specDirect = (D * G) / max(4.0 * NdotV * NdotL, 0.001);
-                    }
-                    let F = fresnelSchlick(NdotV, F0);
-                    finalColor += specDirect * F * NdotL * metalMask;
-
-                    let iblOn = fUniforms.iblEnable;
-                    let R = reflect(-V, N);
-                    var envSpec: vec3f;
-                    if (iblOn > 0.5) {
-                        envSpec = splitSumSpecular(N, V, F0, pixelRough, metalMask);
-                    } else {
-                        envSpec = proceduralEnvReflect(R, time) * F * metalMask * metalAmt;
-                    }
-                    finalColor += envSpec;
-
-                    let coatAmt = max(fUniforms.clearcoat, 0.3) * metalMask;
-                    if (coatAmt > 0.01) {
-                        finalColor += clearcoatSpecular(NdotHcl, NdotV, NdotL, coatAmt);
-                    }
-                }
-
-                if (glassMask > 0.2) {
-                    let iridescence = sin(NdotV * 8.0 - time * 0.5) * 0.5 + 0.5;
-                    let rainbow = vec3f(
-                        sin(iridescence * 6.28) * 0.5 + 0.5,
-                        sin(iridescence * 6.28 + 2.09) * 0.5 + 0.5,
-                        sin(iridescence * 6.28 + 4.18) * 0.5 + 0.5
-                    );
-                    finalColor += rainbow * tightSpec * 0.22 * glassMask;
-                    let diffCenter = vUV - vec2f(0.5);
-                    let centerGlow = clamp((0.2025 - dot(diffCenter, diffCenter)) / 0.1225, 0.0, 1.0);
-                    let breath = sin(time * 1.5) * 0.03 + 0.03;
-                    finalColor += vColor.rgb * breath * centerGlow * glassMask * 0.8;
-                    let edgeFresnel = 1.0 - NdotV;
-                    let edge3 = edgeFresnel * edgeFresnel * edgeFresnel;
-                    finalColor += vec3f(0.4, 0.65, 0.95) * edge3 * glassMask * 0.35;
-
-                    // Refraction of the *real* background through the crystal.
-                    // When the backdrop capture is available we bend the captured
-                    // scene (procedural bg + video portal); otherwise we fall back
-                    // to the procedural studio env so the look degrades, not breaks.
-                    let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
-                    var refractEnv: vec3f;
-                    if (fUniforms.refractEnable > 0.5) {
-                        refractEnv = refractBackdrop(
-                            vClipPos, N, V,
-                            fUniforms.glassIor,
-                            fUniforms.glassThickness,
-                            fUniforms.dispersion,
-                        );
-                    } else {
-                        refractEnv = proceduralEnvReflect(refract(-V, N, 1.0 / max(fUniforms.glassIor, 1.01)), time);
-                    }
-                    let refractedColor = refractEnv * glassTint;
-                    finalColor = mix(finalColor, refractedColor, glassMask * 0.45); // Mix in refraction
-
-                }
-
-                // Gold frame opaque; glass center from CPU GlassParams (min/max/fresnelPower).
-                let glassOpacity = authoredGlassOpacity(
-                    NdotV,
-                    fUniforms.glassParams.min,
-                    fUniforms.glassParams.max,
-                    fUniforms.glassParams.fresnelPower,
+                let shaded = shadeAuthoredBlock(
+                    baseColor, metalColor, metalMask, glassMask, glassMaskAlpha, pixelRough,
+                    N, V, L, NdotL, NdotV, NdotH, tightSpec,
+                    vWorldPos, vUV, vClipPos, vColor, time,
                 );
-                finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);
-            } else if (fUniforms.enablePBR < 0.5 || materialType == 0u) {
-                // Classic mode
-                let lightFactor = 0.4 + NdotL * 0.6;
-                finalColor = baseColor * lightFactor;
-                finalColor += vec3f(tightSpec * metalMask * 0.5);
+                finalColor = shaded.color;
+                finalAlpha = shaded.alpha;
             } else {
-                // Full PBR
-                let metallic = fUniforms.metallic;
-                let roughness = fUniforms.roughness;
-                let transmission = fUniforms.transmission;
-
-                let F0_dielectric = vec3f(0.04);
-                let F0 = mix(F0_dielectric, baseColor, metallic * metalMask);
-                let F = fresnelSchlick(NdotV, F0);
-
-                var specular = 0.0;
-                if (fUniforms.anisotropic > 0.0 && metalMask > 0.5) {
-                    specular = anisotropicSpecular(V, L, N, roughness, fUniforms.anisotropic, vWorldPos.xyz, vUV);
-                } else {
-                    let D = distributionGGX(NdotH, roughness);
-                    let G = geometrySmith(NdotV, NdotL, roughness);
-                    specular = (D * G) / max(4.0 * NdotV * NdotL, 0.001);
-                }
-
-                let kd = (vec3f(1.0) - F) * (1.0 - metallic * metalMask);
-                let diffuse = baseColor * NdotL * kd / 3.14159;
-
-                let R = reflect(-V, N);
-                let envColor = proceduralEnvReflect(R, time);
-                // Warm environment tint on gold frame — avoids cold blue static on metal
-                let warmEnv = envColor * vec3f(1.18, 0.94, 0.52);
-                let metalEnv = mix(envColor, warmEnv, metalMask);
-                let reflection = metalEnv * F * metallic * metalMask;
-
-                finalColor = diffuse + vec3f(specular) * (0.5 + metallic * metalMask);
-                finalColor += reflection;
-
-                // Glass transmission: refraction + edge reflection (not raw texture noise)
-                if (transmission > 0.0 && glassMask > 0.1) {
-                    let f1 = 1.0 - NdotV;
-                    let fresnel = f1 * f1 * f1;
-                    let glassOpacity = mix(0.15, 0.60, fresnel);
-                    finalAlpha = mix(1.0, glassOpacity, transmission * glassMask);
-
-                    var refractEnv: vec3f;
-                    if (fUniforms.refractEnable > 0.5) {
-                        refractEnv = refractBackdrop(
-                            vClipPos, N, V,
-                            max(fUniforms.ior, 1.01),
-                            fUniforms.glassThickness,
-                            fUniforms.dispersion,
-                        );
-                    } else {
-                        refractEnv = proceduralEnvReflect(refract(-V, N, 1.0 / max(fUniforms.ior, 1.01)), time);
-                    }
-                    let glassTint = mix(vec3f(0.92, 0.96, 1.0), vColor.rgb, 0.22);
-                    let refractedColor = refractEnv * glassTint;
-                    let glassReflect = envColor * fresnel * 0.28 * glassMask;
-                    let glassBody = mix(refractedColor, finalColor, 0.38 * glassMask);
-                    finalColor = mix(finalColor, glassBody + glassReflect, transmission * glassMask);
-
-                    if (fUniforms.dispersion > 0.0) {
-                        let edgeFactor = f1 * f1;
-                        finalColor += vec3f(
-                            fUniforms.dispersion * edgeFactor * glassMask * 0.06,
-                            fUniforms.dispersion * edgeFactor * glassMask * 0.03,
-                            -fUniforms.dispersion * edgeFactor * glassMask * 0.04
-                        );
-                    }
-                }
-
-                // Gem subsurface
-                if (fUniforms.subsurface > 0.0 && materialType == 5u) {
-                    let scatter = subsurfaceScattering(NdotL, fUniforms.subsurface, baseColor);
-                    finalColor += scatter * vColor.rgb;
-                }
-
-                // Clearcoat
-                if (fUniforms.clearcoat > 0.0) {
-                    let ccD = distributionGGX(NdotH, 0.03);
-                    let ccG = geometrySmith(NdotV, NdotL, 0.03);
-                    let ccSpec = (ccD * ccG) / max(4.0 * NdotV * NdotL, 0.001);
-                    finalColor += vec3f(ccSpec) * fUniforms.clearcoat;
-                }
+                let shaded = shadeFallbackBlock(
+                    baseColor, metalMask, glassMask,
+                    N, V, L, NdotL, NdotV, NdotH, tightSpec,
+                    vWorldPos, vUV, vClipPos, vColor, materialType, time,
+                );
+                finalColor = shaded.color;
+                finalAlpha = shaded.alpha;
             }
 
-            // === FRESNEL RIM LIGHTING (Neon Bricklayer task) ===
-            // Rim lighting - Fresnel Schlick approximation for brighter edge glow
-            let rimPower = 1.0 - NdotV;
-            let f2 = rimPower * rimPower; let fresnel = f2 * f2 * rimPower; // approximated pow(rimPower, 5.0)
-
-            // Gold rim color + intensity (boosted during hard drops)
-            let rimColor = mix(vColor.rgb, vec3f(1.0, 0.85, 0.4), metalMask * fUniforms.metallic); // Warm gold on metal
-            let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
-            let rimIntensity = (fresnelParams.intensity * dynamicRim) * (1.0 + fresnelParams.hardDropBoost * 2.0);
-
-            let fresnelRim = rimColor * rimIntensity * fresnel;
-            finalColor += fresnelRim; // Additive rim — looks great on gold glass
-
-            // Lock tension effect
-            let lockPercent = fUniforms.lockPercent;
-            if (lockPercent > 0.25) {
-                let tension = smoothstep(0.25, 1.0, lockPercent);
-                let pulse = sin(time * (10.0 + tension * 30.0)) * 0.5 + 0.5;
-                let warnColor = mix(vec3f(1.0, 0.6, 0.0), vec3f(1.0, 0.1, 0.0), tension);
-                finalColor = mix(finalColor, warnColor, tension * pulse * pulse * 0.3);
-            }
-
-            // (ghost handled by early-return above)
-
-            // NEW: Apply particle-material interaction
-            let particleIntensity = fUniforms.particleIntensity;
-            if (particleIntensity > 0.0) {
-                var pMatType = materialType;
-                // If using authored PBR texture (type 0), infer from masks
-                if (pMatType == 0u && fUniforms.enablePBR > 0.5) {
-                    if (glassMask > 0.5) {
-                        pMatType = 1u; // Glass
-                    } else if (metalMask > 0.5) {
-                        pMatType = 2u; // Gold
-                    }
-                }
-                if (pMatType > 0u) {
-                    finalColor = applyParticleInteraction(pMatType, finalColor, N, L, V, particleIntensity, time);
-                }
-            }
-
-            // Gentle emissive pulse (main.ts uses 0.25 scale to avoid washout)
-            // JUICE: Speed up and slightly intensify the pulse during high combos!
-            let levelPulseSpeed = 3.0 + fUniforms.level * 0.5 + fUniforms.comboEnergy * 4.0;
-            let idlePulse = sin(time * levelPulseSpeed) * 0.5 + 0.5;
-            let emissivePulse = idlePulse * (0.25 + min(fUniforms.level * 0.03, 0.5) + fUniforms.comboEnergy * 0.15) + fUniforms.movementFlash * 0.4 + fUniforms.lineClearFlash * 0.8;
-            finalColor += finalColor * emissivePulse;
-
-            // Lava-specific magma glow: slow pulsing + bubbling variation (cooling magma look)
-            if (materialType == 6u) {
-                let magmaSlow = sin(time * 1.6) * 0.5 + 0.5;
-                let magmaFast = sin(time * 5.3 + vWorldPos.x * 7.0) * 0.35 + 0.65;
-                let magmaPulse = magmaSlow * 0.7 + magmaFast * 0.3;
-                // Extra intensity on lava (high emissive values from material)
-                finalColor += baseColor * magmaPulse * 2.1;
-            }
-
-            // Hologram material: animated horizontal scanline overlay for holographic projection
-            if (materialType == 7u) {
-                let scanDensity = 42.0;
-                let scrollSpeed = 0.75; // slow downward scroll
-                // Use vUV.y for consistent horizontal lines across the block face
-                let scanPos = vUV.y * scanDensity - time * scrollSpeed;
-                let scan = fract(scanPos);
-                let lineWidth = 0.07;
-                // Soft bright horizontal lines (classic holo scan)
-                let scanIntensity = smoothstep(0.0, lineWidth, scan) *
-                                    smoothstep(lineWidth * 2.2, lineWidth, scan);
-                // Flicker frequency increases with level (tied to fUniforms.level)
-                let flickerFreq = 5.5 + fUniforms.level * 3.2;
-                let flicker = 0.65 + 0.35 * sin(time * flickerFreq + vUV.x * 7.0);
-                let holoAlpha = 0.28 * scanIntensity * flicker;
-                // Cool holographic cyan tint, additive for projection "glow"
-                let holoTint = vec3f(0.55, 0.82, 1.0);
-                finalColor += holoTint * holoAlpha * 2.8;
-                // Slight desaturation/base reduction for see-through holo effect
-                finalColor *= (0.78 + holoAlpha * 0.25);
-            }
-
-            // Depth-based soft shadow: each block casts downward onto lower blocks in same column.
-            // columnHeights[c] = topmost row (0=top) or 20; vertical dist in rows from vWorldPos (2.2 hardcoded).
-            // Additional darkening term, subtle, only for solid placed blocks (ghosts early-return before).
-            {
-                let colF = floor(vWorldPos.x / 2.2 + 0.0001);
-                let col = i32(clamp(colF, 0.0, 9.0));
-                let topRow = fUniforms.columnHeights[col];
-                let myRow = floor(-vWorldPos.y / 2.2 + 0.0001);
-                let vDepth = myRow - topRow;
-                if (topRow >= 0.0 && vDepth > 0.5) {
-                    let shadow = clamp(vDepth / 9.0, 0.0, 0.28); // soft max ~28% darken deep in stack
-                    finalColor *= (1.0 - shadow);
-                }
-            }
-
-            // Audio-reactive border glow pulsing driven by bands written from viewRenderLoop.
-            // bassLevel pulses left/right outer frame, trebleLevel top, midLevel bottom.
-            // Detects border via vWorldPos ranges (outside main board rect); boosts emissive.
-            {
-                var borderBoost = 0.0;
-                if (vWorldPos.x < -0.8 || vWorldPos.x > 21.0) {
-                    borderBoost = fUniforms.bassLevel * 0.55; // L/R sides
-                } else if (vWorldPos.y > 1.5) {
-                    borderBoost = fUniforms.trebleLevel * 0.55; // top
-                } else if (vWorldPos.y < -44.5) {
-                    borderBoost = fUniforms.midLevel * 0.55; // bottom
-                }
-                finalColor += vec3f(borderBoost);
-            }
-
-            // Keep HDR energy for bloom; ACES tonemap runs in the bloom composite.
-
-            // === GPU CLEAR-DISSOLVE GLOW ===
-            // Sample the compute-written per-cell dissolve field (0..1, decays ~300ms).
-            // Cell index derived from world position (same /BLOCK_WORLD_SIZE mapping as
-            // columnHeights above). Additive post-clamp so the fading glow can bloom.
-            {
-                let dCol = i32(clamp(floor(vWorldPos.x / 2.2 + 0.0001), 0.0, 9.0));
-                let dRow = i32(clamp(floor(-vWorldPos.y / 2.2 + 0.0001), 0.0, 19.0));
-                let dissolveVal = dissolveField[dRow * 10 + dCol];
-                if (dissolveVal > 0.001) {
-                    finalColor += vec3f(0.55, 0.9, 1.0) * dissolveVal * 2.2;
-                }
-            }
+            finalColor = applyBlockFx(
+                finalColor, baseColor, vWorldPos, vUV, vColor,
+                N, L, V, NdotV, metalMask, glassMask, materialType, time,
+            );
 
             // Gold hinges stay alpha 1.0 (no video bleed). Use the hard threshold, not soft mask.
             let materialAlpha = mix(finalAlpha, 1.0, metalOpaque);

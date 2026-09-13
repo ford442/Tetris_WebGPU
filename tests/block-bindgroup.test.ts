@@ -36,10 +36,12 @@ describe('block bind group layout', () => {
       iblSampler: {} as GPUSampler,
       backdropTextureView: {} as GPUTextureView,
       backdropSampler: {} as GPUSampler,
+      blockMaterialMapTexture: dummyTex,
+      materialParamsBuffer: {} as GPUBuffer,
     });
 
     expect(entries).toHaveLength(BLOCK_PIPELINE_BINDINGS.length);
-    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(entries.map((e) => e.binding)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     const vertexEntry = entries[0].resource as GPUBufferBinding;
     expect(vertexEntry.offset).toBe(256);
   });

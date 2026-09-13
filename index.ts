@@ -7,6 +7,7 @@ import { initSettingsUI } from './src/settings/settingsUI.js';
 import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSettings.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
 import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
+import { installMaterialDebugHotkey } from './src/dev/materialDebugHotkey.js';
 import { loadAuthoredBlockTextureConfig } from "./src/webgpu/blockTexture.js";
 import { parseGameModeId } from './src/game/modes/createGameMode.js';
 import type { GameModeId } from './src/game/modes/types.js';
@@ -313,6 +314,10 @@ void (async () => {
   );
 
   console.info(`Tetris renderer: ${view.rendererName} (preference: ${getRendererPreference()})`);
+
+  // Shift+M cycles albedo / metal / glass / roughness / normals / final on the
+  // production shading path (src/dev/materialDebugHotkey.ts).
+  installMaterialDebugHotkey(view);
 
   // Connect game to view for reactive events
   game.view = view;
