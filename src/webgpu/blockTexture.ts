@@ -198,6 +198,27 @@ export const DEFAULT_GLASS_PARAMS: GlassParams = {
   fresnelPower: 2.0,
 };
 
+/**
+ * Jewelry gold albedo used to grade atlas metal (which is often silver-chrome).
+ * Mix 0.78 keeps hinge shading (dark valleys) while forcing a warm brass hue.
+ * Must stay in sync with `gradeGoldMetalAlbedo` in fragmentMain.wgsl and GLSL.
+ */
+export const GOLD_JEWELRY_ALBEDO = [0.90, 0.68, 0.22] as const;
+export const GOLD_GRADE_MIX = 0.78;
+export const GOLD_GRADE_SHADE_MIN = 0.38;
+export const GOLD_GRADE_SHADE_MAX = 1.23;
+
+/** CPU copy of the shader gold grade (unit-testable). */
+export function gradeGoldMetalAlbedo(r: number, g: number, b: number): [number, number, number] {
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  const shade = GOLD_GRADE_SHADE_MIN + (GOLD_GRADE_SHADE_MAX - GOLD_GRADE_SHADE_MIN) * Math.max(0, Math.min(1, luma));
+  const gr = GOLD_JEWELRY_ALBEDO[0] * shade;
+  const gg = GOLD_JEWELRY_ALBEDO[1] * shade;
+  const gb = GOLD_JEWELRY_ALBEDO[2] * shade;
+  const t = GOLD_GRADE_MIX;
+  return [r + (gr - r) * t, g + (gg - g) * t, b + (gb - b) * t];
+}
+
 /** Optional albedo LOD bias (negative = sharper). Mask sampling never uses this. */
 export const BLOCK_COLOR_LOD_BIAS = 0.0;
 

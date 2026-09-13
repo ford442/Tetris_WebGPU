@@ -54,6 +54,13 @@ vec2 transformUVForSampling(vec2 uv) {
   return clamp(vec2(uv.x, 1.0 - uv.y), 0.0, 1.0);
 }
 
+// Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
+vec3 gradeGoldMetalAlbedo(vec3 texRgb) {
+  float luma = dot(texRgb, vec3(0.299, 0.587, 0.114));
+  vec3 gold = vec3(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
+  return mix(texRgb, gold, 0.78);
+}
+
 float extractTextureMetalMask(vec3 rgb) {
   float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
   float warmth = rgb.r - rgb.b;
@@ -89,19 +96,20 @@ void main() {
   float crystalBright = smoothstep(0.15, 0.90, luma);
   float crystalHi = max(luma - 0.65, 0.0) * 2.5;
 
-  vec3 metalColor = texRgb * 1.5 + vec3(0.08, 0.03, 0.0);
+  vec3 metalColor = gradeGoldMetalAlbedo(texRgb);
   vec3 glassColor = texRgb * (0.70 + crystalBright * 0.30)
                   + vColor.rgb * 0.22 * crystalBright
                   + vec3(crystalHi * 0.40);
   vec3 baseColor = mix(glassColor, metalColor, metalMask);
 
-  float lightFactor = 0.42 + NdotL * 0.58;
+  float lightFactor = mix(0.42 + NdotL * 0.58, 0.50 + NdotL * 0.42, metalMask);
   float nh2 = NdotH * NdotH;
   float nh4 = nh2 * nh2;
   float nh16 = nh4 * nh4;
   float tightSpec = nh16 * nh16 * nh16 * nh16;
   float specularStrength = mix(0.06, 0.22, metalMask);
-  vec3 finalColor = baseColor * lightFactor + vec3(tightSpec * specularStrength);
+  vec3 specColor = mix(vec3(1.0), vec3(1.0, 0.88, 0.50), metalMask);
+  vec3 finalColor = baseColor * lightFactor + specColor * (tightSpec * specularStrength);
 
   if (glassMask > 0.15) {
     float iridescence = sin(NdotV * 7.0) * 0.5 + 0.5;

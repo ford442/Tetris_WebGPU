@@ -84,8 +84,11 @@ describe('WebGL2 matches TS authored alpha', () => {
     expect(wgsl).toContain('step(0.5, metalMask)');
     expect(glsl).toContain('step(0.5, metalMask)');
     expect(wgsl).toContain('finalColor *= outAlpha');
+    expect(wgsl).toContain('gradeGoldMetalAlbedo');
+    expect(glsl).toContain('gradeGoldMetalAlbedo');
+    expect(wgsl).toContain('vec3f(0.90, 0.68, 0.22)');
+    expect(glsl).toContain('vec3(0.90, 0.68, 0.22)');
     expect(glsl).toContain('* outAlpha, outAlpha');
-    expect(glsl).toContain('texRgb * 1.5 + vec3(0.08, 0.03, 0.0)');
     const tolerance = Math.abs(
       evalAuthoredOutAlpha(0, 1, DEFAULT_GLASS_PARAMS) -
       evalAuthoredOutAlpha(0, 1, getGlassParams()),

@@ -64,7 +64,7 @@ it('composes gold frame and tinted glass using authored baked alpha', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('composeMaterialBaseColor');
   expect(fragment).toContain('useAuthoredSampling');
-  expect(fragment).toContain('let metalColor = texColor.rgb * 1.5');
+  expect(fragment).toContain('let metalColor = gradeGoldMetalAlbedo(texColor.rgb)');
   expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
   expect(fragment).toContain('metalMask = clamp(texColor.a, 0.0, 1.0)');
   expect(fragment).toContain('let metalOpaque = step(0.5, metalMask)');

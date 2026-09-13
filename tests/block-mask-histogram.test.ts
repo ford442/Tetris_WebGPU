@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dilateBinaryMask, maskAlphaHistogram } from '../src/webgpu/blockTextureExtract.js';
-import { evalAuthoredOutAlpha, DEFAULT_GLASS_PARAMS } from '../src/webgpu/blockTexture.js';
+import { evalAuthoredOutAlpha, DEFAULT_GLASS_PARAMS, gradeGoldMetalAlbedo } from '../src/webgpu/blockTexture.js';
 
 describe('extractor mask dilate + histogram', () => {
   it('dilates a 1px gold hinge so neighboring glass cannot punch a hole', () => {
@@ -43,6 +43,13 @@ describe('extractor mask dilate + histogram', () => {
     expect(faceOnGlass).toBeGreaterThanOrEqual(0.05);
     expect(faceOnGlass).toBeLessThanOrEqual(0.15);
     expect(gold).toBe(1);
+  });
+
+  it('grades silver-chrome hinge RGB toward jewelry gold', () => {
+    const [r, g, b] = gradeGoldMetalAlbedo(0.67, 0.65, 0.60);
+    expect(r - b).toBeGreaterThan(0.35);
+    expect(r).toBeGreaterThan(g);
+    expect(g).toBeGreaterThan(b);
   });
 
   it('does not dilate when radius is 0', () => {

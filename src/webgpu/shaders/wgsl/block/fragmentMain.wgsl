@@ -3,6 +3,13 @@
             return clamp((color * (a * color + b)) / (color * (c * color + d) + e), vec3f(0.0), vec3f(1.0));
         }
 
+        // Atlas metal is often silver-chrome; grade toward jewelry gold while keeping hinge luma.
+        fn gradeGoldMetalAlbedo(texRgb: vec3f) -> vec3f {
+            let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
+            let gold = vec3f(0.90, 0.68, 0.22) * mix(0.38, 1.23, luma);
+            return mix(texRgb, gold, 0.78);
+        }
+
         @fragment
         fn main(@location(0) vWorldPos : vec4f,
                 @location(1) vNormal : vec3f,
@@ -80,7 +87,7 @@
             let luma = dot(texColor.rgb, vec3f(0.299, 0.587, 0.114));
             let crystalBright = smoothstep(0.15, 0.90, luma);
             let crystalHi = max(luma - 0.55, 0.0) * 3.0;
-            let metalColor = texColor.rgb * 1.5 + vec3f(0.08, 0.03, 0.0);
+            let metalColor = gradeGoldMetalAlbedo(texColor.rgb);
             let glassColor = texColor.rgb * (0.60 + crystalBright * 0.40)
                            + vColor.rgb * 0.35 * crystalBright
                            + vec3f(crystalHi * 0.50);
