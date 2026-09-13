@@ -34,6 +34,9 @@ export interface BlockBindGroupResources {
   iblSpecularTexture: GPUTexture;
   iblBrdfLutTexture: GPUTexture;
   iblSampler: GPUSampler;
+  /** Captured scene backdrop sampled by the glass path (see BackdropCapture). */
+  backdropTextureView: GPUTextureView;
+  backdropSampler: GPUSampler;
 }
 
 /**
@@ -70,6 +73,8 @@ export function createBlockBindGroupEntries(
     { binding: 8, resource: resources.iblSampler },
     { binding: 9, resource: createBlockTextureMaskBindingView(resources.blockTexture) },
     { binding: 10, resource: resources.blockSamplerMask },
+    { binding: 11, resource: resources.backdropTextureView },
+    { binding: 12, resource: resources.backdropSampler },
   ];
 }
 

@@ -2,6 +2,7 @@ import type * as Matrix from 'gl-matrix';
 import type { GameState } from '../../game/gameState.js';
 import type { ThemeColors } from '../themes.js';
 import { renderPlayfieldBlocks, renderPlayfieldBorder } from '../viewPlayfield.js';
+import type { BackdropCapture } from '../backdropCapture.js';
 
 type BlockView = {
   device: GPUDevice;
@@ -28,6 +29,7 @@ type BlockView = {
   vertexBuffer: GPUBuffer;
   normalBuffer: GPUBuffer;
   uvBuffer: GPUBuffer;
+  backdropCapture: BackdropCapture;
   uniformBindGroup_ARRAY_border: GPUBindGroup[];
   vertexUniformBuffer_border: GPUBuffer;
   dissolveBuffer: GPUBuffer;
@@ -63,6 +65,7 @@ export class BlockRenderer {
       this.view._f32_3, this.view._f32_4, this.view.MODELMATRIX, this.view.NORMALMATRIX,
       this.view.dissolveBuffer, this.view.fresnelParamsUniform,
       this.view.iblSpecularTexture, this.view.iblBrdfLutTexture, this.view.iblSampler,
+      this.view.backdropCapture.textureView, this.view.backdropCapture.sampler,
       worldOffsetX,
     );
     this.view.vertexUniformBuffer_border = result.vertexUniformBuffer;

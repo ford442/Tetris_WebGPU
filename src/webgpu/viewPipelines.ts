@@ -37,6 +37,8 @@ import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js'
 import { DebugTextureShaders } from './debug_shaders.js';
 import { BloomSystem } from './bloomSystem.js';
 import { createBlockBindGroupEntries } from './shaders/block/bindings.js';
+import { BackdropCapture } from './backdropCapture.js';
+import { shouldEnableBackdropRefraction } from './glassRefraction.js';
 import {
   loadIblResources,
   resolvePlayfieldColorFormat,
@@ -156,6 +158,17 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
     quality,
     adaptiveDisableIbl: adaptiveDisablesIbl(view.adaptiveState?.stepIndex ?? 0),
   });
+  // Backdrop capture must exist before any block bind group is built (including the
+  // border, built inside renderPlayfield_Border_WebGPU below): those bind groups are
+  // created once and hold @binding(11)/@binding(12) for the lifetime of the device.
+  view.backdropCapture?.destroy?.();
+  view.backdropCapture = new BackdropCapture(device);
+  view.backdropRefractionEnabled = shouldEnableBackdropRefraction({
+    powerPreference: view.gpuPowerPreference,
+    quality,
+    adaptiveDisableIbl: adaptiveDisablesIbl(view.adaptiveState?.stepIndex ?? 0),
+  });
+
   const ibl = await loadIblResources(device);
   view.iblSpecularTexture = ibl.specularTexture;
   view.iblBrdfLutTexture = ibl.brdfLutTexture;
@@ -452,6 +465,8 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         iblSpecularTexture: view.iblSpecularTexture,
         iblBrdfLutTexture: view.iblBrdfLutTexture,
         iblSampler: view.iblSampler,
+        backdropTextureView: view.backdropCapture.textureView,
+        backdropSampler: view.backdropCapture.sampler,
       }),
     });
     view.uniformBindGroup_CACHE.push(bindGroup);

@@ -560,10 +560,15 @@ function executeRenderPasses(
   // 2. Frosted Glass Backboard
   renderFrostedGlassPass(view, commandEncoder);
 
-  // 3. Main scene (Blocks, Grid, Particles)
+  // 3. Capture the backdrop so the glass path can refract it. Must sit between the
+  //    background passes and the main pass: blocks cannot sample the scene texture
+  //    they are rendering into.
+  renderBackdropCapturePass(view, commandEncoder);
+
+  // 4. Main scene (Blocks, Grid, Particles)
   renderMainPass(view, commandEncoder, result, passTimers);
 
-  // 4. Post-process
+  // 5. Post-process
   renderPostProcessPass(view, commandEncoder, passTimers);
 }
 
@@ -610,6 +615,21 @@ function renderFrostedGlassPass(view: WebGPUViewHost, commandEncoder: GPUCommand
   glassPassEncoder.setBindGroup(0, view.frostedGlassBindGroup);
   glassPassEncoder.draw(6);
   glassPassEncoder.end();
+}
+
+/**
+ * Blit the current scene colour into the fixed-size backdrop texture sampled by
+ * the glass path. Skipped entirely when refraction is off, so the disabled cost
+ * is zero rather than a wasted pass.
+ */
+function renderBackdropCapturePass(view: WebGPUViewHost, commandEncoder: GPUCommandEncoder) {
+  if (view.backdropRefractionEnabled === false || !view.backdropCapture) return;
+  view.backdropCapture.capture(
+    commandEncoder,
+    view._offscreenTextureView,
+    view.canvasWebGPU.width,
+    view.canvasWebGPU.height,
+  );
 }
 
 /**

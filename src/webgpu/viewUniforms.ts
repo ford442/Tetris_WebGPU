@@ -175,6 +175,11 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
   device.queue.writeBuffer(view.fragmentUniformBuffer, 196, view._f32_1);
   view._f32_1[0] = view.iblEnabled === false ? 0.0 : 1.0;
   device.queue.writeBuffer(view.fragmentUniformBuffer, 200, view._f32_1);
+  // refractEnable (212) — re-sent every frame so adaptive quality steps take effect
+  // without a material/theme reset. glassIor/glassThickness (204/208) are static
+  // per config and written by updateMaterialUniforms.
+  view._f32_1[0] = view.backdropRefractionEnabled === false ? 0.0 : 1.0;
+  device.queue.writeBuffer(view.fragmentUniformBuffer, 212, view._f32_1);
 
   // Post-process uniforms
   const ppUniforms = postProcessUniforms.pack({

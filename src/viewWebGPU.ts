@@ -84,6 +84,8 @@ import {
   adaptiveDisablesIbl,
   type AdaptiveQualityControllerState,
 } from './webgpu/adaptiveQuality.js';
+import { shouldEnableBackdropRefraction } from './webgpu/glassRefraction.js';
+import type { BackdropCapture } from './webgpu/backdropCapture.js';
 import { PerfOverlay, isPerfOverlayEnabled } from './webgpu/perfOverlay.js';
 import type { PerfOverlayAdapterInfo } from './webgpu/perfOverlay.js';
 import { loadGameSettings } from './config/gameSettings.js';
@@ -187,6 +189,10 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   iblBrdfLutTexture!: GPUTexture;
   iblSampler!: GPUSampler;
   iblEnabled: boolean = true;
+  /** Screen-space backdrop refraction on the glass path (set by initGpuResources). */
+  backdropRefractionEnabled: boolean = true;
+  /** Scene-backdrop capture feeding @binding(11); created by initGpuResources. */
+  backdropCapture!: BackdropCapture;
   hdrPlayfield: boolean = false;
   sceneColorFormat!: GPUTextureFormat;
   gpuPowerPreference?: GPUPowerPreference;
@@ -790,5 +796,10 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     this.adaptiveParticleCap = particleCap;
     const step = this.adaptiveState?.stepIndex ?? 0;
     this.iblEnabled = !(this.gpuPowerPreference === 'low-power' || settings.quality === 'low' || adaptiveDisablesIbl(step));
+    this.backdropRefractionEnabled = shouldEnableBackdropRefraction({
+      powerPreference: this.gpuPowerPreference,
+      quality: settings.quality,
+      adaptiveDisableIbl: adaptiveDisablesIbl(step),
+    });
   }
 }

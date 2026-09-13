@@ -50,6 +50,8 @@ src/
     │   └── main.ts          # Primary 3D block shader (lighting, texture atlas)
     ├── shaders.ts           # Barrel re-export (kept for import compatibility)
     ├── viewGameEvents.ts    # Event → visual effect handlers
+    ├── backdropCapture.ts   # Scene backdrop blit sampled by glass refraction
+    ├── glassRefraction.ts   # Quality/adaptive gating for backdrop refraction
     ├── compute.ts           # GPU compute shaders for particle physics
     ├── particles.ts         # Particle system (GPU-driven)
     ├── effects.ts           # Effect parameter wrappers (shockwave, glitch)
@@ -95,9 +97,11 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 
 ### Render Pipeline
 1. Background layer (video or procedural shader)
-2. Grid shader (blocks with texture atlas + lighting)
-3. Particle system (GPU compute + render)
-4. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
+2. Frosted glass backboard
+3. Backdrop capture — blit the scene so far into a fixed-size texture (`webgpu/backdropCapture.ts`) so the glass path can refract it in screen space; blocks cannot sample the target they render into
+4. Grid shader (blocks with texture atlas + lighting)
+5. Particle system (GPU compute + render)
+6. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
 
 ## Key Game Mechanics
 

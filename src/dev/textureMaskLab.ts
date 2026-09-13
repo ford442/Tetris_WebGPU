@@ -3,6 +3,7 @@ import {
   SINGLE_TILE_TEXTURE_CONFIG,
   DEFAULT_BLOCK_TEXTURE_CONFIG,
   DEFAULT_GLASS_PARAMS,
+  DEFAULT_GLASS_REFRACTION_PARAMS,
 } from '../webgpu/blockTexture.js';
 import { extractBlockTileFromImage } from '../webgpu/blockTextureExtract.js';
 
@@ -22,6 +23,11 @@ type MaskLabParams = {
   glassMin: number;
   glassMax: number;
   glassFresnelPower: number;
+
+  // Screen-space refraction controls (renderer-only; the 2D previews below show
+  // opacity, not refraction — these values reach the shader through the exported config)
+  glassIor: number;
+  glassThickness: number;
 
   // Preview controls
   previewScale: number;
@@ -111,6 +117,8 @@ function paramsToBlockTextureConfig(
     authoredGlassMin: params.glassMin,
     authoredGlassMax: params.glassMax,
     authoredGlassFresnelPower: params.glassFresnelPower,
+    authoredGlassIor: params.glassIor,
+    authoredGlassThickness: params.glassThickness,
   };
   if (params.samplingMode === 'subregion') {
     obj.subregionX = params.subregionX;
@@ -436,6 +444,12 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
           <div class="masklab-row">
             <label>glassFresnelPower</label><input id="masklab-glassPow" type="range" min="0.5" max="6" step="0.05" value="2"/>
           </div>
+          <div class="masklab-row">
+            <label>glassIor</label><input id="masklab-glassIor" type="range" min="1.01" max="2.0" step="0.01" value="1.22"/>
+          </div>
+          <div class="masklab-row">
+            <label>glassThickness</label><input id="masklab-glassThick" type="range" min="0" max="0.15" step="0.002" value="0.035"/>
+          </div>
         </div>
       </div>
 
@@ -504,12 +518,16 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
   const elGlassMin = root.querySelector('#masklab-glassMin') as HTMLInputElement;
   const elGlassMax = root.querySelector('#masklab-glassMax') as HTMLInputElement;
   const elGlassPow = root.querySelector('#masklab-glassPow') as HTMLInputElement;
+  const elGlassIor = root.querySelector('#masklab-glassIor') as HTMLInputElement;
+  const elGlassThick = root.querySelector('#masklab-glassThick') as HTMLInputElement;
   const elTint = root.querySelector('#masklab-tint') as HTMLInputElement;
   const elInset = root.querySelector('#masklab-inset') as HTMLInputElement;
 
   elGlassMin.value = String(DEFAULT_GLASS_PARAMS.min);
   elGlassMax.value = String(DEFAULT_GLASS_PARAMS.max);
   elGlassPow.value = String(DEFAULT_GLASS_PARAMS.fresnelPower);
+  elGlassIor.value = String(DEFAULT_GLASS_REFRACTION_PARAMS.ior);
+  elGlassThick.value = String(DEFAULT_GLASS_REFRACTION_PARAMS.thickness);
 
   const cOriginal = root.querySelector('#masklab-original') as HTMLCanvasElement;
   const cMetal = root.querySelector('#masklab-metal') as HTMLCanvasElement;
@@ -529,6 +547,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
     glassMin: Number(elGlassMin.value),
     glassMax: Number(elGlassMax.value),
     glassFresnelPower: Number(elGlassPow.value),
+    glassIor: Number(elGlassIor.value),
+    glassThickness: Number(elGlassThick.value),
     previewScale: Number(elScale.value),
     pieceTint: elTint.value,
 
@@ -554,6 +574,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
     params.glassMin = Number(elGlassMin.value);
     params.glassMax = Number(elGlassMax.value);
     params.glassFresnelPower = Number(elGlassPow.value);
+    params.glassIor = Number(elGlassIor.value);
+    params.glassThickness = Number(elGlassThick.value);
     params.pieceTint = elTint.value.trim() || '#ffffff';
     params.subregionInset = Number(elInset.value);
     params.samplingMode = (elSampling.value as any) ?? 'single';
@@ -584,6 +606,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
       authoredGlassMin: params.glassMin,
       authoredGlassMax: params.glassMax,
       authoredGlassFresnelPower: params.glassFresnelPower,
+      authoredGlassIor: params.glassIor,
+      authoredGlassThickness: params.glassThickness,
     };
 
     // Allow subregion crop only when user switched to subregion.
@@ -661,6 +685,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
     elGlassMin,
     elGlassMax,
     elGlassPow,
+    elGlassIor,
+    elGlassThick,
     elInset,
     elSubX,
     elSubY,
@@ -749,6 +775,14 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
         elGlassPow.value = String(parsed.authoredGlassFresnelPower);
         params.glassFresnelPower = parsed.authoredGlassFresnelPower;
       }
+      if (parsed.authoredGlassIor != null) {
+        elGlassIor.value = String(parsed.authoredGlassIor);
+        params.glassIor = parsed.authoredGlassIor;
+      }
+      if (parsed.authoredGlassThickness != null) {
+        elGlassThick.value = String(parsed.authoredGlassThickness);
+        params.glassThickness = parsed.authoredGlassThickness;
+      }
       if (parsed.maskOuterForce != null) {
         elOuterForce.value = String(parsed.maskOuterForce);
         params.maskOuterForce = parsed.maskOuterForce;
@@ -821,6 +855,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
       authoredGlassMin: params.glassMin,
       authoredGlassMax: params.glassMax,
       authoredGlassFresnelPower: params.glassFresnelPower,
+      authoredGlassIor: params.glassIor,
+      authoredGlassThickness: params.glassThickness,
       url: elTexture.files?.[0]?.name ?? 'your-texture.png',
     };
 
@@ -860,6 +896,8 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
           authoredGlassMin: params.glassMin,
           authoredGlassMax: params.glassMax,
           authoredGlassFresnelPower: params.glassFresnelPower,
+          authoredGlassIor: params.glassIor,
+          authoredGlassThickness: params.glassThickness,
           url: 'dev',
         };
 
