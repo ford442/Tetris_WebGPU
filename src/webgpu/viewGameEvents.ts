@@ -417,9 +417,7 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
   const worldX = x * 2.2;
   const startRow = y - distance;
 
-  if (view.visualEffects && distance > 0) {
-    triggerImpactEffects(view, worldX, y * -2.2, distance);
-  }
+  // First trigger removed, relying on the one at the end of onHardDrop
 
   if (loadGameSettings().ghostDropTrail && view.visualEffects && distance > 0) {
     const snap = view.game?.getHardDropSnapshot?.();
