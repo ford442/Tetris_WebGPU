@@ -47,32 +47,32 @@ describe('shader optimization updates', () => {
     expect(maxUV).toBeLessThan(0.995);
   });
 
-it('samples block image detail from explicit mip 0 in the PBR shader', () => {
+it('samples albedo with the linear color sampler and mask with nearest mip 0', () => {
   const { fragment } = PBRBlockShaders();
-  expect(fragment).toContain('textureSampleLevel(blockTexture, blockSampler, texUV, 0.0)');
+  expect(fragment).toContain('textureSampleBias(blockTexture, blockSamplerColor, texUV, 0.0)');
+  expect(fragment).toContain('textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0)');
+  expect(fragment).not.toContain('borderThickness = 0.14');
 });
 
 it('keeps metal opaque while glass uses dynamic alpha for video reveal', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('var finalAlpha = 1.0;');
-  // Opacity uses hard metal mask derived from baked texColor.a.
-  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalMask);');
+  expect(fragment).toContain('let materialAlpha = mix(finalAlpha, 1.0, metalOpaque);');
 });
 
-it('composes gold frame and tinted glass using geometric UV frame mask', () => {
+it('composes gold frame and tinted glass using authored baked alpha', () => {
   const { fragment } = PBRBlockShaders();
   expect(fragment).toContain('composeMaterialBaseColor');
   expect(fragment).toContain('useAuthoredSampling');
-  // Outer ring force is slightly expanded to reduce halo risk.
-  expect(fragment).toContain('borderThickness = 0.14');
   expect(fragment).toContain('let metalColor = texColor.rgb * 1.5');
   expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
-  // Baked mask drives opacity (no square UV metal mask blending anymore).
-  expect(fragment).toContain('let metalSoftBaked0 = clamp(texColor.a, 0.0, 1.0);');
-  expect(fragment).toContain('let metalOpaqueBaked = smoothstep(0.45, 0.65, metalSoftBaked);');
-  expect(fragment).toContain('let glassMaskAlpha = 1.0 - metalMaskBakedOpaque');
+  expect(fragment).toContain('metalMask = clamp(texColor.a, 0.0, 1.0)');
+  expect(fragment).toContain('let metalOpaque = step(0.5, metalMask)');
+  expect(fragment).toContain('let glassMaskAlpha = 1.0 - metalOpaque');
   expect(fragment).toContain('finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);');
+  expect(fragment).toContain('fUniforms.glassParams.min');
   expect(fragment).not.toContain('combinedMetalMask');
+  expect(fragment).not.toContain('reserved2');
   expect(fragment).toContain('isBorderBlock');
 });
 

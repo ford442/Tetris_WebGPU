@@ -52,9 +52,21 @@ describe('Texture Sampling WGSL Generation', () => {
       expect(code).toContain('METAL_THRESHOLD_HIGH');
     });
 
-    it('includes sampleBlockTexture helper function', () => {
+    it('uses METAL_THRESHOLD constants for color-signal gold detection', () => {
+      setBlockTextureConfig({
+        metalThresholdLow: 0.75,
+        metalThresholdHigh: 1.2,
+      });
+      const code = getTextureSamplingWGSL();
+      expect(code).toContain('smoothstep(METAL_THRESHOLD_LOW, METAL_THRESHOLD_HIGH, goldSignal)');
+      expect(code).not.toContain('smoothstep(0.70, 1.10, goldSignal)');
+      expect(code).not.toContain('smoothstep(0.40, 1.0, goldSignal)');
+    });
+
+    it('includes sampleBlockTexture and sampleBlockMask helpers', () => {
       const code = getTextureSamplingWGSL();
       expect(code).toContain('fn sampleBlockTexture');
+      expect(code).toContain('fn sampleBlockMask');
     });
   });
 

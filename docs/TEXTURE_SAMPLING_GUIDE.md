@@ -234,8 +234,8 @@ Separately, the glass *opacity* is controlled by a configurable Fresnel ramp def
 
 Default values (tuned to the reference `block.png` frame+crystal interior):
 
-- `authoredGlassMin: 0.38`
-- `authoredGlassMax: 0.78`
+- `authoredGlassMin: 0.05`
+- `authoredGlassMax: 0.60`
 - `authoredGlassFresnelPower: 2.0`
 
 To retune translucency for a custom texture, update the block texture config:

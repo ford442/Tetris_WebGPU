@@ -21,7 +21,8 @@ import { BOARD_WORLD_CENTER_X, BOARD_WORLD_CENTER_Y } from './renderMetrics.js';
 import {
   resolveBlockTextureUrl,
   getTextureMipLevelCount,
-  createBlockTextureSamplerDescriptor,
+  createBlockTextureColorSamplerDescriptor,
+  createBlockTextureMaskSamplerDescriptor,
   setBlockTextureConfig,
   getBlockTextureConfig,
   applyBlockTextureConfigForImageDimensions,
@@ -55,7 +56,9 @@ import {
  * generating mipmaps. Falls back to a procedural then solid texture on error.
  */
 export async function loadBlockTexture(view: any): Promise<void> {
-  view.blockSampler = view.device.createSampler(createBlockTextureSamplerDescriptor());
+  view.blockSamplerColor = view.device.createSampler(createBlockTextureColorSamplerDescriptor());
+  view.blockSamplerMask = view.device.createSampler(createBlockTextureMaskSamplerDescriptor());
+  view.blockSampler = view.blockSamplerColor;
 
   try {
     const textureUrl = resolveBlockTextureUrl(import.meta.url);
@@ -448,7 +451,8 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
         vertexUniformOffset: i * 256,
         fragmentUniformBuffer: view.fragmentUniformBuffer,
         blockTexture: view.blockTexture,
-        blockSampler: view.blockSampler,
+        blockSamplerColor: view.blockSamplerColor,
+        blockSamplerMask: view.blockSamplerMask,
         dissolveBuffer: view.dissolveBuffer,
         fresnelParamsUniform: view.fresnelParamsUniform,
         iblSpecularTexture: view.iblSpecularTexture,

@@ -7,7 +7,7 @@ import { initSettingsUI } from './src/settings/settingsUI.js';
 import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSettings.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
 import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
-import { setBlockTextureConfig } from "./src/webgpu/blockTexture.js";
+import { loadAuthoredBlockTextureConfig } from "./src/webgpu/blockTexture.js";
 import { parseGameModeId } from './src/game/modes/createGameMode.js';
 import type { GameModeId } from './src/game/modes/types.js';
 import { initReplayUI } from './src/replay/replayUI.js';
@@ -295,7 +295,7 @@ void (async () => {
   }
 
   // Must run before createView → preRender → loadBlockTexture (mask bake + shader defines).
-  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
+  await loadAuthoredBlockTextureConfig();
 
   const game = new Game();
   const soundManager = new SoundManager();
@@ -554,7 +554,6 @@ void (async () => {
       document.body.className = 'image-sampled-theme';
       view.setTheme('imageSampled');
       view.setMaterialTheme?.('imageSampled', 1);
-      setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
       (e.target as HTMLButtonElement).blur();
   });
 
@@ -644,7 +643,6 @@ void (async () => {
   document.body.className = 'image-sampled-theme';
   view.setTheme('imageSampled');
   view.setMaterialTheme?.('imageSampled', 1);
-  setBlockTextureConfig({ url: 'block.png', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 
   detectDisplayMode();
   initOfflineBanner();

@@ -2,7 +2,10 @@
  * CPU-side block bind-group helpers — single source for required pipeline bindings.
  */
 
-import { createBlockTextureBindingView } from '../../blockTexture.js';
+import {
+  createBlockTextureColorBindingView,
+  createBlockTextureMaskBindingView,
+} from '../../blockTexture.js';
 import {
   BLOCK_FRAGMENT_UNIFORM_SIZE,
   BLOCK_VERTEX_UNIFORM_SIZE,
@@ -24,7 +27,8 @@ export interface BlockBindGroupResources {
   vertexUniformOffset?: number;
   fragmentUniformBuffer: GPUBuffer;
   blockTexture: GPUTexture;
-  blockSampler: GPUSampler;
+  blockSamplerColor: GPUSampler;
+  blockSamplerMask: GPUSampler;
   dissolveBuffer: GPUBuffer;
   fresnelParamsUniform: GPUBuffer;
   iblSpecularTexture: GPUTexture;
@@ -34,6 +38,7 @@ export interface BlockBindGroupResources {
 
 /**
  * Build bind-group entries for the production block pipeline.
+ * Color + mask are two views / two samplers of the same RGBA tile.
  */
 export function createBlockBindGroupEntries(
   resources: BlockBindGroupResources,
@@ -56,13 +61,15 @@ export function createBlockBindGroupEntries(
         size: BLOCK_FRAGMENT_UNIFORM_SIZE,
       },
     },
-    { binding: 2, resource: createBlockTextureBindingView(resources.blockTexture) },
-    { binding: 3, resource: resources.blockSampler },
+    { binding: 2, resource: createBlockTextureColorBindingView(resources.blockTexture) },
+    { binding: 3, resource: resources.blockSamplerColor },
     { binding: 4, resource: resources.iblSpecularTexture.createView() },
     { binding: 5, resource: { buffer: resources.dissolveBuffer } },
     { binding: 6, resource: { buffer: resources.fresnelParamsUniform } },
     { binding: 7, resource: resources.iblBrdfLutTexture.createView() },
     { binding: 8, resource: resources.iblSampler },
+    { binding: 9, resource: createBlockTextureMaskBindingView(resources.blockTexture) },
+    { binding: 10, resource: resources.blockSamplerMask },
   ];
 }
 
@@ -82,5 +89,8 @@ export function assertBlockShaderBindings(vertexSource: string, fragmentSource: 
   }
   if (!fragmentSource.includes('struct FragmentUniforms')) {
     throw new Error('Block fragment shader missing FragmentUniforms struct');
+  }
+  if (!fragmentSource.includes('struct GlassParams')) {
+    throw new Error('Block fragment shader missing GlassParams struct');
   }
 }

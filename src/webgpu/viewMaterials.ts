@@ -6,7 +6,7 @@ import type { Piece } from '../game/pieces.js';
 import { themes, type ThemeColors } from './themes.js';
 import { Materials } from './materials.js';
 import { renderLogger } from '../utils/logger.js';
-import { getBlockTextureConfig } from './blockTexture.js';
+import { getGlassParams, glassParamsToVec4 } from './blockTexture.js';
 import { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from './shaders/block/bindings.js';
 
 export interface MaterialViewLike {
@@ -87,20 +87,9 @@ export function updateMaterialUniforms(view: MaterialViewLike) {
   scratch[0] = textureMix;
   view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.textureMix, scratch);
 
-  // Authored imageSampled glass opacity curve params.
-  // Stored in FragmentUniforms.reserved2 (vec4f at byte offset 120).
-  // x=glassMin, y=glassMax, z=glassFresnelPower, w unused.
-  const cfg = getBlockTextureConfig();
-  // Priority:
-  // 1) texture config overrides (artist-friendly per-texture tuning)
-  // 2) material defaults (imageSampled)
-  // 3) hardcoded reference fallback
-  const glassMin = cfg.authoredGlassMin ?? m.authoredGlassMin ?? 0.38;
-  const glassMax = cfg.authoredGlassMax ?? m.authoredGlassMax ?? 0.78;
-  const glassPower = cfg.authoredGlassFresnelPower ?? m.authoredGlassFresnelPower ?? 2.0;
-
-  const glassParams = new Float32Array([glassMin, glassMax, glassPower, 0.0]);
-  view.device.queue.writeBuffer(view.fragmentUniformBuffer, 120, glassParams);
+  // Authored glass opacity curve — GlassParams at byte offset 120 (not a reserved slot).
+  const glassParams = glassParamsToVec4(getGlassParams());
+  view.device.queue.writeBuffer(view.fragmentUniformBuffer, offs.glassParams, glassParams);
 }
 
 export function cycleTheme(view: MaterialViewLike) {

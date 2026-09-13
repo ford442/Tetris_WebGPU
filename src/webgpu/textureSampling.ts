@@ -13,7 +13,7 @@
  * - Edge inset to avoid atlas bleeding
  */
 
-import { getBlockTextureConfig, type BlockTextureConfig } from './blockTexture.js';
+import { getBlockTextureConfig, type BlockTextureConfig, BLOCK_COLOR_LOD_BIAS } from './blockTexture.js';
 
 /** WGSL body for extractMaterialMask — separates gold frame from cool crystal glass */
 function getMaterialMaskLogicWGSL(config: BlockTextureConfig): string {
@@ -104,9 +104,14 @@ fn transformUVForSampling(uv: vec2<f32>) -> vec2<f32> {
 /**
  * Sample the block texture with the current sampling configuration
  */
-fn sampleBlockTexture(blockTexture: texture_2d<f32>, blockSampler: sampler, uv: vec2<f32>) -> vec4<f32> {
+fn sampleBlockTexture(blockTexture: texture_2d<f32>, blockSamplerColor: sampler, uv: vec2<f32>) -> vec4<f32> {
     let texUV = transformUVForSampling(uv);
-    return textureSampleLevel(blockTexture, blockSampler, texUV, 0.0);
+    return textureSampleBias(blockTexture, blockSamplerColor, texUV, ${BLOCK_COLOR_LOD_BIAS});
+}
+
+fn sampleBlockMask(blockTextureMask: texture_2d<f32>, blockSamplerMask: sampler, uv: vec2<f32>) -> f32 {
+    let texUV = transformUVForSampling(uv);
+    return textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0).a;
 }
 
 /**
@@ -125,7 +130,7 @@ fn extractMaterialMask(texColor: vec3<f32>) -> vec2<f32> {
         case MATERIAL_MODE_COLOR_SIGNAL: {
             // Color signal: gold metal has high R+G, lower B
             let goldSignal = texColor.r + texColor.g - texColor.b * 0.5;
-            metalMask = smoothstep(0.40, 1.0, goldSignal);
+            metalMask = smoothstep(METAL_THRESHOLD_LOW, METAL_THRESHOLD_HIGH, goldSignal);
         }
         case MATERIAL_MODE_WARMTH: {
             let luma = dot(texColor.rgb, vec3<f32>(0.299, 0.587, 0.114));

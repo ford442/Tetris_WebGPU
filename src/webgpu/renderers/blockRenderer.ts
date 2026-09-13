@@ -22,6 +22,8 @@ type BlockView = {
   pipeline: GPURenderPipeline;
   fragmentUniformBuffer: GPUBuffer;
   blockSampler: GPUSampler;
+  blockSamplerColor: GPUSampler;
+  blockSamplerMask: GPUSampler;
   numberOfVertices: number;
   vertexBuffer: GPUBuffer;
   normalBuffer: GPUBuffer;
@@ -56,7 +58,7 @@ export class BlockRenderer {
     if (!this.view.device) return;
     const result = renderPlayfieldBorder(
       this.view.device, this.view.pipeline, this.view.fragmentUniformBuffer,
-      this.view.blockTexture, this.view.blockSampler,
+      this.view.blockTexture, this.view.blockSamplerColor, this.view.blockSamplerMask,
       this.view.vpMatrix as Float32Array, this.view.currentTheme,
       this.view._f32_3, this.view._f32_4, this.view.MODELMATRIX, this.view.NORMALMATRIX,
       this.view.dissolveBuffer, this.view.fresnelParamsUniform,

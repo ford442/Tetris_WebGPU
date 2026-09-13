@@ -1,6 +1,8 @@
 import {
   type BlockTextureConfig,
   SINGLE_TILE_TEXTURE_CONFIG,
+  DEFAULT_BLOCK_TEXTURE_CONFIG,
+  DEFAULT_GLASS_PARAMS,
 } from '../webgpu/blockTexture.js';
 import { extractBlockTileFromImage } from '../webgpu/blockTextureExtract.js';
 
@@ -54,11 +56,6 @@ function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
 
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = clamp01((x - edge0) / (edge1 - edge0));
-  return t * t * (3 - 2 * t);
-}
-
 function debounce<T extends (...args: any[]) => void>(fn: T, waitMs: number): T {
   let t: any = null;
   return ((...args: any[]) => {
@@ -90,6 +87,44 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement {
   c.width = Math.max(1, Math.round(w));
   c.height = Math.max(1, Math.round(h));
   return c;
+}
+
+const MASKLAB_CONFIG_STORAGE_KEY = 'tetris_block_texture_config';
+
+function paramsToBlockTextureConfig(
+  params: MaskLabParams,
+  textureName: string,
+  hasMask: boolean,
+): Partial<BlockTextureConfig> {
+  const obj: Partial<BlockTextureConfig> = {
+    ...DEFAULT_BLOCK_TEXTURE_CONFIG,
+    url: textureName,
+    samplingMode: params.samplingMode,
+    materialDetectionMode: params.materialDetectionMode,
+    maskOuterForce: params.maskOuterForce,
+    maskFeatherPx: params.maskFeatherPx,
+    maskDilatePx: DEFAULT_BLOCK_TEXTURE_CONFIG.maskDilatePx ?? 1,
+    warmthLumaBandA0: params.warmthLumaBandA0,
+    warmthLumaBandA1: params.warmthLumaBandA1,
+    warmthLumaBandB0: params.warmthLumaBandB0,
+    warmthLumaBandB1: params.warmthLumaBandB1,
+    authoredGlassMin: params.glassMin,
+    authoredGlassMax: params.glassMax,
+    authoredGlassFresnelPower: params.glassFresnelPower,
+  };
+  if (params.samplingMode === 'subregion') {
+    obj.subregionX = params.subregionX;
+    obj.subregionY = params.subregionY;
+    obj.subregionWidth = params.subregionW;
+    obj.subregionHeight = params.subregionH;
+    obj.subregionInset = params.subregionInset;
+  }
+  if (hasMask) {
+    obj.maskUrl = 'your-mask.png';
+    obj.maskChannel = 'alpha';
+    obj.maskThreshold = 0.5;
+  }
+  return obj;
 }
 
 function renderMaskOverlay(
@@ -161,11 +196,6 @@ function renderFinalAlphaPreview(
 
   const tint = parseHexColor(params.pieceTint);
 
-  // Match shader constants used in authored path:
-  // metalOpaque = smoothstep(0.45, 0.65, metalSoftBaked)
-  const metalEdge0 = 0.45;
-  const metalEdge1 = 0.65;
-
   for (let i = 0; i < w * h; i++) {
     const u = (i % w) / Math.max(1, w - 1);
     const v = Math.floor(i / w) / Math.max(1, h - 1);
@@ -173,7 +203,7 @@ function renderFinalAlphaPreview(
     const edgeFresnel = clamp01(uvEdgeDist);
 
     const metalSoft = mask[i * 4] / 255;
-    const metalOpaque = smoothstep(metalEdge0, metalEdge1, metalSoft);
+    const metalOpaque = metalSoft >= 0.5 ? 1 : 0;
     const glassMaskAlpha = 1 - metalOpaque;
 
     const glassFactor = Math.pow(edgeFresnel, Math.max(0.001, params.glassFresnelPower));
@@ -398,10 +428,10 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
             <label>B1</label><input id="masklab-b1" type="range" min="0.2" max="1.0" step="0.005" value="0.95"/>
           </div>
           <div class="masklab-row">
-            <label>glassMin</label><input id="masklab-glassMin" type="range" min="0.1" max="0.9" step="0.005" value="0.38"/>
+            <label>glassMin</label><input id="masklab-glassMin" type="range" min="0" max="0.5" step="0.005" value="0.05"/>
           </div>
           <div class="masklab-row">
-            <label>glassMax</label><input id="masklab-glassMax" type="range" min="0.2" max="1.0" step="0.005" value="0.78"/>
+            <label>glassMax</label><input id="masklab-glassMax" type="range" min="0.2" max="1.0" step="0.005" value="0.60"/>
           </div>
           <div class="masklab-row">
             <label>glassFresnelPower</label><input id="masklab-glassPow" type="range" min="0.5" max="6" step="0.05" value="2"/>
@@ -414,6 +444,9 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
         <button class="masklab-btn" id="masklab-autoOuter">Auto-propose outerForce</button>
         <button class="masklab-btn" id="masklab-export2x">Export 2x tile + mask</button>
         <button class="masklab-btn" id="masklab-bakeCfg">Bake suggested config</button>
+        <button class="masklab-btn" id="masklab-downloadJson">Download JSON</button>
+        <label class="masklab-btn" for="masklab-loadJson" style="display:inline-block;cursor:pointer;">Load JSON</label>
+        <input id="masklab-loadJson" type="file" accept="application/json,.json" style="display:none"/>
       </div>
 
       <div class="masklab-panels">
@@ -473,6 +506,10 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
   const elGlassPow = root.querySelector('#masklab-glassPow') as HTMLInputElement;
   const elTint = root.querySelector('#masklab-tint') as HTMLInputElement;
   const elInset = root.querySelector('#masklab-inset') as HTMLInputElement;
+
+  elGlassMin.value = String(DEFAULT_GLASS_PARAMS.min);
+  elGlassMax.value = String(DEFAULT_GLASS_PARAMS.max);
+  elGlassPow.value = String(DEFAULT_GLASS_PARAMS.fresnelPower);
 
   const cOriginal = root.querySelector('#masklab-original') as HTMLCanvasElement;
   const cMetal = root.querySelector('#masklab-metal') as HTMLCanvasElement;
@@ -659,48 +696,71 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
   const bakeCfgBtn = root.querySelector('#masklab-bakeCfg') as HTMLButtonElement;
   bakeCfgBtn.addEventListener('click', async () => {
     syncParamsFromUI();
-    const textureName = elTexture.files?.[0]?.name ?? 'your-texture.png';
-      const obj: Partial<BlockTextureConfig> = {
-        url: textureName,
-        samplingMode: params.samplingMode,
-        // Extractor uses this for "warmth" heuristic strength when no companion mask is provided.
-        materialDetectionMode: params.materialDetectionMode,
-        maskOuterForce: params.maskOuterForce,
-        maskFeatherPx: params.maskFeatherPx,
-        warmthLumaBandA0: params.warmthLumaBandA0,
-        warmthLumaBandA1: params.warmthLumaBandA1,
-        warmthLumaBandB0: params.warmthLumaBandB0,
-        warmthLumaBandB1: params.warmthLumaBandB1,
-
-        // Authored glass curve (used in pbrBlocks.ts / viewWebGL2 paths)
-        authoredGlassMin: params.glassMin,
-        authoredGlassMax: params.glassMax,
-        authoredGlassFresnelPower: params.glassFresnelPower,
-      };
-
-      // Include crop parameters when the user is in subregion mode.
-      if (params.samplingMode === 'subregion') {
-        obj.subregionX = params.subregionX;
-        obj.subregionY = params.subregionY;
-        obj.subregionWidth = params.subregionW;
-        obj.subregionHeight = params.subregionH;
-        obj.subregionInset = params.subregionInset;
-      }
-
-      // If user uploaded a companion mask, suggest wiring it into runtime too.
-      if (maskBitmap) {
-        obj.maskUrl = 'your-mask.png';
-        obj.maskChannel = 'alpha';
-        obj.maskThreshold = 0.5;
-        obj.maskFeatherPx = params.maskFeatherPx;
-      }
-
-      const snippet = `// Copy/paste into code\n${JSON.stringify(obj, null, 2)};\n`;
-      cfgOut.value = snippet;
+    const textureName = elTexture.files?.[0]?.name ?? DEFAULT_BLOCK_TEXTURE_CONFIG.url;
+    const obj = paramsToBlockTextureConfig(params, textureName, !!maskBitmap);
+    const json = JSON.stringify(obj, null, 2);
+    cfgOut.value = json;
     try {
-      await navigator.clipboard.writeText(snippet);
+      localStorage.setItem(MASKLAB_CONFIG_STORAGE_KEY, json);
+      await navigator.clipboard.writeText(json);
     } catch {
       // ignore
+    }
+  });
+
+  const downloadJsonBtn = root.querySelector('#masklab-downloadJson') as HTMLButtonElement;
+  downloadJsonBtn.addEventListener('click', () => {
+    syncParamsFromUI();
+    const textureName = elTexture.files?.[0]?.name ?? DEFAULT_BLOCK_TEXTURE_CONFIG.url;
+    const obj = paramsToBlockTextureConfig(params, textureName, !!maskBitmap);
+    const json = JSON.stringify(obj, null, 2);
+    cfgOut.value = json;
+    try {
+      localStorage.setItem(MASKLAB_CONFIG_STORAGE_KEY, json);
+    } catch {
+      // ignore
+    }
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'blockTextureConfig.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  const loadJsonInput = root.querySelector('#masklab-loadJson') as HTMLInputElement;
+  loadJsonInput.addEventListener('change', async () => {
+    const file = loadJsonInput.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<BlockTextureConfig>;
+      if (parsed.authoredGlassMin != null) {
+        elGlassMin.value = String(parsed.authoredGlassMin);
+        params.glassMin = parsed.authoredGlassMin;
+      }
+      if (parsed.authoredGlassMax != null) {
+        elGlassMax.value = String(parsed.authoredGlassMax);
+        params.glassMax = parsed.authoredGlassMax;
+      }
+      if (parsed.authoredGlassFresnelPower != null) {
+        elGlassPow.value = String(parsed.authoredGlassFresnelPower);
+        params.glassFresnelPower = parsed.authoredGlassFresnelPower;
+      }
+      if (parsed.maskOuterForce != null) {
+        elOuterForce.value = String(parsed.maskOuterForce);
+        params.maskOuterForce = parsed.maskOuterForce;
+      }
+      if (parsed.maskFeatherPx != null) {
+        elFeather.value = String(parsed.maskFeatherPx);
+        params.maskFeatherPx = parsed.maskFeatherPx;
+      }
+      cfgOut.value = JSON.stringify(parsed, null, 2);
+      scheduleBake();
+    } catch {
+      cfgOut.value = '// Failed to parse JSON config';
     }
   });
 

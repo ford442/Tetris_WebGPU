@@ -9,7 +9,9 @@ import {
   resetBlockTextureConfig,
   getAtlasSamplingParams,
   createBlockTextureSamplerDescriptor,
-  createBlockTextureBindingView,
+  createBlockTextureColorBindingView,
+  createBlockTextureMaskBindingView,
+  createBlockTextureMaskSamplerDescriptor,
   SINGLE_TILE_TEXTURE_CONFIG,
   type BlockTextureGradient,
   type BlockTexturePainter,
@@ -67,11 +69,23 @@ describe('block texture helpers', () => {
     expect(getTextureMipLevelCount(2816, 1536)).toBe(12);
   });
 
-  it('creates a mip-0-only binding view for block texture sampling', () => {
-    const view = createBlockTextureBindingView({
+  it('creates a full-mip color binding view and a mip-0 mask view', () => {
+    const colorView = createBlockTextureColorBindingView({
+      mipLevelCount: 12,
       createView: (desc: GPUTextureViewDescriptor) => desc,
     } as unknown as GPUTexture);
-    expect(view).toEqual({
+    expect(colorView).toEqual({
+      format: 'rgba8unorm',
+      dimension: '2d',
+      baseMipLevel: 0,
+      mipLevelCount: 5,
+    });
+
+    const maskView = createBlockTextureMaskBindingView({
+      mipLevelCount: 12,
+      createView: (desc: GPUTextureViewDescriptor) => desc,
+    } as unknown as GPUTexture);
+    expect(maskView).toEqual({
       format: 'rgba8unorm',
       dimension: '2d',
       baseMipLevel: 0,
@@ -79,7 +93,7 @@ describe('block texture helpers', () => {
     });
   });
 
-  it('creates a sharp clamped sampler descriptor for authored block images', () => {
+  it('creates linear color and nearest mask sampler descriptors', () => {
     expect(createBlockTextureSamplerDescriptor()).toEqual({
       magFilter: 'linear',
       minFilter: 'linear',
@@ -89,6 +103,15 @@ describe('block texture helpers', () => {
       lodMinClamp: 0,
       lodMaxClamp: 4,
       maxAnisotropy: 16,
+    });
+    expect(createBlockTextureMaskSamplerDescriptor()).toEqual({
+      magFilter: 'nearest',
+      minFilter: 'nearest',
+      mipmapFilter: 'nearest',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+      lodMinClamp: 0,
+      lodMaxClamp: 0,
     });
   });
 

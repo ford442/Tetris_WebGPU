@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { BLOCK_FRAGMENT_UNIFORM_OFFSETS } from '../src/webgpu/shaders/block/bindings.js';
 import { updateMaterialUniforms } from '../src/webgpu/viewMaterials.js';
 import { Materials } from '../src/webgpu/materials.js';
+import { resetBlockTextureConfig } from '../src/webgpu/blockTexture.js';
 
 describe('updateMaterialUniforms', () => {
+  beforeEach(() => {
+    resetBlockTextureConfig();
+  });
   it('writes textureMix and enablePBR at the authoritative fragment uniform offsets', () => {
     const writes: Array<{ offset: number; data: ArrayBufferView }> = [];
     const view = {
@@ -45,6 +49,12 @@ describe('updateMaterialUniforms', () => {
 
     expect(enablePbrWrite).toBeDefined();
     expect((enablePbrWrite!.data as Float32Array)[0]).toBeCloseTo(1.0, 5);
+
+    const glassWrite = writes.find((w) => w.offset === BLOCK_FRAGMENT_UNIFORM_OFFSETS.glassParams);
+    expect(glassWrite).toBeDefined();
+    expect((glassWrite!.data as Float32Array)[0]).toBeCloseTo(0.05, 5);
+    expect((glassWrite!.data as Float32Array)[1]).toBeCloseTo(0.60, 5);
+    expect((glassWrite!.data as Float32Array)[2]).toBeCloseTo(2.0, 5);
   });
 
   it('uses reduced textureMix when authored block texture failed to load', () => {
