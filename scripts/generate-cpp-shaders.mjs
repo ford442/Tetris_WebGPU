@@ -17,6 +17,29 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const SHADERS_DIR = join(ROOT, 'cpp', 'src', 'shaders');
+
+/**
+ * TS-owned WGSL shared verbatim with the C++ renderer, so the authored look has a
+ * single source of truth instead of a hand-copied C++ fork. Each entry must be
+ * binding-free (parameters only) — the two renderers keep different bind-group
+ * layouts, and a shared file that read a @binding would tie them together.
+ * Identifiers are prefixed `kShared*` to mark them as coming from src/.
+ */
+const SHARED_TS_SHADERS = [
+  { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'authoredGlass.wgsl'), identifier: 'kSharedAuthoredGlassWgsl' },
+  { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'pbrCore.wgsl'), identifier: 'kSharedPbrCoreWgsl' },
+];
+
+/** Shared sources must not reference bind-group resources — see SHARED_TS_SHADERS. */
+function assertBindingFree(file, source) {
+  const match = source.match(/@binding\s*\(/);
+  if (match) {
+    throw new Error(
+      `${relative(ROOT, file)} is shared with the C++ renderer but declares a @binding. ` +
+        'Move binding-dependent helpers into a TS-only file.',
+    );
+  }
+}
 const OUT_DIR = join(ROOT, 'cpp', 'src', 'generated');
 const OUT_HEADER = join(OUT_DIR, 'shader_sources.h');
 
@@ -56,6 +79,16 @@ function main() {
   const seen = new Map();
   const literals = [];
 
+  for (const { file, identifier } of SHARED_TS_SHADERS) {
+    if (!existsSync(file)) {
+      throw new Error(`Shared shader ${relative(ROOT, file)} is missing — SHARED_TS_SHADERS is stale.`);
+    }
+    const source = readFileSync(file, 'utf8');
+    assertBindingFree(file, source);
+    seen.set(identifier, file);
+    literals.push(`// Shared with the TS renderer. Source: ${relative(ROOT, file)}\n${toRawStringLiteral(identifier, source)}`);
+  }
+
   for (const file of files) {
     const identifier = identifierFor(file);
     if (seen.has(identifier)) {
@@ -85,7 +118,10 @@ ${literals.join('\n\n')}
 `;
 
   writeFileSync(OUT_HEADER, header);
-  console.log(`[generate-cpp-shaders] Wrote ${OUT_HEADER} (${files.length} shader(s))`);
+  console.log(
+    `[generate-cpp-shaders] Wrote ${OUT_HEADER} ` +
+      `(${files.length} cpp shader(s) + ${SHARED_TS_SHADERS.length} shared from src/)`,
+  );
 }
 
 main();

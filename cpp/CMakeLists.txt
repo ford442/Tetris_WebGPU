@@ -35,14 +35,17 @@ if(NOT EMSCRIPTEN)
     "This CMake project targets Emscripten. Use: emcmake cmake -S cpp -B build/cpp-cmake -G Ninja")
 endif()
 
-# Embed cpp/src/shaders/**/*.wgsl into cpp/src/generated/shader_sources.h so
-# gpu_renderer.cpp never hand-copies a WGSL string. Pure Node, no emcc needed;
-# always re-run (ALL) so a stale header can't get compiled by accident.
+# Generate cpp/src/generated/: the embedded WGSL (cpp/src/shaders/**/*.wgsl plus
+# the modules shared with the TS renderer) and the block uniform struct derived
+# from shared/authoredBlockUniforms.json, so gpu_renderer.cpp never hand-copies a
+# WGSL string or a byte offset. Pure Node, no emcc needed; always re-run (ALL) so
+# a stale header can't get compiled by accident.
 find_program(NODE_EXECUTABLE node REQUIRED)
 add_custom_target(generate_cpp_shaders ALL
   COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-shaders.mjs"
+  COMMAND "${NODE_EXECUTABLE}" "${TETRIS_REPO_ROOT}/scripts/generate-cpp-uniforms.mjs"
   WORKING_DIRECTORY "${TETRIS_REPO_ROOT}"
-  COMMENT "Embedding cpp/src/shaders/**/*.wgsl into cpp/src/generated/shader_sources.h"
+  COMMENT "Generating cpp/src/generated/ (embedded WGSL + block uniform struct)"
   VERBATIM
 )
 

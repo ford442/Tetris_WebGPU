@@ -19,8 +19,11 @@
  *   public/cpp/tetris_renderer.{js,wasm}
  *   public/cpp/build-info.json
  *   build/cpp/compile_commands.json  (+ cpp/compile_commands.json mirror for clangd)
- *   cpp/src/generated/shader_sources.h  (embedded cpp/src/shaders/**\/*.wgsl —
- *     via scripts/generate-cpp-shaders.mjs, runs even without emcc)
+ *   cpp/src/generated/shader_sources.h  (embedded cpp/src/shaders/**\/*.wgsl plus
+ *     the WGSL shared with the TS renderer — via scripts/generate-cpp-shaders.mjs,
+ *     runs even without emcc)
+ *   cpp/src/generated/authored_block_uniforms.h  (block uniform struct generated
+ *     from shared/authoredBlockUniforms.json — via scripts/generate-cpp-uniforms.mjs)
  */
 
 import { spawnSync } from 'node:child_process';
@@ -380,16 +383,21 @@ function buildLinkedPort() {
   return { result, linkedPort };
 }
 
-function generateShaderHeaders() {
-  const result = spawnSync(process.execPath, [join(__dirname, 'generate-cpp-shaders.mjs')], {
+function runGenerator(script) {
+  const result = spawnSync(process.execPath, [join(__dirname, script)], {
     encoding: 'utf8',
     stdio: 'pipe',
   });
   if (result.status !== 0) {
-    console.error(result.stderr || result.stdout || '[build-cpp] generate-cpp-shaders.mjs failed');
+    console.error(result.stderr || result.stdout || `[build-cpp] ${script} failed`);
     process.exit(result.status ?? 1);
   }
   console.log((result.stdout || '').trim());
+}
+
+function generateShaderHeaders() {
+  runGenerator('generate-cpp-shaders.mjs');
+  runGenerator('generate-cpp-uniforms.mjs');
 }
 
 function main() {

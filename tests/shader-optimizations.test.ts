@@ -66,12 +66,16 @@ it('composes gold frame and tinted glass using authored baked alpha', () => {
   expect(fragment).toContain('composeMaterialBaseColor');
   expect(fragment).toContain('useAuthoredSampling');
   expect(fragment).toContain('let metalColor = gradeGoldMetalAlbedo(texColor.rgb)');
-  expect(fragment).toContain('let glassOpacity = mix(glassMin, glassMax');
+  // Opacity curve moved into the shared authored module (also embedded by the C++
+  // renderer); the fragment shader calls it instead of inlining the mix.
+  expect(fragment).toContain('let glassOpacity = authoredGlassOpacity(');
+  expect(fragment).toContain('mix(glassMin, glassMax, glassFresnel)');
   expect(fragment).toContain('metalMask = clamp(texColor.a, 0.0, 1.0)');
   expect(fragment).toContain('let metalOpaque = step(0.5, metalMask)');
   expect(fragment).toContain('let glassMaskAlpha = 1.0 - metalOpaque');
   expect(fragment).toContain('finalAlpha = mix(1.0, glassOpacity, glassMaskAlpha);');
   expect(fragment).toContain('fUniforms.glassParams.min');
+  expect(fragment).toContain('fUniforms.glassParams.fresnelPower');
   expect(fragment).not.toContain('combinedMetalMask');
   expect(fragment).not.toContain('reserved2');
   expect(fragment).toContain('isBorderBlock');

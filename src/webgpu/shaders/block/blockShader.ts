@@ -5,6 +5,7 @@
 
 import { getSimpleTextureSamplingWGSL } from '../../textureSampling.js';
 import { ParticleMaterialInteractionWGSL } from '../particleMaterialInteraction.js';
+import { BLOCK_AUTHORED_GLASS_WGSL } from './authoredGlass.wgsl.js';
 import { BLOCK_FRAGMENT_BINDINGS_WGSL } from './bindings.wgsl.js';
 import { BLOCK_FRAGMENT_MAIN_WGSL } from './fragmentMain.wgsl.js';
 import { BLOCK_PBR_FUNCTIONS_WGSL } from './pbrFunctions.wgsl.js';
@@ -25,6 +26,7 @@ export function createBlockShaders(): BlockShaderSources {
   const fragment = `
         ${BLOCK_FRAGMENT_BINDINGS_WGSL}
 
+        ${BLOCK_AUTHORED_GLASS_WGSL}
         ${BLOCK_PBR_FUNCTIONS_WGSL}
         ${ParticleMaterialInteractionWGSL}
 
