@@ -61,6 +61,14 @@ describe('GlassParams single opacity curve', () => {
     expect(getGlassParams().min).toBeCloseTo(0.08, 5);
     expect(getGlassParams().max).toBeCloseTo(0.5, 5);
   });
+
+  it('returns false when the config fetch stalls past the timeout', async () => {
+    const loaded = await loadAuthoredBlockTextureConfig(
+      () => new Promise<Response>(() => undefined),
+      25,
+    );
+    expect(loaded).toBe(false);
+  });
 });
 
 describe('WebGL2 matches TS authored alpha', () => {
@@ -117,5 +125,10 @@ describe('WebGL2 matches TS authored alpha', () => {
     expect(json.subregionWidth).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionWidth ?? 1, 3);
     expect(json.subregionHeight).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionHeight ?? 1, 3);
     expect(json.subregionInset).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionInset ?? 0, 3);
+  });
+
+  it('loads a companion mask in the WebGL2 extract path', () => {
+    const src = readFileSync(join(process.cwd(), 'src/viewWebGL2/glBlockRenderer.ts'), 'utf8');
+    expect(src).toContain('loadCompanionMaskImage');
   });
 });

@@ -6,6 +6,7 @@ import { EnhancedPostProcessShaders } from '../src/webgpu/shaders/enhancedPostPr
 import { MaterialAwarePostProcessShaders } from '../src/webgpu/shaders/materialAwarePostProcess.js';
 import { createBlockShaders as PBRBlockShaders } from '../src/webgpu/shaders/block/blockShader.js';
 import { CompositeShader } from '../src/webgpu/bloomShaders.js';
+import { DebugTextureShaders } from '../src/webgpu/debug_shaders.js';
 
 describe('shader optimization updates', () => {
   it('uses squared distance for background orbital light falloff', () => {
@@ -83,6 +84,14 @@ it('premultiplies post-process output for the premultiplied-alpha canvas', () =>
 
 it('preserves alpha in the multi-pass bloom composite for glass transparency', () => {
   expect(CompositeShader).toContain('return vec4<f32>(mapped * alpha, alpha);');
+});
+
+it('debug mask views nearest-sample baked alpha and hard-threshold metal', () => {
+  const dbg = DebugTextureShaders();
+  expect(dbg.fragmentBakedMetalAlpha).toContain('textureLoad(blockTexture, px, 0).a');
+  expect(dbg.fragmentGlassMask).toContain('textureLoad(blockTexture, px, 0).a');
+  expect(dbg.fragmentFinalAlphaApprox).toContain('step(0.5, texMaskA)');
+  expect(dbg.fragmentFinalAlphaApprox).not.toContain('smoothstep(0.45, 0.65, texColor.a)');
 });
   
 });

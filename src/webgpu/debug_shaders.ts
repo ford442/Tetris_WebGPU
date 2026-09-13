@@ -96,6 +96,14 @@ export const DebugTextureShaders = () => {
                 return vec4<f32>(vColor.rgb, 1.0);
             }`;
 
+  // Nearest mip-0 alpha (matches production mask sampler; no linear halo).
+  const bakedMaskSample = `
+                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
+                let dims = textureDimensions(blockTexture, 0);
+                let px = vec2<i32>(vec2<f32>(dims) * clamp(texUV, vec2<f32>(0.0), vec2<f32>(0.9999)));
+                let texMaskA = textureLoad(blockTexture, px, 0).a;
+`;
+
   // Debug mode 6: Show baked metal-frame alpha (stored in texColor.a)
   const fragmentBakedMetalAlpha = `
             @binding(2) @group(0) var blockTexture: texture_2d<f32>;
@@ -103,9 +111,8 @@ export const DebugTextureShaders = () => {
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 0.0);
-                return vec4<f32>(vec3<f32>(texColor.a), 1.0);
+                ${bakedMaskSample}
+                return vec4<f32>(vec3<f32>(texMaskA), 1.0);
             }`;
 
   // Debug mode 7: Show baked glass mask derived from alpha channel
@@ -115,9 +122,8 @@ export const DebugTextureShaders = () => {
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 0.0);
-                let glass = 1.0 - texColor.a;
+                ${bakedMaskSample}
+                let glass = 1.0 - texMaskA;
                 return vec4<f32>(vec3<f32>(glass), 1.0);
             }`;
 
@@ -128,11 +134,10 @@ export const DebugTextureShaders = () => {
 
             @fragment
             fn main(@location(0) vPosition: vec4<f32>, @location(1) vNormal: vec4<f32>,@location(2) vColor: vec4<f32>, @location(3) vUV: vec2<f32>) ->  @location(0) vec4<f32> {
-                let texUV = vec2<f32>(vUV.x, 1.0 - vUV.y);
-                let texColor = textureSampleLevel(blockTexture, blockSamplerColor, texUV, 0.0);
+                ${bakedMaskSample}
 
-                // Match authored path constants (pbrBlocks.ts).
-                let metalOpaque = smoothstep(0.45, 0.65, texColor.a);
+                // Match authored path: metalOpaque = step(0.5, metalMask)
+                let metalOpaque = step(0.5, texMaskA);
                 let glassMaskAlpha = 1.0 - metalOpaque;
 
                 // Approximate NdotV using a fixed camera position (debug only).

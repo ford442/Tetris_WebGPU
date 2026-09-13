@@ -757,6 +757,46 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
         elFeather.value = String(parsed.maskFeatherPx);
         params.maskFeatherPx = parsed.maskFeatherPx;
       }
+      if (parsed.samplingMode != null) {
+        elSampling.value = parsed.samplingMode;
+        params.samplingMode = parsed.samplingMode;
+      }
+      if (parsed.subregionX != null) {
+        elSubX.value = String(parsed.subregionX);
+        params.subregionX = parsed.subregionX;
+      }
+      if (parsed.subregionY != null) {
+        elSubY.value = String(parsed.subregionY);
+        params.subregionY = parsed.subregionY;
+      }
+      if (parsed.subregionWidth != null) {
+        elSubW.value = String(parsed.subregionWidth);
+        params.subregionW = parsed.subregionWidth;
+      }
+      if (parsed.subregionHeight != null) {
+        elSubH.value = String(parsed.subregionHeight);
+        params.subregionH = parsed.subregionHeight;
+      }
+      if (parsed.subregionInset != null) {
+        elInset.value = String(parsed.subregionInset);
+        params.subregionInset = parsed.subregionInset;
+      }
+      if (parsed.warmthLumaBandA0 != null) {
+        elA0.value = String(parsed.warmthLumaBandA0);
+        params.warmthLumaBandA0 = parsed.warmthLumaBandA0;
+      }
+      if (parsed.warmthLumaBandA1 != null) {
+        elA1.value = String(parsed.warmthLumaBandA1);
+        params.warmthLumaBandA1 = parsed.warmthLumaBandA1;
+      }
+      if (parsed.warmthLumaBandB0 != null) {
+        elB0.value = String(parsed.warmthLumaBandB0);
+        params.warmthLumaBandB0 = parsed.warmthLumaBandB0;
+      }
+      if (parsed.warmthLumaBandB1 != null) {
+        elB1.value = String(parsed.warmthLumaBandB1);
+        params.warmthLumaBandB1 = parsed.warmthLumaBandB1;
+      }
       cfgOut.value = JSON.stringify(parsed, null, 2);
       scheduleBake();
     } catch {

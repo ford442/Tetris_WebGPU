@@ -32,21 +32,27 @@ function appendBlockTextureCacheBust(url: string): string {
   return `${url}${sep}v=${key}`;
 }
 
-/** Resolve block.png against the Vite deployment base (e.g. /tetris-webgpu/block.png). */
-export function resolveBlockTextureUrl(_moduleUrl?: string): string {
-  const configured = currentTextureConfig.url;
-  // Absolute URLs and data URLs are used as-is.
-  if (/^(https?:|data:)/.test(configured)) {
-    return appendBlockTextureCacheBust(configured);
+/** Resolve an explicit public-asset path (color tile, companion mask, etc.). */
+export function resolveBlockTextureAssetUrl(assetPath: string): string {
+  if (/^(https?:|data:)/.test(assetPath)) {
+    return appendBlockTextureCacheBust(assetPath);
   }
-  if (configured.startsWith('/')) {
-    return appendBlockTextureCacheBust(configured);
+  if (assetPath.startsWith('/')) {
+    return appendBlockTextureCacheBust(assetPath);
   }
   const base =
     (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  const asset = configured.replace(/^\.\//, '');
+  const asset = assetPath.replace(/^\.\//, '');
   return appendBlockTextureCacheBust(`${normalizedBase}${asset}`);
+}
+
+/**
+ * Resolve the active color tile URL.
+ * `moduleUrl` is legacy (ignored); companion masks must use `resolveBlockTextureAssetUrl(cfg.maskUrl)`.
+ */
+export function resolveBlockTextureUrl(_moduleUrl?: string): string {
+  return resolveBlockTextureAssetUrl(currentTextureConfig.url);
 }
 
 /** Default authored block texture URL (honours Vite base path). */
@@ -344,7 +350,8 @@ export function evalAuthoredOutAlpha(
   return materialAlpha * vertexAlpha;
 }
 
-function pickAuthoredTuning(config: BlockTextureConfig): Partial<BlockTextureConfig> {
+/** Glass / extractor fields that are valid on both atlas and single-tile images. */
+function pickGlassMaskTuning(config: BlockTextureConfig): Partial<BlockTextureConfig> {
   return {
     url: config.url,
     authoredGlassMin: config.authoredGlassMin,
@@ -356,16 +363,22 @@ function pickAuthoredTuning(config: BlockTextureConfig): Partial<BlockTextureCon
     maskUrl: config.maskUrl,
     maskChannel: config.maskChannel,
     maskThreshold: config.maskThreshold,
-    metalThresholdLow: config.metalThresholdLow,
-    metalThresholdHigh: config.metalThresholdHigh,
-    materialDetectionMode: config.materialDetectionMode,
     warmthLumaBandA0: config.warmthLumaBandA0,
     warmthLumaBandA1: config.warmthLumaBandA1,
     warmthLumaBandB0: config.warmthLumaBandB0,
     warmthLumaBandB1: config.warmthLumaBandB1,
     warmthSignalClampMin: config.warmthSignalClampMin,
     warmthSignalClampMax: config.warmthSignalClampMax,
-    // Atlas crop stays DEFAULT for large images; inset is Mask Lab–tunable.
+  };
+}
+
+/** Atlas-only crop / detection — must not clobber the 768×768 single-tile path. */
+function pickAtlasTuning(config: BlockTextureConfig): Partial<BlockTextureConfig> {
+  return {
+    ...pickGlassMaskTuning(config),
+    materialDetectionMode: config.materialDetectionMode,
+    metalThresholdLow: config.metalThresholdLow,
+    metalThresholdHigh: config.metalThresholdHigh,
     subregionInset: config.subregionInset,
   };
 }
@@ -378,16 +391,32 @@ export function resolveBlockTextureConfigUrl(): string {
   return appendBlockTextureCacheBust(`${normalizedBase}${BLOCK_TEXTURE_CONFIG_JSON}`);
 }
 
+/** Bound so a stalled blockTextureConfig.json cannot hang `index.ts` before createView. */
+export const AUTH_CONFIG_FETCH_TIMEOUT_MS = 4000;
+
 /**
  * Load persisted BlockTextureConfig JSON next to the tile (public/blockTextureConfig.json).
  * Returns true when a file was applied; false keeps DEFAULT_BLOCK_TEXTURE_CONFIG.
  */
 export async function loadAuthoredBlockTextureConfig(
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = AUTH_CONFIG_FETCH_TIMEOUT_MS,
 ): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const aborted = new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      controller.signal.removeEventListener('abort', onAbort);
+      reject(Object.assign(new Error('Authored config fetch timed out'), { name: 'AbortError' }));
+    };
+    controller.signal.addEventListener('abort', onAbort);
+  });
   try {
     const url = resolveBlockTextureConfigUrl();
-    const res = await fetchImpl(url);
+    const res = await Promise.race([
+      fetchImpl(url, { signal: controller.signal }),
+      aborted,
+    ]);
     if (!res.ok) return false;
     const json: unknown = await res.json();
     if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
@@ -395,6 +424,8 @@ export async function loadAuthoredBlockTextureConfig(
     return true;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -412,9 +443,8 @@ export function resetBlockTextureConfig(): void {
  */
 export function applyBlockTextureConfigForImageDimensions(width: number, height: number): void {
   const maxDim = Math.max(width, height);
-  const tuning = pickAuthoredTuning(getBlockTextureConfig());
   if (maxDim >= 2000) {
-    setBlockTextureConfig({ ...DEFAULT_BLOCK_TEXTURE_CONFIG, ...tuning });
+    setBlockTextureConfig({ ...DEFAULT_BLOCK_TEXTURE_CONFIG, ...pickAtlasTuning(getBlockTextureConfig()) });
     return;
   }
 
@@ -428,7 +458,7 @@ export function applyBlockTextureConfigForImageDimensions(width: number, height:
     materialDetectionMode: 'warmth',
     metalThresholdLow: 0.75,
     metalThresholdHigh: 1.15,
-    ...tuning,
+    ...pickGlassMaskTuning(getBlockTextureConfig()),
   });
 }
 

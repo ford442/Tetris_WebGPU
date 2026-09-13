@@ -1,5 +1,6 @@
 import {
   getBlockTextureConfig,
+  resolveBlockTextureAssetUrl,
   type BlockTextureConfig,
 } from './blockTexture.js';
 
@@ -615,6 +616,20 @@ export function loadBlockTextureImage(url: string, timeoutMs = 10000): Promise<H
 
     img.src = url;
   });
+}
+
+/** Load cfg.maskUrl if set. Returns null when absent or the fetch fails (heuristic bake). */
+export async function loadCompanionMaskImage(
+  config: BlockTextureConfig = getBlockTextureConfig(),
+  timeoutMs = 10000,
+): Promise<HTMLImageElement | null> {
+  const maskUrl = config.maskUrl;
+  if (!maskUrl) return null;
+  try {
+    return await loadBlockTextureImage(resolveBlockTextureAssetUrl(maskUrl), timeoutMs);
+  } catch {
+    return null;
+  }
 }
 
 export async function extractBlockTileFromUrl(

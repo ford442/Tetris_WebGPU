@@ -4,6 +4,7 @@ import {
   getTextureMipLevelCount,
   paintProceduralBlockTexture,
   resolveBlockTextureUrl,
+  resolveBlockTextureAssetUrl,
   setBlockTextureConfig,
   getBlockTextureConfig,
   resetBlockTextureConfig,
@@ -218,6 +219,27 @@ describe('block texture configuration', () => {
     expect(config.authoredGlassMin).toBeCloseTo(0.08, 5);
   });
 
+  it('does not apply atlas crop or color_signal detection to a 768 single tile', () => {
+    setBlockTextureConfig({
+      samplingMode: 'subregion',
+      subregionX: 0.368,
+      subregionY: 0.193,
+      subregionWidth: 0.247,
+      subregionHeight: 0.446,
+      subregionInset: 0.01,
+      materialDetectionMode: 'color_signal',
+      authoredGlassMin: 0.08,
+    });
+    applyBlockTextureConfigForImageDimensions(768, 768);
+    const config = getBlockTextureConfig();
+    expect(config.samplingMode).toBe('single');
+    expect(config.subregionX).toBe(0);
+    expect(config.subregionWidth).toBe(1);
+    expect(config.subregionInset).toBeCloseTo(0.04, 5);
+    expect(config.materialDetectionMode).toBe('warmth');
+    expect(config.authoredGlassMin).toBeCloseTo(0.08, 5);
+  });
+
   it('can configure material detection thresholds', () => {
     setBlockTextureConfig({
       materialDetectionMode: 'luminance',
@@ -295,5 +317,12 @@ describe('block texture configuration', () => {
     const url = resolveBlockTextureUrl();
     expect(url.startsWith('/new-texture.png')).toBe(true);
     expect(url).toMatch(/[?&]v=[0-9a-f]{8}$/);
+  });
+
+  it('resolves a companion mask path without using the color tile URL', () => {
+    setBlockTextureConfig({ url: 'block.png' });
+    const mask = resolveBlockTextureAssetUrl('hinge-mask.png');
+    expect(mask.startsWith('/hinge-mask.png')).toBe(true);
+    expect(resolveBlockTextureUrl()).toMatch(/^\/block\.png/);
   });
 });

@@ -4,6 +4,7 @@ import {
   BLOCK_TILE_EXTRACT_SCALE,
   extractBlockTileFromImage,
   loadBlockTextureImage,
+  loadCompanionMaskImage,
 } from '../webgpu/blockTextureExtract.js';
 import { createBlockShaderSources } from './blockShadersGLSL.js';
 import { textureLogger } from '../utils/logger.js';
@@ -146,7 +147,9 @@ export class GLBlockRenderer {
       textureLogger.info('[WebGL2] Loading block texture from:', url);
       const image = await loadBlockTextureImage(url);
       applyBlockTextureConfigForImageDimensions(image.width, image.height);
-      const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE, getBlockTextureConfig());
+      const cfg = getBlockTextureConfig();
+      const maskImg = await loadCompanionMaskImage(cfg);
+      const extracted = extractBlockTileFromImage(image, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
       this.tileWidth = extracted.width;
       this.tileHeight = extracted.height;
 

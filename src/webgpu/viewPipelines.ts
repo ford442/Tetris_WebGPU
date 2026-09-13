@@ -30,7 +30,7 @@ import {
 import {
   BLOCK_TILE_EXTRACT_SCALE,
   extractBlockTileFromImage,
-  loadBlockTextureImage,
+  loadCompanionMaskImage,
 } from './blockTextureExtract.js';
 import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
 import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js';
@@ -96,15 +96,9 @@ export async function loadBlockTexture(view: any): Promise<void> {
     setBlockTextureConfig({ samplingMode: 'single', metalThresholdLow: 0.75, metalThresholdHigh: 1.15 });
 
     const cfg = getBlockTextureConfig();
-    let maskImg: HTMLImageElement | null = null;
-    if (cfg.maskUrl) {
-      const resolvedMaskUrl = resolveBlockTextureUrl(cfg.maskUrl);
-      try {
-        maskImg = await loadBlockTextureImage(resolvedMaskUrl, textureLoadTimeoutMs);
-      } catch (maskErr) {
-        textureLogger.warn('Failed to load block mask; using heuristic mask bake', maskErr);
-        maskImg = null;
-      }
+    const maskImg = await loadCompanionMaskImage(cfg, textureLoadTimeoutMs);
+    if (cfg.maskUrl && !maskImg) {
+      textureLogger.warn('Failed to load block mask; using heuristic mask bake');
     }
 
     const extracted = extractBlockTileFromImage(img, BLOCK_TILE_EXTRACT_SCALE, cfg, maskImg);
