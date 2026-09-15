@@ -63,6 +63,7 @@ export interface ViewEventHost extends IView {
   nextPieceContext: CanvasRenderingContext2D;
   holdPieceContext: CanvasRenderingContext2D;
   lastEffectCounter: number;
+  lastScoreEffectCounter: number;
   lastScore: number;
   neonBurstUniform?: Float32Array;
   setFresnelBoost?(boost: number): void;

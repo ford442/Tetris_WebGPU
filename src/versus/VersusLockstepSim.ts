@@ -15,6 +15,16 @@ export interface VersusTickResult {
   hash1: number;
   locked0: boolean;
   locked1: boolean;
+  hardDropped0: boolean;
+  hardDropped1: boolean;
+  hardDropDist0: number;
+  hardDropDist1: number;
+  hardDropColorIdx0: number;
+  hardDropColorIdx1: number;
+  hardDropX0: number;
+  hardDropX1: number;
+  hardDropGhostY0: number;
+  hardDropGhostY1: number;
 }
 
 function stepGravity(game: Game, gravityTimer: number): number {
@@ -82,15 +92,65 @@ export class VersusLockstepSim {
     const linesBefore0 = this.g0.lines;
     const linesBefore1 = this.g1.lines;
 
+    let hardDropped0 = false;
+    let hardDropDist0 = 0;
+    let hardDropColorIdx0 = 1;
+    let hardDropX0 = 0;
+    let hardDropGhostY0 = 0;
+
+    let hardDropped1 = false;
+    let hardDropDist1 = 0;
+    let hardDropColorIdx1 = 1;
+    let hardDropX1 = 0;
+    let hardDropGhostY1 = 0;
+
     if (!this.g0.isRunEnded) {
-      applyActionMask(this.g0, p0Mask);
+      const ghostY = this.g0.activPiece ? this.g0.getGhostY() : 0;
+      const currentX = this.g0.activPiece?.x ?? 4;
+      const currentY = this.g0.activPiece?.y ?? 0;
+      const type = this.g0.activPiece?.type ?? 'T';
+      const hadPiece = !!this.g0.activPiece;
+
+      const { hardDropped } = applyActionMask(this.g0, p0Mask);
+      if (hardDropped && hadPiece) {
+        hardDropped0 = true;
+        hardDropX0 = currentX;
+        hardDropGhostY0 = this.g0.lastDropPos?.y ?? this.g0.gameStateCache.lastDropPos?.y ?? ghostY;
+        hardDropDist0 = ghostY - currentY;
+        if (type === 'I') hardDropColorIdx0 = 1;
+        else if (type === 'J') hardDropColorIdx0 = 2;
+        else if (type === 'L') hardDropColorIdx0 = 3;
+        else if (type === 'O') hardDropColorIdx0 = 4;
+        else if (type === 'S') hardDropColorIdx0 = 5;
+        else if (type === 'T') hardDropColorIdx0 = 6;
+        else if (type === 'Z') hardDropColorIdx0 = 7;
+      }
       this.gravityTimer0 = stepGravity(this.g0, this.gravityTimer0);
       this.g0.update(REPLAY_TICK_MS);
       this.g0.tickMode(REPLAY_TICK_MS);
     }
 
     if (!this.g1.isRunEnded) {
-      applyActionMask(this.g1, p1Mask);
+      const ghostY = this.g1.activPiece ? this.g1.getGhostY() : 0;
+      const currentX = this.g1.activPiece?.x ?? 4;
+      const currentY = this.g1.activPiece?.y ?? 0;
+      const type = this.g1.activPiece?.type ?? 'T';
+      const hadPiece = !!this.g1.activPiece;
+
+      const { hardDropped } = applyActionMask(this.g1, p1Mask);
+      if (hardDropped && hadPiece) {
+        hardDropped1 = true;
+        hardDropX1 = currentX;
+        hardDropGhostY1 = this.g1.lastDropPos?.y ?? this.g1.gameStateCache.lastDropPos?.y ?? ghostY;
+        hardDropDist1 = ghostY - currentY;
+        if (type === 'I') hardDropColorIdx1 = 1;
+        else if (type === 'J') hardDropColorIdx1 = 2;
+        else if (type === 'L') hardDropColorIdx1 = 3;
+        else if (type === 'O') hardDropColorIdx1 = 4;
+        else if (type === 'S') hardDropColorIdx1 = 5;
+        else if (type === 'T') hardDropColorIdx1 = 6;
+        else if (type === 'Z') hardDropColorIdx1 = 7;
+      }
       this.gravityTimer1 = stepGravity(this.g1, this.gravityTimer1);
       this.g1.update(REPLAY_TICK_MS);
       this.g1.tickMode(REPLAY_TICK_MS);
@@ -112,6 +172,16 @@ export class VersusLockstepSim {
       hash1: hashPlayfield(this.g1.playfield),
       locked0: false,
       locked1: false,
+      hardDropped0,
+      hardDropped1,
+      hardDropDist0,
+      hardDropDist1,
+      hardDropColorIdx0,
+      hardDropColorIdx1,
+      hardDropX0,
+      hardDropX1,
+      hardDropGhostY0,
+      hardDropGhostY1,
     };
 
     this.frame++;

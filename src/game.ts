@@ -499,6 +499,10 @@ export default class Game implements ModeGameHooks {
     return this.gameStateCache;
   }
 
+  clearEffects(): void {
+    this.effectEvent = null;
+  }
+
   getGhostY(): number {
     const piece = this.activPiece;
     let count = 0;

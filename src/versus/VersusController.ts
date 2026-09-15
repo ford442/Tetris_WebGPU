@@ -298,8 +298,33 @@ export default class VersusController {
   private async hardDrop(player: 0 | 1): Promise<void> {
     const slot = this.players[player];
     const g = slot.game;
+
+    const ghostY = g.activPiece ? g.getGhostY() : 0;
+    const dropDist = g.activPiece ? ghostY - g.activPiece.y : 0;
+    const currentX = g.activPiece?.x ?? 4;
+
+    const type = g.activPiece?.type ?? 'T';
+    let colorIdx = 1;
+    if (type === 'I') colorIdx = 1;
+    else if (type === 'J') colorIdx = 2;
+    else if (type === 'L') colorIdx = 3;
+    else if (type === 'O') colorIdx = 4;
+    else if (type === 'S') colorIdx = 5;
+    else if (type === 'T') colorIdx = 6;
+    else if (type === 'Z') colorIdx = 7;
+
     const result = await g.hardDropAsync();
     this.soundManager.playHardDrop();
+
+    const finalGhostY = g.lastDropPos?.y
+      ?? g.gameStateCache.lastDropPos?.y
+      ?? ghostY;
+
+    // Use view's onHardDrop hook for particle systems/visual parity
+    if (this.view.onHardDrop) {
+      this.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx);
+    }
+
     if (result.linesCleared.length > 0) {
       const combo = g.scoreEvent?.combo ?? 0;
       this.soundManager.playLineClear(result.linesCleared.length, combo, false, g.activPiece?.x ?? 4);

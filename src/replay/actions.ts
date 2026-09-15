@@ -40,12 +40,17 @@ export function applyActionMask(game: {
   hardDrop(): { locked: boolean };
   hold(): void;
   canHold: boolean;
-}, mask: number): void {
+}, mask: number): { hardDropped: boolean } {
+  let hardDropped = false;
   if (mask & REPLAY_ACTION.LEFT) game.movePieceLeft();
   if (mask & REPLAY_ACTION.RIGHT) game.movePieceRight();
   if (mask & REPLAY_ACTION.DOWN) game.movePieceDown();
   if (mask & REPLAY_ACTION.ROTATE_CW) game.rotatePiece(true);
   if (mask & REPLAY_ACTION.ROTATE_CCW) game.rotatePiece(false);
-  if (mask & REPLAY_ACTION.HARD_DROP) game.hardDrop();
+  if (mask & REPLAY_ACTION.HARD_DROP) {
+    game.hardDrop();
+    hardDropped = true;
+  }
   if ((mask & REPLAY_ACTION.HOLD) && game.canHold) game.hold();
+  return { hardDropped };
 }
