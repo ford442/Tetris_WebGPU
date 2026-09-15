@@ -170,5 +170,8 @@ export async function runControllerFrame(
   host.viewWebGPU.state = state;
   host.viewWebGPU.render(dt / 1000.0);
 
+  // Clear transient game events after all views have seen them
+  host.game.clearEffects();
+
   return true;
 }

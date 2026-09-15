@@ -615,12 +615,12 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
   }
 
   if (state.scoreEvent) {
-    if (state.effectCounter !== view.lastEffectCounter && state.scoreEvent?.text) {
+    if (state.effectCounter !== view.lastScoreEffectCounter && state.scoreEvent?.text) {
       showFloatingText(view, state.scoreEvent.text, state.scoreEvent.points > 0 ? `+${state.scoreEvent.points}` : "");
 
       // Removed glitch on Back-to-Back to reduce vestibular load
 
-      view.lastEffectCounter = state.effectCounter;
+      view.lastScoreEffectCounter = state.effectCounter;
     }
 
     if (view.lastScore !== state.score && state.scoreEvent?.text) {

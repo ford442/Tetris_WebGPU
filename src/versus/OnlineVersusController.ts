@@ -389,6 +389,24 @@ export default class OnlineVersusController {
   }
 
   private onSimTick(result: VersusTickResult): void {
+    if (result.hardDropped0) {
+      this.soundManager.playHardDrop();
+      if (this.viewWebGPU.onHardDrop) {
+        // Player 1 drops use standard coordinates
+        this.viewWebGPU.onHardDrop(result.hardDropX0, result.hardDropGhostY0, result.hardDropDist0, result.hardDropColorIdx0);
+      }
+    }
+    if (result.hardDropped1) {
+      this.soundManager.playHardDrop();
+      if (this.viewWebGPU.onHardDrop) {
+        // Player 2 drops could be mapped differently if view implementation required it,
+        // but for now we dispatch to the same hook (view might need context on which board,
+        // though WebGPU particle system handles global effects).
+        // In local versus, both call the same onHardDrop.
+        this.viewWebGPU.onHardDrop(result.hardDropX1, result.hardDropGhostY1, result.hardDropDist1, result.hardDropColorIdx1);
+      }
+    }
+
     if (result.linesCleared0 > 0) {
       this.soundManager.playLineClear(result.linesCleared0, 0, false, 4);
       announceLineClear(result.linesCleared0, this.session.lockstep.sim.g0.score, 0, false, 'Player 1');
