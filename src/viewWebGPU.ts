@@ -320,7 +320,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   };
 
   lastEffectCounter = -1;
-  lastScoreEffectCounter = -1;
+  lastScoreEffectCounter: number = -1;
   lastScore = -1;
   _hardDropBoostTimer: number = 0;
   _neonHyperInversionTimer: number = 0;
