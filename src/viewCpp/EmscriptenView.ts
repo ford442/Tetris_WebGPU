@@ -67,6 +67,7 @@ export default class EmscriptenView implements IView, ViewEventHost {
   bloomEnabled = false;
   useWireframe = false;
   lastEffectCounter = -1;
+  lastScoreEffectCounter = -1;
   lastScore = -1;
 
   private ctx2d: CanvasRenderingContext2D | null = null;

@@ -45,7 +45,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
     // NEW: Trigger Neon Burst on hard drops
     if (view.state && (view.state.neonBurstFlag || view.state.effectEvent === "hardDrop") && view.neonBurstUniform) {
       view.state.neonBurstFlag = false;
-      if (view.state.effectEvent === "hardDrop") view.state.effectEvent = null;
+
       view.neonBurstUniform[0] = 1.0;
     }
   }
