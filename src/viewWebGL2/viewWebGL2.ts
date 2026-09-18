@@ -59,6 +59,7 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
   useWireframe = false;
   authoredBlockTextureLoaded = false;
   lastEffectCounter = -1;
+  lastScoreEffectCounter = -1;
   lastScore = -1;
 
   private gl!: WebGL2RenderingContext;
