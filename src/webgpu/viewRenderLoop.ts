@@ -34,8 +34,9 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   const clampedDt = Math.min(dt, 0.1);
 
   // Neon Bricklayer explicitly routed hardDropBoost via effectFlag
-  if (view.state && view.state.effectFlag && view.state.effectCounter !== view.lastEffectCounter) {
-    view.lastEffectCounter = view.state.effectCounter;
+  const state = view.state;
+  if (state && state.effectFlag && state.effectCounter !== view.lastEffectCounter) {
+    view.lastEffectCounter = state.effectCounter; // consume boost pulse here only
     view._hardDropBoostTimer = 1.0;
 
     if (typeof view.setFresnelBoost === 'function') {
@@ -43,9 +44,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
     }
 
     // NEW: Trigger Neon Burst on hard drops
-    if (view.state && (view.state.neonBurstFlag || view.state.effectEvent === "hardDrop") && view.neonBurstUniform) {
-      view.state.neonBurstFlag = false;
-
+    if (view.neonBurstUniform && (state.neonBurstFlag || state.effectEvent === 'hardDrop')) {
       view.neonBurstUniform[0] = 1.0;
     }
   }
