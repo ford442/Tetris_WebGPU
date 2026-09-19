@@ -37,6 +37,12 @@ import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
 import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js';
 import { DebugTextureShaders } from './debug_shaders.js';
 import { BloomSystem } from './bloomSystem.js';
+import {
+  AutoBloomController,
+  GpuChoreRunner,
+  baselineBloomThreshold,
+  exposeChoreDebugHandle,
+} from './gpuChores/index.js';
 import { createBlockBindGroupEntries } from './shaders/block/bindings.js';
 import { writeMaterialParams, type MaterialViewLike } from './viewMaterials.js';
 import { BackdropCapture } from './backdropCapture.js';
@@ -64,6 +70,7 @@ import {
 } from './blockMaterial.js';
 import { bakeMaterialMapFromTile } from './blockMaterialCanvas.js';
 import { tryLoadKtx2Texture } from './ktx2.js';
+import { loadGameSettings } from '../config/gameSettings.js';
 import {
   checkBlockMaterialContract,
   measureBlockMaterialContract,
@@ -446,14 +453,27 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
 
   // Initialize multi-pass bloom system.
   view.bloomSystem = new BloomSystem(device, view.canvasWebGPU.width, view.canvasWebGPU.height);
-  // Conservative values to prevent block washout.
+  // Conservative values to prevent block washout. These stay the *floor* under
+  // auto-bloom: the luma chore can raise the threshold on a bright frame, never
+  // lower it below this hand-tuned baseline.
   view.bloomSystem.setParameters({
-    threshold: view.hdrPlayfield ? 1.05 : 0.72,
+    threshold: baselineBloomThreshold(view.hdrPlayfield),
     intensity: view.bloomIntensity,
     scatter: 0.52,
     clamp: 65472,
     knee: 0.1,
   });
+
+  // GPU chores ride this same device — they never request one of their own.
+  view.gpuChores?.destroy();
+  view.gpuChores = GpuChoreRunner.create({
+    device,
+    rendererName: 'webgpu',
+    powerPreference: view.gpuPowerPreference,
+    quality: loadGameSettings().quality,
+  });
+  view.autoBloom = new AutoBloomController();
+  exposeChoreDebugHandle(() => view.gpuChores?.status());
 
   // 224 bytes — WGSL minBindingSize for FragmentUniforms (audio bands at 184+, struct tail padding).
   view.fragmentUniformBuffer = device.createBuffer({ size: UNIFORM_BUFFER_SIZES.FRAGMENT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });

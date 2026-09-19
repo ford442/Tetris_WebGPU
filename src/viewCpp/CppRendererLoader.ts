@@ -8,6 +8,7 @@ import {
   requestGpuAdapterAndDevice,
   type GpuDeviceLifecycleHost,
 } from '../webgpu/gpuContext.js';
+import { releaseGpuDevice } from '../webgpu/gpuChores/deviceRegistry.js';
 import {
   flattenPlayfieldGrid,
   packPieceState,
@@ -119,7 +120,7 @@ async function importCreateModule(): Promise<{ create: CreateModuleFn; jsUrl: st
 async function createWebGpuDevice(
   lifecycleHost?: GpuDeviceLifecycleHost,
 ): Promise<GPUDevice | null> {
-  const bundle = await requestGpuAdapterAndDevice();
+  const bundle = await requestGpuAdapterAndDevice({ owner: 'webgpu-cpp' });
   if (!bundle) return null;
 
   if (lifecycleHost) {
@@ -386,6 +387,10 @@ export class CppRendererLoader {
       return true;
     } catch (err) {
       renderLogger.warn('[cpp] init failed:', err);
+      // Hand the device back before the fallback chain builds the TS renderer:
+      // an orphaned device here would leave the session running two of them,
+      // with the GPU chores measuring frames nobody is looking at.
+      releaseGpuDevice(webgpuDevice, 'cpp-init-failed');
       this.reset();
       return false;
     }

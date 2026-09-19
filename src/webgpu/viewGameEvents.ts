@@ -165,6 +165,20 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
     view.visualEffects.triggerChromaticSpike(1.5 + lines.length * 0.2); // NEON BRICKLAYER
   }
 
+  // Spawn-index compaction chore: 200 board flags in, the dense list of cells
+  // that still get a per-cell firework out. At the full particle budget every
+  // occupied cell survives, so this is a no-op on a healthy frame; under the
+  // adaptive budget it thins the burst evenly instead of letting the ring
+  // buffer drop whichever emits happened to land last. Positions, colours and
+  // counts below are untouched — the chore only picks cells.
+  const spawnFlags = buildSpawnFlags(lines, view.state?.playfield, {
+    maxParticles: view.particleSystem?.maxParticles,
+  });
+  const spawnCells = view.gpuChores
+    ? view.gpuChores.compactIndices(spawnFlags)
+    : compactIndicesCpu(spawnFlags);
+  const spawnable = spawnLookup(spawnCells);
+
   lines.forEach((y: number) => {
     const worldY = y * -2.2;
 
@@ -208,7 +222,9 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         count = Math.floor(count * 2.5);
       }
 
-      view.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
+      if (spawnable[y * BOARD_COLS + c]) {
+        view.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
+      }
 
       if (combo > 2 && c === 5) {
         for (let i = 0; i < 20 + combo * 5; i++) {
@@ -650,6 +666,12 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
 
 import { gameOverAnimation } from '../effects/gameOverAnimation.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
+import {
+  BOARD_COLS,
+  buildSpawnFlags,
+  compactIndicesCpu,
+  spawnLookup,
+} from './gpuChores/compact.js';
 
 export function renderEndScreen(view: ViewEventHost, state: GameState): void {
   gameOverAnimation.addGameOverStyles();
