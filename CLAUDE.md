@@ -56,6 +56,15 @@ src/
     ├── backdropCapture.ts   # Scene backdrop blit sampled by glass refraction
     ├── glassRefraction.ts   # Quality/adaptive gating for backdrop refraction
     ├── compute.ts           # GPU compute shaders for particle physics
+    ├── gpuChores/           # Post/juice compute helpers (see docs/gpu-chores.md)
+    │   ├── runner.ts        # Adopts the active renderer's device; encodes jobs
+    │   ├── shaders.ts       # luma_histogram (8,8), downsample_2d (8,8), compact_indices (64)
+    │   ├── lumaStats.ts     # Histogram → bloom threshold math (pure)
+    │   ├── autoBloom.ts     # Measured stats → BloomSystem params (smoothed)
+    │   ├── compact.ts       # Spawn-flag build + CPU compaction rung
+    │   ├── policy.ts        # `?no_gpu_compute` kill switch, WebGPU → CPU order
+    │   ├── deviceRegistry.ts# One live GPU device per session
+    │   └── breadcrumbs.ts   # `window.__tetrisGpuChores` trail
     ├── particles.ts         # Particle system (GPU-driven)
     ├── effects.ts           # Effect parameter wrappers (shockwave, glitch)
     ├── geometry.ts          # 3D mesh data (cube, quad, grid)
@@ -94,6 +103,20 @@ index.html                   # HTML bootstrap
 - **Fallback:** cpp → TS WebGPU → WebGL2 if wasm missing or init fails
 - **Docs:** `cpp/README.md`
 
+### GPU chores (post/juice helpers)
+- **What:** luminance histogram, 2D downsample and index compaction for bloom and
+  line-clear juice — never board state, collision or gravity.
+- **Device:** chores *adopt* the active renderer's device (TS WebGPU **or** the
+  C++ renderer, never both); they never request one. `gpuChores/deviceRegistry.ts`
+  keeps a session to a single live device.
+- **Backends:** WebGPU compute → CPU overlay FX. No WebGL2 rung; without WebGPU
+  the board plays and the juice degrades.
+- **Kill switch:** `?no_gpu_compute` (or `localStorage.tetris_no_gpu_compute`);
+  breadcrumbs at `__tetrisGpuChores.breadcrumbs()` / `.status()`.
+- **Bloom:** the measured threshold never drops below the static baseline, so
+  auto-bloom can only bloom less than the hand-tuned look (#265 guard).
+- **Docs:** `docs/gpu-chores.md`
+
 ### Authored block material (the visual contract)
 The go.1ink.us look is **data**, not shader constants:
 - `public/block-material.json` — glass curve, gold grade, roughness band, normal
@@ -128,7 +151,8 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 3. Backdrop capture — blit the scene so far into a fixed-size texture (`webgpu/backdropCapture.ts`) so the glass path can refract it in screen space; blocks cannot sample the target they render into
 4. Grid shader (blocks with texture atlas + lighting)
 5. Particle system (GPU compute + render)
-6. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
+6. Luma chore — `downsample_2d` + `luma_histogram` over the composited frame, feeding the bloom threshold (`webgpu/gpuChores/`)
+7. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
 
 ## Key Game Mechanics
 
@@ -194,3 +218,4 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `block-material-schema.test.ts` — material validation + uniform packing
 - `block-material-parity.test.ts` — TS / WebGL2 / C++ material parity + shader split
 - `validate-block-material.test.ts` — the `prebuild` gate
+- `gpu-chores-*.test.ts` — chore policy, luma/bloom math, compaction parity, runner, wiring

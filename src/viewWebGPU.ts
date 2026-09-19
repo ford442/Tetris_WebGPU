@@ -21,6 +21,8 @@ import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
 import { ChaosModeController } from './webgpu/chaosMode.js';
 import { type BloomSystem, type BloomParameters } from './webgpu/bloomSystem.js';
+import type { GpuChoreRunner } from './webgpu/gpuChores/runner.js';
+import type { AutoBloomController } from './webgpu/gpuChores/autoBloom.js';
 import {
   setPremiumVisualsPreset as setPremiumPresetImpl,
   onLineClearReactive as onLineClearReactiveImpl,
@@ -297,6 +299,12 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // NEW: Multi-pass Bloom System
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
+
+  // GPU chores: luma histogram / downsample / compact helpers on this device.
+  // Created by initGpuResources; absent (or on its CPU rung) means the static
+  // bloom tuning applies and the board plays exactly as before.
+  gpuChores?: GpuChoreRunner;
+  autoBloom?: AutoBloomController;
 
   // GPU pass timers + adaptive quality + perf overlay
   passTimers: GpuPassTimers | null = null;

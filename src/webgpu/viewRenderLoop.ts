@@ -17,6 +17,7 @@ import type { Piece } from '../game/pieces.js';
 import {
   tickAdaptiveQuality,
 } from './adaptiveQuality.js';
+import { baselineBloomThreshold } from './gpuChores/autoBloom.js';
 
 const glMatrix = Matrix;
 
@@ -128,6 +129,11 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 
   passTimers?.resolveAfterSubmit(view.device, commandEncoder);
   view.device.queue.submit([commandEncoder.finish()]);
+
+  // Kick the luma chore's non-blocking readback for the scan encoded above.
+  // Returns immediately; the stats land a frame or two later and are consumed
+  // by the auto-bloom controller in updatePostProcessUniforms.
+  view.gpuChores?.afterSubmit();
 
   const wallMs = performance.now() - wallStart;
   const timerSnap = passTimers?.snapshot();
@@ -439,15 +445,27 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.warpSurge = view.visualEffects.warpSurge;
   view._postProcessParams.enableFXAA = view.useFXAA !== false ? 1.0 : 0.0;
   
-  // Update Bloom System with dynamic neon flash intensity
-  if (view.bloomSystem && view.visualEffects.neonBloomIntensity > 0) {
-    view.bloomSystem.setParameters({
-      intensity: view.bloomIntensity + view.visualEffects.neonBloomIntensity
-    });
-  } else if (view.bloomSystem) {
-    view.bloomSystem.setParameters({
-      intensity: view.bloomIntensity
-    });
+  // Update Bloom System: dynamic neon flash intensity, plus the measured
+  // threshold when the luma chore has numbers. With no chore, no stats yet, or
+  // the kill switch on, `AutoBloomController` returns the static tuning and the
+  // additive flash unscaled — byte for byte the old behavior.
+  if (view.bloomSystem) {
+    const flash = Math.max(view.visualEffects.neonBloomIntensity || 0, 0);
+    if (view.autoBloom) {
+      const auto = view.autoBloom.update(
+        view.gpuChores?.stats,
+        { baselineThreshold: baselineBloomThreshold(view.hdrPlayfield), baselineKnee: 0.1 },
+        view.bloomIntensity,
+        flash,
+      );
+      view.bloomSystem.setParameters({
+        intensity: auto.intensity,
+        threshold: auto.threshold,
+        knee: auto.knee,
+      });
+    } else {
+      view.bloomSystem.setParameters({ intensity: view.bloomIntensity + flash });
+    }
   }
 
   const inShaderBloom = view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom;

@@ -8,6 +8,7 @@
  */
 import { renderLogger } from '../utils/logger.js';
 import { loadGameSettings } from '../config/gameSettings.js';
+import { registerGpuDevice, type DeviceOwner } from './gpuChores/deviceRegistry.js';
 
 /**
  * Optional device features we *request when present*. These are never
@@ -63,6 +64,13 @@ export interface RequestGpuDeviceOptions {
   deviceLabel?: string;
   /** Override the derived required limits (mainly for tests). */
   requiredLimits?: Record<string, number>;
+  /**
+   * Renderer requesting the device. Recorded in the single-device registry so
+   * GPU chores adopt the device the *active* renderer owns — and so a handoff
+   * (cpp renderer boots, fails, TS WebGPU takes over) retires the loser instead
+   * of leaving two live devices in the session.
+   */
+  owner?: DeviceOwner;
 }
 
 export interface RequestGpuDeviceResult {
@@ -250,6 +258,7 @@ export async function requestGpuAdapterAndDevice(
     }
   }
   device.label = device.label || deviceLabel;
+  registerGpuDevice(device, options.owner ?? 'unknown');
 
   return { adapter, device, powerPreference, enabledFeatures: requiredFeatures, enabledLimits };
 }
@@ -285,7 +294,7 @@ export function buildCanvasConfiguration(
  * adapter/device is available (caller should abort and fall back).
  */
 export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextureFormat | null> {
-  const bundle = await requestGpuAdapterAndDevice();
+  const bundle = await requestGpuAdapterAndDevice({ owner: 'webgpu' });
   if (!bundle) return null;
 
   view.device = bundle.device;

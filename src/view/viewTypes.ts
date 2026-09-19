@@ -17,6 +17,8 @@ import type { GameSettings } from '../config/gameSettings.js';
 import type { GpuPassTimers } from '../webgpu/gpuPassTimers.js';
 import type { AdaptiveQualityControllerState } from '../webgpu/adaptiveQuality.js';
 import type { PerfOverlay, PerfOverlayAdapterInfo } from '../webgpu/perfOverlay.js';
+import type { AutoBloomController } from '../webgpu/gpuChores/autoBloom.js';
+import type { GpuChoreRunner } from '../webgpu/gpuChores/runner.js';
 
 /** Minimal particle API used by viewGameEvents across render backends. */
 export interface ParticleSystemLike {
@@ -74,6 +76,12 @@ export interface ViewEventHost extends IView {
     getHardDropSnapshot?: () => { blocks: number[][]; x: number } | null;
   };
   controller?: { reset?: () => void };
+  /**
+   * Post/juice compute helpers riding the active renderer's device (see
+   * `webgpu/gpuChores/`). Optional: a renderer without one keeps the previous
+   * behavior everywhere the chores are consulted.
+   */
+  gpuChores?: GpuChoreRunner;
   renderPlayfield_WebGPU(state: GameState): void | Promise<void>;
 }
 
@@ -153,7 +161,13 @@ export interface WebGPUViewHost extends ViewEventHost {
   jellyfishSystem: { update(dt: number, time: number): void };
   reactiveVideoBackground?: ReactiveVideoBackground & { isSeaCreatureLevel?: boolean };
   reactiveMusicSystem?: { getFrequencyBands?(): { bass: number; mid: number; treble: number } };
-  bloomSystem?: { setParameters(params: Partial<{ intensity: number }>): void };
+  bloomSystem?: {
+    setParameters(params: Partial<{ intensity: number; threshold: number; knee: number }>): void;
+  };
+  /** Turns the chore's measured luma stats into bloom parameters. */
+  autoBloom?: AutoBloomController;
+  /** Static bloom threshold for the active playfield format — the auto floor. */
+  hdrPlayfield?: boolean;
   _backgroundPassDescriptor: GPURenderPassDescriptor;
   _mainPassDescriptor: GPURenderPassDescriptor;
   _ppPassDescriptor: GPURenderPassDescriptor;
