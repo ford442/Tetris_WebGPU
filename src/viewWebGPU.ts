@@ -92,6 +92,7 @@ import type { BackdropCapture } from './webgpu/backdropCapture.js';
 import { PerfOverlay, isPerfOverlayEnabled } from './webgpu/perfOverlay.js';
 import type { PerfOverlayAdapterInfo } from './webgpu/perfOverlay.js';
 import { loadGameSettings } from './config/gameSettings.js';
+import { buildWebgpuProbe } from './webgpu/bootProbe.js';
 
 export default class View implements IView, ViewEventHost, WebGPUViewHost {
   readonly rendererName = 'webgpu' as const;
@@ -530,7 +531,11 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
 
   async preRender() {
     const presentationFormat = await acquireGpuContext(this);
-    if (!presentationFormat) return;
+    const probe = buildWebgpuProbe('ts', !!presentationFormat);
+    if (!presentationFormat) {
+      this.isWebGPU = { result: false, description: probe.reason ?? 'WebGPU device acquisition failed' };
+      return;
+    }
 
     this.passTimers = new GpuPassTimers(this.device);
     this.adaptiveState = createAdaptiveControllerState();

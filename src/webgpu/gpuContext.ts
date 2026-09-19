@@ -84,6 +84,35 @@ export interface RequestGpuDeviceResult {
 type AdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfo };
 
 /**
+ * Last-attempt diagnostics from {@link requestGpuAdapterAndDevice}, for the
+ * boot probe (`webgpu/bootProbe.ts`) to report *why* the active renderer
+ * couldn't get a device — without a second adapter/device request of its own.
+ * Module-level like `gpuChores/deviceRegistry.ts`: there is only ever one
+ * acquisition attempt in flight per renderer boot.
+ */
+export interface GpuAcquireDiagnostics {
+  /** Stable, greppable failure id, or `null` after a successful acquisition. */
+  reason: string | null;
+  /** Human-readable adapter description, when an adapter was obtained. */
+  adapterDescription: string | null;
+}
+
+let lastAcquireDiagnostics: GpuAcquireDiagnostics = { reason: null, adapterDescription: null };
+
+/** Diagnostics from the most recent {@link requestGpuAdapterAndDevice} call. */
+export function getLastGpuAcquireDiagnostics(): GpuAcquireDiagnostics {
+  return lastAcquireDiagnostics;
+}
+
+function describeAdapter(adapter: GPUAdapter): string {
+  const info = (adapter as AdapterWithInfo).info;
+  if (!info) return 'unknown-adapter';
+  return [info.vendor, info.architecture, info.device, info.description]
+    .filter((part) => !!part)
+    .join(' ') || 'unknown-adapter';
+}
+
+/**
  * GPU limits this renderer actually depends on: line-clear compute reads/
  * writes 4 storage buffers (board, dissolve, clearFlags, results) in one
  * shader stage, and both the line-clear and particle compute passes dispatch
@@ -210,6 +239,7 @@ export async function requestGpuAdapterAndDevice(
 ): Promise<RequestGpuDeviceResult | null> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     renderLogger.error('WebGPU is not available');
+    lastAcquireDiagnostics = { reason: 'navigator.gpu-unavailable', adapterDescription: null };
     return null;
   }
 
@@ -224,13 +254,19 @@ export async function requestGpuAdapterAndDevice(
     adapter = await navigator.gpu.requestAdapter({ powerPreference });
   } catch (err) {
     renderLogger.error('requestAdapter threw:', err);
+    lastAcquireDiagnostics = {
+      reason: `request-adapter-threw: ${err instanceof Error ? err.message : String(err)}`,
+      adapterDescription: null,
+    };
     return null;
   }
   if (!adapter) {
     renderLogger.error('No WebGPU adapter available');
+    lastAcquireDiagnostics = { reason: 'no-adapter', adapterDescription: null };
     return null;
   }
   logAdapterInfo(adapter, powerPreference);
+  const adapterDescription = describeAdapter(adapter);
 
   const requiredFeatures = selectOptionalFeatures(adapter.features);
   if (requiredFeatures.length > 0) {
@@ -254,11 +290,16 @@ export async function requestGpuAdapterAndDevice(
       enabledLimits = {};
     } catch (err2) {
       renderLogger.error('requestDevice failed:', err2);
+      lastAcquireDiagnostics = {
+        reason: `request-device-failed: ${err2 instanceof Error ? err2.message : String(err2)}`,
+        adapterDescription,
+      };
       return null;
     }
   }
   device.label = device.label || deviceLabel;
   registerGpuDevice(device, options.owner ?? 'unknown');
+  lastAcquireDiagnostics = { reason: null, adapterDescription };
 
   return { adapter, device, powerPreference, enabledFeatures: requiredFeatures, enabledLimits };
 }

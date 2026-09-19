@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PLAYFIELD_BYTES, WASM_CANDIDATES, JS_CANDIDATES } from '../src/viewCpp/CppRendererLoader.js';
+import { CppRendererLoader, PLAYFIELD_BYTES, WASM_CANDIDATES, JS_CANDIDATES } from '../src/viewCpp/CppRendererLoader.js';
 
 describe('CppRendererLoader paths', () => {
   it('probes relative and root artifact paths like WasmCore', () => {
@@ -37,5 +37,20 @@ describe('CppRendererLoader paths', () => {
     expect(src).toContain('uploadBlockTexture');
     expect(src).toContain('resolveBlockTextureUrl');
     expect(src).toContain('hasBlockTexture');
+  });
+
+  it('exposes no live-device state until init() runs', () => {
+    expect(CppRendererLoader.isLoaded()).toBe(false);
+    expect(CppRendererLoader.getLastFailureReason()).toBeNull();
+  });
+
+  it('hard-fails instead of accepting a non-WebGPU backend or a deviceless module (#485)', () => {
+    const src = readFileSync(join(process.cwd(), 'src/viewCpp/CppRendererLoader.ts'), 'utf8');
+    // No device acquired -> refuse before even instantiating the wasm module.
+    expect(src).toMatch(/if \(!webgpuDevice\)/);
+    // A cpp module that fell back to its own Canvas2D (or no) backend is a
+    // hard failure too, never accepted as "the WebGPU renderer".
+    expect(src).toMatch(/this\.backend !== RendererBackend\.WEBGPU/);
+    expect(src).toContain('getLastFailureReason');
   });
 });
