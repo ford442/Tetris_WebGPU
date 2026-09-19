@@ -36,6 +36,7 @@ import { renderLogger } from '../utils/logger.js';
 import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
 import type { GpuDeviceLifecycleHost } from '../webgpu/gpuContext.js';
 import { drawPlayfield2D, drawWipBanner } from './placeholderDraw.js';
+import { buildWebgpuProbe } from '../webgpu/bootProbe.js';
 
 const noopParticleSystem = {
   emitParticles: () => {},
@@ -147,6 +148,12 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.gpuDrawActive = this.cppModuleReady &&
       CppRendererLoader.getRendererBackend() === RendererBackend.WEBGPU;
 
+    buildWebgpuProbe(
+      'cpp',
+      this.gpuDrawActive,
+      this.gpuDrawActive ? null : CppRendererLoader.getLastFailureReason(),
+    );
+
     if (!this.gpuDrawActive) {
       this.ctx2d = this.canvasWebGPU.getContext('2d', { alpha: true });
       if (!this.cppModuleReady && !this.ctx2d) {
@@ -163,6 +170,17 @@ export default class EmscriptenView implements IView, ViewEventHost {
           ? `EmscriptenView: C++ Canvas2D fallback (${CppRendererLoader.getLoadedUrl()})`
           : 'EmscriptenView: TS Canvas2D placeholder (wasm not built)',
     );
+  }
+
+  /** True only when the cpp module is actually drawing via its WebGPU backend. */
+  get isGpuReady(): boolean {
+    return this.gpuDrawActive;
+  }
+
+  /** Tear down DOM the view added, for a caller that hard-fails on `!isGpuReady`. */
+  dispose(): void {
+    this.canvasWebGPU.remove();
+    this.rendererBadge?.remove();
   }
 
   private showRendererBadge(): void {
