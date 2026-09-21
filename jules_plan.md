@@ -52,19 +52,33 @@ This document outlines the optimizations and game-feel improvements made in the 
 
 # Weekly Performance Optimization and Game-Feel Polish (New Report)
 
-## Graphical & Performance Optimizations
-- Checked WGSL shaders: Optimizations were already in place (fast path approximation for `pow` common powers, cross pattern texture sampling in post-processing).
-- Explored dynamic array allocation in `src/game/rotation.ts` and `src/game/stateProjection.ts`. Confirmed these already pre-allocate nested arrays.
-- Verified UI decays in `effects.ts` and `viewRenderLoop.ts`. Realized that they purposefully use true exponential decay `Math.exp` per memory rule for a snappier "juice" game feel.
-- **Proactive Optimizations Suggested:** In the future, we could explore moving some particle logic (like spatial hashing for collisions if they exist) to a separate WebWorker or compute shader to further reduce main-thread CPU load, as well as optimizing vertex buffer streaming using ring buffers for particles and dynamic geometry.
+## ⚠️ Important Learnings & Corrections (from Code Review)
 
-## Image Sampled Block Rendering
-- Configured the imageSampled block textures to use thresholds (`metalThresholdLow: 0.75, metalThresholdHigh: 1.15`) in `src/webgpu/viewPipelines.ts` to properly extract metal hinges and visual details directly from `block.png`, resolving washed-out colors and improving transparency.
-- Verified that `textureScale` was correctly set to `0.98` in `src/webgpu/geometry.ts` to avoid blurry tile edges when sampling from texture atlases.
+During this iteration, several changes were attempted and subsequently reverted after code review. These reversions provide critical guidance for future optimizations:
 
-## Playability & Game Feel
-- Left `MOVE_BUFFER_WINDOW` and `ROTATE_BUFFER_WINDOW` in `src/config/gameConfig.ts` untouched at `50ms` per the rigid constraint forbidding tuning without explicit playtest complaints.
-- Evaluated codebase for any missing `// TODO: Polish`, `// TODO: GameFeel`, or `// FIX: Latency` comments and found none.
+### 1. Texture Sampling and Mipmapping (Albedo vs. Mask)
+- **Attempted:** Replacing `textureSampleBias(..., 0.0)` with `textureSampleLevel(..., 0.0)` for the main albedo texture in `src/webgpu/shaders/wgsl/block/fragmentMain.wgsl`.
+- **Correction:** This was reverted. The previous memory note suggesting `textureSampleLevel` forces sharpness for image-sampled blocks was **stale and incorrect**.
+- **The Rule:** The current split in `fragmentMain.wgsl` is the strict contract:
+  - **Albedo:** Must use `textureSampleBias(blockTexture, blockSamplerColor, texUV, 0.0)`. A bias of `0.0` means "no extra sharpen/blur" while preserving the hardware LOD calculation and anisotropic filtering. Using `textureSampleLevel` disables these, causing severe aliasing on distant blocks.
+  - **Mask:** Must use `textureSampleLevel(blockTextureMask, blockSamplerMask, texUV, 0.0)`. This intentionally forces mip 0 (nearest sampling) to prevent linear filtering halos from fringing gold into glass.
+  - **Do not** conflate these two sampling methods. `textureScale` in geometry is an inset and does not replace proper mip selection.
+
+### 2. Material Detection Thresholds
+- **Attempted:** Hardcoding `smoothstep(0.35, 0.95, goldSignal)` directly into the WGSL generator `getMaterialMaskLogicWGSL` in `src/webgpu/textureSampling.ts`, and trying to modify `viewPipelines.ts` to tune these values.
+- **Correction:** This was reverted. Hardcoding values destroys the configurability of the `BlockTextureConfig` object. Furthermore, the thresholds (`metalThresholdLow: 0.75`, `metalThresholdHigh: 1.20`) in `DEFAULT_BLOCK_TEXTURE_CONFIG` are specifically calibrated for the `color_signal` mode (`r + g - 0.5b`, which scales up to ~2.5) and are *not* warmth thresholds.
+- **The Rule:** Leave the `BlockTextureConfig` object and the generated WGSL parameters alone. The authored path in `fragmentMain.wgsl` primarily derives metal vs glass from the baked alpha mask (`texColor.a`) anyway.
+
+### 3. Input Buffering and Coyote Time
+- **Attempted:** Modifying `processInputBuffer` in `src/input/inputBuffer.ts` to add a 50ms window where `success = true` if `currentTime - deps.bufferedActionTime < 50` during a hard drop.
+- **Correction:** This was reverted. Setting `success = true` when the Y coordinate did not change (e.g., during lock delay) actually *discards* the input from the buffer, eating the input rather than queueing it.
+- **The Rule:** Hard-drop buffering is already handled perfectly:
+  ```ts
+  if (deps.getActivPieceY() !== yBefore) {
+    success = true; // Only clears the buffer if the piece actually moved.
+  }
+  ```
+  If Y does not change, the action correctly stays queued across lock frames. Furthermore, "coyote time" is already implemented in `src/game/lockDelay.ts` (`host.lockTimer = -200;`), and the buffer windows are correctly tuned to 50ms in `gameConfig.ts`. **Do not retune DAS/ARR or buffer windows without explicit playtest complaints.**
 
 ## Overall
-- Re-tested visual and rendering pipelines to ensure backward compatibility and zero artifacts via pre-commit steps.
+- Re-tested visual and rendering pipelines to ensure backward compatibility and zero artifacts via pre-commit steps. The reverted tree *is* the fix.
