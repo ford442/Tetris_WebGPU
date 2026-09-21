@@ -424,7 +424,7 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 1.0 + Math.min(distance * 0.3, 2.0);
   // NEON BRICKLAYER: Slightly heavier camera shake
-  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
+  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 2.0, 0.5);
 }
 
 import { loadGameSettings } from '../config/gameSettings.js';
@@ -453,7 +453,7 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
   const trailColor = [...themeColors, 0.8];
 
   // JUICE: Increased particle count and trail density
-  for (let i = 0; i < distance * 6; i++) {
+  for (let i = 0; i < distance * 8; i++) {
     const r = startRow + i * 0.33;
     const worldY = r * -2.2;
     view.particleSystem.emitParticles(worldX, worldY, 0.0, 36, trailColor);
