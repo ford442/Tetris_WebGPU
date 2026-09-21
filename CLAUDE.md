@@ -52,6 +52,9 @@ src/
     │   ├── background.ts    # Procedural/video background shaders
     │   └── main.ts          # Primary 3D block shader (lighting, texture atlas)
     ├── shaders.ts           # Barrel re-export (kept for import compatibility)
+    ├── gpuContext.ts        # Adapter/device acquisition + acquire diagnostics
+    ├── bootProbe.ts         # window.webgpuProbe (see docs/webgpu-boot-probe.md)
+    ├── fatalBootOverlay.ts  # Blocking overlay on a failed WebGPU boot probe
     ├── viewGameEvents.ts    # Event → visual effect handlers
     ├── backdropCapture.ts   # Scene backdrop blit sampled by glass refraction
     ├── glassRefraction.ts   # Quality/adaptive gating for backdrop refraction
@@ -100,8 +103,19 @@ index.html                   # HTML bootstrap
 - **Switch:** `?renderer=webgpu-cpp` or `localStorage.tetris_renderer=webgpu-cpp`
 - **Build:** `npm run cpp:release` (requires [emsdk](https://emscripten.org/) — `source emsdk_env.sh`)
 - **Artifacts:** `public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`)
-- **Fallback:** cpp → TS WebGPU → WebGL2 if wasm missing or init fails
-- **Docs:** `cpp/README.md`
+- **On failure:** hard-fails (fatal overlay) if wasm is missing, init fails, or its
+  own backend isn't WebGPU — it never falls back to TS WebGPU or WebGL2 as a rescue.
+- **Docs:** `cpp/README.md`, `docs/webgpu-boot-probe.md`
+
+### WebGPU boot policy (hard-fail, no WebGL rescue)
+- **What:** the active renderer (TS WebGPU *or* cpp, never both) either gets a
+  real `GPUDevice` or the boot hard-fails with a blocking overlay — there is no
+  automatic fallback onto WebGL2. `?renderer=webgl2` still works as an explicit,
+  opt-in renderer choice; it is never reached for automatically on a WebGPU failure.
+- **Probe:** `window.webgpuProbe` (`src/webgpu/bootProbe.ts`) — `{ ok, browser,
+  reason, adapter, renderer }`, set on every boot attempt, success or failure.
+- **Overlay:** `src/webgpu/fatalBootOverlay.ts`.
+- **Docs:** `docs/webgpu-boot-probe.md`
 
 ### GPU chores (post/juice helpers)
 - **What:** luminance histogram, 2D downsample and index compaction for bloom and
@@ -219,3 +233,6 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `block-material-parity.test.ts` — TS / WebGL2 / C++ material parity + shader split
 - `validate-block-material.test.ts` — the `prebuild` gate
 - `gpu-chores-*.test.ts` — chore policy, luma/bloom math, compaction parity, runner, wiring
+- `webgpu-boot-probe.test.ts` — `window.webgpuProbe`, browser detection, acquire diagnostics
+- `fatal-boot-overlay.test.ts` — blocking overlay on a failed boot probe
+- `create-view-integration.test.ts` — no automatic WebGPU → WebGL2 rescue chain

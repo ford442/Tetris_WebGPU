@@ -5,6 +5,7 @@
 import { renderLogger } from '../utils/logger.js';
 import {
   attachDeviceLifecycleHandlers,
+  getLastGpuAcquireDiagnostics,
   requestGpuAdapterAndDevice,
   type GpuDeviceLifecycleHost,
 } from '../webgpu/gpuContext.js';
@@ -140,6 +141,7 @@ export class CppRendererLoader {
   private static loadedUrl = '';
   private static loaded = false;
   private static backend: RendererBackendId = RendererBackend.NONE;
+  private static lastFailureReason: string | null = null;
 
   private static initFn: ((w: number, h: number) => number) | null = null;
   private static resizeFn: ((w: number, h: number) => void) | null = null;
@@ -175,6 +177,11 @@ export class CppRendererLoader {
 
   static getLoadedUrl(): string {
     return this.loadedUrl;
+  }
+
+  /** Stable, greppable reason from the most recent failed {@link init}, for the boot probe. */
+  static getLastFailureReason(): string | null {
+    return this.lastFailureReason;
   }
 
   /** Shared HEAP view into the C++ playfield buffer (200 bytes). */
@@ -306,20 +313,33 @@ export class CppRendererLoader {
     lifecycleHost?: GpuDeviceLifecycleHost,
   ): Promise<boolean> {
     if (this.loaded) return true;
+    this.lastFailureReason = null;
 
     const wasmProbe = await fetchWasmModule();
     if (!wasmProbe) {
+      this.lastFailureReason = 'cpp-wasm-missing';
       renderLogger.warn('[cpp] wasm not found — run npm run cpp:release');
       return false;
     }
 
     const imported = await importCreateModule();
     if (!imported) {
+      this.lastFailureReason = 'cpp-glue-missing';
       renderLogger.warn('[cpp] glue JS not found');
       return false;
     }
 
     const webgpuDevice = await createWebGpuDevice(lifecycleHost);
+    if (!webgpuDevice) {
+      // No WebGPU device, no rescue: this renderer never hands off to the TS
+      // WebGPU path or a Canvas2D placeholder as the "active" surface — that
+      // would be exactly the two-live-devices / silent-degrade the boot probe
+      // exists to prevent (#485). The caller hard-fails instead.
+      const diagnostics = getLastGpuAcquireDiagnostics();
+      this.lastFailureReason = diagnostics.reason ? `cpp-device:${diagnostics.reason}` : 'cpp-device-unavailable';
+      renderLogger.warn('[cpp] WebGPU device unavailable:', this.lastFailureReason);
+      return false;
+    }
 
     try {
       const instance = await imported.create({
@@ -374,22 +394,26 @@ export class CppRendererLoader {
       this.bindHeapViews();
       this.backend = (this.getBackendFn?.() ?? this.isGpuActiveFn?.() ?? 0) as RendererBackendId;
 
-      if (this.backend === RendererBackend.WEBGPU) {
-        await this.uploadBlockTexture();
+      if (this.backend !== RendererBackend.WEBGPU) {
+        // A cpp module that fell back to its own Canvas2D backend (or came up
+        // with no backend at all) is exactly the silent-degrade this probe
+        // exists to prevent — hard-fail through the catch block below instead
+        // of handing the caller a non-GPU "WebGPU renderer".
+        const backendLabel = this.backend === RendererBackend.CANVAS2D ? 'canvas2d' : 'none';
+        throw new Error(`cpp backend is ${backendLabel}, not WebGPU`);
       }
 
+      await this.uploadBlockTexture();
+
       this.loaded = true;
-      const backendLabel =
-        this.backend === RendererBackend.WEBGPU ? 'WebGPU'
-          : this.backend === RendererBackend.CANVAS2D ? 'Canvas2D fallback'
-            : 'none';
-      renderLogger.info(`[cpp] module ready (backend=${backendLabel}, id=${this.backend}) from ${this.loadedUrl}`);
+      renderLogger.info(`[cpp] module ready (backend=WebGPU) from ${this.loadedUrl}`);
       return true;
     } catch (err) {
+      this.lastFailureReason = `cpp-init-failed: ${err instanceof Error ? err.message : String(err)}`;
       renderLogger.warn('[cpp] init failed:', err);
-      // Hand the device back before the fallback chain builds the TS renderer:
-      // an orphaned device here would leave the session running two of them,
-      // with the GPU chores measuring frames nobody is looking at.
+      // Hand the device back rather than leaving it orphaned: the caller
+      // hard-fails on this renderer, it never hands off to another live
+      // device (#485 — never two live devices, never a rescue).
       releaseGpuDevice(webgpuDevice, 'cpp-init-failed');
       this.reset();
       return false;

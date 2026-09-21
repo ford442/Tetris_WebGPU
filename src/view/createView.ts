@@ -2,6 +2,8 @@ import type { IView } from './IView.js';
 import ViewWebGPU from '../viewWebGPU.js';
 import ViewWebGL2 from '../viewWebGL2/viewWebGL2.js';
 import { getRendererPreference } from './rendererPreference.js';
+import { buildWebgpuProbe, getWebgpuProbe, type WebgpuProbeResult } from '../webgpu/bootProbe.js';
+import { showFatalWebgpuOverlay } from '../webgpu/fatalBootOverlay.js';
 
 export type { RendererPreference } from './rendererPreference.js';
 export { getRendererPreference, setRendererPreference } from './rendererPreference.js';
@@ -16,61 +18,53 @@ type ViewFactoryArgs = [
   CanvasRenderingContext2D,
 ];
 
-async function createCppView(...args: ViewFactoryArgs): Promise<IView | null> {
-  try {
-    const mod = await import('../viewCpp/EmscriptenView.js');
-    const EmscriptenView = mod.default;
-    if (!EmscriptenView?.create) {
-      console.warn('EmscriptenView module loaded but create() is missing');
-      return null;
-    }
-    return await EmscriptenView.create(...args);
-  } catch (err) {
-    console.warn('WebGPU C++ renderer failed to load or initialize:', err);
-    return null;
+/**
+ * Thrown when the session's single active WebGPU renderer (TS or cpp — never
+ * both) can't get a GPU device. This game is WebGPU-only: that failure is
+ * fatal, not a cue to quietly stand up a WebGL board instead. See
+ * docs/webgpu-boot-probe.md.
+ */
+export class WebgpuBootFailure extends Error {
+  readonly probe: WebgpuProbeResult;
+
+  constructor(probe: WebgpuProbeResult) {
+    super(`WebGPU unavailable (${probe.renderer}): ${probe.reason ?? 'unknown reason'}`);
+    this.name = 'WebgpuBootFailure';
+    this.probe = probe;
   }
 }
 
-async function createWebGPUView(...args: ViewFactoryArgs): Promise<IView | null> {
-  if (!navigator.gpu) return null;
+async function createCppView(...args: ViewFactoryArgs): Promise<IView> {
+  const mod = await import('../viewCpp/EmscriptenView.js');
+  const EmscriptenView = mod.default;
+  if (!EmscriptenView?.create) {
+    throw new WebgpuBootFailure(buildWebgpuProbe('cpp', false, 'cpp-module-export-missing'));
+  }
+
+  const view = await EmscriptenView.create(...args);
+  if (!view.isGpuReady) {
+    view.dispose?.();
+    throw new WebgpuBootFailure(getWebgpuProbe() ?? buildWebgpuProbe('cpp', false));
+  }
+  return view as unknown as IView;
+}
+
+async function createWebGPUView(...args: ViewFactoryArgs): Promise<IView> {
   const view = await ViewWebGPU.create(...args);
-  if (!(view as { isWebGPU?: { result: boolean } }).isWebGPU?.result) return null;
+  const isWebGPU = (view as { isWebGPU?: { result: boolean; description?: string } }).isWebGPU;
+  if (!isWebGPU?.result) {
+    // `preRender()` (and its own probe) never runs when `navigator.gpu` is
+    // absent entirely — fall back to the constructor's own description so
+    // that case still gets a real reason instead of "unknown-failure".
+    throw new WebgpuBootFailure(
+      getWebgpuProbe() ?? buildWebgpuProbe('ts', false, isWebGPU?.description ?? 'navigator.gpu-unavailable'),
+    );
+  }
   return view as unknown as IView;
 }
 
 async function createWebGL2View(...args: ViewFactoryArgs): Promise<IView> {
   return ViewWebGL2.create(...args);
-}
-
-/** webgpu-cpp → TS WebGPU → WebGL2 */
-async function createWithCppFallback(...args: ViewFactoryArgs): Promise<IView> {
-  const cppView = await createCppView(...args);
-  if (cppView) return cppView;
-
-  console.warn('WebGPU C++ requested but unavailable — falling back to WebGPU (TS).');
-  const gpuView = await createWebGPUView(...args);
-  if (gpuView) return gpuView;
-
-  console.warn('WebGPU unavailable — falling back to WebGL2.');
-  return createWebGL2View(...args);
-}
-
-/** webgpu → WebGL2 */
-async function createWithWebGpuFallback(...args: ViewFactoryArgs): Promise<IView> {
-  const gpuView = await createWebGPUView(...args);
-  if (gpuView) return gpuView;
-
-  console.warn('WebGPU requested but unavailable — falling back to WebGL2.');
-  return createWebGL2View(...args);
-}
-
-/** auto: WebGPU then WebGL2 */
-async function createAuto(...args: ViewFactoryArgs): Promise<IView> {
-  const gpuView = await createWebGPUView(...args);
-  if (gpuView) return gpuView;
-
-  console.warn('WebGPU unavailable — using WebGL2 fallback renderer.');
-  return createWebGL2View(...args);
 }
 
 export async function createView(
@@ -94,17 +88,23 @@ export async function createView(
 
   const pref = getRendererPreference();
 
+  // Explicit `?renderer=webgl2` is a deliberate manual choice — not an
+  // automatic rescue for a WebGPU failure — so it's left untouched.
   if (pref === 'webgl2') {
     return createWebGL2View(...args);
   }
 
-  if (pref === 'webgpu-cpp') {
-    return createWithCppFallback(...args);
-  }
+  const activeRenderer: 'cpp' | 'ts' = pref === 'webgpu-cpp' ? 'cpp' : 'ts';
 
-  if (pref === 'webgpu') {
-    return createWithWebGpuFallback(...args);
+  try {
+    return activeRenderer === 'cpp' ? await createCppView(...args) : await createWebGPUView(...args);
+  } catch (err) {
+    // Never start a second device as a rescue (TS after cpp, or WebGL2 after
+    // either) — the active path failing is fatal, full stop (#485).
+    const probe = err instanceof WebgpuBootFailure
+      ? err.probe
+      : buildWebgpuProbe(activeRenderer, false, err instanceof Error ? err.message : String(err));
+    showFatalWebgpuOverlay(element, probe);
+    throw err instanceof WebgpuBootFailure ? err : new WebgpuBootFailure(probe);
   }
-
-  return createAuto(...args);
 }
