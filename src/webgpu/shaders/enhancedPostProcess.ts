@@ -217,6 +217,14 @@ export const EnhancedPostProcessShaders = () => {
             let hardDropBoostFromBuffer = uniforms.hardDropBoost;
             let level = uniforms.level;
 
+            // Hold Warp (UV Shear)
+            let holdWarp = uniforms.holdWarp;
+            if (holdWarp > 0.0) {
+                let shear = sin(finalUV.y * 20.0 + uniforms.time * 30.0) * 0.05 * holdWarp;
+                finalUV.x += shear;
+                finalUV.y -= shear * 0.5;
+            }
+
             let swResult = applyShockwave(finalUV, center, time, params, hardDropBoostFromBuffer, blockTexture, mySampler);
             finalUV = swResult.uv;
             var shockwaveAberration = swResult.aberration;

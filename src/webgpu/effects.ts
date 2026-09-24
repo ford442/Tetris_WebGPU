@@ -27,6 +27,7 @@ export class VisualEffects {
     shakeIntensity: number = 0;
     aberrationIntensity: number = 0;
     glitchIntensity: number = 0;
+    holdWarpTimer: number = 0;
     warpSurge: number = 0;
     
     // Shockwave state
@@ -169,6 +170,10 @@ export class VisualEffects {
         // Glitch decay
         this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
+
+        // Hold Warp decay
+        this.holdWarpTimer *= 1.0 / (1.0 + dt * 10.0);
+        if (this.holdWarpTimer < 0.01) this.holdWarpTimer = 0;
 
         // Neon Bloom decay
         this.neonBloomIntensity = this.neonBloomIntensity * Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
@@ -412,6 +417,11 @@ export class VisualEffects {
     triggerGlitch(intensity: number): void {
         if (this.reducedMotion) return;
         this.glitchIntensity = intensity;
+    }
+
+    triggerHoldWarp(intensity: number = 1.0): void {
+        if (this.reducedMotion) return;
+        this.holdWarpTimer = intensity;
     }
 
     triggerLevelUp(level: number = 1): void {

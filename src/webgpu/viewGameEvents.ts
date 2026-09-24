@@ -375,6 +375,7 @@ export function onHold(view: ViewEventHost): void {
   // Add a subtle warp/aberration glitch to simulate "teleportation"
   view.visualEffects.triggerAberration(0.3);
   view.visualEffects.triggerGlitch(0.2);
+  view.visualEffects.triggerHoldWarp(1.0); // UV Shear effect for hold
 
   const centerX = 4.5 * 2.2;
   const centerY = -10.0 * 2.2;
@@ -416,9 +417,9 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
   // JUICE: Doubled shockwave strength and width, massively amplified aberration and speed for heavier impacts
-  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 4.5;   // NEON BRICKLAYER: INCREASED
+  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.0;   // NEON BRICKLAYER: Snappier, less muddy
   const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 3.5;      // NEON BRICKLAYER: INCREASED
-  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 6.0; // NEON BRICKLAYER: INCREASED Ultra Hyper aberration
+  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 2.5; // NEON BRICKLAYER: Snappier, less muddy
   const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 3.0;      // NEON BRICKLAYER: INCREASED
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
