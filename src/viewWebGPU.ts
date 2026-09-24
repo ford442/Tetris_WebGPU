@@ -769,13 +769,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // Material uniforms buffer (used by viewMaterials.ts)
   _materialUniforms = new Float32Array(12);
 
-  // Particle interaction uniforms
-  particleInteractionUniforms = {
-    particleInfluence: 1.0,
-    glassDistortion: 0.4,
-    goldSpecularBoost: 2.2,
-    cyberEmissivePulse: 0.0
-  };
 
   // Material/theme management (delegated to viewMaterials.ts)
   setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as MaterialViewLike, themeName, pieceType); }

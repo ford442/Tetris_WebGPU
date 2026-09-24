@@ -55,12 +55,6 @@ export interface ViewLike {
   backgroundUniformBuffer: GPUBuffer;
   currentMaterial: unknown;
   usePremiumMaterials: boolean;
-  particleInteractionUniforms: {
-    particleInfluence: number;
-    glassDistortion: number;
-    goldSpecularBoost: number;
-    cyberEmissivePulse: number;
-  };
   particleSystem: ParticleSystem | null;
   state: GameState | null;
 }
@@ -72,7 +66,6 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
   reactiveMusic?: boolean;
   materialTheme?: string;
   chaosMode?: boolean;
-  particleInteraction?: boolean;
 } = {}) {
   const {
     renderScale = 1.5,
@@ -80,8 +73,7 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     reactiveVideo = true,
     reactiveMusic = true,
     materialTheme,
-    chaosMode = false,
-    particleInteraction = true
+    chaosMode = false
   } = options;
 
   view.setRenderScale(renderScale);
@@ -101,9 +93,6 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
 
   view.useReactiveMusic = reactiveMusic;
   renderLogger.info(`Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
-
-  view.useParticleInteraction = particleInteraction;
-  renderLogger.info(`Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
 
   if (chaosMode) {
     view.useChaosMode = true;
