@@ -531,7 +531,6 @@ export default class Game implements ModeGameHooks {
   }
 
   hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-    this.gameStateCache.effectFlag = true;
     void performHardDrop(this, () => this.clearLine(), this._hardDropResult);
     return this._hardDropResult;
   }

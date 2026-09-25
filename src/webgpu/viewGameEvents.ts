@@ -417,10 +417,10 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
   // JUICE: Doubled shockwave strength and width, massively amplified aberration and speed for heavier impacts
-  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 2.0;   // NEON BRICKLAYER: Snappier, less muddy
-  const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 3.5;      // NEON BRICKLAYER: INCREASED
-  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 2.5; // NEON BRICKLAYER: Snappier, less muddy
-  const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 3.0;      // NEON BRICKLAYER: INCREASED
+  const strength = 2.0 + Math.min(distance * 0.02, 0.5);   // NEON BRICKLAYER: Tuned conservatively per memory
+  const width = 0.15 + Math.min(distance * 0.02, 0.1);      // NEON BRICKLAYER: Adjusted width
+  const aberration = 2.0 + Math.min(distance * 0.02, 0.5); // NEON BRICKLAYER: Tuned conservatively per memory
+  const speed = 2.0 + Math.min(distance * 0.2, 1.0);      // NEON BRICKLAYER: Adjusted speed
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 1.0 + Math.min(distance * 0.3, 2.0);
