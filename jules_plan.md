@@ -82,3 +82,17 @@ During this iteration, several changes were attempted and subsequently reverted 
 
 ## Overall
 - Re-tested visual and rendering pipelines to ensure backward compatibility and zero artifacts via pre-commit steps. The reverted tree *is* the fix.
+
+### 5. CPU Math Optimizations
+**Objective**: Reduce redundant mathematical operations on the CPU hot path for particle and visual effects decays.
+* **Files**: `src/webgpu/effects.ts`, `src/webgpu/viewRenderLoop.ts`, `src/webgpu/viewPlayfield.ts`, `src/viewWebGPU.ts`
+* **Changes**:
+  * Replaced expensive `Math.exp(-dt * X)` calls with algebraic decay approximations `1.0 / (1.0 + dt * X)`. This reduces ALU overhead on the CPU while maintaining the visual curve of exponential decay.
+* **Metrics**: Minor CPU frametime reduction during heavy visual effect processing (e.g. during high combo situations and level ups).
+
+### 6. Shader Math Optimizations (Branchless Pow)
+**Objective**: Optimize power calculation paths in critical WGSL shader functions.
+* **Files**: `src/webgpu/shaders/wgsl/block/authoredGlass.wgsl`
+* **Changes**:
+  * Refactored `authoredGlassFresnel` to use branchless `select` statements instead of conditional `if` branches for fast-path integer powers (2.0 and 5.0).
+* **Metrics**: Improved ALU utilization in the pixel shader by reducing branch divergence on GPUs.
