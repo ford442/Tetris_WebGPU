@@ -25,6 +25,8 @@ export class VisualEffects {
     rotationFlashTimer: number = 0;
     lockTimer: number = 0;
     shakeIntensity: number = 0;
+    shakeDirX: number = 0;
+    shakeDirY: number = 0;
     aberrationIntensity: number = 0;
     glitchIntensity: number = 0;
     holdWarpTimer: number = 0;
@@ -328,7 +330,9 @@ export class VisualEffects {
       this.triggerGhostTrail(Math.min(0.45, duration + 0.1));
     }
 
-    triggerShake(magnitude: number, _duration: number): void {
+    triggerShake(magnitude: number, _duration: number, dirX: number = 0, dirY: number = 0): void {
+        this.shakeDirX = dirX;
+        this.shakeDirY = dirY;
         if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
@@ -507,8 +511,8 @@ export class VisualEffects {
     private _shakeOffset = { x: 0, y: 0 };
     getShakeOffset(): { x: number, y: number } {
         if (this.shakeIntensity > 0) {
-            this._shakeOffset.x = (Math.random() - 0.5) * this.shakeIntensity;
-            this._shakeOffset.y = (Math.random() - 0.5) * this.shakeIntensity;
+            this._shakeOffset.x = (Math.random() - 0.5 + this.shakeDirX) * this.shakeIntensity;
+            this._shakeOffset.y = (Math.random() - 0.5 + this.shakeDirY) * this.shakeIntensity;
             return this._shakeOffset;
         }
         this._shakeOffset.x = 0;

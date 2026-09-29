@@ -425,7 +425,7 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 1.0 + Math.min(distance * 0.3, 2.0);
   // NEON BRICKLAYER: Slightly heavier camera shake
-  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 2.0, 0.5);
+  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 2.0, 0.5, 0.0, -1.0);
 }
 
 import { loadGameSettings } from '../config/gameSettings.js';
