@@ -80,7 +80,7 @@ export const BackgroundShaders = () => {
 
           // Smoothed and clamped warp strength to prevent nausea
           // BOOSTED: Increased max warp
-          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.6, 0.6) * 1.5;
+          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.8, 0.8) * 1.5;
 
           // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
           // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
@@ -125,7 +125,7 @@ export const BackgroundShaders = () => {
             let scale = select(1.0, 2.618, layer > 0);
 
             // Speed scales with level + warp surge
-            let warpSpeed = 1.0 + level * 3.75 + warpSurge * 12.0; // JUICE: multiplied level and warpSurge speed by 1.5
+            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0; // JUICE: multiplied level and warpSurge speed by 1.5
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift

@@ -327,7 +327,7 @@ export class VisualEffects {
       this.hardDropTrail.colorIdx = colorIdx;
       this.hardDropTrail.duration = duration;
       this.hardDropTrail.timer = duration;
-      this.triggerGhostTrail(Math.min(0.45, duration + 0.1));
+      this.triggerGhostTrail(Math.min(0.60, duration + 0.2));
     }
 
     triggerShake(magnitude: number, _duration: number, dirX: number = 0, dirY: number = 0): void {
@@ -336,7 +336,7 @@ export class VisualEffects {
         if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // JUICE: Increased max shake
+        this.shakeIntensity = Math.min(this.shakeIntensity, 6.0); // JUICE: Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
