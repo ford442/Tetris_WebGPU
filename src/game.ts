@@ -486,8 +486,6 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.lockDelayTime = this.lockDelayTime;
     this.gameStateCache.effectEvent = this.effectEvent;
     this.gameStateCache.effectCounter = this.effectCounter;
-    this.gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
-    this.gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
     this.gameStateCache.neonHyperInversionFlag = this.neonHyperInversionFlag;
     this.neonHyperInversionFlag = false; // Reset after sending to view
     this.gameStateCache.lastDropPos = this.lastDropPos;
