@@ -68,3 +68,5 @@
 - "Tuned hard drop shockwave multipliers in \`viewGameEvents.ts\` to make impacts feel crisp and tactile rather than muddy. Scaled \`strength\` and \`aberration\` to stay comfortably within the 2.0 to 2.5 conservative game-feel limit as requested for supreme responsiveness."
 - "Neon Bricklayer task check: Verified that all visual effects and game-feel mechanics requested (additive blending, exponential screen shake, shockwave, fresnel rim lighting, bloom, chromatic aberration, level-reactive backgrounds, infinity lock delay, wall kicks, DAS/ARR) are already fully implemented in the codebase."
 - "Increased max camera shake on hard drops for heavier impact and intensified the hyperspace warp speed during level up/resonance to make the background feel more chaotic at high levels."
+- "Adding additive blending to the particle shader makes the explosions look like real light."
+- "Screen shake should decay exponentially, not linearly, for a snappier feel."
