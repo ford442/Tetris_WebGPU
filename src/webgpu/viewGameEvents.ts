@@ -83,6 +83,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
 
   const strength = Math.min(base + lineBonus + specialBonus + comboBonus, 0.95);
   view.visualEffects.triggerLineClearFlash(strength);
+  view.visualEffects.setTargetCombo(combo);
 
   // New Combo Celebration System
   if (combo >= 2) {

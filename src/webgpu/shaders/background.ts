@@ -125,7 +125,8 @@ export const BackgroundShaders = () => {
             let scale = select(1.0, 2.618, layer > 0);
 
             // Speed scales with level + warp surge
-            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0; // JUICE: multiplied level and warpSurge speed by 1.5
+            // comboEnergy is saturated up to 2.5
+            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0 + (exp(min(comboEnergy, 1.0)) - 1.0) * 15.0;
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift
@@ -208,9 +209,9 @@ export const BackgroundShaders = () => {
           }
 
           // --- Global pulse effect ---
-          // Pulse faster at higher levels
-          let pulseSpeed = 2.0 + levelFactor * 4.0;
-          let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
+          // Pulse faster at higher levels and high combo
+          let pulseSpeed = 2.0 + levelFactor * 4.0 + min(comboEnergy, 2.0) * 2.0;
+          let pulse = sin(time * pulseSpeed) * (0.15 + min(comboEnergy, 1.5) * 0.1) + 0.85;
 
 
           // Dynamic brick wall background evolution

@@ -109,6 +109,10 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
   device.queue.writeBuffer(view.backgroundUniformBuffer, 72, view._f32_1);
   view._f32_1[0] = ghostUVW;
   device.queue.writeBuffer(view.backgroundUniformBuffer, 76, view._f32_1);
+  view._f32_1[0] = view.visualEffects.backgroundResonance || 0.0;
+  device.queue.writeBuffer(view.backgroundUniformBuffer, 80, view._f32_1);
+  view._f32_1[0] = view.visualEffects.comboEnergy || 0.0;
+  device.queue.writeBuffer(view.backgroundUniformBuffer, 84, view._f32_1);
 
   // Block (fragment) uniforms — offsets match pbrBlocks.ts FragmentUniforms:
   // lightPosition(0), eyePosition(16), time(32), useGlitch(36), lockPercent(40), level(44)
