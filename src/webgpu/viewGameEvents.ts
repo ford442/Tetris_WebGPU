@@ -319,14 +319,22 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   }
 }
 
-export function onLock(view: ViewEventHost, isTSpin: boolean = false): void {
-  view.visualEffects.triggerLock(0.3);
+export function onLock(view: ViewEventHost, isTSpin: boolean = false, blocks?: number[][], pieceX?: number, pieceY?: number): void {
+  view.visualEffects.triggerLock(0.05); // Tiny tint so it doesn't stack heavily with neon bloom
   view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
   // JUICE: Chromatic Aberration on regular locks to make every placement tactile
   view.visualEffects.triggerAberration(isTSpin ? 1.0 : 0.5);
 
-  if (view.state?.activePiece) {
-    const { x, y } = view.state.activePiece;
+  // Trigger squash & lock flash on the committed cells
+  if (blocks && pieceX !== undefined && pieceY !== undefined) {
+    view.visualEffects.triggerSquashAndFlash(blocks, pieceX, pieceY);
+  }
+
+  // Use pieceX and pieceY from snapshot if available, else activePiece
+  const x = pieceX !== undefined ? pieceX : view.state?.activePiece?.x;
+  const y = pieceY !== undefined ? pieceY : view.state?.activePiece?.y;
+
+  if (x !== undefined && y !== undefined) {
     const worldX = (x + 1.5) * 2.2;
     const worldY = (y + 1.5) * -2.2;
 
@@ -431,11 +439,15 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
 
 import { loadGameSettings } from '../config/gameSettings.js';
 
-export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0): void {
+export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0, blocks?: number[][]): void {
   const worldX = x * 2.2;
   const startRow = y - distance;
 
   // First trigger removed, relying on the one at the end of onHardDrop
+
+  if (blocks) {
+    view.visualEffects.triggerSquashAndFlash(blocks, x, y);
+  }
 
   if (loadGameSettings().ghostDropTrail && view.visualEffects && distance > 0) {
     const snap = view.game?.getHardDropSnapshot?.();
