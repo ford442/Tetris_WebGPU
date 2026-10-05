@@ -153,30 +153,11 @@ export const PostProcessShaders = () => {
             var b = textureSampleLevel(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset), 0.0).b;
             let a = baseSample.a;
 
-            // Bloom-ish boost (optimized 5-tap tent filter)
             var color = vec3<f32>(r, g, b) + vec3<f32>(0.4, 0.8, 1.0) * glassOverlay;
 
-            // OPTIMIZED: 5-tap tent filter (down from 8) with weighted sampling
-            // Center + 4 directional samples = better quality, fewer ALU ops
-            let spread = 0.012 * (1.0 + levelStress * 0.6);
-            var glow = color * 0.25; // Center weight
-
-            // 4 directional samples (cardinal directions for better cache coherence)
-            let dX = vec2<f32>(spread, 0.0);
-            let dY = vec2<f32>(0.0, spread);
-            glow += textureSampleLevel(myTexture, mySampler, finalUV + dX, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV - dX, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV + dY, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV - dY, 0.0).rgb * 0.1875;
-
-            // Tuned bloom that preserves texture detail
-            let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.35;   // higher = protects glass texture
-            let knee = 0.12;
-            let contrib = max(glowLum - bloomThreshold + knee, 0.0);
-            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 3.2;  // lowered from 6.0
-
-            color += glow * bloomIntensity;
+            if (uniforms.enableBloom > 0.5) {
+                color = materialAwareBloom(finalUV, color);
+            }
 
             // Darken the center of the black hole
             if (uniforms.blackHoleTime > 0.001) {
