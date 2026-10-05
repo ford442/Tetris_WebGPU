@@ -469,13 +469,13 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
     }
   }
 
-  const inShaderBloom = view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom;
+  const inShaderBloom = view.bloomEnabled && !view.useMultiPassBloom;
   view._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
   view._postProcessParams.enableFilmGrain = view.useFilmGrain !== false ? 1.0 : 0.0;
   view._postProcessParams.enableCRT = view.useCRT ? 1.0 : 0.0;
   view._postProcessParams.bloomIntensity = view.bloomIntensity + view.visualEffects.neonBloomIntensity;
-  view._postProcessParams.bloomThreshold = 0.72;
-  view._postProcessParams.materialAwareBloom = (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0;
+  view._postProcessParams.bloomThreshold = 0.35;
+  view._postProcessParams.materialAwareBloom = 1.0;
   view._postProcessParams.screenResolution[0] = view.canvasWebGPU.width;
   view._postProcessParams.screenResolution[1] = view.canvasWebGPU.height;
   view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;

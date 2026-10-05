@@ -45,7 +45,7 @@ export const ParticleShaders = () => {
 
             // JUICE: Dynamic Particle Rotation (Spinning debris)
             // Add a rotation matrix to the particle based on its life and spatial position
-            let rotSpeed = 15.0; // Spin rate
+            let rotSpeed = 20.0; // Spin rate
             let rotOffset = particlePos.x * 12.9898 + particlePos.y * 78.233; // Pseudo-random starting angle
             let rotAngle = rotOffset + particleLife * rotSpeed;
             let s = sin(rotAngle);

@@ -336,7 +336,7 @@ export class VisualEffects {
         if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 6.0); // JUICE: Increased max shake
+        this.shakeIntensity = Math.min(this.shakeIntensity, 7.0); // JUICE: Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
