@@ -814,6 +814,7 @@ export default class Game implements ModeGameHooks {
 
   lockPiece(): void {
     const { y: pieceY, x: pieceX, blocks } = this.activPiece;
+    this.hardDropSnapshot = { blocks, x: pieceX };
 
     for (let y = 0; y < blocks.length; y++) {
       for (let x = 0; x < blocks[y].length; x++) {

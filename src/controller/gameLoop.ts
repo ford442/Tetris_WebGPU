@@ -24,6 +24,7 @@ export interface ControllerLoopHost {
   lastLevel: number;
   playTimeMs: number;
   gravityTimer: number;
+  hitStopFrames: number;
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
   playScoringAudio(
@@ -96,6 +97,17 @@ export async function runControllerFrame(
 
   const dt = time - host.lastTime;
   host.lastTime = time;
+
+  // Render unconditionally so that hit-stop flashes and particles continue playing
+  host.viewWebGPU.render?.(dt);
+
+  // If in hit-stop, freeze the simulation but let animations run
+  const reducedMotion = host.viewWebGPU.visualEffects?.reducedMotion ?? false;
+  if (!reducedMotion && host.hitStopFrames > 0) {
+    host.hitStopFrames--;
+    return true; // skip input and state updates this frame
+  }
+
   host.replayRecorder.advanceClock(dt);
 
   if (host.isPlaying && !host.isPaused) {
@@ -138,9 +150,23 @@ export async function runControllerFrame(
       const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
       host.subliminal.triggerReinforcement('lineClear', intensity);
     }
+
+    if (result.locked && !reducedMotion) {
+      host.hitStopFrames = 1;
+    }
   } else if (result.locked) {
     host.playScoringAudio(result, pieceType, pieceCol);
-    host.viewWebGPU.onLock?.(result.tSpin);
+
+    const snap = host.game.getHardDropSnapshot?.();
+    if (snap && host.viewWebGPU.onLock) {
+      host.viewWebGPU.onLock(result.tSpin, snap.blocks, snap.x, host.game.lastDropPos?.y || 0);
+    } else {
+      host.viewWebGPU.onLock?.(result.tSpin);
+    }
+
+    if (!reducedMotion) {
+      host.hitStopFrames = 1;
+    }
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);
     }

@@ -56,6 +56,9 @@ export default class Controller {
   // Input buffering for game-feel improvements
   bufferedAction: Action | null = null;
   bufferedActionTime: number = 0;
+
+  // Visual juice: Hit-stop presentation freeze
+  hitStopFrames: number = 0;
   bufferedMoveAction: 'left' | 'right' | null = null;
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
@@ -699,7 +702,14 @@ export default class Controller {
       const finalGhostY = this.game.lastDropPos?.y
         ?? this.game.gameStateCache.lastDropPos?.y
         ?? ghostY;
-      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx);
+
+      const snap = this.game.getHardDropSnapshot?.();
+      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx, snap?.blocks);
+
+      const reducedMotion = (this.viewWebGPU as any).visualEffects?.reducedMotion ?? false;
+      if (!reducedMotion) {
+          this.hitStopFrames = 2;
+      }
 
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;
@@ -712,7 +722,11 @@ export default class Controller {
           announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
       } else if (result.locked) {
           this.playScoringAudio(result, pieceType, pieceCol);
-          this.viewWebGPU.onLock?.(result.tSpin);
+          if (snap && this.viewWebGPU.onLock) {
+              this.viewWebGPU.onLock(result.tSpin, snap.blocks, currentX, finalGhostY);
+          } else {
+              this.viewWebGPU.onLock?.(result.tSpin);
+          }
       }
       if (result.gameOver || this.game.victory) {
           this.soundManager.playGameOver();

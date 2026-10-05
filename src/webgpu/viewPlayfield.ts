@@ -397,6 +397,72 @@ export function renderPlayfieldBlocks(
     }
   }
 
+  const sq = visualEffects?.squashAndFlash;
+  if (sq?.active && sq.blocks && blockIndex < uniformBindGroup_CACHE.length - 8) {
+    const pieceW = sq.blocks[0]?.length || 0;
+    const pieceH = sq.blocks.length || 0;
+    const colorIdx = currentTheme[4] ? 4 : 1; // Default fallback
+    const baseCol = currentTheme[colorIdx] || [1.0, 1.0, 1.0];
+
+    // Timer goes from 0 to 1 over ~120ms
+    const t = sq.timer;
+    // Ease-out back to 1.0
+    const squashScaleX = 1.0 + 0.08 * (1.0 - t);
+    const squashScaleY = 1.0 - 0.18 * (1.0 - t);
+
+    // Flash decays over the same window
+    const flash = (1.0 - t) * 1.5;
+    const r = Math.min(1.0, baseCol[0] + flash);
+    const g = Math.min(1.0, baseCol[1] + flash);
+    const b = Math.min(1.0, baseCol[2] + flash);
+
+    for (let ly = 0; ly < pieceH; ly++) {
+      for (let lx = 0; lx < pieceW; lx++) {
+        if (sq.blocks[ly][lx] === 0) continue;
+        if (blockIndex >= uniformBindGroup_CACHE.length) break;
+
+        _f32_4[0] = r; _f32_4[1] = g; _f32_4[2] = b; _f32_4[3] = 1.0;
+
+        Matrix.mat4.identity(MODELMATRIX);
+        Matrix.mat4.identity(NORMALMATRIX);
+
+        // Pivot scale at the bottom of the block
+        const blockX = worldX(sq.x + lx);
+        const blockY = boardWorldY(sq.y + ly);
+
+        _f32_3[0] = blockX;
+        _f32_3[1] = blockY - 1.1; // Move to bottom edge (cell size is 2.2, so 1.1 down)
+        _f32_3[2] = 0.0;
+        Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
+
+        Matrix.mat4.scale(MODELMATRIX, MODELMATRIX, [squashScaleX, squashScaleY, 1.0]);
+
+        _f32_3[0] = 0.0;
+        _f32_3[1] = 1.1; // Move back up
+        _f32_3[2] = 0.0;
+        Matrix.mat4.translate(MODELMATRIX, MODELMATRIX, _f32_3);
+
+        const sqBindGroup = uniformBindGroup_CACHE[blockIndex];
+        batchBuffer.set(vpMatrix as Float32Array, batchOffset);
+        batchBuffer.set(MODELMATRIX as Float32Array, batchOffset + 16);
+        batchBuffer.set(NORMALMATRIX as Float32Array, batchOffset + 32);
+        batchBuffer.set(_f32_4, batchOffset + 48);
+
+        // padding
+        batchBuffer[batchOffset + 52] = 0; batchBuffer[batchOffset + 53] = 0;
+        batchBuffer[batchOffset + 54] = 0; batchBuffer[batchOffset + 55] = 0;
+        batchBuffer[batchOffset + 56] = 0; batchBuffer[batchOffset + 57] = 0;
+        batchBuffer[batchOffset + 58] = 0; batchBuffer[batchOffset + 59] = 0;
+        batchBuffer[batchOffset + 60] = 0; batchBuffer[batchOffset + 61] = 0;
+        batchBuffer[batchOffset + 62] = 0; batchBuffer[batchOffset + 63] = 0;
+
+        uniformBindGroup_ARRAY[arrayLength++] = sqBindGroup;
+        blockIndex++;
+        batchOffset += 64;
+      }
+    }
+  }
+
   uniformBindGroup_ARRAY.length = arrayLength;
 
   return arrayLength;

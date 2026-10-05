@@ -497,14 +497,14 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin: boolean = false) { handleLock(this, isTSpin); }
+  onLock(isTSpin: boolean = false, blocks?: number[][], x?: number, y?: number) { handleLock(this, isTSpin, blocks, x, y); }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
       handleImpactEffects(this, worldX, impactY, distance);
   }
-  onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
-      handleHardDrop(this, x, y, distance, colorIdx);
+  onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0, blocks?: number[][]) {
+      handleHardDrop(this, x, y, distance, colorIdx, blocks);
   }
 
   triggerNeonBloomFlash(strength: number = 1.0) {

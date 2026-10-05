@@ -15,8 +15,17 @@ export interface EchoTrail {
     intensity: number;
 }
 
+export interface SquashAndFlashState {
+    blocks: number[][];
+    x: number;
+    y: number;
+    timer: number; // 0 to 1
+    active: boolean;
+}
+
 export class VisualEffects {
     echoTrails: EchoTrail[] = [];
+    squashAndFlash: SquashAndFlashState = { blocks: [], x: 0, y: 0, timer: 0, active: false };
     /** When true, skip shake / shockwave / flash / heavy FX (a11y). */
     reducedMotion = false;
 
@@ -145,6 +154,14 @@ export class VisualEffects {
             if (this.lineClearLaserIntensity < 0.005) {
                 this.lineClearLaserIntensity = 0;
                 this.lineClearLaserY.fill(0);
+            }
+        }
+
+        // Squash and Flash decay
+        if (this.squashAndFlash.active) {
+            this.squashAndFlash.timer += dt * 8.0; // Fast squash recovery (roughly 120ms)
+            if (this.squashAndFlash.timer >= 1.0) {
+                this.squashAndFlash.active = false;
             }
         }
 
@@ -328,6 +345,17 @@ export class VisualEffects {
       this.hardDropTrail.duration = duration;
       this.hardDropTrail.timer = duration;
       this.triggerGhostTrail(Math.min(0.60, duration + 0.2));
+    }
+
+    triggerSquashAndFlash(blocks: number[][], x: number, y: number): void {
+        if (this.reducedMotion) return;
+        this.squashAndFlash = {
+            blocks: blocks,
+            x: x,
+            y: y,
+            timer: 0.0,
+            active: true
+        };
     }
 
     triggerShake(magnitude: number, _duration: number, dirX: number = 0, dirY: number = 0): void {
