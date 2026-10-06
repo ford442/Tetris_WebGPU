@@ -32,7 +32,7 @@ export const BackgroundShaders = () => {
             ghostX: f32, // Offset 72 (UV space)
             ghostWidth: f32, // Offset 76 (UV width)
             resonance: f32, // Offset 80
-            _pad1: f32,     // Offset 84
+            comboEnergy: f32, // Offset 84
             _pad2: f32,     // Offset 88
             _pad3: f32,     // Offset 92
         };
@@ -45,6 +45,7 @@ export const BackgroundShaders = () => {
           let lockPercent = uniforms.lockPercent;
           let warpSurge = uniforms.warpSurge;
           let resonance = uniforms.resonance;
+          let comboEnergy = uniforms.comboEnergy;
           var uv = vUV;
 
           // Modify parameters based on level
