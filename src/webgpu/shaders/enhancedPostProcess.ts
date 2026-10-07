@@ -5,6 +5,8 @@
 
 import { PostProcessUniformsWGSL } from '../postProcessUniforms.js';
 import { ShockwaveWGSL } from './wgsl/postprocess/shockwave.js';
+import { BlackholeWGSL } from './wgsl/postprocess/blackhole.js';
+
 
 export const EnhancedPostProcessShaders = () => {
     const vertex = `
@@ -160,6 +162,7 @@ export const EnhancedPostProcessShaders = () => {
         }
 
         ${ShockwaveWGSL}
+        ${BlackholeWGSL}
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             // Lens Distortion (Barrel)
@@ -170,29 +173,8 @@ export const EnhancedPostProcessShaders = () => {
             var finalUV = distortedUV;
 
             // Black Hole Distortion Effect for Tetris/All Clears
-            if (uniforms.blackHoleTime > 0.001) {
-                let bhCenter = uniforms.blackHoleCenter;
-                let bhTime = uniforms.blackHoleTime;
-                let bhDiff = finalUV - bhCenter;
-                let bhDist = sqrt(dot(bhDiff, bhDiff));
+            finalUV = applyBlackholeDistortion(finalUV, uniforms.blackHoleCenter, uniforms.blackHoleTime);
 
-                // Exponential radius shrink as it decays
-                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
-
-                if (bhDist < bhRadius && bhDist > 0.0) {
-                    let angle = atan2(bhDiff.y, bhDiff.x);
-                    // Faster spin towards the center and over time
-                    let spin = bhTime * 10.0 * (1.0 - bhDist / bhRadius);
-                    let newAngle = angle + spin;
-
-                    // Suck inwards (gravity)
-                    let suckRatio = bhDist / bhRadius;
-                    let suck = (suckRatio * suckRatio) * bhRadius;
-
-                    finalUV = bhCenter + vec2<f32>(cos(newAngle), sin(newAngle)) * suck;
-                }
-            }
-            
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && 
                            distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
@@ -398,20 +380,7 @@ export const EnhancedPostProcessShaders = () => {
             // Canvas uses alphaMode: 'premultiplied' — RGB must be scaled by alpha.
 
             // Darken the center of the black hole
-            if (uniforms.blackHoleTime > 0.001) {
-                let bhCenter = uniforms.blackHoleCenter;
-                let bhTime = uniforms.blackHoleTime;
-                let bhDiff = uv - bhCenter;
-                let bhDist = sqrt(dot(bhDiff, bhDiff));
-                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
-                if (bhDist < bhRadius) {
-                    let darkFactor = smoothstep(0.0, bhRadius * 0.5, bhDist);
-                    color *= darkFactor;
-                    // Event horizon cyan glow
-                    let ring = smoothstep(bhRadius * 0.8, bhRadius, bhDist) * (1.0 - smoothstep(bhRadius, bhRadius * 1.2, bhDist));
-                    color += vec3<f32>(0.2, 0.8, 1.0) * ring * 2.0 * (1.0 - bhTime);
-                }
-            }
+            color = applyBlackholeColor(color, uv, uniforms.blackHoleCenter, uniforms.blackHoleTime);
 
             // NEON BRICKLAYER: Neon Hyper-Inversion
             let invTime = uniforms.neonHyperInversionTime;
