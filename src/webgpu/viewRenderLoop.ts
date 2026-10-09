@@ -38,10 +38,13 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   const state = view.state;
   if (state && state.effectFlag && state.effectCounter !== view.lastEffectCounter) {
     view.lastEffectCounter = state.effectCounter; // consume boost pulse here only
-    view._hardDropBoostTimer = 1.0;
 
-    if (typeof view.setFresnelBoost === 'function') {
-      view.setFresnelBoost(1.0);
+    if (state.effectEvent === 'hardDrop') {
+      view._hardDropBoostTimer = 1.0;
+
+      if (typeof view.setFresnelBoost === 'function') {
+        view.setFresnelBoost(1.0);
+      }
     }
 
     // NEW: Trigger Neon Burst on hard drops
