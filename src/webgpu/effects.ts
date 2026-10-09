@@ -144,13 +144,12 @@ export class VisualEffects {
         if (this.lockTimer < 0) this.lockTimer = 0;
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
-        const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
         this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 15.0);
-        this.aberrationIntensity *= aberrationDecay;
+        this.aberrationIntensity *= Math.exp(-dt / 0.33);
 
         // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)
         if (this.lineClearLaserIntensity > 0) {
-            this.lineClearLaserIntensity *= 1.0 / (1.0 + dt / 0.06);
+            this.lineClearLaserIntensity *= Math.exp(-dt / 0.15);
             if (this.lineClearLaserIntensity < 0.005) {
                 this.lineClearLaserIntensity = 0;
                 this.lineClearLaserY.fill(0);
@@ -166,15 +165,15 @@ export class VisualEffects {
         }
 
         // Warp surge decay
-        this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
+        this.warpSurge *= Math.exp(-dt / 0.66);
         if (this.warpSurge < 0.01) this.warpSurge = 0;
 
         // Update combo energy (smooth decay towards 0 if no combo)
-        this.comboEnergy *= 1.0 / (1.0 + dt * 2.0);
+        this.comboEnergy *= Math.exp(-dt / 0.5);
         if (this.comboEnergy < 0.001) this.comboEnergy = 0;
 
         // Saturation Boost decay
-        this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
+        this.saturationBoost *= Math.exp(-dt / 0.5);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
 
@@ -187,11 +186,11 @@ export class VisualEffects {
         }
 
         // Glitch decay
-        this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
+        this.glitchIntensity *= Math.exp(-dt / 0.33);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
 
         // Hold Warp decay
-        this.holdWarpTimer *= 1.0 / (1.0 + dt * 10.0);
+        this.holdWarpTimer *= Math.exp(-dt / 0.1);
         if (this.holdWarpTimer < 0.01) this.holdWarpTimer = 0;
 
         // Neon Bloom decay
@@ -199,23 +198,23 @@ export class VisualEffects {
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         // Background Resonance decay
-        this.backgroundResonance *= 1.0 / (1.0 + dt * 6.0);
+        this.backgroundResonance *= Math.exp(-dt / 0.16);
         if (this.backgroundResonance < 0.01) this.backgroundResonance = 0;
 
 
         // Block Emissive decay
         if (this.particleHitTimer > 0) {
-            this.particleHitTimer *= 1.0 / (1.0 + dt * 8.0); // Fast decay for snappy hits
+            this.particleHitTimer *= Math.exp(-dt / 0.12); // Fast decay for snappy hits
             if (this.particleHitTimer < 0.01) this.particleHitTimer = 0;
         }
 
-        this.movementFlashTimer *= 1.0 / (1.0 + dt * 8.0);
+        this.movementFlashTimer *= Math.exp(-dt / 0.12);
         if (this.movementFlashTimer < 0.01) this.movementFlashTimer = 0;
 
-        this.lineClearFlashTimer *= 1.0 / (1.0 + dt * 4.0);
+        this.lineClearFlashTimer *= Math.exp(-dt / 0.25);
         if (this.lineClearFlashTimer < 0.01) this.lineClearFlashTimer = 0;
 
-        this.softDropPressure *= 1.0 / (1.0 + dt * 4.0); // slower decay than movement flash
+        this.softDropPressure *= Math.exp(-dt / 0.25); // slower decay than movement flash
         if (this.softDropPressure < 0.01) {
             this.softDropPressure = 0;
             this.softDropActive = false;
@@ -235,11 +234,11 @@ export class VisualEffects {
 
         // Hard drop chromatic aberration pulse: exponential decay targeting ~300ms
         // (e^(-dt/0.08) gives strong initial dropoff, effectively gone after 0.3s)
-        this.hardDropAberrationPulse *= 1.0 / (1.0 + dt / 0.08);
+        this.hardDropAberrationPulse *= Math.exp(-dt / 0.3);
         if (this.hardDropAberrationPulse < 0.005) this.hardDropAberrationPulse = 0;
 
         // Base chromatic aberration intensity decay
-        this.baseChromaticIntensity *= Math.exp(-dt * 3.0);
+        this.baseChromaticIntensity *= Math.exp(-dt / 0.33);
         if (this.baseChromaticIntensity < 0.005) this.baseChromaticIntensity = 0;
 
         // Grid ripple decay (age the wave; render loop / shader handles visual fade at 500ms)
