@@ -33,7 +33,7 @@ fn gradeGoldMetalAlbedo(texRgb: vec3f) -> vec3f {
 /// Stained-glass crystal albedo: authored tile detail tinted by the piece color.
 fn authoredGlassAlbedo(texRgb: vec3f, pieceRgb: vec3f) -> vec3f {
     let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
-    let crystalBright = smoothstep(0.15, 0.90, luma);
+    let crystalBright = smoothstep(0.20, 0.95, luma);
     let crystalHi = max(luma - 0.55, 0.0) * 3.0;
     return texRgb * (0.60 + crystalBright * 0.40)
          + pieceRgb * 0.35 * crystalBright

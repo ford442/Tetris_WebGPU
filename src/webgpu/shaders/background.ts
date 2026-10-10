@@ -127,7 +127,8 @@ export const BackgroundShaders = () => {
 
             // Speed scales with level + warp surge
             // comboEnergy is saturated up to 2.5
-            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0 + (exp(min(comboEnergy, 1.0)) - 1.0) * 15.0;
+            let ce = min(comboEnergy, 1.0);
+            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0 + (ce * (1.0 + ce * 0.5)) * 15.0;
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift
