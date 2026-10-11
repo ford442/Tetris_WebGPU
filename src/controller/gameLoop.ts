@@ -95,7 +95,10 @@ export async function runControllerFrame(
     return false;
   }
 
-  const dt = time - host.lastTime;
+  let dt = time - host.lastTime;
+  if (dt > 100) {
+    dt = 100;
+  }
   host.lastTime = time;
 
   // Render unconditionally so that hit-stop flashes and particles continue playing

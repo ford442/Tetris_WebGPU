@@ -124,7 +124,30 @@ export default class Controller {
       },
     );
 
+    // Auto-pause on tab hide/blur
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && this.isPlaying && !this.isPaused) {
+        this.pause();
+        this.clearInputs();
+      }
+    });
+    window.addEventListener("blur", () => {
+      if (this.isPlaying && !this.isPaused) {
+        this.pause();
+        this.clearInputs();
+      }
+    });
+
     this.play();
+  }
+
+  private clearInputs(): void {
+    this.keys = {};
+    for (const key of Object.keys(this.actionTimers) as Action[]) {
+      this.actionTimers[key] = 0;
+    }
+    this.bufferedAction = null;
+    this.bufferedMoveAction = null;
   }
 
   audioColumn(): number {
