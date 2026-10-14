@@ -17,6 +17,7 @@ import { NetMessageType, type NetMessage, type PeerRole, type SessionPhase, type
 import { normalizeRoomCode, isValidRoomCode } from '../net/roomCode.js';
 import { announce, announceLineClear } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
+import { clampDt } from '../controller/gameLoop.js';
 import type Game from '../game.js';
 import type { VersusTickResult } from './VersusLockstepSim.js';
 
@@ -327,6 +328,9 @@ export default class OnlineVersusController {
   private runFrame(time: number): void {
     const dt = time - this.lastTime;
     this.lastTime = time;
+
+    // Do not clamp the wall-clock dt used to drive the lockstep simulation (`accumMs`).
+    // Clamping the simulation dt can cause this client to permanently fall behind its peer.
     this.accumMs += dt;
 
     while (this.accumMs >= REPLAY_TICK_MS) {
@@ -346,7 +350,8 @@ export default class OnlineVersusController {
       this.session.tick();
     }
 
-    this.render(dt);
+    // Only clamp the render and effects dt to prevent visual spikes after tab blurs
+    this.render(clampDt(dt));
   }
 
   private processDas(dt: number): void {

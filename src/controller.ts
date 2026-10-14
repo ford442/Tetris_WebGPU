@@ -50,6 +50,9 @@ export default class Controller {
   // Track last horizontal direction for SOCD cleaning
   lastDirection: 'left' | 'right' | null = null;
 
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
+
   // Experimental: Positive Reinforcement Subliminal System (wired from index.ts)
   subliminal: SubliminalReinforcement | null = null;
 
@@ -113,6 +116,20 @@ export default class Controller {
 
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
     document.addEventListener("keyup", this.handleKeyUp.bind(this));
+
+    // Auto-pause on tab blur or visibility change
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused && !this.game.isRunEnded) {
+        this.pause();
+      }
+    };
+    window.addEventListener("blur", this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener("visibilitychange", this.boundVisibilityChange);
 
     // Initialize touch controls
     addTouchControlStyles();
@@ -248,6 +265,12 @@ export default class Controller {
     this.isPaused = true;
     this.isPlaying = false;
 
+    // Clear physical keys and action timers so DAS doesn't keep running after alt-tab
+    this.keys = {};
+    for (const action in this.actionTimers) {
+      this.actionTimers[action as Action] = 0;
+    }
+
     stopGameLoop(this);
 
     // Pause music
@@ -307,6 +330,11 @@ export default class Controller {
       clearInterval(this.intervalID);
       this.intervalID = null;
     }
+  }
+
+  destroy(): void {
+    window.removeEventListener("blur", this.boundBlurOrHidden);
+    document.removeEventListener("visibilitychange", this.boundVisibilityChange);
   }
 
   updateView(): void {

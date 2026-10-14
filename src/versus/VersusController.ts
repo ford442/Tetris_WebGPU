@@ -16,6 +16,7 @@ import {
   announceLineClear,
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
+import { clampDt } from '../controller/gameLoop.js';
 
 type Action = PlayerAction;
 
@@ -51,6 +52,8 @@ export default class VersusController {
   private lastTime = 0;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
 
   constructor(
     view: IView,
@@ -100,6 +103,27 @@ export default class VersusController {
     this.boundKeyUp = this.handleKeyUp.bind(this);
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
+
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused) {
+        this.pause();
+      }
+    };
+    window.addEventListener('blur', this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener('visibilitychange', this.boundVisibilityChange);
+  }
+
+  destroy(): void {
+    document.removeEventListener('keydown', this.boundKeyDown);
+    document.removeEventListener('keyup', this.boundKeyUp);
+    window.removeEventListener('blur', this.boundBlurOrHidden);
+    document.removeEventListener('visibilitychange', this.boundVisibilityChange);
+    this.disableSplitScreen();
   }
 
   get game(): Game {
@@ -128,6 +152,15 @@ export default class VersusController {
     if (!this.isPlaying || this.isPaused) return;
     this.isPaused = true;
     this.isPlaying = false;
+
+    // Clear physical keys and action timers so DAS doesn't keep running after alt-tab
+    for (const player of this.players) {
+      player.keys = {};
+      for (const action in player.actionTimers) {
+        player.actionTimers[action as Action] = 0;
+      }
+    }
+
     if (this.gameLoopID) cancelAnimationFrame(this.gameLoopID);
     this.gameLoopID = null;
     this.soundManager.musicManager.pause();
@@ -392,7 +425,7 @@ export default class VersusController {
 
   private async runFrame(time: number): Promise<boolean> {
     if (!this.isPlaying || this.isPaused) return false;
-    const dt = time - this.lastTime;
+    const dt = clampDt(time - this.lastTime);
     this.lastTime = time;
 
     let anyAlive = false;
