@@ -60,6 +60,10 @@ export function startGameLoop(host: ControllerLoopHost): void {
   host.gameLoopID = requestAnimationFrame(animate);
 }
 
+export function clampDt(dt: number, maxDt = 100): number {
+  return Math.min(dt, maxDt);
+}
+
 export function stepGravity(
   game: Game,
   gravityTimer: number,
@@ -95,7 +99,7 @@ export async function runControllerFrame(
     return false;
   }
 
-  const dt = time - host.lastTime;
+  const dt = clampDt(time - host.lastTime);
   host.lastTime = time;
 
   // Render unconditionally so that hit-stop flashes and particles continue playing
