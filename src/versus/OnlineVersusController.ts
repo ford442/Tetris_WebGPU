@@ -64,6 +64,8 @@ export default class OnlineVersusController {
 
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
 
   private readonly keyMap = PLAYER1_KEY_MAP;
   private readonly DAS = INPUT_CONFIG.DAS;
@@ -116,6 +118,27 @@ export default class OnlineVersusController {
     this.boundKeyUp = this.handleKeyUp.bind(this);
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
+
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused) {
+        this.pause();
+      }
+    };
+    window.addEventListener('blur', this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener('visibilitychange', this.boundVisibilityChange);
+  }
+
+  destroy(): void {
+    document.removeEventListener('keydown', this.boundKeyDown);
+    document.removeEventListener('keyup', this.boundKeyUp);
+    window.removeEventListener('blur', this.boundBlurOrHidden);
+    document.removeEventListener('visibilitychange', this.boundVisibilityChange);
+    this.disableSplitScreen();
   }
 
   get game(): Game {
@@ -281,7 +304,7 @@ export default class OnlineVersusController {
     if (this.gameLoopID) cancelAnimationFrame(this.gameLoopID);
     this.gameLoopID = null;
     this.transport?.close();
-    this.disableSplitScreen();
+    this.destroy();
   }
 
   updateHighScoreDisplay(): void {
@@ -326,14 +349,16 @@ export default class OnlineVersusController {
   }
 
   private runFrame(time: number): void {
-    const dt = time - this.lastTime;
+    const rawDt = time - this.lastTime;
     this.lastTime = time;
 
-    // Do not clamp the wall-clock dt used to drive the lockstep simulation (`accumMs`).
+    // never clamp — lockstep must track wall clock; see #547.
     // Clamping the simulation dt can cause this client to permanently fall behind its peer.
-    this.accumMs += dt;
+    this.accumMs += rawDt;
 
-    while (this.accumMs >= REPLAY_TICK_MS) {
+    let steps = 0;
+    const MAX_STEPS = 10;
+    while (this.accumMs >= REPLAY_TICK_MS && steps < MAX_STEPS) {
       this.accumMs -= REPLAY_TICK_MS;
       this.processDas(REPLAY_TICK_MS);
 
@@ -348,10 +373,11 @@ export default class OnlineVersusController {
       }
 
       this.session.tick();
+      steps++;
     }
 
     // Only clamp the render and effects dt to prevent visual spikes after tab blurs
-    this.render(clampDt(dt));
+    this.render(clampDt(rawDt));
   }
 
   private processDas(dt: number): void {
