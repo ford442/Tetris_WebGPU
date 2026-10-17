@@ -5,7 +5,7 @@
 **Tetris_WebGPU** is a browser-based Tetris implementation designed to showcase high-performance web graphics. It targets modern WebGPU-enabled browsers and features advanced visual effects including particle systems, dynamic lighting, PBR material shaders, post-processing (bloom, chromatic aberration, shockwave, film grain, CRT, FXAA), and level-based background video portals.
 
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
-* **Frontend:** TypeScript 4.9 + Vite 6.
+* **Frontend:** TypeScript 5.8 + Vite 6.
 * **Testing:** Vitest 3.x.
 * **Rendering:** WebGPU (WGSL shaders) primary; WebGL2 fallback; optional Emscripten C++ (`webgpu-cpp`).
 * **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM) for collision; C++ renderer is rendering-only.
@@ -42,14 +42,15 @@ Parallel to `assembly/` — **not** used for game logic or collision.
 * **Switch:** `?renderer=webgpu-cpp` or `localStorage.setItem('tetris_renderer', 'webgpu-cpp')`
 * **Build:** `npm run cpp:release` / `cpp:debug` / `build:cpp` — requires `emcc` on PATH (`source emsdk_env.sh`). **Skips cleanly** when emsdk is absent; `npm test` still passes.
 * **Fallback:** `webgpu-cpp` → TS WebGPU → WebGL2 if wasm missing or init fails
-* **Current state:** Canvas2D bootstrap draw from C++; full WebGPU port in progress. See `cpp/README.md` for roadmap and manual test matrix.
+* **Current state:** C++ draws the board via WebGPU instanced cubes (Canvas2D fallback) using the shared authored block material, plus an initial post-process pass; particles and full post-process stay on the TS path. See `cpp/README.md` for roadmap and manual test matrix.
 
 ### Render Pipeline (simplified)
 
 1. Background pass (procedural shader or HTML `<video>` portal)
-2. Playfield pass (3D blocks with texture atlas, lighting, and materials)
-3. Particle pass (CPU-simulated, GPU-rendered point sprites)
-4. Post-process pass (bloom, lens distortion, chromatic aberration, glitch, scanlines, FXAA, film grain, CRT)
+2. Backdrop capture (`webgpu/backdropCapture.ts`) — scene blit sampled by the block glass refraction
+3. Playfield pass (3D blocks with texture atlas, lighting, and authored materials)
+4. Particle pass (GPU compute simulation in `compute.ts`, billboard render)
+5. Post-process pass (bloom, lens distortion, chromatic aberration, glitch, scanlines, FXAA, film grain, CRT)
 
 ## Directory Structure
 
@@ -60,14 +61,19 @@ Parallel to `assembly/` — **not** used for game logic or collision.
 
 /cpp                   # Emscripten C++ renderer (opt-in)
   src/renderer.cpp
+  src/gpu_renderer.cpp # WebGPU instanced cubes + initial post-process
   src/playfield_draw.cpp
+  src/shaders/         # block/authoredBlock.wgsl, postprocess/postprocess.wgsl
   README.md
 
+/shared                # TS + C++ contracts: blockMaterialSchema.json, authoredBlockUniforms.json
+
+index.ts               # App entry point at repo root (UI injection, MVC wiring, theme setup)
+
 /src
-  index.ts             # App entry point (UI injection, MVC wiring, theme setup)
-  game.ts              # Main game engine (~650 lines)
-  controller.ts        # Input + game loop (~980 lines)
-  viewWebGPU.ts        # Thin WebGPU View orchestrator implementing IView (~670 lines)
+  game.ts              # Main game engine (~900 lines)
+  controller.ts        # Input + game loop (~830 lines); helpers in controller/
+  viewWebGPU.ts        # Thin WebGPU View orchestrator implementing IView (~820 lines)
   sound.ts             # Sound manager + music manager (Web Audio API, procedural music)
   /game                # Game logic modules
     pieces.ts          # Tetromino definitions, 7-bag randomizer
@@ -79,7 +85,14 @@ Parallel to `assembly/` — **not** used for game logic or collision.
   /webgpu              # Rendering subsystem
     gpuContext.ts      # Device/canvas acquisition + resize lifecycle
     viewPipelines.ts   # Block-texture load + pipeline/buffer/bind-group setup
-    shaders/           # WGSL shader modules (~3,000 lines) split by purpose
+    shaders/           # WGSL shader modules split by purpose; block shader in shaders/block/ + shaders/wgsl/block/
+    renderers/         # backgroundRenderer, blockRenderer, postProcessor
+    viewRenderLoop.ts  # Per-frame render pass sequencing
+    blockMaterial.ts   # Authored material contract loader (public/block-material.json)
+    blockMaterialMaps.ts / blockMaskBake.ts / blockTileCpu.ts  # Pure (canvas-free) material + mask bakers
+    backdropCapture.ts / glassRefraction.ts  # Screen-space glass refraction
+    ktx2.ts            # Optional KTX2/BC7 albedo upgrade
+    materialModifiers.ts # Variant deltas on the authored material
     shaders.ts         # Barrel re-export for backward compatibility
     geometry.ts        # Cube, full-screen quad, grid line meshes
     themes.ts          # Color palette definitions
@@ -132,6 +145,11 @@ Parallel to `assembly/` — **not** used for game logic or collision.
     renderConfig.ts
   /utils
     logger.ts          # Categorized logging (render, game, wasm, etc.)
+  /versus /net /ui     # Local split-screen + online lockstep versus (WebRTC signaling, garbage)
+  /replay              # Replay recording, playback, simulator
+  /audio               # Audio bus, music/SFX engines
+  /a11y /settings /pwa # Accessibility, settings UI, service worker/offline
+  /dev                 # textureMaskLab (?masklab), materialDebugHotkey (Shift+M)
 
 /tests                 # Vitest test suites
   game.test.ts         # WASM + Game integration tests
@@ -140,6 +158,8 @@ Parallel to `assembly/` — **not** used for game logic or collision.
   block-texture.test.ts
   shader-optimizations.test.ts
   texture-sampling.test.ts
+  block-material-*.test.ts  # Authored material contract, maps, schema, TS/WebGL2/C++ parity
+  cpp-block-parity.test.ts
 
 /public                # Static assets served by Vite
   release.wasm         # Collision WASM (asbuild:release)
@@ -147,6 +167,8 @@ Parallel to `assembly/` — **not** used for game logic or collision.
     tetris_renderer.js
     tetris_renderer.wasm
   block.png            # Block texture atlas
+  block-material.json  # Authored block material contract (validated in prebuild)
+  blockTextureConfig.json
   block-2.png
   assets/              # Additional runtime assets (videos, etc.)
 
@@ -186,6 +208,12 @@ npm run build:all
 
 # Run unit tests (Vitest). pretest compiles collision WASM only (not cpp).
 npm test
+
+# Type-check (tsc --noEmit)
+npm run typecheck
+
+# Validate public/block-material.json + authored maps (also runs in prebuild)
+npm run material:validate
 
 # Lint (minimal typescript-eslint ruleset)
 npm run lint
@@ -258,7 +286,10 @@ When modifying hot paths, avoid creating new objects inside `update()` or `Frame
 * **SRS wall kicks** are adapted to this Y-down system. Standard wiki tables often assume Y-up, so the code manually inverts Y offsets.
 
 ### 6. Shader Uniform Offsets are Hardcoded
-`viewWebGPU.ts` contains many hardcoded byte offsets and struct sizes for WebGPU uniform buffers (e.g., `size: 208`, `offset: 64`). If you change a WGSL struct layout in any shader, you **must** update the matching CPU-side offset calculations or the renderer will corrupt uniforms.
+`src/webgpu/viewPipelines.ts` / `viewUniforms.ts` contain hardcoded byte offsets and buffer sizes for WebGPU uniform buffers. The block fragment layout lives in `src/webgpu/shaders/block/uniforms.ts` (CPU offsets) mirroring `shaders/wgsl/block/uniforms.wgsl`; the C++ block uniforms are generated from `shared/authoredBlockUniforms.json`. If you change a WGSL struct layout, you **must** update the matching CPU-side offsets or the renderer will corrupt uniforms (`tests/block-uniform-layout.test.ts` guards the block struct).
+
+### 6b. Block Look is Data (Authored Material Contract)
+The block look comes from `public/block-material.json` (validated against `shared/blockMaterialSchema.json` at runtime and in `prebuild`). Shared WGSL `authoredMaterial.wgsl` / `authoredGlass.wgsl` is composed verbatim by TS and C++ and hand-ported to WebGL2 — never add a `@binding` to them. A new brick is a PNG + JSON, not a shader edit. See `docs/block-material-contract.md`.
 
 ### 7. Canvas Transparency Requirement
 The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background render pass **must** clear with `alpha: 0.0`. This allows the HTML `<video>` background element to show through behind the board.
