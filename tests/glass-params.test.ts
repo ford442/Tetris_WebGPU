@@ -21,12 +21,12 @@ describe('GlassParams single opacity curve', () => {
     resetBlockTextureConfig();
   });
 
-  it('defaults to transmissive face-on crystal (0.05 / 0.60 / 2.0)', () => {
-    expect(DEFAULT_GLASS_PARAMS).toEqual({ min: 0.05, max: 0.60, fresnelPower: 2.0 });
-    expect(DEFAULT_BLOCK_TEXTURE_CONFIG.authoredGlassMin).toBe(0.05);
-    expect(DEFAULT_BLOCK_TEXTURE_CONFIG.authoredGlassMax).toBe(0.60);
-    expect(Materials.imageSampled.authoredGlassMin).toBe(0.05);
-    expect(Materials.imageSampled.authoredGlassMax).toBe(0.60);
+  it('defaults to classic translucent stained glass (0.80 / 0.88 / 2.0)', () => {
+    expect(DEFAULT_GLASS_PARAMS).toEqual({ min: 0.80, max: 0.88, fresnelPower: 2.0 });
+    expect(DEFAULT_BLOCK_TEXTURE_CONFIG.authoredGlassMin).toBe(0.80);
+    expect(DEFAULT_BLOCK_TEXTURE_CONFIG.authoredGlassMax).toBe(0.88);
+    expect(Materials.imageSampled.authoredGlassMin).toBe(0.80);
+    expect(Materials.imageSampled.authoredGlassMax).toBe(0.88);
     expect(getGlassParams()).toEqual(DEFAULT_GLASS_PARAMS);
   });
 
@@ -44,8 +44,8 @@ describe('GlassParams single opacity curve', () => {
     const params = DEFAULT_GLASS_PARAMS;
     expect(evalAuthoredOutAlpha(1, 1, params)).toBeCloseTo(1, 5);
     expect(evalAuthoredOutAlpha(0.9, 0, params)).toBeCloseTo(1, 5);
-    expect(evalAuthoredOutAlpha(0, 1, params)).toBeCloseTo(0.05, 5);
-    expect(evalAuthoredOutAlpha(0, 0, params)).toBeCloseTo(0.60, 5);
+    expect(evalAuthoredOutAlpha(0, 1, params)).toBeCloseTo(0.80, 5);
+    expect(evalAuthoredOutAlpha(0, 0, params)).toBeCloseTo(0.88, 5);
   });
 
   it('loads JSON config at boot instead of magic numbers', async () => {
@@ -122,8 +122,8 @@ describe('WebGL2 matches TS authored alpha', () => {
       subregionHeight: number;
       subregionInset: number;
     };
-    expect(json.authoredGlassMin).toBeCloseTo(0.05, 5);
-    expect(json.authoredGlassMax).toBeCloseTo(0.60, 5);
+    expect(json.authoredGlassMin).toBeCloseTo(0.80, 5);
+    expect(json.authoredGlassMax).toBeCloseTo(0.88, 5);
     expect(json.maskDilatePx).toBe(1);
     expect(json.subregionX).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionX ?? 0, 3);
     expect(json.subregionY).toBeCloseTo(DEFAULT_BLOCK_TEXTURE_CONFIG.subregionY ?? 0, 3);

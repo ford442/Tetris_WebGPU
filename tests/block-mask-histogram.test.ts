@@ -40,8 +40,8 @@ describe('extractor mask dilate + histogram', () => {
 
     const faceOnGlass = evalAuthoredOutAlpha(0, 1, DEFAULT_GLASS_PARAMS);
     const gold = evalAuthoredOutAlpha(1, 0.2, DEFAULT_GLASS_PARAMS);
-    expect(faceOnGlass).toBeGreaterThanOrEqual(0.05);
-    expect(faceOnGlass).toBeLessThanOrEqual(0.15);
+    expect(faceOnGlass).toBeGreaterThanOrEqual(0.75);
+    expect(faceOnGlass).toBeLessThanOrEqual(0.9); // classic translucent window (~0.8)
     expect(gold).toBe(1);
   });
 
