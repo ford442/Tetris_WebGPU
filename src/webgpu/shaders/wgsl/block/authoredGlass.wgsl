@@ -35,9 +35,13 @@ fn authoredGlassAlbedo(texRgb: vec3f, pieceRgb: vec3f) -> vec3f {
     let luma = dot(texRgb, vec3f(0.299, 0.587, 0.114));
     let crystalBright = smoothstep(0.20, 0.95, luma);
     let crystalHi = max(luma - 0.55, 0.0) * 3.0;
-    return texRgb * (0.60 + crystalBright * 0.40)
+    let crystal = texRgb * (0.60 + crystalBright * 0.40)
          + pieceRgb * 0.35 * crystalBright
          + vec3f(crystalHi * 0.50);
+    // Classic stained-glass window (go.1ink.us/tetris): texture detail tinted
+    // by the brightened piece color. Weighted toward the classic look.
+    let classicWindow = texRgb * (pieceRgb + vec3f(0.2));
+    return mix(crystal, classicWindow, 0.65);
 }
 
 /// Authored base color: glass interior vs gold frame, driven by the baked alpha mask.
