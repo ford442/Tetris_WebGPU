@@ -5,8 +5,8 @@
     "albedo": "block.png"
   },
   "glass": {
-    "min": 0.05,
-    "max": 0.6,
+    "min": 0.8,
+    "max": 0.88,
     "fresnelPower": 2.0,
     "ior": 1.22,
     "thickness": 0.035

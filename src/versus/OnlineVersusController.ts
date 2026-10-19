@@ -17,6 +17,7 @@ import { NetMessageType, type NetMessage, type PeerRole, type SessionPhase, type
 import { normalizeRoomCode, isValidRoomCode } from '../net/roomCode.js';
 import { announce, announceLineClear } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
+import { clampDt } from '../controller/gameLoop.js';
 import type Game from '../game.js';
 import type { VersusTickResult } from './VersusLockstepSim.js';
 
@@ -63,6 +64,8 @@ export default class OnlineVersusController {
 
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
 
   private readonly keyMap = PLAYER1_KEY_MAP;
   private readonly DAS = INPUT_CONFIG.DAS;
@@ -115,6 +118,27 @@ export default class OnlineVersusController {
     this.boundKeyUp = this.handleKeyUp.bind(this);
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
+
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused) {
+        this.pause();
+      }
+    };
+    window.addEventListener('blur', this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener('visibilitychange', this.boundVisibilityChange);
+  }
+
+  destroy(): void {
+    document.removeEventListener('keydown', this.boundKeyDown);
+    document.removeEventListener('keyup', this.boundKeyUp);
+    window.removeEventListener('blur', this.boundBlurOrHidden);
+    document.removeEventListener('visibilitychange', this.boundVisibilityChange);
+    this.disableSplitScreen();
   }
 
   get game(): Game {
@@ -280,7 +304,7 @@ export default class OnlineVersusController {
     if (this.gameLoopID) cancelAnimationFrame(this.gameLoopID);
     this.gameLoopID = null;
     this.transport?.close();
-    this.disableSplitScreen();
+    this.destroy();
   }
 
   updateHighScoreDisplay(): void {
@@ -325,11 +349,16 @@ export default class OnlineVersusController {
   }
 
   private runFrame(time: number): void {
-    const dt = time - this.lastTime;
+    const rawDt = time - this.lastTime;
     this.lastTime = time;
-    this.accumMs += dt;
 
-    while (this.accumMs >= REPLAY_TICK_MS) {
+    // never clamp — lockstep must track wall clock; see #547.
+    // Clamping the simulation dt can cause this client to permanently fall behind its peer.
+    this.accumMs += rawDt;
+
+    let steps = 0;
+    const MAX_STEPS = 10;
+    while (this.accumMs >= REPLAY_TICK_MS && steps < MAX_STEPS) {
       this.accumMs -= REPLAY_TICK_MS;
       this.processDas(REPLAY_TICK_MS);
 
@@ -344,9 +373,11 @@ export default class OnlineVersusController {
       }
 
       this.session.tick();
+      steps++;
     }
 
-    this.render(dt);
+    // Only clamp the render and effects dt to prevent visual spikes after tab blurs
+    this.render(clampDt(rawDt));
   }
 
   private processDas(dt: number): void {

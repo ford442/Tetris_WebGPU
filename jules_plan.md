@@ -25,3 +25,6 @@
 Since this runs in an automated environment without a visual frontend to measure strict MS frametimes:
 - **Before**: `exp` function called per pixel in the background shader; slightly softer texture UVs.
 - **After**: Reduced ALU instructions per fragment; crisper block textures; more pronounced glass transparency.
+## Optimization Iteration
+- **Shockwave Shader Update**: Optimized `src/webgpu/shaders/wgsl/postprocess/shockwave.ts` to use squared distances (`dot(diff, diff)`) instead of `sqrt()`, reducing ALU load.
+- **State Projection Update**: Fixed a performance bottleneck / out-of-bounds error in `src/game/stateProjection.ts` by explicitly setting array sizes dynamically without GC allocations.
