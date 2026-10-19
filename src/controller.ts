@@ -1,5 +1,6 @@
 import type Game from "./game.js";
 import type { IView } from "./view/IView.js";
+import type { TSpinResult } from "./game/tSpin.js";
 import type SoundManager from "./sound.js";
 import { TouchControls, type TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { processDasArrInput, isActionPressed as checkActionPressed } from "./input/dasArr.js";
@@ -15,7 +16,6 @@ import {
 import { startGameLoop, stopGameLoop } from "./controller/gameLoop.js";
 import { type SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 import { INPUT_CONFIG } from "./config/gameConfig.js";
-import type { TSpinResult } from "./game/tSpin.js";
 import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
 import type { ReplayActionName } from "./replay/actions.js";
 import type { ReplayFile } from "./replay/format.js";

@@ -73,7 +73,6 @@ export default class Game implements ModeGameHooks {
 
   // T-Spin Tracking
   isTSpin: TSpinResult = 'none';
-  private lastKickIndex: number = 0;
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -430,7 +429,7 @@ export default class Game implements ModeGameHooks {
   // Set view reference for reactive events
   // ==================== REACTIVE EVENT HOOKS ====================
   triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: TSpinResult, isAllClear: boolean): void {
-    this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin !== 'none', isAllClear);
+    this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin, isAllClear);
   }
 
   triggerLevelUpReactive(newLevel: number): void {
@@ -604,7 +603,7 @@ export default class Game implements ModeGameHooks {
   update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
-      tickLockDelaySync(this as LockDelayHost, dt, () => this.clearLine(), this._updateResult);
+      tickLockDelaySync(this, dt, () => this.clearLine(), this._updateResult);
       return this._updateResult;
   }
 
@@ -613,7 +612,7 @@ export default class Game implements ModeGameHooks {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
       await tickLockDelay(
-        this as LockDelayHost,
+        this,
         dt,
         () => this.clearLineAsync(),
         this._updateResult,
@@ -674,14 +673,14 @@ export default class Game implements ModeGameHooks {
       return isPlayfieldEmpty(this.playfield);
   }
 
-  checkTSpin(): void {
+  checkTSpin(kickIndex: number = 0): void {
       this.isTSpin = evaluateTSpin(
         this.activPiece,
         this.boundGetCell,
         this.playfieldWidth,
         this.playfieldHeight,
         this._tSpinCorners,
-        this.lastKickIndex,
+        kickIndex,
       );
   }
 
@@ -722,7 +721,6 @@ export default class Game implements ModeGameHooks {
       }
 
       this.activPiece.rotation = this._tempPiece.rotation;
-      this.lastKickIndex = 0; // Standard rotation is kick index 0
       this.handleMoveReset();
       this.checkTSpin(); // Check T-Spin after rotation
       // Trigger T-Spin reactive if detected
@@ -745,7 +743,6 @@ export default class Game implements ModeGameHooks {
             // Apply successful kick
             this.activPiece.x = this._tempPiece.x;
             this.activPiece.y = this._tempPiece.y;
-            this.lastKickIndex = kickIndex;
             // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
 
       // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
@@ -765,7 +762,8 @@ export default class Game implements ModeGameHooks {
 
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
-            this.checkTSpin(); // Check T-Spin after kick
+            // Need to know kick index for promotion
+            this.checkTSpin(kickIndex); // Check T-Spin after kick
             // Trigger T-Spin reactive if detected
             if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
               this.triggerTSpinReactive(this.isTSpin);

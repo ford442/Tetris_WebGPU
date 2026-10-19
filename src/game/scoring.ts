@@ -283,13 +283,17 @@ export class ScoringSystem {
       return null;
     }
 
+    if (linesCleared === 0) {
+        // Zero-line T-spins don't increment combo
+        this.combo = -1;
+    } else {
+        this.combo++;
+    }
+
     // Check level before adding lines
     const previousLevel = this.level;
 
     this.lines += linesCleared;
-    if (linesCleared > 0) {
-        this.combo++;
-    }
 
     // Check if level increased
     const levelUp = this.level > previousLevel;
@@ -308,22 +312,27 @@ export class ScoringSystem {
         }
         this.backToBack = true;
     } else if (linesCleared > 0) {
+        // Only break B2B if lines were cleared and it wasn't difficult
         this.backToBack = false;
     }
+    // Note: If linesCleared === 0 (e.g. zero-line t-spin), B2B is preserved but not started
 
     // T-Spin Scoring
-    if (tSpin === 'mini') {
-        switch (linesCleared) {
-            case 0: baseScore = 100 * level; text += "T-SPIN MINI"; break;
-            case 1: baseScore = 200 * level; text += "T-SPIN MINI SINGLE"; break;
-            case 2: baseScore = 400 * level; text += "T-SPIN MINI DOUBLE"; break;
-        }
-    } else if (tSpin === 'normal') {
-        switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
-            case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
-            case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
-            case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+    if (tSpin !== 'none') {
+        if (tSpin === 'mini') {
+            switch (linesCleared) {
+                case 0: baseScore = 100 * level; text += "T-SPIN MINI"; break;
+                case 1: baseScore = 200 * level; text += "T-SPIN MINI SINGLE"; break;
+                case 2: baseScore = 400 * level; text += "T-SPIN MINI DOUBLE"; break;
+                default: baseScore = 0;
+            }
+        } else {
+            switch (linesCleared) {
+                case 0: baseScore = 400 * level; text += "T-SPIN"; break;
+                case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
+                case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
+                case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+            }
         }
     } else {
         // Standard Scoring

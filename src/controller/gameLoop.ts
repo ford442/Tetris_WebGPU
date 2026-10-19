@@ -1,6 +1,7 @@
 import type Game from '../game.js';
 import type { IView } from '../view/IView.js';
 import type { ReplayRecorder } from '../replay/recorder.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import type { SubliminalReinforcement } from '../effects/subliminalReinforcement.js';
 import type SoundManager from '../sound.js';
 import { announceGameOver, announceLevelUp, announceLineClear } from '../a11y/announcer.js';
@@ -9,7 +10,6 @@ import {
   updateHighScoreDisplay,
   updateModeHud,
 } from './hudBridge.js';
-import type { TSpinResult } from '../game/tSpin.js';
 
 export interface ControllerLoopHost {
   isPlaying: boolean;

@@ -1,10 +1,10 @@
 import type { GameSettings } from '../config/gameSettings.js';
 import type { GameState } from '../game/gameState.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import type { Piece } from '../game/pieces.js';
 import type { VisualEffects } from '../webgpu/effects.js';
 import type { ThemeColors, Themes } from '../webgpu/themes.js';
 import type { ParticleSystemLike } from './viewTypes.js';
-import type { TSpinResult } from '../game/tSpin.js';
 
 /** Shared surface area used by Controller and index.ts for any renderer backend. */
 export interface IView {
@@ -45,7 +45,7 @@ export interface IView {
 
   onLineClear?(
     lines: number[],
-    tSpin?: boolean,
+    tSpin?: TSpinResult | boolean,
     combo?: number,
     backToBack?: boolean,
     isAllClear?: boolean,
@@ -62,7 +62,7 @@ export interface IView {
   onLineClearReactive?(
     linesCleared: number,
     combo: number,
-    isTSpin: boolean,
+    isTSpin: TSpinResult | boolean,
     isAllClear: boolean,
   ): void;
   onLevelUpReactive?(newLevel: number): void;

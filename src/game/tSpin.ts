@@ -5,7 +5,7 @@ export interface TSpinCorner {
   y: number;
 }
 
-export type TSpinResult = 'none' | 'mini' | 'normal';
+export type TSpinResult = 'none' | 'normal' | 'mini';
 
 export function evaluateTSpin(
   piece: Piece,
@@ -13,7 +13,7 @@ export function evaluateTSpin(
   playfieldWidth: number,
   playfieldHeight: number,
   corners: TSpinCorner[],
-  kickIndex: number = 0,
+  lastKickIndex: number = 0,
 ): TSpinResult {
   if (piece.type !== 'T') {
     return 'none';
@@ -22,10 +22,6 @@ export function evaluateTSpin(
   const px = piece.x;
   const py = piece.y;
 
-  // A-B
-  // | |
-  // C-D
-  // 0: top-left, 1: top-right, 2: bottom-left, 3: bottom-right
   corners[0].x = px;
   corners[0].y = py;
   corners[1].x = px + 2;
@@ -36,58 +32,36 @@ export function evaluateTSpin(
   corners[3].y = py + 2;
 
   let occupied = 0;
+  let frontOccupied = 0;
+  let front1 = 0;
+  let front2 = 1;
+  switch (piece.rotation) {
+    case 0: front1 = 0; front2 = 1; break;
+    case 1: front1 = 1; front2 = 3; break;
+    case 2: front1 = 3; front2 = 2; break;
+    case 3: front1 = 2; front2 = 0; break;
+  }
+
   for (let i = 0; i < 4; i++) {
     const c = corners[i];
+    let isOccupied = false;
     if (c.x < 0 || c.x >= playfieldWidth || c.y >= playfieldHeight) {
+      isOccupied = true;
+    } else if (c.y >= 0 && getCell(c.x, c.y) !== 0) {
+      isOccupied = true;
+    }
+
+    if (isOccupied) {
       occupied++;
-    } else if (c.y >= 0) {
-      if (getCell(c.x, c.y) !== 0) {
-        occupied++;
+      if (i === front1 || i === front2) {
+        frontOccupied++;
       }
     }
   }
 
-  if (occupied < 3) {
-    return 'none';
+  if (occupied >= 3) {
+    return frontOccupied >= 2 || lastKickIndex === 4 ? 'normal' : 'mini';
   }
 
-  // T-Spin Mini rules
-  // 3 corners must be filled.
-  // Both front corners -> 'normal'
-  // 1 front + 2 back corners -> 'mini'
-  // Special exception: if the last kick used was kick test 5 (index 4), it promotes to 'normal'
-
-  if (kickIndex === 4) {
-    return 'normal';
-  }
-
-  let front1, front2;
-  switch (piece.rotation) {
-    case 0: // Spawn state (flat side up) - A & B are front
-      front1 = 0; front2 = 1; break;
-    case 1: // Right state - B & D are front
-      front1 = 1; front2 = 3; break;
-    case 2: // Double rotation (flat side down) - C & D are front
-      front1 = 2; front2 = 3; break;
-    case 3: // Left state - A & C are front
-      front1 = 0; front2 = 2; break;
-    default:
-      front1 = 0; front2 = 1; break;
-  }
-
-  let frontCornersFilled = 0;
-  for (const f of [front1, front2]) {
-    const c = corners[f];
-    if (c.x < 0 || c.x >= playfieldWidth || c.y >= playfieldHeight) {
-      frontCornersFilled++;
-    } else if (c.y >= 0 && getCell(c.x, c.y) !== 0) {
-      frontCornersFilled++;
-    }
-  }
-
-  if (frontCornersFilled === 2) {
-    return 'normal';
-  } else {
-    return 'mini';
-  }
+  return 'none';
 }

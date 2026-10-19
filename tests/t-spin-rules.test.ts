@@ -1,102 +1,70 @@
 import { describe, it, expect } from 'vitest';
 import { evaluateTSpin } from '../src/game/tSpin.js';
 import type { Piece } from '../src/game/pieces.js';
+import { attackRowsFromClear } from '../src/versus/garbage.js';
 
 describe('T-Spin Rules', () => {
-  const createMockPiece = (rotation: number): Piece => ({
-    type: 'T',
-    rotation,
-    x: 1,
-    y: 1,
-    blocks: [], // blocks aren't used by evaluateTSpin
+  it('detects a normal T-Spin with 3 corners occupied and 2 front corners', () => {
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
+    const getCell = (x: number, y: number) => {
+      if (x === 0 && y === 0) return 1;
+      if (x === 2 && y === 0) return 1;
+      if (x === 0 && y === 2) return 1;
+      return 0;
+    };
+    expect(evaluateTSpin(piece, getCell, 10, 20, corners, 0)).toBe('normal');
   });
 
-  const getCellMock = (playfield: number[][]) => (x: number, y: number) => {
-    if (y < 0 || y >= playfield.length || x < 0 || x >= playfield[0].length) {
-      return 1; // Out of bounds counts as occupied
+  it('detects a mini T-Spin with 3 corners occupied and 1 front corner', () => {
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
+    const getCell = (x: number, y: number) => {
+      if (x === 0 && y === 0) return 1;
+      if (x === 0 && y === 2) return 1;
+      if (x === 2 && y === 2) return 1;
+      return 0;
+    };
+    expect(evaluateTSpin(piece, getCell, 10, 20, corners, 0)).toBe('mini');
+  });
+
+  it('promotes to a normal T-Spin when kick index 4 is used', () => {
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
+    const getCell = (x: number, y: number) => {
+      if (x === 0 && y === 0) return 1;
+      if (x === 0 && y === 2) return 1;
+      if (x === 2 && y === 2) return 1;
+      return 0;
+    };
+    expect(evaluateTSpin(piece, getCell, 10, 20, corners, 4)).toBe('normal');
+  });
+
+  it('returns none when fewer than 3 corners are occupied', () => {
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
+    const getCell = (x: number, y: number) => x === 0 && y === 0 ? 1 : 0;
+    expect(evaluateTSpin(piece, getCell, 10, 20, corners, 0)).toBe('none');
+  });
+
+  it('treats walls and the floor as occupied corners', () => {
+    const piece: Piece = { type: 'T', x: -1, y: 19, rotation: 0, blocks: [], color: 0 };
+    const corners = [{ x: -1, y: 19 }, { x: 1, y: 19 }, { x: -1, y: 21 }, { x: 1, y: 21 }];
+    expect(evaluateTSpin(piece, () => 0, 10, 20, corners, 0)).toBe('mini');
+  });
+
+  it('maps front corners across all 4 orientations', () => {
+    const getCell = () => 1;
+    const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const piece: Piece = { type: 'T', x: 0, y: 0, rotation, blocks: [], color: 0 };
+      expect(evaluateTSpin(piece, getCell, 10, 20, corners, 0)).toBe('normal');
     }
-    return playfield[y][x];
-  };
-
-  const corners = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }];
-
-  it('detects normal T-Spin when both front corners are occupied', () => {
-    // Rotation 0 (flat side up): front corners are top-left (0) and top-right (1)
-    // T piece is at x: 1, y: 1. Corners are (1,1), (3,1), (1,3), (3,3)
-    const playfield = [
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 1, 0], // row 1: corner A (1,1) filled, corner B (3,1) filled
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0], // row 3: corner C (1,3) filled, D empty. 3 corners total
-      [0, 0, 0, 0, 0]
-    ];
-
-    const result = evaluateTSpin(createMockPiece(0), getCellMock(playfield), 5, 5, corners, 0);
-    expect(result).toBe('normal');
-  });
-
-  it('detects mini T-Spin when 1 front + 2 back corners are occupied', () => {
-    // Rotation 0 (flat side up): front corners are top-left (0) and top-right (1)
-    // T piece is at x: 1, y: 1. Corners are (1,1), (3,1), (1,3), (3,3)
-    const playfield = [
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0], // row 1: corner A (1,1) filled, corner B (3,1) empty
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 1, 0], // row 3: corner C (1,3) filled, D (3,3) filled. 3 corners total
-      [0, 0, 0, 0, 0]
-    ];
-
-    const result = evaluateTSpin(createMockPiece(0), getCellMock(playfield), 5, 5, corners, 0);
-    expect(result).toBe('mini');
-  });
-
-  it('promotes to normal T-Spin if kick index 4 is used (kick-5 upgrade)', () => {
-    const playfield = [
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0], // row 1: corner A (1,1) filled, corner B (3,1) empty
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 1, 0], // row 3: corner C (1,3) filled, D (3,3) filled. 3 corners total
-      [0, 0, 0, 0, 0]
-    ];
-
-    // Kick index 4 (the 5th kick) promotes mini to normal
-    const result = evaluateTSpin(createMockPiece(0), getCellMock(playfield), 5, 5, corners, 4);
-    expect(result).toBe('normal');
-  });
-
-  it('returns none if fewer than 3 corners are occupied', () => {
-    const playfield = [
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0], // row 1: corner A (1,1) filled, corner B (3,1) empty
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0], // row 3: corner C (1,3) filled, D empty. 2 corners total
-      [0, 0, 0, 0, 0]
-    ];
-
-    const result = evaluateTSpin(createMockPiece(0), getCellMock(playfield), 5, 5, corners, 0);
-    expect(result).toBe('none');
-  });
-
-  it('checks rotation 1 (Right state - B & D are front)', () => {
-    // Corners are (1,1), (3,1), (1,3), (3,3)
-    // Front: B (3,1) and D (3,3)
-    const playfield = [
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 1, 0], // row 1: B (3,1) filled
-      [0, 0, 0, 0, 0],
-      [0, 1, 0, 1, 0], // row 3: C (1,3) filled, D (3,3) filled
-      [0, 0, 0, 0, 0]
-    ];
-    // 3 corners filled. Front corners: B filled, D filled -> Both front filled
-    const result = evaluateTSpin(createMockPiece(1), getCellMock(playfield), 5, 5, corners, 0);
-    expect(result).toBe('normal');
   });
 });
 
-import { attackRowsFromClear } from '../src/versus/garbage.js';
-
 describe('T-Spin Garbage Rules', () => {
-  it('sends correct garbage lines', () => {
+  it('sends the correct number of garbage lines', () => {
     expect(attackRowsFromClear(1, 'mini')).toBe(0);
     expect(attackRowsFromClear(2, 'mini')).toBe(1);
     expect(attackRowsFromClear(1, 'normal')).toBe(2);

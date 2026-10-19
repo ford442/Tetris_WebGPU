@@ -5,16 +5,15 @@ import type { TSpinResult } from '../game/tSpin.js';
 
 /** Lines cleared → garbage rows sent to opponent. */
 export function attackRowsFromClear(linesCleared: number, tSpin: TSpinResult = 'none'): number {
-  if (tSpin === 'mini') {
-    if (linesCleared === 1) return 0; // Mini single: 0
-    if (linesCleared === 2) return 1; // Mini double: 1
-    return 0;
-  }
-  if (tSpin === 'normal') {
-    if (linesCleared === 1) return 2; // TSS: 2
-    if (linesCleared === 2) return 4; // TSD: 4
-    if (linesCleared >= 3) return 6; // TST: 6
-    return 0;
+  if (tSpin !== 'none') {
+    if (tSpin === 'mini') {
+      if (linesCleared === 1) return 0; // Mini single
+      if (linesCleared === 2) return 1; // Mini double
+    } else {
+      if (linesCleared === 1) return 2; // T-Spin Single
+      if (linesCleared === 2) return 4; // T-Spin Double
+      if (linesCleared === 3) return 6; // T-Spin Triple
+    }
   }
 
   if (linesCleared <= 0) return 0;

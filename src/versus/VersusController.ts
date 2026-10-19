@@ -376,7 +376,7 @@ export default class VersusController {
     if (result.gameOver) this.onPlayerDefeated(player);
   }
 
-  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult = 'none'): void {
+  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
     const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
       this.players[1 - from].game.queueGarbage(rows);

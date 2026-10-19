@@ -1,6 +1,7 @@
 import type { Piece } from './pieces.js';
 
 import type { TSpinResult } from './tSpin.js';
+import type { RunStats } from './runStats.js';
 
 export interface HardDropResult {
   linesCleared: number[];
@@ -9,7 +10,6 @@ export interface HardDropResult {
   tSpin: TSpinResult;
 }
 
-import type { RunStats } from './runStats.js';
 
 export interface HardDropHost {
   activPiece: Piece;
