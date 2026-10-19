@@ -1,5 +1,6 @@
 import type Game from "./game.js";
 import type { IView } from "./view/IView.js";
+import type { TSpinResult } from "./game/tSpin.js";
 import type SoundManager from "./sound.js";
 import { TouchControls, type TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { processDasArrInput, isActionPressed as checkActionPressed } from "./input/dasArr.js";
@@ -162,7 +163,7 @@ export default class Controller {
   }
 
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void {
@@ -171,13 +172,13 @@ export default class Controller {
       const combo = scoreEvent?.combo ?? 0;
       const b2b = scoreEvent?.backToBack ?? false;
       this.soundManager.playLineClear(result.linesCleared.length, combo, b2b, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
       this.soundManager.musicManager.setGameplayIntensity(this.game.level, combo);
       return;
     }
     if (result.locked) {
       this.soundManager.playLock(pieceType, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
     }
   }
 

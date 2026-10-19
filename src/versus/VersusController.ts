@@ -17,6 +17,7 @@ import {
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
 import { clampDt } from '../controller/gameLoop.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 type Action = PlayerAction;
 
@@ -368,15 +369,15 @@ export default class VersusController {
         result.tSpin,
         player === 0 ? 'Player 1' : 'Player 2',
       );
-      this.sendAttack(player, result.linesCleared.length);
+      this.sendAttack(player, result.linesCleared.length, result.tSpin);
     } else if (result.locked) {
       this.soundManager.playLock(g.activPiece?.type ?? 'T', g.activPiece?.x ?? 4);
     }
     if (result.gameOver) this.onPlayerDefeated(player);
   }
 
-  private sendAttack(from: 0 | 1, linesCleared: number): void {
-    const rows = attackRowsFromClear(linesCleared);
+  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
+    const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
       this.players[1 - from].game.queueGarbage(rows);
     }
@@ -465,7 +466,7 @@ export default class VersusController {
           result.tSpin,
           i === 0 ? 'Player 1' : 'Player 2',
         );
-        this.sendAttack(i as 0 | 1, result.linesCleared.length);
+        this.sendAttack(i as 0 | 1, result.linesCleared.length, result.tSpin);
         this.viewWebGPU.onLineClear?.(
           result.linesCleared,
           result.tSpin,

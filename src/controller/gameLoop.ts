@@ -1,6 +1,7 @@
 import type Game from '../game.js';
 import type { IView } from '../view/IView.js';
 import type { ReplayRecorder } from '../replay/recorder.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import type { SubliminalReinforcement } from '../effects/subliminalReinforcement.js';
 import type SoundManager from '../sound.js';
 import { announceGameOver, announceLevelUp, announceLineClear } from '../a11y/announcer.js';
@@ -28,7 +29,7 @@ export interface ControllerLoopHost {
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void;
@@ -151,7 +152,7 @@ export async function runControllerFrame(
     updateComboDisplay(combo, host.view);
 
     if (host.subliminal) {
-      const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
+      const intensity = (combo >= 4 || result.tSpin !== 'none') ? 'strong' : 'normal';
       host.subliminal.triggerReinforcement('lineClear', intensity);
     }
 
