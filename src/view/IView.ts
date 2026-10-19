@@ -1,5 +1,6 @@
 import type { GameSettings } from '../config/gameSettings.js';
 import type { GameState } from '../game/gameState.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import type { Piece } from '../game/pieces.js';
 import type { VisualEffects } from '../webgpu/effects.js';
 import type { ThemeColors, Themes } from '../webgpu/themes.js';
@@ -21,6 +22,7 @@ export interface IView {
 
   render(dt: number): void;
   renderMainScreen(state: GameState): void;
+  renderDualScreen?(state1: GameState, state2: GameState, offset1: [number, number], offset2: [number, number], ghostY1?: number, ghostY2?: number): void;
   renderEndScreen(state: GameState): void;
   renderPauseScreen(): void;
   renderPiece(ctx: CanvasRenderingContext2D, piece: Piece | null, blockSize?: number): void;
@@ -44,12 +46,12 @@ export interface IView {
 
   onLineClear?(
     lines: number[],
-    tSpin?: boolean,
+    tSpin?: TSpinResult | boolean,
     combo?: number,
     backToBack?: boolean,
     isAllClear?: boolean,
   ): void;
-  onLock?(isTSpin?: boolean, blocks?: number[][], x?: number, y?: number): void;
+  onLock?(isTSpin?: TSpinResult | boolean, blocks?: number[][], x?: number, y?: number): void;
   onHardDrop?(x: number, ghostY: number, dropDist: number, colorIdx: number, blocks?: number[][]): void;
   onMove?(x: number, y: number): void;
   onRotate?(): void;
@@ -61,11 +63,11 @@ export interface IView {
   onLineClearReactive?(
     linesCleared: number,
     combo: number,
-    isTSpin: boolean,
+    isTSpin: TSpinResult | boolean,
     isAllClear: boolean,
   ): void;
   onLevelUpReactive?(newLevel: number): void;
-  onTSpinReactive?(type?: string): void;
+  onTSpinReactive?(type?: 'normal' | 'mini'): void;
   onPerfectClearReactive?(): void;
   onGameOverReactive?(): void;
 

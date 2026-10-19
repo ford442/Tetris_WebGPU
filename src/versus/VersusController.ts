@@ -16,6 +16,8 @@ import {
   announceLineClear,
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
+import { clampDt } from '../controller/gameLoop.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 type Action = PlayerAction;
 
@@ -51,6 +53,8 @@ export default class VersusController {
   private lastTime = 0;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
 
   constructor(
     view: IView,
@@ -100,6 +104,27 @@ export default class VersusController {
     this.boundKeyUp = this.handleKeyUp.bind(this);
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
+
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused) {
+        this.pause();
+      }
+    };
+    window.addEventListener('blur', this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener('visibilitychange', this.boundVisibilityChange);
+  }
+
+  destroy(): void {
+    document.removeEventListener('keydown', this.boundKeyDown);
+    document.removeEventListener('keyup', this.boundKeyUp);
+    window.removeEventListener('blur', this.boundBlurOrHidden);
+    document.removeEventListener('visibilitychange', this.boundVisibilityChange);
+    this.disableSplitScreen();
   }
 
   get game(): Game {
@@ -128,6 +153,15 @@ export default class VersusController {
     if (!this.isPlaying || this.isPaused) return;
     this.isPaused = true;
     this.isPlaying = false;
+
+    // Clear physical keys and action timers so DAS doesn't keep running after alt-tab
+    for (const player of this.players) {
+      player.keys = {};
+      for (const action in player.actionTimers) {
+        player.actionTimers[action as Action] = 0;
+      }
+    }
+
     if (this.gameLoopID) cancelAnimationFrame(this.gameLoopID);
     this.gameLoopID = null;
     this.soundManager.musicManager.pause();
@@ -335,15 +369,15 @@ export default class VersusController {
         result.tSpin,
         player === 0 ? 'Player 1' : 'Player 2',
       );
-      this.sendAttack(player, result.linesCleared.length);
+      this.sendAttack(player, result.linesCleared.length, result.tSpin);
     } else if (result.locked) {
       this.soundManager.playLock(g.activPiece?.type ?? 'T', g.activPiece?.x ?? 4);
     }
     if (result.gameOver) this.onPlayerDefeated(player);
   }
 
-  private sendAttack(from: 0 | 1, linesCleared: number): void {
-    const rows = attackRowsFromClear(linesCleared);
+  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
+    const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
       this.players[1 - from].game.queueGarbage(rows);
     }
@@ -392,7 +426,7 @@ export default class VersusController {
 
   private async runFrame(time: number): Promise<boolean> {
     if (!this.isPlaying || this.isPaused) return false;
-    const dt = time - this.lastTime;
+    const dt = clampDt(time - this.lastTime);
     this.lastTime = time;
 
     let anyAlive = false;
@@ -432,7 +466,7 @@ export default class VersusController {
           result.tSpin,
           i === 0 ? 'Player 1' : 'Player 2',
         );
-        this.sendAttack(i as 0 | 1, result.linesCleared.length);
+        this.sendAttack(i as 0 | 1, result.linesCleared.length, result.tSpin);
         this.viewWebGPU.onLineClear?.(
           result.linesCleared,
           result.tSpin,
@@ -456,6 +490,13 @@ export default class VersusController {
     this.updateVersusHud(s0, s1);
     this.viewWebGPU.state = s0;
     this.viewWebGPU.splitScreen.stateB = s1;
+    if (this.view.renderDualScreen) {
+      const g0 = this.players[0].game;
+      const g1 = this.players[1].game;
+      const ghostY1 = g0.activPiece ? g0.getGhostY() : 0;
+      const ghostY2 = g1.activPiece ? g1.getGhostY() : 0;
+      this.view.renderDualScreen(s0, s1, [-9, 0], [9, 0], ghostY1, ghostY2);
+    }
     this.view.renderMainScreen(s0);
     this.renderSidePanels(s0, s1);
     this.viewWebGPU.render(dt / 1000);

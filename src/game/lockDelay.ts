@@ -3,12 +3,13 @@ import type { ScoreEvent } from './scoring.js';
 import type { RunStats } from './runStats.js';
 import type { ScoringSystem } from './scoring.js';
 import type { IView } from '../view/IView.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface LockUpdateResult {
   linesCleared: number[];
   locked: boolean;
   gameOver: boolean;
-  tSpin: boolean;
+  tSpin: TSpinResult;
 }
 
 export interface LockDelayHost {
@@ -18,7 +19,7 @@ export interface LockDelayHost {
   maxLockResets: number;
   isRunEnded: boolean;
   activPiece: Piece;
-  isTSpin: boolean;
+  isTSpin: TSpinResult;
   effectCounter: number;
   gameOver: boolean;
   victory: boolean;
@@ -37,7 +38,7 @@ export interface LockDelayHost {
   triggerLineClearReactive(
     linesCleared: number,
     combo: number,
-    isTSpin: boolean,
+    isTSpin: TSpinResult,
     isAllClear: boolean,
   ): void;
   triggerLevelUpReactive(newLevel: number): void;
@@ -62,7 +63,7 @@ export function handleMoveReset(host: LockDelayHost): void {
 export function finishLockUpdate(
   host: LockDelayHost,
   linesScore: number[],
-  wasTSpin: boolean,
+  wasTSpin: TSpinResult,
   result: LockUpdateResult,
 ): void {
   if (linesScore.length > 0) {
@@ -75,7 +76,7 @@ export function finishLockUpdate(
     }
     result.tSpin = wasTSpin;
     host.triggerLineClearReactive(linesScore.length, host.combo, wasTSpin, isAllClear);
-    if (wasTSpin) host.view?.onTSpinReactive?.();
+    if (wasTSpin !== 'none') host.view?.onTSpinReactive?.(wasTSpin);
     if (host.level > previousLevel) {
       host.triggerLevelUpReactive(host.level);
     }
@@ -146,5 +147,5 @@ export function resetLockDelayResult(result: LockUpdateResult): void {
   result.linesCleared.length = 0;
   result.locked = false;
   result.gameOver = false;
-  result.tSpin = false;
+  result.tSpin = 'none';
 }

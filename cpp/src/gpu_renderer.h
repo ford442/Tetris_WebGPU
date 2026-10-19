@@ -18,8 +18,16 @@ void gpu_renderer_resize(int width, int height);
 void gpu_renderer_shutdown(void);
 
 /** Draw locked + active + ghost blocks from playfield + optional piece state. */
+/** Begin frame (clear buffers). */
+void gpu_renderer_begin_frame(float dt);
+
+/** Draw locked + active + ghost blocks from playfield + optional piece state into offscreen target. */
 void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
-                         const PieceState* piece_state, float dt);
+                         const PieceState* piece_state, float dt,
+                         float offset_x, float offset_y);
+
+/** End frame (post-process and present). */
+void gpu_renderer_end_frame(void);
 
 /** Upload RGBA8 block atlas pixels (e.g. block.png). Returns 1 on success. */
 int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len);
