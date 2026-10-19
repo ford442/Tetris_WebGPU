@@ -4,6 +4,7 @@
  */
 
 import { gameLogger } from '../utils/logger.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface ScoreEvent {
   points: number;
@@ -276,7 +277,7 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: 'none' | 'mini' | 'normal' = 'none', isAllClear: boolean = false): ScoreEvent | null {
+  updateScore(linesCleared: number, tSpin: TSpinResult = 'none', isAllClear: boolean = false): ScoreEvent | null {
     if (linesCleared === 0 && tSpin === 'none') {
       this.combo = -1;
       return null;
@@ -288,12 +289,12 @@ export class ScoringSystem {
        // do not reset B2B, do not score
        return null;
     }
+    this.combo++;
 
     // Check level before adding lines
     const previousLevel = this.level;
 
     this.lines += linesCleared;
-    this.combo++;
 
     // Check if level increased
     const levelUp = this.level > previousLevel;
@@ -314,6 +315,7 @@ export class ScoringSystem {
     } else if (linesCleared > 0) {
         this.backToBack = false;
     }
+    // Note: If linesCleared === 0 (e.g. zero-line t-spin), B2B is preserved but not started
 
     // T-Spin Scoring
     if (tSpin === 'normal') {

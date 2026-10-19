@@ -2,7 +2,7 @@
 
 #include <emscripten/emscripten.h>
 
-EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int canvas_w, int canvas_h, int show_badge), {
+EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int canvas_w, int canvas_h, int clear_bg, float offset_x, float offset_y), {
   var canvas = Module.canvas;
   if (!canvas) {
     canvas = document.getElementById('canvaswebgpu');
@@ -12,9 +12,11 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
   var ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(7, 24, 18, 0.85)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (clear_bg) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(7, 24, 18, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   var heap = HEAP8;
   var offset = cells >> 0;
@@ -24,14 +26,18 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
 
   var boardW = cellPx * cols;
   var boardH = cellPx * rows;
-  var originX = Math.floor((canvas.width - boardW) * 0.5);
-  var originY = Math.floor((canvas.height - boardH) * 0.5);
+  // Apply world offset but convert to pixels assuming world coords approximate -10 to 10
+  var pxOffsetX = (offset_x / 20.0) * canvas.width;
+  var pxOffsetY = -(offset_y / 20.0) * canvas.height;
+  var originX = Math.floor((canvas.width - boardW) * 0.5 + pxOffsetX);
+  var originY = Math.floor((canvas.height - boardH) * 0.5 + pxOffsetY);
   var gap = Math.max(1, Math.floor(cellPx * 0.06));
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.fillRect(originX - gap, originY - gap, boardW + gap * 2, boardH + gap * 2);
 
-  if (show_badge) {
+  // Only show badge when clearing (first draw)
+  if (clear_bg) {
     ctx.fillStyle = 'rgba(180, 180, 180, 0.85)';
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
@@ -75,6 +81,6 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
 });
 
 void canvas_draw_playfield(const int8_t* playfield, int cols, int rows, int canvas_w, int canvas_h,
-                           int show_fallback_badge) {
-  js_draw_playfield(playfield, cols, rows, canvas_w, canvas_h, show_fallback_badge);
+                           int clear_bg, float offset_x, float offset_y) {
+  js_draw_playfield(playfield, cols, rows, canvas_w, canvas_h, clear_bg, offset_x, offset_y);
 }

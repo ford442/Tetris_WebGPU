@@ -17,6 +17,7 @@ import {
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
 import { clampDt } from '../controller/gameLoop.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 type Action = PlayerAction;
 
@@ -375,7 +376,7 @@ export default class VersusController {
     if (result.gameOver) this.onPlayerDefeated(player);
   }
 
-  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: 'none' | 'mini' | 'normal'): void {
+  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
     const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
       this.players[1 - from].game.queueGarbage(rows);
@@ -489,6 +490,13 @@ export default class VersusController {
     this.updateVersusHud(s0, s1);
     this.viewWebGPU.state = s0;
     this.viewWebGPU.splitScreen.stateB = s1;
+    if (this.view.renderDualScreen) {
+      const g0 = this.players[0].game;
+      const g1 = this.players[1].game;
+      const ghostY1 = g0.activPiece ? g0.getGhostY() : 0;
+      const ghostY2 = g1.activPiece ? g1.getGhostY() : 0;
+      this.view.renderDualScreen(s0, s1, [-9, 0], [9, 0], ghostY1, ghostY2);
+    }
     this.view.renderMainScreen(s0);
     this.renderSidePanels(s0, s1);
     this.viewWebGPU.render(dt / 1000);

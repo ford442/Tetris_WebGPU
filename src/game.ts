@@ -22,7 +22,7 @@ import {
   tickLockDelaySync,
   type LockDelayHost,
 } from './game/lockDelay.js';
-import { evaluateTSpin } from './game/tSpin.js';
+import { evaluateTSpin, type TSpinResult } from './game/tSpin.js';
 import {
   performHold as applyHold,
   refillNextQueue as refillNextQueueHost,
@@ -72,7 +72,7 @@ export default class Game implements ModeGameHooks {
   scoreEvent: ScoreEvent | null = null;
 
   // T-Spin Tracking
-  isTSpin: 'none' | 'mini' | 'normal' = 'none';
+  isTSpin: TSpinResult = 'none';
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -90,7 +90,7 @@ export default class Game implements ModeGameHooks {
   ];
 
   // Pre-allocated result object for update loop to avoid GC
-  private _updateResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' } = {
+  private _updateResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: 'none'
   };
 
@@ -125,7 +125,7 @@ export default class Game implements ModeGameHooks {
   private wasmBoardId = 0;
   private neonHyperInversionFlag = false;
 
-  private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' } = {
+  private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: 'none'
   };
 
@@ -528,20 +528,20 @@ export default class Game implements ModeGameHooks {
     return this.collisionDetector.getGhostY(piece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' } {
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
     void performHardDrop(this, () => this.clearLine(), this._hardDropResult);
     return this._hardDropResult;
   }
 
-  async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' }> {
+  async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult }> {
     await performHardDrop(this, () => this.clearLineAsync(), this._hardDropResult);
     return this._hardDropResult;
   }
 
   applyLineClearScoring(
     linesScore: number[],
-    wasTSpin: 'none' | 'mini' | 'normal',
-    result: { linesCleared: number[], tSpin: 'none' | 'mini' | 'normal' },
+    wasTSpin: TSpinResult,
+    result: { linesCleared: number[], tSpin: TSpinResult },
   ): void {
     if (linesScore.length > 0) {
         const isAllClear = this.isPlayfieldEmpty();
@@ -600,19 +600,19 @@ export default class Game implements ModeGameHooks {
   }
 
   // Called every frame (CPU line detection — used by unit tests)
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' } {
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
-      tickLockDelaySync(this as LockDelayHost, dt, () => this.clearLine(), this._updateResult);
+      tickLockDelaySync(this, dt, () => this.clearLine(), this._updateResult);
       return this._updateResult;
   }
 
   /** Game loop entry — GPU line detection when the view pipeline is ready. */
-  async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: 'none' | 'mini' | 'normal' }> {
+  async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult }> {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
       await tickLockDelay(
-        this as LockDelayHost,
+        this,
         dt,
         () => this.clearLineAsync(),
         this._updateResult,
@@ -680,7 +680,7 @@ export default class Game implements ModeGameHooks {
         this.playfieldWidth,
         this.playfieldHeight,
         this._tSpinCorners,
-        kickIndex
+        kickIndex,
       );
   }
 

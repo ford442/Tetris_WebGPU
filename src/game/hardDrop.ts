@@ -1,18 +1,20 @@
 import type { Piece } from './pieces.js';
 
+import type { TSpinResult } from './tSpin.js';
+import type { RunStats } from './runStats.js';
+
 export interface HardDropResult {
   linesCleared: number[];
   locked: boolean;
   gameOver: boolean;
-  tSpin: 'none' | 'mini' | 'normal';
+  tSpin: TSpinResult;
 }
 
-import type { RunStats } from './runStats.js';
 
 export interface HardDropHost {
   activPiece: Piece;
   runStats: RunStats;
-  isTSpin: 'none' | 'mini' | 'normal';
+  isTSpin: TSpinResult;
   effectEvent: string | null;
   effectCounter: number;
   lastDropPos: { x: number; y: number } | null;
@@ -27,7 +29,7 @@ export interface HardDropHost {
   updatePieces(): void;
   applyLineClearScoring(
     linesScore: number[],
-    wasTSpin: 'none' | 'mini' | 'normal',
+    wasTSpin: TSpinResult,
     result: HardDropResult,
   ): void;
 }

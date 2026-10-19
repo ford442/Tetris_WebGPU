@@ -3,12 +3,13 @@ import type { ScoreEvent } from './scoring.js';
 import type { RunStats } from './runStats.js';
 import type { ScoringSystem } from './scoring.js';
 import type { IView } from '../view/IView.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface LockUpdateResult {
   linesCleared: number[];
   locked: boolean;
   gameOver: boolean;
-  tSpin: 'none' | 'mini' | 'normal';
+  tSpin: TSpinResult;
 }
 
 export interface LockDelayHost {
@@ -18,7 +19,7 @@ export interface LockDelayHost {
   maxLockResets: number;
   isRunEnded: boolean;
   activPiece: Piece;
-  isTSpin: 'none' | 'mini' | 'normal';
+  isTSpin: TSpinResult;
   effectCounter: number;
   gameOver: boolean;
   victory: boolean;
@@ -62,7 +63,7 @@ export function handleMoveReset(host: LockDelayHost): void {
 export function finishLockUpdate(
   host: LockDelayHost,
   linesScore: number[],
-  wasTSpin: 'none' | 'mini' | 'normal',
+  wasTSpin: TSpinResult,
   result: LockUpdateResult,
 ): void {
   if (linesScore.length > 0) {

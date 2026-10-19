@@ -1,6 +1,7 @@
 import type { Piece } from './pieces.js';
 import type { IView } from '../view/IView.js';
 import type { RunStats } from './runStats.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface SpawnHoldHost {
   activPiece: Piece;
@@ -13,7 +14,7 @@ export interface SpawnHoldHost {
   practiceTopOutRecovery?: boolean;
   lockTimer: number;
   lockResets: number;
-  isTSpin: 'none' | 'mini' | 'normal';
+  isTSpin: TSpinResult;
   gameOver: boolean;
   runStats: RunStats;
   view: IView | null;
