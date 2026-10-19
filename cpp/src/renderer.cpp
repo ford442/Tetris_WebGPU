@@ -68,10 +68,33 @@ void resize_renderer(int width, int height) {
 EMSCRIPTEN_KEEPALIVE
 void render_frame(float dt) {
   if (gpu_renderer_is_active()) {
-    gpu_renderer_render(g_playfield, kBoardCols, kBoardRows, &g_piece_state, dt);
+    gpu_renderer_begin_frame(dt);
+    gpu_renderer_render(g_playfield, kBoardCols, kBoardRows, &g_piece_state, dt, 0.0f, 0.0f);
+    gpu_renderer_end_frame();
     return;
   }
-  canvas_draw_playfield(g_playfield, kBoardCols, kBoardRows, g_width, g_height, 1);
+  canvas_draw_playfield(g_playfield, kBoardCols, kBoardRows, g_width, g_height, 1, 0.0f, 0.0f);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void render_dual_frame(float dt,
+                       const int8_t* pf1, const PieceState* ps1, float off_x1, float off_y1,
+                       const int8_t* pf2, const PieceState* ps2, float off_x2, float off_y2) {
+  if (gpu_renderer_is_active()) {
+    gpu_renderer_begin_frame(dt);
+    gpu_renderer_render(pf1, kBoardCols, kBoardRows, ps1, dt, off_x1, off_y1);
+    gpu_renderer_render(pf2, kBoardCols, kBoardRows, ps2, dt, off_x2, off_y2);
+    gpu_renderer_end_frame();
+    return;
+  }
+
+  // Canvas2D clearing is handled in js_draw_playfield. If we draw twice, it clears twice.
+  // We need to disable the clear on the second pass.
+  // We'll update the playfield draw to clear if offset_x == 0 or just add a flag.
+  // For now, let's just make it clear the first time and not the second.
+  // Actually, wait, let's fix canvas_draw_playfield to support a clear parameter.
+  canvas_draw_playfield(pf1, kBoardCols, kBoardRows, g_width, g_height, 1, off_x1, off_y1);
+  canvas_draw_playfield(pf2, kBoardCols, kBoardRows, g_width, g_height, 0, off_x2, off_y2);
 }
 
 EMSCRIPTEN_KEEPALIVE

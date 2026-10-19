@@ -490,6 +490,13 @@ export default class VersusController {
     this.updateVersusHud(s0, s1);
     this.viewWebGPU.state = s0;
     this.viewWebGPU.splitScreen.stateB = s1;
+    if (this.view.renderDualScreen) {
+      const g0 = this.players[0].game;
+      const g1 = this.players[1].game;
+      const ghostY1 = g0.activPiece ? g0.getGhostY() : 0;
+      const ghostY2 = g1.activPiece ? g1.getGhostY() : 0;
+      this.view.renderDualScreen(s0, s1, [-9, 0], [9, 0], ghostY1, ghostY2);
+    }
     this.view.renderMainScreen(s0);
     this.renderSidePanels(s0, s1);
     this.viewWebGPU.render(dt / 1000);
