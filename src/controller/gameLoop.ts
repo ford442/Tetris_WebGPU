@@ -28,7 +28,7 @@ export interface ControllerLoopHost {
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: 'none' | 'mini' | 'normal' },
     pieceType: string,
     pieceCol: number,
   ): void;
@@ -151,7 +151,7 @@ export async function runControllerFrame(
     updateComboDisplay(combo, host.view);
 
     if (host.subliminal) {
-      const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
+      const intensity = (combo >= 4 || result.tSpin !== 'none') ? 'strong' : 'normal';
       host.subliminal.triggerReinforcement('lineClear', intensity);
     }
 
@@ -174,7 +174,7 @@ export async function runControllerFrame(
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);
     }
-    if (result.tSpin && host.subliminal) {
+    if (result.tSpin !== 'none' && host.subliminal) {
       host.subliminal.triggerReinforcement('tspin', 'strong');
     }
   }

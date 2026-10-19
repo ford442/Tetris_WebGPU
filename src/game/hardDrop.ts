@@ -4,7 +4,7 @@ export interface HardDropResult {
   linesCleared: number[];
   locked: boolean;
   gameOver: boolean;
-  tSpin: boolean;
+  tSpin: 'none' | 'mini' | 'normal';
 }
 
 import type { RunStats } from './runStats.js';
@@ -12,7 +12,7 @@ import type { RunStats } from './runStats.js';
 export interface HardDropHost {
   activPiece: Piece;
   runStats: RunStats;
-  isTSpin: boolean;
+  isTSpin: 'none' | 'mini' | 'normal';
   effectEvent: string | null;
   effectCounter: number;
   lastDropPos: { x: number; y: number } | null;
@@ -27,7 +27,7 @@ export interface HardDropHost {
   updatePieces(): void;
   applyLineClearScoring(
     linesScore: number[],
-    wasTSpin: boolean,
+    wasTSpin: 'none' | 'mini' | 'normal',
     result: HardDropResult,
   ): void;
 }
@@ -36,7 +36,7 @@ export function resetHardDropResult(result: HardDropResult): void {
   result.linesCleared.length = 0;
   result.locked = false;
   result.gameOver = false;
-  result.tSpin = false;
+  result.tSpin = 'none';
 }
 
 export async function performHardDrop(
@@ -48,7 +48,7 @@ export async function performHardDrop(
 
   const ghostY = host.getGhostY();
   if (host.activPiece.y !== ghostY) {
-    host.isTSpin = false;
+    host.isTSpin = 'none';
   }
 
   host.hardDropSnapshot = {

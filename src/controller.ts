@@ -162,7 +162,7 @@ export default class Controller {
   }
 
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: 'none' | 'mini' | 'normal' },
     pieceType: string,
     pieceCol: number,
   ): void {

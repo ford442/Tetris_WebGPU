@@ -440,12 +440,12 @@ export default class OnlineVersusController {
 
     if (result.linesCleared0 > 0) {
       this.soundManager.playLineClear(result.linesCleared0, 0, false, 4);
-      announceLineClear(result.linesCleared0, this.session.lockstep.sim.g0.score, 0, false, 'Player 1');
-      this.viewWebGPU.onLineClear?.([0], false, 0, false, false);
+      announceLineClear(result.linesCleared0, this.session.lockstep.sim.g0.score, 0, 'none', 'Player 1');
+      this.viewWebGPU.onLineClear?.([0], 'none', 0, false, false);
     }
     if (result.linesCleared1 > 0) {
       this.soundManager.playLineClear(result.linesCleared1, 0, false, 4);
-      announceLineClear(result.linesCleared1, this.session.lockstep.sim.g1.score, 0, false, 'Player 2');
+      announceLineClear(result.linesCleared1, this.session.lockstep.sim.g1.score, 0, 'none', 'Player 2');
     }
   }
 

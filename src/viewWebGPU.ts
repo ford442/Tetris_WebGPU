@@ -23,6 +23,8 @@ import { ChaosModeController } from './webgpu/chaosMode.js';
 import { type BloomSystem, type BloomParameters } from './webgpu/bloomSystem.js';
 import type { GpuChoreRunner } from './webgpu/gpuChores/runner.js';
 import type { AutoBloomController } from './webgpu/gpuChores/autoBloom.js';
+import type { TSpinResult } from './game/tSpin.js';
+
 import {
   setPremiumVisualsPreset as setPremiumPresetImpl,
   onLineClearReactive as onLineClearReactiveImpl,
@@ -486,7 +488,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleShowFloatingText(this, text, subText);
   }
 
-  onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
+  onLineClear(lines: number[], tSpin: TSpinResult = 'none', combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
       // Trigger DOM-based line flash effect
       lineFlashEffect.flashLines(lines);
 
@@ -497,7 +499,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin: boolean = false, blocks?: number[][], x?: number, y?: number) { handleLock(this, isTSpin, blocks, x, y); }
+  onLock(isTSpin: TSpinResult = 'none', blocks?: number[][], x?: number, y?: number) { handleLock(this, isTSpin, blocks, x, y); }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
@@ -781,7 +783,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
   setPremiumVisualsPreset(options: Record<string, unknown> = {}) { setPremiumPresetImpl(this as ViewLike, options); }
   onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) { onLineClearReactiveImpl(this as ViewLike, lines, combo, isTSpin, isAllClear); }
-  onTSpinReactive() { onTSpinReactiveImpl(this as ViewLike); }
+  onTSpinReactive(type?: 'normal' | 'mini') { onTSpinReactiveImpl(this as ViewLike, type); }
   onPerfectClearReactive() { onPerfectClearReactiveImpl(this as ViewLike); }
   onLevelUpReactive(level: number) { onLevelUpReactiveImpl(this as ViewLike, level); }
   onGameOverReactive() { onGameOverReactiveImpl(this as ViewLike); }

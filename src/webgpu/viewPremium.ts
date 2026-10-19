@@ -140,7 +140,7 @@ export function onLineClearReactive(view: ViewLike, lines: number, combo: number
   }
 }
 
-export function onTSpinReactive(view: ViewLike) {
+export function onTSpinReactive(view: ViewLike, _type?: 'normal' | 'mini') {
   if (view.useReactiveVideo) {
     view.reactiveVideoBackground.onTSpin();
   }

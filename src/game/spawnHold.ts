@@ -13,7 +13,7 @@ export interface SpawnHoldHost {
   practiceTopOutRecovery?: boolean;
   lockTimer: number;
   lockResets: number;
-  isTSpin: boolean;
+  isTSpin: 'none' | 'mini' | 'normal';
   gameOver: boolean;
   runStats: RunStats;
   view: IView | null;
@@ -43,7 +43,7 @@ export function spawnNextPiece(host: SpawnHoldHost): void {
   host.canHold = true;
   host.lockTimer = 0;
   host.lockResets = 0;
-  host.isTSpin = false;
+  host.isTSpin = 'none';
 
   if (host.hasCollision()) {
     if (host.recoverFromTopOut) {
@@ -82,5 +82,5 @@ export function performHold(host: SpawnHoldHost): void {
   }
   host.lockTimer = 0;
   host.lockResets = 0;
-  host.isTSpin = false;
+  host.isTSpin = 'none';
 }

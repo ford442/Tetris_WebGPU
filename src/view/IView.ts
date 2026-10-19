@@ -44,12 +44,12 @@ export interface IView {
 
   onLineClear?(
     lines: number[],
-    tSpin?: boolean,
+    tSpin?: 'none' | 'mini' | 'normal',
     combo?: number,
     backToBack?: boolean,
     isAllClear?: boolean,
   ): void;
-  onLock?(isTSpin?: boolean, blocks?: number[][], x?: number, y?: number): void;
+  onLock?(isTSpin?: 'none' | 'mini' | 'normal', blocks?: number[][], x?: number, y?: number): void;
   onHardDrop?(x: number, ghostY: number, dropDist: number, colorIdx: number, blocks?: number[][]): void;
   onMove?(x: number, y: number): void;
   onRotate?(): void;
