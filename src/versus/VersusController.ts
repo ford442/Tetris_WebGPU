@@ -9,6 +9,7 @@ import type SoundManager from '../sound.js';
 import { INPUT_CONFIG } from '../config/gameConfig.js';
 import { PLAYER1_KEY_MAP, PLAYER2_KEY_MAP, type PlayerAction } from './inputMaps.js';
 import { attackRowsFromClear } from './garbage.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { SPLIT_PARTICLE_CAP } from './splitScreen.js';
 import { generateReplaySeed } from '../replay/recorder.js';
 import {
@@ -365,18 +366,18 @@ export default class VersusController {
         result.linesCleared.length,
         g.score,
         combo,
-        result.tSpin,
+        result.tSpin !== 'none',
         player === 0 ? 'Player 1' : 'Player 2',
       );
-      this.sendAttack(player, result.linesCleared.length);
+      this.sendAttack(player, result.linesCleared.length, result.tSpin);
     } else if (result.locked) {
       this.soundManager.playLock(g.activPiece?.type ?? 'T', g.activPiece?.x ?? 4);
     }
     if (result.gameOver) this.onPlayerDefeated(player);
   }
 
-  private sendAttack(from: 0 | 1, linesCleared: number): void {
-    const rows = attackRowsFromClear(linesCleared);
+  private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult = 'none'): void {
+    const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
       this.players[1 - from].game.queueGarbage(rows);
     }
@@ -462,13 +463,13 @@ export default class VersusController {
           result.linesCleared.length,
           slot.game.score,
           combo,
-          result.tSpin,
+          result.tSpin !== 'none',
           i === 0 ? 'Player 1' : 'Player 2',
         );
-        this.sendAttack(i as 0 | 1, result.linesCleared.length);
+        this.sendAttack(i as 0 | 1, result.linesCleared.length, result.tSpin);
         this.viewWebGPU.onLineClear?.(
           result.linesCleared,
-          result.tSpin,
+          result.tSpin !== 'none',
           combo,
           false,
           false,

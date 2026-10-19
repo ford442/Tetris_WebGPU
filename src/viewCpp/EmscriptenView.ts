@@ -31,6 +31,7 @@ import {
   onLevelUpReactive as onLevelUpReactiveImpl,
   onGameOverReactive as onGameOverReactiveImpl,
 } from '../webgpu/viewPremium.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
 import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
@@ -312,7 +313,7 @@ export default class EmscriptenView implements IView, ViewEventHost {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin = false): void {
+  onLock(isTSpin: TSpinResult = 'none'): void {
     handleLock(this, isTSpin);
   }
 

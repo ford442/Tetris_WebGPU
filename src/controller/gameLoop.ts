@@ -9,6 +9,7 @@ import {
   updateHighScoreDisplay,
   updateModeHud,
 } from './hudBridge.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 export interface ControllerLoopHost {
   isPlaying: boolean;
@@ -28,7 +29,7 @@ export interface ControllerLoopHost {
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void;
@@ -145,13 +146,13 @@ export async function runControllerFrame(
     const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
     host.playScoringAudio(result, pieceType, pieceCol);
-    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
-    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin);
+    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin !== 'none', combo, b2b, isAllClear);
+    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin !== 'none');
 
     updateComboDisplay(combo, host.view);
 
     if (host.subliminal) {
-      const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
+      const intensity = (combo >= 4 || result.tSpin !== 'none') ? 'strong' : 'normal';
       host.subliminal.triggerReinforcement('lineClear', intensity);
     }
 
@@ -174,7 +175,7 @@ export async function runControllerFrame(
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);
     }
-    if (result.tSpin && host.subliminal) {
+    if (result.tSpin !== 'none' && host.subliminal) {
       host.subliminal.triggerReinforcement('tspin', 'strong');
     }
   }

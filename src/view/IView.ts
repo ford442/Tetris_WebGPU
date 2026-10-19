@@ -4,6 +4,7 @@ import type { Piece } from '../game/pieces.js';
 import type { VisualEffects } from '../webgpu/effects.js';
 import type { ThemeColors, Themes } from '../webgpu/themes.js';
 import type { ParticleSystemLike } from './viewTypes.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 /** Shared surface area used by Controller and index.ts for any renderer backend. */
 export interface IView {
@@ -49,7 +50,7 @@ export interface IView {
     backToBack?: boolean,
     isAllClear?: boolean,
   ): void;
-  onLock?(isTSpin?: boolean, blocks?: number[][], x?: number, y?: number): void;
+  onLock?(isTSpin?: TSpinResult, blocks?: number[][], x?: number, y?: number): void;
   onHardDrop?(x: number, ghostY: number, dropDist: number, colorIdx: number, blocks?: number[][]): void;
   onMove?(x: number, y: number): void;
   onRotate?(): void;
@@ -65,7 +66,7 @@ export interface IView {
     isAllClear: boolean,
   ): void;
   onLevelUpReactive?(newLevel: number): void;
-  onTSpinReactive?(type?: string): void;
+  onTSpinReactive?(type?: TSpinResult): void;
   onPerfectClearReactive?(): void;
   onGameOverReactive?(): void;
 

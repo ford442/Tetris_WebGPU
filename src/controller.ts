@@ -15,6 +15,7 @@ import {
 import { startGameLoop, stopGameLoop } from "./controller/gameLoop.js";
 import { type SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 import { INPUT_CONFIG } from "./config/gameConfig.js";
+import type { TSpinResult } from "./game/tSpin.js";
 import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
 import type { ReplayActionName } from "./replay/actions.js";
 import type { ReplayFile } from "./replay/format.js";
@@ -162,7 +163,7 @@ export default class Controller {
   }
 
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void {
@@ -171,13 +172,13 @@ export default class Controller {
       const combo = scoreEvent?.combo ?? 0;
       const b2b = scoreEvent?.backToBack ?? false;
       this.soundManager.playLineClear(result.linesCleared.length, combo, b2b, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
       this.soundManager.musicManager.setGameplayIntensity(this.game.level, combo);
       return;
     }
     if (result.locked) {
       this.soundManager.playLock(pieceType, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
     }
   }
 
@@ -746,8 +747,8 @@ export default class Controller {
           const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
           this.playScoringAudio(result, pieceType, pieceCol);
-          this.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
-          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
+          this.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin !== 'none', combo, b2b, isAllClear);
+          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin !== 'none');
       } else if (result.locked) {
           this.playScoringAudio(result, pieceType, pieceCol);
           if (snap && this.viewWebGPU.onLock) {

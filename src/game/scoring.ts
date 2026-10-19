@@ -4,6 +4,7 @@
  */
 
 import { gameLogger } from '../utils/logger.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface ScoreEvent {
   points: number;
@@ -276,8 +277,8 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
-    if (linesCleared === 0) {
+  updateScore(linesCleared: number, tSpin: TSpinResult = 'none', isAllClear: boolean = false): ScoreEvent | null {
+    if (linesCleared === 0 && tSpin === 'none') {
       this.combo = -1;
       return null;
     }
@@ -286,7 +287,9 @@ export class ScoringSystem {
     const previousLevel = this.level;
 
     this.lines += linesCleared;
-    this.combo++;
+    if (linesCleared > 0) {
+        this.combo++;
+    }
 
     // Check if level increased
     const levelUp = this.level > previousLevel;
@@ -294,22 +297,28 @@ export class ScoringSystem {
     let baseScore = 0;
     let text = "";
     const level = this.level;
-    const isDifficult = tSpin || linesCleared === 4;
+    const isDifficult = linesCleared === 4 || (tSpin !== 'none' && linesCleared > 0);
 
     // Back-to-Back check
     let b2bMultiplier = 1.0;
     if (isDifficult) {
         if (this.backToBack) {
             b2bMultiplier = 1.5;
-            text += "B2B ";
+            if (linesCleared > 0) text += "B2B ";
         }
         this.backToBack = true;
-    } else {
+    } else if (linesCleared > 0) {
         this.backToBack = false;
     }
 
     // T-Spin Scoring
-    if (tSpin) {
+    if (tSpin === 'mini') {
+        switch (linesCleared) {
+            case 0: baseScore = 100 * level; text += "T-SPIN MINI"; break;
+            case 1: baseScore = 200 * level; text += "T-SPIN MINI SINGLE"; break;
+            case 2: baseScore = 400 * level; text += "T-SPIN MINI DOUBLE"; break;
+        }
+    } else if (tSpin === 'normal') {
         switch (linesCleared) {
             case 0: baseScore = 400 * level; text += "T-SPIN"; break;
             case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
