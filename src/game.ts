@@ -436,7 +436,7 @@ export default class Game implements ModeGameHooks {
     this.view?.onLevelUpReactive?.(newLevel);
   }
 
-  private triggerTSpinReactive(type: 'normal' | 'mini'): void {
+  private triggerTSpinReactive(type: TSpinResult): void {
     this.view?.onTSpinReactive?.(type);
   }
 
@@ -555,7 +555,7 @@ export default class Game implements ModeGameHooks {
             this.neonHyperInversionFlag = true;
         }
         this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-        if (wasTSpin) this.triggerTSpinReactive('normal');
+        if (wasTSpin !== 'none') this.triggerTSpinReactive(wasTSpin);
         if (isAllClear) this.view?.onPerfectClearReactive?.();
         this.notifyModeLineClear(linesScore.length);
         if (this.scoreEvent) {
@@ -734,6 +734,7 @@ export default class Game implements ModeGameHooks {
     const kicks = getWallKicks(type, currentRotation, nextRotation);
     if (!kicks || kicks.length === 0) return;
 
+    let kickIndex = 0;
     for (const [ox, oy] of kicks) {
         this._tempPiece.x = this.activPiece.x + ox;
         this._tempPiece.y = this.activPiece.y + oy;
@@ -762,13 +763,6 @@ export default class Game implements ModeGameHooks {
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
             // Need to know kick index for promotion
-            let kickIndex = 0;
-            for (let i = 0; i < kicks.length; i++) {
-                if (kicks[i][0] === ox && kicks[i][1] === oy) {
-                    kickIndex = i;
-                    break;
-                }
-            }
             this.checkTSpin(kickIndex); // Check T-Spin after kick
             // Trigger T-Spin reactive if detected
             if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
@@ -776,6 +770,7 @@ export default class Game implements ModeGameHooks {
             }
             return;
         }
+        kickIndex++;
     }
   }
 

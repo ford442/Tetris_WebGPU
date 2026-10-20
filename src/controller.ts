@@ -742,8 +742,8 @@ export default class Controller {
           const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
           this.playScoringAudio(result, pieceType, pieceCol);
-          this.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
-          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
+          this.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin !== 'none', combo, b2b, isAllClear);
+          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin !== 'none');
       } else if (result.locked) {
           this.playScoringAudio(result, pieceType, pieceCol);
           if (snap && this.viewWebGPU.onLock) {

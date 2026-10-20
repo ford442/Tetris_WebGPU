@@ -33,15 +33,13 @@ export function evaluateTSpin(
 
   let occupied = 0;
   let frontOccupied = 0;
-
-  // Assuming corners 0 and 1 are "front" corners based on rotation state
-  // We need to map rotation state to the correct front corners
-  let front1 = 0, front2 = 1;
+  let front1 = 0;
+  let front2 = 1;
   switch (piece.rotation) {
-    case 0: front1 = 0; front2 = 1; break; // A, B
-    case 1: front1 = 1; front2 = 3; break; // B, D
-    case 2: front1 = 3; front2 = 2; break; // D, C
-    case 3: front1 = 2; front2 = 0; break; // C, A
+    case 0: front1 = 0; front2 = 1; break;
+    case 1: front1 = 1; front2 = 3; break;
+    case 2: front1 = 3; front2 = 2; break;
+    case 3: front1 = 2; front2 = 0; break;
   }
 
   for (let i = 0; i < 4; i++) {
@@ -49,10 +47,8 @@ export function evaluateTSpin(
     let isOccupied = false;
     if (c.x < 0 || c.x >= playfieldWidth || c.y >= playfieldHeight) {
       isOccupied = true;
-    } else if (c.y >= 0) {
-      if (getCell(c.x, c.y) !== 0) {
-        isOccupied = true;
-      }
+    } else if (c.y >= 0 && getCell(c.x, c.y) !== 0) {
+      isOccupied = true;
     }
 
     if (isOccupied) {
@@ -64,11 +60,7 @@ export function evaluateTSpin(
   }
 
   if (occupied >= 3) {
-    if (frontOccupied >= 2 || lastKickIndex === 4) {
-      return 'normal';
-    } else {
-      return 'mini';
-    }
+    return frontOccupied >= 2 || lastKickIndex === 4 ? 'normal' : 'mini';
   }
 
   return 'none';

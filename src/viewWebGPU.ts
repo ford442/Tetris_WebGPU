@@ -40,6 +40,7 @@ import {
   setBloomParameters as setBloomParametersImpl,
   applyGameSettings as applyGameSettingsImpl,
 } from './webgpu/viewPremium.js';
+import type { TSpinResult } from './game/tSpin.js';
 import type { GameSettings } from './config/gameSettings.js';
 import { renderLogger } from './utils/logger.js';
 import {
@@ -497,7 +498,9 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin: boolean = false, blocks?: number[][], x?: number, y?: number) { handleLock(this, isTSpin, blocks, x, y); }
+  onLock(isTSpin: TSpinResult = 'none', blocks?: number[][], x?: number, y?: number) {
+    handleLock(this, isTSpin, blocks, x, y);
+  }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {

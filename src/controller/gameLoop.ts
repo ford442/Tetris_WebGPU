@@ -146,8 +146,8 @@ export async function runControllerFrame(
     const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
     host.playScoringAudio(result, pieceType, pieceCol);
-    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
-    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin);
+    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin !== 'none', combo, b2b, isAllClear);
+    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin !== 'none');
 
     updateComboDisplay(combo, host.view);
 
@@ -175,7 +175,7 @@ export async function runControllerFrame(
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);
     }
-    if (result.tSpin && host.subliminal) {
+    if (result.tSpin !== 'none' && host.subliminal) {
       host.subliminal.triggerReinforcement('tspin', 'strong');
     }
   }

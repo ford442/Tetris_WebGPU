@@ -1,7 +1,6 @@
 /** Garbage cell color index (themes.ts). */
 export const GARBAGE_CELL = 8;
 
-/** Lines cleared → garbage rows sent to opponent. */
 import type { TSpinResult } from '../game/tSpin.js';
 
 /** Lines cleared → garbage rows sent to opponent. */
