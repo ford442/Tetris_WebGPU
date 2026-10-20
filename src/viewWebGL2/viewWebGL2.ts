@@ -27,6 +27,7 @@ import {
 } from '../webgpu/viewGameEvents.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 const glMatrix = Matrix;
 
@@ -251,7 +252,7 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin = false): void {
+  onLock(isTSpin: TSpinResult = 'none'): void {
     handleLock(this, isTSpin);
   }
 

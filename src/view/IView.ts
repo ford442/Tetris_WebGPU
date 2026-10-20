@@ -51,7 +51,7 @@ export interface IView {
     backToBack?: boolean,
     isAllClear?: boolean,
   ): void;
-  onLock?(isTSpin?: TSpinResult | boolean, blocks?: number[][], x?: number, y?: number): void;
+  onLock?(isTSpin?: TSpinResult, blocks?: number[][], x?: number, y?: number): void;
   onHardDrop?(x: number, ghostY: number, dropDist: number, colorIdx: number, blocks?: number[][]): void;
   onMove?(x: number, y: number): void;
   onRotate?(): void;
@@ -67,7 +67,7 @@ export interface IView {
     isAllClear: boolean,
   ): void;
   onLevelUpReactive?(newLevel: number): void;
-  onTSpinReactive?(type?: 'normal' | 'mini'): void;
+  onTSpinReactive?(type?: TSpinResult): void;
   onPerfectClearReactive?(): void;
   onGameOverReactive?(): void;
 
