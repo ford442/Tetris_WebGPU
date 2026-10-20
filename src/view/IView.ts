@@ -22,6 +22,7 @@ export interface IView {
 
   render(dt: number): void;
   renderMainScreen(state: GameState): void;
+  renderDualScreen?(state1: GameState, state2: GameState, offset1: [number, number], offset2: [number, number], ghostY1?: number, ghostY2?: number): void;
   renderEndScreen(state: GameState): void;
   renderPauseScreen(): void;
   renderPiece(ctx: CanvasRenderingContext2D, piece: Piece | null, blockSize?: number): void;
