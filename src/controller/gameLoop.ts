@@ -157,7 +157,7 @@ export async function runControllerFrame(
     }
 
     if (result.locked && !reducedMotion) {
-      host.hitStopFrames = 1;
+      host.hitStopFrames = (host.game.effectEvent === 'hardDrop') ? 2 : 1;
     }
   } else if (result.locked) {
     host.playScoringAudio(result, pieceType, pieceCol);
@@ -170,7 +170,7 @@ export async function runControllerFrame(
     }
 
     if (!reducedMotion) {
-      host.hitStopFrames = 1;
+      host.hitStopFrames = (host.game.effectEvent === 'hardDrop') ? 2 : 1;
     }
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);

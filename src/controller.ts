@@ -735,11 +735,6 @@ export default class Controller {
       const snap = this.game.getHardDropSnapshot?.();
       this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx, snap?.blocks);
 
-      const reducedMotion = (this.viewWebGPU as any).visualEffects?.reducedMotion ?? false;
-      if (!reducedMotion) {
-          this.hitStopFrames = 2;
-      }
-
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;
           const combo = scoreEvent ? scoreEvent.combo : 0;
