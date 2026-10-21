@@ -9,6 +9,7 @@ import type SoundManager from '../sound.js';
 import { INPUT_CONFIG } from '../config/gameConfig.js';
 import { PLAYER1_KEY_MAP, PLAYER2_KEY_MAP, type PlayerAction } from './inputMaps.js';
 import { attackRowsFromClear } from './garbage.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { SPLIT_PARTICLE_CAP } from './splitScreen.js';
 import { generateReplaySeed } from '../replay/recorder.js';
 import {
@@ -17,7 +18,6 @@ import {
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
 import { clampDt } from '../controller/gameLoop.js';
-import type { TSpinResult } from '../game/tSpin.js';
 
 type Action = PlayerAction;
 

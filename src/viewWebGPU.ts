@@ -499,7 +499,9 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin: TSpinResult = 'none', blocks?: number[][], x?: number, y?: number) { handleLock(this, isTSpin, blocks, x, y); }
+  onLock(isTSpin: TSpinResult = 'none', blocks?: number[][], x?: number, y?: number) {
+    handleLock(this, isTSpin, blocks, x, y);
+  }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {

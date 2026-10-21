@@ -18,6 +18,7 @@ import { renderLogger, audioLogger } from '../utils/logger.js';
 import type { GameSettings } from '../config/gameSettings.js';
 import type { GameState } from '../game/gameState.js';
 import { QUALITY_PRESET_VALUES } from '../config/renderConfig.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { applyAccessibilitySettings } from '../a11y/applyAccessibility.js';
 import { isReducedMotionActive } from '../a11y/accessibility.js';
 import { particleBudgetForQuality } from './particles/layout.js';
@@ -140,7 +141,7 @@ export function onLineClearReactive(view: ViewLike, lines: number, combo: number
   }
 }
 
-export function onTSpinReactive(view: ViewLike, _type?: 'normal' | 'mini') {
+export function onTSpinReactive(view: ViewLike, _type: TSpinResult = 'normal') {
   if (view.useReactiveVideo) {
     view.reactiveVideoBackground.onTSpin();
   }

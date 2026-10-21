@@ -436,7 +436,7 @@ export default class Game implements ModeGameHooks {
     this.view?.onLevelUpReactive?.(newLevel);
   }
 
-  private triggerTSpinReactive(type: 'normal' | 'mini'): void {
+  private triggerTSpinReactive(type: TSpinResult): void {
     this.view?.onTSpinReactive?.(type);
   }
 
@@ -769,6 +769,7 @@ export default class Game implements ModeGameHooks {
             }
             return;
         }
+        kickIndex++;
     }
   }
 

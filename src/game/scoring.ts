@@ -309,7 +309,7 @@ export class ScoringSystem {
     if (isDifficult) {
         if (this.backToBack) {
             b2bMultiplier = 1.5;
-            text += "B2B ";
+            if (linesCleared > 0) text += "B2B ";
         }
         this.backToBack = true;
     } else if (linesCleared > 0) {

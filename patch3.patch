@@ -1,5 +1,5 @@
---- src/webgpu/shaders/wgsl/block/pbrFunctions.wgsl
-+++ src/webgpu/shaders/wgsl/block/pbrFunctions.wgsl
+--- src/webgpu/shaders/wgsl/block/pbrCore.wgsl
++++ src/webgpu/shaders/wgsl/block/pbrCore.wgsl
 @@ -67,9 +67,23 @@
      let Rn = normalize(R);
      let up = Rn.y * 0.5 + 0.5;

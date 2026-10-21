@@ -67,7 +67,7 @@ export interface IView {
     isAllClear: boolean,
   ): void;
   onLevelUpReactive?(newLevel: number): void;
-  onTSpinReactive?(type?: 'normal' | 'mini'): void;
+  onTSpinReactive?(type?: TSpinResult): void;
   onPerfectClearReactive?(): void;
   onGameOverReactive?(): void;
 
