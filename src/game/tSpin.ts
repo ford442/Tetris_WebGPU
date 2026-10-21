@@ -5,15 +5,18 @@ export interface TSpinCorner {
   y: number;
 }
 
+export type TSpinResult = 'none' | 'normal' | 'mini';
+
 export function evaluateTSpin(
   piece: Piece,
   getCell: (x: number, y: number) => number,
   playfieldWidth: number,
   playfieldHeight: number,
   corners: TSpinCorner[],
-): boolean {
+  lastKickIndex: number = 0,
+): TSpinResult {
   if (piece.type !== 'T') {
-    return false;
+    return 'none';
   }
 
   const px = piece.x;
@@ -29,16 +32,36 @@ export function evaluateTSpin(
   corners[3].y = py + 2;
 
   let occupied = 0;
+  let frontOccupied = 0;
+  let front1 = 0;
+  let front2 = 1;
+  switch (piece.rotation) {
+    case 0: front1 = 0; front2 = 1; break;
+    case 1: front1 = 1; front2 = 3; break;
+    case 2: front1 = 3; front2 = 2; break;
+    case 3: front1 = 2; front2 = 0; break;
+  }
+
   for (let i = 0; i < 4; i++) {
     const c = corners[i];
+    let isOccupied = false;
     if (c.x < 0 || c.x >= playfieldWidth || c.y >= playfieldHeight) {
+      isOccupied = true;
+    } else if (c.y >= 0 && getCell(c.x, c.y) !== 0) {
+      isOccupied = true;
+    }
+
+    if (isOccupied) {
       occupied++;
-    } else if (c.y >= 0) {
-      if (getCell(c.x, c.y) !== 0) {
-        occupied++;
+      if (i === front1 || i === front2) {
+        frontOccupied++;
       }
     }
   }
 
-  return occupied >= 3;
+  if (occupied >= 3) {
+    return frontOccupied >= 2 || lastKickIndex === 4 ? 'normal' : 'mini';
+  }
+
+  return 'none';
 }

@@ -1,8 +1,21 @@
 /** Garbage cell color index (themes.ts). */
 export const GARBAGE_CELL = 8;
 
+import type { TSpinResult } from '../game/tSpin.js';
+
 /** Lines cleared → garbage rows sent to opponent. */
-export function attackRowsFromClear(linesCleared: number): number {
+export function attackRowsFromClear(linesCleared: number, tSpin: TSpinResult = 'none'): number {
+  if (tSpin !== 'none') {
+    if (tSpin === 'mini') {
+      if (linesCleared === 1) return 0; // Mini single
+      if (linesCleared === 2) return 1; // Mini double
+    } else {
+      if (linesCleared === 1) return 2; // T-Spin Single
+      if (linesCleared === 2) return 4; // T-Spin Double
+      if (linesCleared === 3) return 6; // T-Spin Triple
+    }
+  }
+
   if (linesCleared <= 0) return 0;
   if (linesCleared === 1) return 0;
   if (linesCleared === 2) return 1;

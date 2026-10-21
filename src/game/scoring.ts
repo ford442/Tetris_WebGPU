@@ -4,6 +4,7 @@
  */
 
 import { gameLogger } from '../utils/logger.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface ScoreEvent {
   points: number;
@@ -276,17 +277,23 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
-    if (linesCleared === 0) {
+  updateScore(linesCleared: number, tSpin: TSpinResult = 'none', isAllClear: boolean = false): ScoreEvent | null {
+    if (linesCleared === 0 && tSpin === 'none') {
       this.combo = -1;
       return null;
+    }
+
+    if (linesCleared === 0) {
+        // Zero-line T-spins don't increment combo
+        this.combo = -1;
+    } else {
+        this.combo++;
     }
 
     // Check level before adding lines
     const previousLevel = this.level;
 
     this.lines += linesCleared;
-    this.combo++;
 
     // Check if level increased
     const levelUp = this.level > previousLevel;
@@ -294,27 +301,38 @@ export class ScoringSystem {
     let baseScore = 0;
     let text = "";
     const level = this.level;
-    const isDifficult = tSpin || linesCleared === 4;
+    const isDifficult = linesCleared === 4 || (tSpin !== 'none' && linesCleared > 0);
 
     // Back-to-Back check
     let b2bMultiplier = 1.0;
     if (isDifficult) {
         if (this.backToBack) {
             b2bMultiplier = 1.5;
-            text += "B2B ";
+            if (linesCleared > 0) text += "B2B ";
         }
         this.backToBack = true;
-    } else {
+    } else if (linesCleared > 0) {
+        // Only break B2B if lines were cleared and it wasn't difficult
         this.backToBack = false;
     }
+    // Note: If linesCleared === 0 (e.g. zero-line t-spin), B2B is preserved but not started
 
     // T-Spin Scoring
-    if (tSpin) {
-        switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
-            case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
-            case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
-            case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+    if (tSpin !== 'none') {
+        if (tSpin === 'mini') {
+            switch (linesCleared) {
+                case 0: baseScore = 100 * level; text += "T-SPIN MINI"; break;
+                case 1: baseScore = 200 * level; text += "T-SPIN MINI SINGLE"; break;
+                case 2: baseScore = 400 * level; text += "T-SPIN MINI DOUBLE"; break;
+                default: baseScore = 0;
+            }
+        } else {
+            switch (linesCleared) {
+                case 0: baseScore = 400 * level; text += "T-SPIN"; break;
+                case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
+                case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
+                case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+            }
         }
     } else {
         // Standard Scoring

@@ -146,6 +146,7 @@ export class CppRendererLoader {
   private static initFn: ((w: number, h: number) => number) | null = null;
   private static resizeFn: ((w: number, h: number) => void) | null = null;
   private static renderFn: ((dt: number) => void) | null = null;
+  private static renderDualFrameFn: ((dt: number, pf1: number, ps1: number, offx1: number, offy1: number, pf2: number, ps2: number, offx2: number, offy2: number) => void) | null = null;
   private static getPlayfieldPtrFn: (() => number) | null = null;
   private static getPieceStatePtrFn: (() => number) | null = null;
   private static updatePlayfieldFn: ((ptr: number, len: number) => void) | null = null;
@@ -358,6 +359,9 @@ export class CppRendererLoader {
         h: number,
       ) => void;
       this.renderFn = instance.cwrap('render_frame', null, ['number']) as (dt: number) => void;
+      this.renderDualFrameFn = instance.cwrap('render_dual_frame', null, [
+        'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'
+      ]) as any;
       this.getPlayfieldPtrFn = instance.cwrap('get_playfield_ptr', 'number', []) as () => number;
       this.getPieceStatePtrFn = instance.cwrap('get_piece_state_ptr', 'number', []) as () => number;
       this.updatePlayfieldFn = instance.cwrap('update_playfield', null, ['number', 'number']) as (
@@ -426,6 +430,36 @@ export class CppRendererLoader {
 
   static render(dt: number): void {
     this.renderFn?.(dt);
+  }
+
+  static renderDualFrame(dt: number, state1: GameState, ghostY1: number, offx1: number, offy1: number,
+                         state2: GameState, ghostY2: number, offx2: number, offy2: number): void {
+    if (!this.module || !this.module._malloc || !this.module._free || !this.renderDualFrameFn) return;
+
+    // Allocate temporary buffers for both states since dual rendering needs both simultaneously
+    const pf1 = flattenPlayfieldGrid(state1.playfield);
+    const ps1 = packPieceState(state1, ghostY1);
+    const pf2 = flattenPlayfieldGrid(state2.playfield);
+    const ps2 = packPieceState(state2, ghostY2);
+
+    const pf1Ptr = this.module._malloc(pf1.byteLength);
+    const ps1Ptr = this.module._malloc(ps1.byteLength);
+    const pf2Ptr = this.module._malloc(pf2.byteLength);
+    const ps2Ptr = this.module._malloc(ps2.byteLength);
+
+    try {
+      this.module.HEAPU8.set(new Uint8Array(pf1.buffer), pf1Ptr);
+      this.module.HEAPU8.set(new Uint8Array(ps1.buffer), ps1Ptr);
+      this.module.HEAPU8.set(new Uint8Array(pf2.buffer), pf2Ptr);
+      this.module.HEAPU8.set(new Uint8Array(ps2.buffer), ps2Ptr);
+
+      this.renderDualFrameFn(dt, pf1Ptr, ps1Ptr, offx1, offy1, pf2Ptr, ps2Ptr, offx2, offy2);
+    } finally {
+      this.module._free(pf1Ptr);
+      this.module._free(ps1Ptr);
+      this.module._free(pf2Ptr);
+      this.module._free(ps2Ptr);
+    }
   }
 
   /**
@@ -511,6 +545,7 @@ export class CppRendererLoader {
     this.initFn = null;
     this.resizeFn = null;
     this.renderFn = null;
+    this.renderDualFrameFn = null;
     this.getPlayfieldPtrFn = null;
     this.getPieceStatePtrFn = null;
     this.updatePlayfieldFn = null;

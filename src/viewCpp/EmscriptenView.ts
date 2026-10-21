@@ -31,6 +31,7 @@ import {
   onLevelUpReactive as onLevelUpReactiveImpl,
   onGameOverReactive as onGameOverReactiveImpl,
 } from '../webgpu/viewPremium.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
 import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
@@ -298,6 +299,13 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.syncPlayfieldToCpp();
   }
 
+  renderDualScreen(state1: GameState, state2: GameState, offset1: [number, number], offset2: [number, number], ghostY1 = 0, ghostY2 = 0): void {
+    if (!this.cppModuleReady) return;
+
+    // Save states so the render loop can use them
+    this.dualState = { state1, ghostY1, offset1, state2, ghostY2, offset2 };
+  }
+
   renderPlayfield_WebGPU(_state: GameState): void {}
 
   renderEndScreen(state: GameState): void {
@@ -312,7 +320,7 @@ export default class EmscriptenView implements IView, ViewEventHost {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin = false): void {
+  onLock(isTSpin: TSpinResult = 'none'): void {
     handleLock(this, isTSpin);
   }
 
@@ -356,6 +364,11 @@ export default class EmscriptenView implements IView, ViewEventHost {
     onGameOverReactiveImpl(this as any);
   }
 
+  private dualState: {
+    state1: GameState; ghostY1: number; offset1: [number, number];
+    state2: GameState; ghostY2: number; offset2: [number, number];
+  } | null = null;
+
   render(dt: number): void {
     if (!this.ready) return;
 
@@ -363,7 +376,18 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.visualEffects.updateEffects(clampedDt);
 
     if (this.cppModuleReady) {
-      this.cppRender(clampedDt);
+      if (this.dualState) {
+        const { state1, ghostY1, offset1, state2, ghostY2, offset2 } = this.dualState;
+        CppRendererLoader.renderDualFrame(
+          clampedDt,
+          state1, ghostY1, offset1[0], offset1[1],
+          state2, ghostY2, offset2[0], offset2[1]
+        );
+        // Clear dual state so it doesn't persist if we switch back to single player
+        this.dualState = null;
+      } else {
+        this.cppRender(clampedDt);
+      }
     } else {
       this.placeholderRender();
     }
