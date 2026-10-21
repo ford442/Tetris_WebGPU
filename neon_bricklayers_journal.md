@@ -70,3 +70,4 @@
 - "Increased max camera shake on hard drops for heavier impact and intensified the hyperspace warp speed during level up/resonance to make the background feel more chaotic at high levels."
 - "Adding additive blending to the particle shader makes the explosions look like real light."
 - "Screen shake should decay exponentially, not linearly, for a snappier feel."
+- "Optimized PBR shader lighting calculations using chained multiplications instead of pow(), significantly improving GPU ALU performance while maintaining the juiced metallic specular highlights."
