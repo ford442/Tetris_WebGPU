@@ -366,7 +366,7 @@ export default class VersusController {
         result.linesCleared.length,
         g.score,
         combo,
-        result.tSpin !== 'none',
+        result.tSpin,
         player === 0 ? 'Player 1' : 'Player 2',
       );
       this.sendAttack(player, result.linesCleared.length, result.tSpin);
@@ -463,13 +463,13 @@ export default class VersusController {
           result.linesCleared.length,
           slot.game.score,
           combo,
-          result.tSpin !== 'none',
+          result.tSpin,
           i === 0 ? 'Player 1' : 'Player 2',
         );
         this.sendAttack(i as 0 | 1, result.linesCleared.length, result.tSpin);
         this.viewWebGPU.onLineClear?.(
           result.linesCleared,
-          result.tSpin !== 'none',
+          result.tSpin,
           combo,
           false,
           false,
