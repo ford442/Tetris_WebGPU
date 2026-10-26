@@ -74,13 +74,31 @@ export function resolveVideoUrl(relativePath: string): string {
   return `${base}/${normalized}`;
 }
 
-export interface VideoManifest {
+export interface VideoManifestV1 {
   version: 1;
   basePath: string;
   files: string[];
   generated: boolean;
   builtAt?: string;
 }
+
+export interface VideoManifestFileV2 {
+  name: string;
+  required?: boolean;
+  hash?: string;
+  resolution?: string;
+  license?: string;
+}
+
+export interface VideoManifestV2 {
+  version: 2;
+  basePath?: string;
+  generated?: boolean;
+  builtAt?: string;
+  files: VideoManifestFileV2[];
+}
+
+export type VideoManifest = VideoManifestV1 | VideoManifestV2;
 
 export const VIDEO_MANIFEST_PATH = './assets/video/manifest.json';
 

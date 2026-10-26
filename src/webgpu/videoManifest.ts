@@ -19,7 +19,21 @@ export async function loadVideoManifest(): Promise<VideoManifest | null> {
       const res = await fetch(resolveVideoUrl(VIDEO_MANIFEST_PATH), { cache: 'no-cache' });
       if (!res.ok) return null;
       const raw = await res.json() as VideoManifest;
-      if (raw.version !== 1 || !Array.isArray(raw.files)) return null;
+      if (raw.version !== 1 && raw.version !== 2) return null;
+      if (!Array.isArray(raw.files)) return null;
+      if (raw.version === 2) {
+        for (const file of raw.files) {
+          if (typeof file !== 'object' || file === null || typeof (file as any).name !== 'string') {
+            return null;
+          }
+        }
+      } else if (raw.version === 1) {
+        for (const file of raw.files) {
+          if (typeof file !== 'string') {
+            return null;
+          }
+        }
+      }
       cachedManifest = raw;
       return raw;
     } catch {
@@ -36,6 +50,9 @@ export async function loadVideoManifest(): Promise<VideoManifest | null> {
 export async function probeVideoAvailability(): Promise<Set<string>> {
   const manifest = await loadVideoManifest();
   if (manifest?.files?.length) {
+    if (manifest.version === 2) {
+      return new Set(manifest.files.map(f => f.name));
+    }
     return new Set(manifest.files);
   }
 
