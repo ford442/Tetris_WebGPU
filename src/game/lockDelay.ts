@@ -38,7 +38,7 @@ export interface LockDelayHost {
   triggerLineClearReactive(
     linesCleared: number,
     combo: number,
-    isTSpin: TSpinResult,
+    isTSpin: boolean,
     isAllClear: boolean,
   ): void;
   triggerLevelUpReactive(newLevel: number): void;
@@ -75,7 +75,7 @@ export function finishLockUpdate(
       result.linesCleared.push(linesScore[i]);
     }
     result.tSpin = wasTSpin;
-    host.triggerLineClearReactive(linesScore.length, host.combo, wasTSpin, isAllClear);
+    host.triggerLineClearReactive(linesScore.length, host.combo, wasTSpin !== 'none', isAllClear);
     if (wasTSpin !== 'none') host.view?.onTSpinReactive?.(wasTSpin);
     if (host.level > previousLevel) {
       host.triggerLevelUpReactive(host.level);

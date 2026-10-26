@@ -5,7 +5,7 @@ export interface TSpinCorner {
   y: number;
 }
 
-export type TSpinResult = 'none' | 'normal' | 'mini';
+export type TSpinResult = 'none' | 'mini' | 'normal';
 
 export function evaluateTSpin(
   piece: Piece,
@@ -13,7 +13,7 @@ export function evaluateTSpin(
   playfieldWidth: number,
   playfieldHeight: number,
   corners: TSpinCorner[],
-  lastKickIndex: number = 0,
+  kickIndex: number = -1,
 ): TSpinResult {
   if (piece.type !== 'T') {
     return 'none';
@@ -31,36 +31,54 @@ export function evaluateTSpin(
   corners[3].x = px + 2;
   corners[3].y = py + 2;
 
+  const isCornerOccupied = (x: number, y: number) => {
+    if (x < 0 || x >= playfieldWidth || y >= playfieldHeight) return true;
+    if (y < 0) return false;
+    return getCell(x, y) !== 0;
+  };
+
+  const c0 = isCornerOccupied(corners[0].x, corners[0].y); // Top-Left
+  const c1 = isCornerOccupied(corners[1].x, corners[1].y); // Top-Right
+  const c2 = isCornerOccupied(corners[2].x, corners[2].y); // Bottom-Left
+  const c3 = isCornerOccupied(corners[3].x, corners[3].y); // Bottom-Right
+
   let occupied = 0;
+  if (c0) occupied++;
+  if (c1) occupied++;
+  if (c2) occupied++;
+  if (c3) occupied++;
+
+  if (occupied < 3) {
+    return 'none';
+  }
+
   let frontOccupied = 0;
-  let front1 = 0;
-  let front2 = 1;
   switch (piece.rotation) {
-    case 0: front1 = 0; front2 = 1; break;
-    case 1: front1 = 1; front2 = 3; break;
-    case 2: front1 = 3; front2 = 2; break;
-    case 3: front1 = 2; front2 = 0; break;
+    case 0: // Pointing Up, Top corners are front
+      if (c0) frontOccupied++;
+      if (c1) frontOccupied++;
+      break;
+    case 1: // Pointing Right, Right corners are front (Top Right, Bottom Right)
+      if (c1) frontOccupied++;
+      if (c3) frontOccupied++;
+      break;
+    case 2: // Pointing Down, Bottom corners are front
+      if (c2) frontOccupied++;
+      if (c3) frontOccupied++;
+      break;
+    case 3: // Pointing Left, Left corners are front
+      if (c0) frontOccupied++;
+      if (c2) frontOccupied++;
+      break;
   }
 
-  for (let i = 0; i < 4; i++) {
-    const c = corners[i];
-    let isOccupied = false;
-    if (c.x < 0 || c.x >= playfieldWidth || c.y >= playfieldHeight) {
-      isOccupied = true;
-    } else if (c.y >= 0 && getCell(c.x, c.y) !== 0) {
-      isOccupied = true;
+  if (frontOccupied === 2) {
+    return 'normal';
+  } else if (frontOccupied === 1 && occupied >= 3) {
+    if (kickIndex === 4) { // Kick test 5 (index 4) promotes to normal
+      return 'normal';
     }
-
-    if (isOccupied) {
-      occupied++;
-      if (i === front1 || i === front2) {
-        frontOccupied++;
-      }
-    }
-  }
-
-  if (occupied >= 3) {
-    return frontOccupied >= 2 || lastKickIndex === 4 ? 'normal' : 'mini';
+    return 'mini';
   }
 
   return 'none';

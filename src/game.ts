@@ -162,7 +162,7 @@ export default class Game implements ModeGameHooks {
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
-    isTSpinReady: false,
+    isTSpinReady: 'none',
     runStats: {
       piecesPlaced: 0,
       moves: 0,
@@ -428,7 +428,7 @@ export default class Game implements ModeGameHooks {
 
   // Set view reference for reactive events
   // ==================== REACTIVE EVENT HOOKS ====================
-  triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: TSpinResult, isAllClear: boolean): void {
+  triggerLineClearReactive(linesCleared: number, combo: number, isTSpin: boolean, isAllClear: boolean): void {
     this.view?.onLineClearReactive?.(linesCleared, combo, isTSpin, isAllClear);
   }
 
@@ -491,7 +491,7 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.lastDropPos = this.lastDropPos;
     this.gameStateCache.lastDropDistance = this.lastDropDistance;
     this.gameStateCache.scoreEvent = this.scoreEvent;
-    this.gameStateCache.isTSpinReady = this.isTSpin !== 'none' && this.activPiece?.type === 'T';
+    this.gameStateCache.isTSpinReady = this.activPiece?.type === 'T' ? this.isTSpin : 'none';
     this.gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
 
     return this.gameStateCache;
@@ -554,7 +554,7 @@ export default class Game implements ModeGameHooks {
         if (linesScore.length >= 4) {
             this.neonHyperInversionFlag = true;
         }
-        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
+        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin !== 'none', isAllClear);
         if (wasTSpin !== 'none') this.triggerTSpinReactive(wasTSpin);
         if (isAllClear) this.view?.onPerfectClearReactive?.();
         this.notifyModeLineClear(linesScore.length);
@@ -673,7 +673,7 @@ export default class Game implements ModeGameHooks {
       return isPlayfieldEmpty(this.playfield);
   }
 
-  checkTSpin(kickIndex: number = 0): void {
+  checkTSpin(kickIndex: number = -1): void {
       this.isTSpin = evaluateTSpin(
         this.activPiece,
         this.boundGetCell,
@@ -722,7 +722,7 @@ export default class Game implements ModeGameHooks {
 
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
-      this.checkTSpin(); // Check T-Spin after rotation
+      this.checkTSpin(-1); // Check T-Spin after rotation
       // Trigger T-Spin reactive if detected
       if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
         this.triggerTSpinReactive(this.isTSpin);
@@ -734,8 +734,8 @@ export default class Game implements ModeGameHooks {
     const kicks = getWallKicks(type, currentRotation, nextRotation);
     if (!kicks || kicks.length === 0) return;
 
-    let kickIndex = 0;
-    for (const [ox, oy] of kicks) {
+    for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
+        const [ox, oy] = kicks[kickIndex];
         this._tempPiece.x = this.activPiece.x + ox;
         this._tempPiece.y = this.activPiece.y + oy;
 
@@ -762,7 +762,6 @@ export default class Game implements ModeGameHooks {
 
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
-            // Need to know kick index for promotion
             this.checkTSpin(kickIndex); // Check T-Spin after kick
             // Trigger T-Spin reactive if detected
             if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {

@@ -74,11 +74,13 @@ export function showFloatingComboText(view: ViewEventHost, combo: number): void 
   view.showFloatingText(`COMBO x${combo}`, "OVERDRIVE");
 }
 
-export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
+import type { TSpinResult } from '../game/tSpin.js';
+
+export function onLineClear(view: ViewEventHost, lines: number[], tSpin: TSpinResult = 'none', combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
 
   const base = 0.45;
   const lineBonus = Math.min(lines.length * 0.12, 0.35);
-  const specialBonus = (tSpin || backToBack) ? 0.15 : 0;
+  const specialBonus = (tSpin !== 'none' || backToBack) ? 0.15 : 0;
   const comboBonus = Math.min(combo * 0.03, 0.12);
 
   const strength = Math.min(base + lineBonus + specialBonus + comboBonus, 0.95);
@@ -124,19 +126,19 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   view.visualEffects.warpSurge = 1.0 + lines.length * 0.3 + (combo * 0.2);
   
   // Screen shake with more intensity for bigger clears
-  const shakeBase = tSpin ? 1.0 : (0.3 + lines.length * 0.2);
+  const shakeBase = tSpin !== 'none' ? 1.0 : (0.3 + lines.length * 0.2);
   const shakeBonus = Math.min(combo * 0.15, 1.5);
-  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.7 : 0.6);
+  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin !== 'none' ? 0.7 : 0.6);
   
   // Chromatic aberration for big clears
-  if (lines.length >= 4 || tSpin || combo >= 3) {
+  if (lines.length >= 4 || tSpin !== 'none' || combo >= 3) {
     view.visualEffects.triggerAberration(0.3 + lines.length * 0.1);
   }
 
   // JUICE: Supernova Line Clears
   // Variable neonBloomIntensity spike based on event importance.
   let bloomIntensity = 0.7;
-  if (lines.length >= 4 || tSpin || combo >= 5) {
+  if (lines.length >= 4 || tSpin !== 'none' || combo >= 5) {
     bloomIntensity = 2.0;
     // Trigger Black Hole on Tetris or huge clears
     if (lines.length >= 4) {
@@ -201,7 +203,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
       let color = [0.0, 1.0, 1.0, 1.0];
       let count = 20 + (combo * 5);
 
-      if (tSpin) {
+      if (tSpin !== 'none') {
         color = [1.0, 0.0, 1.0, 1.0];
         count = 150 + (combo * 25);
       } else if (lines.length === 4) {
@@ -318,8 +320,6 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
     }
   }
 }
-
-import type { TSpinResult } from '../game/tSpin.js';
 
 export function onLock(view: ViewEventHost, isTSpin: TSpinResult = 'none', blocks?: number[][], pieceX?: number, pieceY?: number): void {
   view.visualEffects.triggerLock(0.05); // Tiny tint so it doesn't stack heavily with neon bloom
