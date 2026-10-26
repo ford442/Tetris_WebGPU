@@ -18,8 +18,8 @@ fn applyBlackholeDistortion(
             let spin = bhTime * 10.0 * (1.0 - bhDist / bhRadius);
             let newAngle = angle + spin;
 
-            let suckVal = 1.0 - bhDist / bhRadius;
-            let suck = (suckVal * suckVal) * bhTime * 0.2;
+            let suckFactor = 1.0 - bhDist / bhRadius;
+            let suck = suckFactor * suckFactor * bhTime * 0.2;
             let newDist = max(0.001, bhDist - suck);
 
             finalUV = bhCenter + vec2<f32>(cos(newAngle), sin(newAngle)) * newDist;
