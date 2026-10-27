@@ -74,17 +74,35 @@ export function resolveVideoUrl(relativePath: string): string {
   return `${base}/${normalized}`;
 }
 
-export interface VideoManifest {
-  version: 1 | 2;
-  // v2 fields
-  themePackId?: string;
-  fallbackBehavior?: 'bg1' | 'procedural' | 'none';
-
+export interface VideoManifestV1 {
+  version: 1;
   basePath: string;
   files: string[];
   generated: boolean;
   builtAt?: string;
 }
+
+export interface VideoManifestFileV2 {
+  name: string;
+  required?: boolean;
+  hash?: string;
+  resolution?: string;
+  license?: string;
+}
+
+export interface VideoManifestV2 {
+  version: 2;
+  /** Content-pack id. Absent on manifests written before theme packs. */
+  themePackId?: string;
+  /** Missing-clip policy. Absent means the historical bg1 fallback. */
+  fallbackBehavior?: 'bg1' | 'procedural' | 'none';
+  basePath?: string;
+  generated?: boolean;
+  builtAt?: string;
+  files: VideoManifestFileV2[];
+}
+
+export type VideoManifest = VideoManifestV1 | VideoManifestV2;
 
 export const VIDEO_MANIFEST_PATH = './assets/video/manifest.json';
 

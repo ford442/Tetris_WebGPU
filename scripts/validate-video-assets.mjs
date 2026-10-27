@@ -65,7 +65,7 @@ function writeManifest(files, generated) {
     themePackId: 'default',
     fallbackBehavior: 'bg1',
     basePath: './assets/video/',
-    files,
+    files: files.map((name) => ({ name })),
     generated,
     builtAt: new Date().toISOString(),
   };
