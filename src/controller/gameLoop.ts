@@ -146,8 +146,8 @@ export async function runControllerFrame(
     const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
 
     host.playScoringAudio(result, pieceType, pieceCol);
-    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin !== 'none', combo, b2b, isAllClear);
-    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin !== 'none');
+    host.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
+    announceLineClear(result.linesCleared.length, host.game.score, combo, result.tSpin);
 
     updateComboDisplay(combo, host.view);
 

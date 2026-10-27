@@ -27,7 +27,7 @@ export function announceLineClear(
   lineCount: number,
   score: number,
   combo: number,
-  tSpin: TSpinResult | boolean,
+  tSpin: TSpinResult,
   prefix?: string,
 ): void {
   const lines =
@@ -41,11 +41,8 @@ export function announceLineClear(
             ? 'Tetris'
             : `${lineCount} lines`;
   const parts = [lines];
-  if (tSpin === 'mini') {
-    parts.push('T-Spin Mini');
-  } else if (tSpin === 'normal' || tSpin === true) {
-    parts.push('T-Spin');
-  }
+  if (tSpin === 'normal') parts.push('T-Spin');
+  else if (tSpin === 'mini') parts.push('T-Spin Mini');
   if (combo > 1) parts.push(`combo ${combo}`);
   parts.push(`score ${score.toLocaleString()}`);
   const body = parts.join('. ') + '.';

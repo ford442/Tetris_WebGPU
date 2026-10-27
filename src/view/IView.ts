@@ -46,7 +46,7 @@ export interface IView {
 
   onLineClear?(
     lines: number[],
-    tSpin?: TSpinResult | boolean,
+    tSpin?: TSpinResult,
     combo?: number,
     backToBack?: boolean,
     isAllClear?: boolean,

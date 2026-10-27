@@ -316,7 +316,7 @@ export default class EmscriptenView implements IView, ViewEventHost {
     handleRenderPauseScreen(this);
   }
 
-  onLineClear(lines: number[], tSpin = false, combo = 0, backToBack = false, isAllClear = false): void {
+  onLineClear(lines: number[], tSpin: 'none' | 'mini' | 'normal' = 'none', combo = 0, backToBack = false, isAllClear = false): void {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 

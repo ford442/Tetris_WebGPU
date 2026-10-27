@@ -50,7 +50,7 @@ export interface GameState {
   lastDropPos: { x: number; y: number } | null;
   lastDropDistance: number;
   scoreEvent: ScoreEvent | null;
-  isTSpinReady: boolean;
+  isTSpinReady: 'none' | 'mini' | 'normal';
   runStats: RunStatsSnapshot;
 }
 
@@ -93,7 +93,7 @@ export function createEmptyGameState(): GameState {
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
-    isTSpinReady: false,
+    isTSpinReady: 'none',
     runStats: {
       piecesPlaced: 0,
       moves: 0,
