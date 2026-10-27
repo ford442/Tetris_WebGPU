@@ -8,8 +8,8 @@
    - **Impact**: Provides sharper marble detail and prevents the slight zoom-in that blurred tile edges.
 
 2. **Background Shader Optimization**:
-   - **File**: `src/webgpu/shaders/background.ts`
-   - **Change**: Replaced the expensive `exp(min(comboEnergy, 1.0)) - 1.0` math function call with a simpler, faster Taylor approximation: `ce * (1.0 + ce * 0.5)` where `ce = min(comboEnergy, 1.0)`.
+   - **File**: `src/webgpu/shaders/wgsl/postprocess/blackhole.ts`
+   - **Change**: Replaced the expensive `pow(1.0 - bhDist / bhRadius, 2.0)` math function call with chained multiplications `suckVal * suckVal` for power 2.
    - **Impact**: Reduces GPU ALU pressure per fragment during the background rendering pass without significantly altering the visual appearance of the combo warp surge effect. Improves frame times incrementally.
 
 3. **Block Material Separation**:
