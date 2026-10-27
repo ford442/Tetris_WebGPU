@@ -75,7 +75,11 @@ export function resolveVideoUrl(relativePath: string): string {
 }
 
 export interface VideoManifest {
-  version: 1;
+  version: 1 | 2;
+  // v2 fields
+  themePackId?: string;
+  fallbackBehavior?: 'bg1' | 'procedural' | 'none';
+
   basePath: string;
   files: string[];
   generated: boolean;

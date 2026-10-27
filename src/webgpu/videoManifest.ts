@@ -6,9 +6,42 @@ import {
   resolveVideoUrl,
   type VideoManifest,
 } from '../config/videoConfig.js';
+import { gameLogger } from '../utils/logger.js';
 
 let cachedManifest: VideoManifest | null = null;
 let manifestPromise: Promise<VideoManifest | null> | null = null;
+
+export class ManifestValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ManifestValidationError';
+  }
+}
+
+export function validateManifest(raw: any): VideoManifest {
+  if (!raw || typeof raw !== 'object') {
+    throw new ManifestValidationError('Manifest must be an object');
+  }
+
+  if (raw.version !== 1 && raw.version !== 2) {
+    throw new ManifestValidationError('Manifest must have version 1 or 2');
+  }
+
+  if (!Array.isArray(raw.files)) {
+    throw new ManifestValidationError('Manifest must have a files array');
+  }
+
+  const manifest = raw as VideoManifest;
+
+  // v1 to v2 migration
+  if (manifest.version === 1) {
+    manifest.version = 2;
+    manifest.themePackId = 'default-v1-migrated';
+    manifest.fallbackBehavior = 'bg1';
+  }
+
+  return manifest;
+}
 
 export async function loadVideoManifest(): Promise<VideoManifest | null> {
   if (cachedManifest) return cachedManifest;
@@ -18,11 +51,15 @@ export async function loadVideoManifest(): Promise<VideoManifest | null> {
     try {
       const res = await fetch(resolveVideoUrl(VIDEO_MANIFEST_PATH), { cache: 'no-cache' });
       if (!res.ok) return null;
-      const raw = await res.json() as VideoManifest;
-      if (raw.version !== 1 || !Array.isArray(raw.files)) return null;
-      cachedManifest = raw;
-      return raw;
-    } catch {
+      const raw = await res.json();
+
+      const manifest = validateManifest(raw);
+      cachedManifest = manifest;
+      return manifest;
+    } catch (e) {
+      if (e instanceof ManifestValidationError) {
+        gameLogger.error?.(`Invalid video manifest: ${e.message}`);
+      }
       return null;
     } finally {
       manifestPromise = null;
@@ -64,7 +101,7 @@ export async function probeVideoAvailability(): Promise<Set<string>> {
   return available;
 }
 
-export function resolveLevelVideoSrc(level: number, available: Set<string> | null): string | null {
+export function resolveLevelVideoSrc(level: number, available: Set<string> | null, manifest: VideoManifest | null = null): string | null {
   const preferred = levelVideoPath(levelToVideoIndex(level));
   const preferredName = preferred.split('/').pop()!;
   if (!available || available.size === 0) {
@@ -73,8 +110,11 @@ export function resolveLevelVideoSrc(level: number, available: Set<string> | nul
   if (available.has(preferredName)) {
     return resolveVideoUrl(preferred);
   }
-  if (available.has('bg1.mp4')) {
+
+  const fallback = manifest?.fallbackBehavior ?? 'bg1';
+  if (fallback === 'bg1' && available.has('bg1.mp4')) {
     return resolveVideoUrl(levelVideoPath(1));
   }
+
   return null;
 }
