@@ -92,6 +92,10 @@ export interface VideoManifestFileV2 {
 
 export interface VideoManifestV2 {
   version: 2;
+  /** Content-pack id. Absent on manifests written before theme packs. */
+  themePackId?: string;
+  /** Missing-clip policy. Absent means the historical bg1 fallback. */
+  fallbackBehavior?: 'bg1' | 'procedural' | 'none';
   basePath?: string;
   generated?: boolean;
   builtAt?: string;

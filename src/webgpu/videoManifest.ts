@@ -23,9 +23,13 @@ export async function loadVideoManifest(): Promise<VideoManifest | null> {
       if (!Array.isArray(raw.files)) return null;
       if (raw.version === 2) {
         for (const file of raw.files) {
-          if (typeof file !== 'object' || file === null || typeof (file as any).name !== 'string') {
+          if (typeof file !== 'object' || file === null || typeof (file as { name?: unknown }).name !== 'string') {
             return null;
           }
+        }
+        const mode = raw.fallbackBehavior;
+        if (mode !== undefined && mode !== 'bg1' && mode !== 'procedural' && mode !== 'none') {
+          return null;
         }
       } else if (raw.version === 1) {
         for (const file of raw.files) {
@@ -81,7 +85,19 @@ export async function probeVideoAvailability(): Promise<Set<string>> {
   return available;
 }
 
-export function resolveLevelVideoSrc(level: number, available: Set<string> | null): string | null {
+function videoFallback(manifest: VideoManifest | null): 'bg1' | 'procedural' | 'none' {
+  if (manifest?.version === 2) {
+    const mode = manifest.fallbackBehavior;
+    if (mode === 'bg1' || mode === 'procedural' || mode === 'none') return mode;
+  }
+  return 'bg1';
+}
+
+export function resolveLevelVideoSrc(
+  level: number,
+  available: Set<string> | null,
+  manifest: VideoManifest | null = null,
+): string | null {
   const preferred = levelVideoPath(levelToVideoIndex(level));
   const preferredName = preferred.split('/').pop()!;
   if (!available || available.size === 0) {
@@ -90,7 +106,7 @@ export function resolveLevelVideoSrc(level: number, available: Set<string> | nul
   if (available.has(preferredName)) {
     return resolveVideoUrl(preferred);
   }
-  if (available.has('bg1.mp4')) {
+  if (videoFallback(manifest) === 'bg1' && available.has('bg1.mp4')) {
     return resolveVideoUrl(levelVideoPath(1));
   }
   return null;
