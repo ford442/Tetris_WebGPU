@@ -34,6 +34,75 @@ export const PostProcessShaders = () => {
 
         ${ShockwaveWGSL}
         ${BlackholeWGSL}
+
+        // Calculate local luminance variance for texture detection
+        fn calcLuminanceVariance(uv: vec2<f32>) -> f32 {
+            let offset = vec2<f32>(1.0) / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight) * 2.0;
+
+            var lumaSqSum = 0.0;
+            var lumaSum = 0.0;
+
+            // 3x3 kernel
+            for(var y = -1; y <= 1; y++) {
+                for(var x = -1; x <= 1; x++) {
+                    let sampleUV = uv + vec2<f32>(f32(x), f32(y)) * offset;
+                    let color = textureSampleLevel(myTexture, mySampler, sampleUV, 0.0).rgb;
+                    let luma = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+                    lumaSum += luma;
+                    lumaSqSum += luma * luma;
+                }
+            }
+
+            let mean = lumaSum / 9.0;
+            let variance = (lumaSqSum / 9.0) - (mean * mean);
+            return sqrt(max(variance, 0.0));
+        }
+
+        // Material-aware bloom with texture preservation
+        fn materialAwareBloom(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
+            let texelSize = vec2<f32>(1.0) / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
+            let spread = 0.008 * uniforms.bloomIntensity;
+
+            // Detect if this is a textured region (high variance = texture detail)
+            let luminanceVar = calcLuminanceVariance(uv);
+            let isTextured = step(0.02, luminanceVar); // Threshold for texture detection
+
+            // For textured regions, reduce bloom to preserve detail
+            // For smooth/emissive regions, apply full bloom
+            let textureMask = isTextured * uniforms.materialAwareBloom;
+            let adjustedIntensity = mix(uniforms.bloomIntensity, uniforms.bloomIntensity * 0.2, textureMask);
+            let adjustedSpread = mix(spread, spread * 0.5, textureMask);
+
+            var bloom = vec3<f32>(0.0);
+            let weight = 1.0 / 13.0;
+
+            // 13-tap bloom (center + 12 samples)
+            bloom += textureSampleLevel(myTexture, mySampler, uv, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( adjustedSpread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-adjustedSpread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  adjustedSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -adjustedSpread), 0.0).rgb * weight;
+
+            // Diagonals
+            let diagSpread = adjustedSpread * 0.707;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( diagSpread,  diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-diagSpread,  diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( diagSpread, -diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-diagSpread, -diagSpread), 0.0).rgb * weight;
+
+            // Outer cross
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( adjustedSpread * 2.0, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-adjustedSpread * 2.0, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  adjustedSpread * 2.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -adjustedSpread * 2.0), 0.0).rgb * weight;
+
+            // Apply threshold
+            let luma = dot(bloom, vec3<f32>(0.299, 0.587, 0.114));
+            let thresholdContribution = max(luma - uniforms.bloomThreshold, 0.0) / max(luma, 0.0001);
+
+            return color + (bloom * thresholdContribution * adjustedIntensity);
+        }
+
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             // Lens Distortion (Barrel)
