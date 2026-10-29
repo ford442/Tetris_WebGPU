@@ -1,6 +1,6 @@
 import Game from '../game.js';
 import type { GameModeId } from '../game/modes/types.js';
-import { applyActionMask } from './actions.js';
+import { applyActionMask, REPLAY_ACTION } from './actions.js';
 import {
   decodeInputStream,
   inputEventsToMap,
@@ -40,7 +40,38 @@ export class GameSimulator {
   tick(actionMask = 0): void {
     if (this.game.isRunEnded) return;
 
+    // Capture state for onHardDrop before applying the action
+    const g = this.game;
+    const isHardDrop = (actionMask & REPLAY_ACTION.HARD_DROP) !== 0;
+    const wasActive = !!g.activPiece;
+    let currentX = 4;
+    let ghostY = 0;
+    let dropDist = 0;
+    let colorIdx = 1;
+
+    if (isHardDrop && wasActive) {
+      currentX = g.activPiece.x;
+      ghostY = g.getGhostY();
+      dropDist = ghostY - g.activPiece.y;
+      const type = g.activPiece.type;
+      if (type === 'I') colorIdx = 1;
+      else if (type === 'J') colorIdx = 2;
+      else if (type === 'L') colorIdx = 3;
+      else if (type === 'O') colorIdx = 4;
+      else if (type === 'S') colorIdx = 5;
+      else if (type === 'T') colorIdx = 6;
+      else if (type === 'Z') colorIdx = 7;
+    }
+
     applyActionMask(this.game, actionMask);
+
+    if (isHardDrop && wasActive && g.view && g.view.onHardDrop) {
+      const finalGhostY = g.lastDropPos?.y
+        ?? g.gameStateCache.lastDropPos?.y
+        ?? ghostY;
+      g.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx, g.hardDropSnapshot?.blocks);
+    }
+
     this.applyGravity();
     this.game.update(REPLAY_TICK_MS);
     this.game.tickMode(REPLAY_TICK_MS);
