@@ -35,5 +35,6 @@ describe('Replay simulator onHardDrop', () => {
     // ghostY should be > 0
     expect(callArgs[1]).toBeGreaterThan(0);
     expect(callArgs[2]).toBeGreaterThan(0); // dropDist
+    expect(callArgs[4]).toBeDefined();
   });
 });

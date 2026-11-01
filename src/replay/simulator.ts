@@ -69,7 +69,7 @@ export class GameSimulator {
       const finalGhostY = g.lastDropPos?.y
         ?? g.gameStateCache.lastDropPos?.y
         ?? ghostY;
-      g.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx, g.hardDropSnapshot?.blocks);
+      g.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx, g.getHardDropSnapshot?.()?.blocks);
     }
 
     this.applyGravity();
