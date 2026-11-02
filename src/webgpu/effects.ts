@@ -144,7 +144,7 @@ export class VisualEffects {
         if (this.lockTimer < 0) this.lockTimer = 0;
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
-        this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 15.0);
+        this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 8.0);
         this.aberrationIntensity *= Math.exp(-dt / 0.33);
 
         // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)

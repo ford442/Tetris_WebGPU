@@ -141,8 +141,8 @@ export const ParticleShaders = () => {
             if (hash > 0.92) { flicker *= 1.3; }
 
             // Brightness boost based on life phase
-            var brightness = 8.0;
-            if (lifeRatio > 0.8) { brightness = 15.0; }
+            var brightness = 15.0;
+            if (lifeRatio > 0.8) { brightness = 30.0; }
 
             return vec4<f32>(finalColor * brightness * lifeRatio, finalAlpha * pulse * flicker);
         }
