@@ -30,7 +30,7 @@ fn applyBlockFx(
             // Gold rim color + intensity (boosted during hard drops)
             let rimColor = mix(vColor.rgb, vec3f(1.0, 0.85, 0.4), metalMask * fUniforms.metallic); // Warm gold on metal
             let dynamicRim = 5.0 + (fUniforms.movementFlash * 3.0) + (fUniforms.lineClearFlash * 10.0);
-            let rimIntensity = (fresnelParams.intensity * dynamicRim) * (1.0 + fresnelParams.hardDropBoost * 2.0);
+            let rimIntensity = (fresnelParams.intensity * dynamicRim) * (1.0 + fresnelParams.hardDropBoost * 15.0);
 
             let fresnelRim = rimColor * rimIntensity * fresnel;
             finalColor += fresnelRim; // Additive rim — looks great on gold glass
