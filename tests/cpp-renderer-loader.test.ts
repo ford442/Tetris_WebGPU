@@ -53,4 +53,32 @@ describe('CppRendererLoader paths', () => {
     expect(src).toMatch(/this\.backend !== RendererBackend\.WEBGPU/);
     expect(src).toContain('getLastFailureReason');
   });
+
+  it('fails if tetris_renderer.wasm does not export all methods CppRendererLoader cwraps', async () => {
+    const loaderSrc = readFileSync(join(process.cwd(), 'src/viewCpp/CppRendererLoader.ts'), 'utf8');
+
+    // Extract all cwrap function names from the loader
+    const cwrapMatches = [...loaderSrc.matchAll(/\.cwrap\(\s*'([^']+)'/g)].map(m => m[1]);
+
+    // Check if we have the binary compiled
+    let wasmBuffer: Buffer;
+    try {
+      wasmBuffer = readFileSync(join(process.cwd(), 'public/cpp/tetris_renderer.wasm'));
+    } catch {
+      // If wasm isn't present in this test environment, skip it gracefully
+      return;
+    }
+
+    // Inspect the actual WASM binary exports
+    const mod = await WebAssembly.compile(wasmBuffer);
+    const exports = WebAssembly.Module.exports(mod);
+
+    const wasmExports = exports
+      .filter(e => e.kind === 'function')
+      .map(e => e.name);
+
+    for (const cwrapFn of cwrapMatches) {
+      expect(wasmExports).toContain(`_${cwrapFn}`);
+    }
+  });
 });

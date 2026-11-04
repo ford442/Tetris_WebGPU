@@ -64,6 +64,7 @@ const EXPORTED_FUNCTIONS = [
   '_init_renderer',
   '_resize_renderer',
   '_render_frame',
+  '_render_dual_frame',
   '_update_playfield',
   '_get_playfield_ptr',
   '_get_playfield_len',
