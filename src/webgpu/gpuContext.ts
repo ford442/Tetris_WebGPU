@@ -230,25 +230,18 @@ function logAdapterInfo(adapter: GPUAdapter, powerPreference: GPUPowerPreference
 }
 
 /**
- * Request a GPU adapter and device using the shared policy (power preference,
- * optional feature detection, labeled device with retry). Pure inputs can be
- * passed for unit tests; defaults read from window location / localStorage.
+ * Ask for an adapter and record why it failed. Shared by the real acquisition
+ * and by {@link isWebgpuAdapterAvailable} so the failure reasons (and the
+ * diagnostics the boot probe reads) stay identical.
  */
-export async function requestGpuAdapterAndDevice(
-  options: RequestGpuDeviceOptions = {},
-): Promise<RequestGpuDeviceResult | null> {
+async function requestAdapterWithDiagnostics(
+  powerPreference: GPUPowerPreference | undefined,
+): Promise<GPUAdapter | null> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     renderLogger.error('WebGPU is not available');
     lastAcquireDiagnostics = { reason: 'navigator.gpu-unavailable', adapterDescription: null };
     return null;
   }
-
-  const storageValue = options.storageValue !== undefined
-    ? options.storageValue
-    : resolveGpuPowerFromSettings();
-  const powerPreference = resolvePowerPreference(options.search, storageValue);
-  const deviceLabel = options.deviceLabel ?? 'tetris-main-device';
-
   let adapter: GPUAdapter | null = null;
   try {
     adapter = await navigator.gpu.requestAdapter({ powerPreference });
@@ -265,6 +258,42 @@ export async function requestGpuAdapterAndDevice(
     lastAcquireDiagnostics = { reason: 'no-adapter', adapterDescription: null };
     return null;
   }
+  return adapter;
+}
+
+/**
+ * Adapter-only preflight: true when `navigator.gpu` exists and
+ * `requestAdapter()` yields an adapter. It never requests a *device*, so it
+ * can't create a second live device. Only the `auto` renderer preference uses
+ * it, to choose WebGL2 up front instead of constructing a WebGPU view that
+ * can't draw. On failure the reason is left in the acquire diagnostics.
+ */
+export async function isWebgpuAdapterAvailable(
+  options: Pick<RequestGpuDeviceOptions, 'search' | 'storageValue'> = {},
+): Promise<boolean> {
+  const storageValue = options.storageValue !== undefined
+    ? options.storageValue
+    : resolveGpuPowerFromSettings();
+  const powerPreference = resolvePowerPreference(options.search, storageValue);
+  return (await requestAdapterWithDiagnostics(powerPreference)) !== null;
+}
+
+/**
+ * Request a GPU adapter and device using the shared policy (power preference,
+ * optional feature detection, labeled device with retry). Pure inputs can be
+ * passed for unit tests; defaults read from window location / localStorage.
+ */
+export async function requestGpuAdapterAndDevice(
+  options: RequestGpuDeviceOptions = {},
+): Promise<RequestGpuDeviceResult | null> {
+  const storageValue = options.storageValue !== undefined
+    ? options.storageValue
+    : resolveGpuPowerFromSettings();
+  const powerPreference = resolvePowerPreference(options.search, storageValue);
+  const deviceLabel = options.deviceLabel ?? 'tetris-main-device';
+
+  const adapter = await requestAdapterWithDiagnostics(powerPreference);
+  if (!adapter) return null;
   logAdapterInfo(adapter, powerPreference);
   const adapterDescription = describeAdapter(adapter);
 
