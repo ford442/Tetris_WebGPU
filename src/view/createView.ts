@@ -4,6 +4,8 @@ import ViewWebGL2 from '../viewWebGL2/viewWebGL2.js';
 import { getRendererPreference } from './rendererPreference.js';
 import { buildWebgpuProbe, getWebgpuProbe, type WebgpuProbeResult } from '../webgpu/bootProbe.js';
 import { showFatalWebgpuOverlay } from '../webgpu/fatalBootOverlay.js';
+import { isWebgpuAdapterAvailable } from '../webgpu/gpuContext.js';
+import { renderLogger } from '../utils/logger.js';
 
 export type { RendererPreference } from './rendererPreference.js';
 export { getRendererPreference, setRendererPreference } from './rendererPreference.js';
@@ -20,9 +22,10 @@ type ViewFactoryArgs = [
 
 /**
  * Thrown when the session's single active WebGPU renderer (TS or cpp — never
- * both) can't get a GPU device. This game is WebGPU-only: that failure is
- * fatal, not a cue to quietly stand up a WebGL board instead. See
- * docs/webgpu-boot-probe.md.
+ * both) can't get a GPU device. An *explicit* WebGPU choice (`?renderer=webgpu`
+ * or `webgpu-cpp`) treats that as fatal, not a cue to quietly stand up a WebGL
+ * board instead. Only the default `auto` preference may pick WebGL2, and only
+ * when no adapter exists at all. See docs/webgpu-boot-probe.md.
  */
 export class WebgpuBootFailure extends Error {
   readonly probe: WebgpuProbeResult;
@@ -92,6 +95,23 @@ export async function createView(
   // automatic rescue for a WebGPU failure — so it's left untouched.
   if (pref === 'webgl2') {
     return createWebGL2View(...args);
+  }
+
+  // `auto` (the default, no explicit choice) is the one preference allowed to
+  // land on WebGL2 — and only when the browser has no WebGPU adapter at all
+  // (`navigator.gpu` missing, or `requestAdapter()` resolves null). It's decided
+  // up front, before any WebGPU view is constructed, so there is never a
+  // half-built WebGPU view to tear down and never a second device. A device
+  // that fails *after* an adapter was found is still fatal, as is any explicit
+  // `?renderer=webgpu` / `webgpu-cpp`.
+  if (pref === 'auto' && !(await isWebgpuAdapterAvailable())) {
+    const probe = buildWebgpuProbe('ts', false);
+    renderLogger.warn(
+      `No WebGPU adapter (${probe.reason ?? 'unknown'}); preference is "auto", using the WebGL2 renderer.`,
+    );
+    const view = await createWebGL2View(...args);
+    view.fallbackReason = probe.reason ?? 'no WebGPU adapter';
+    return view;
   }
 
   const activeRenderer: 'cpp' | 'ts' = pref === 'webgpu-cpp' ? 'cpp' : 'ts';

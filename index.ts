@@ -1,5 +1,6 @@
 import Game from "./src/game.js";
 import { createView, getRendererPreference } from "./src/view/createView.js";
+import { showRendererBadge } from "./src/view/rendererBadge.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
@@ -323,6 +324,7 @@ void (async () => {
   }
 
   console.info(`Tetris renderer: ${view.rendererName} (preference: ${getRendererPreference()})`);
+  showRendererBadge(view);
 
   // Shift+M cycles albedo / metal / glass / roughness / normals / final on the
   // production shading path (src/dev/materialDebugHotkey.ts).

@@ -7,7 +7,7 @@
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
 * **Frontend:** TypeScript 4.9 + Vite 6.
 * **Testing:** Vitest 3.x.
-* **Rendering:** WebGPU (WGSL shaders) primary; WebGL2 fallback; optional Emscripten C++ (`webgpu-cpp`).
+* **Rendering:** WebGPU (WGSL shaders); optional Emscripten C++ (`webgpu-cpp`); WebGL2 only when explicitly chosen (`?renderer=webgl2`) or under `auto` when the browser has no WebGPU adapter at all. Boot policy: `docs/webgpu-boot-probe.md`.
 * **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM) for collision; C++ renderer is rendering-only.
 * **Audio:** Web Audio API (procedural synthesis + sample playback).
 * **Math:** `gl-matrix` 3.4 for 3D transformations.
@@ -17,7 +17,7 @@
 The project follows a classic **MVC** pattern:
 
 * **Model (`src/game.ts` + `src/game/`)**: Manages the 10×20 playfield, piece generation (7-bag randomizer), SRS rotation with wall kicks, collision detection, lock delay (extended placement / Infinity-like behavior with up to 15 resets), T-spin detection, scoring, combos, back-to-backs, and all-clears.
-* **View (`src/viewWebGPU.ts` + `src/webgpu/` + `src/view/`)**: Handles render loop selection via `createView()`. Default path is WebGPU; WebGL2 and opt-in C++ (`src/viewCpp/EmscriptenView.ts`) implement the shared `IView` contract.
+* **View (`src/viewWebGPU.ts` + `src/webgpu/` + `src/view/`)**: Handles render loop selection via `createView()`. Default path is WebGPU (hard-fail on a device failure); WebGL2 and opt-in C++ (`src/viewCpp/EmscriptenView.ts`) implement the shared `IView` contract.
 * **Controller (`src/controller.ts` + `src/input/`)**: Bridges input and game logic. Runs a `requestAnimationFrame` loop, handles DAS/ARR (Delayed Auto Shift / Auto Repeat Rate), input buffering, SOCD cleaning, and touch controls for mobile devices.
 
 ### TypeScript / WASM Hybrid
@@ -41,8 +41,8 @@ Parallel to `assembly/` — **not** used for game logic or collision.
 * **Factory:** `src/view/createView.ts` dynamic-imports EmscriptenView when preference is `webgpu-cpp`
 * **Switch:** `?renderer=webgpu-cpp` or `localStorage.setItem('tetris_renderer', 'webgpu-cpp')`
 * **Build:** `npm run cpp:release` / `cpp:debug` / `build:cpp` — requires `emcc` on PATH (`source emsdk_env.sh`). **Skips cleanly** when emsdk is absent; `npm test` still passes.
-* **Fallback:** `webgpu-cpp` → TS WebGPU → WebGL2 if wasm missing or init fails
-* **Current state:** Canvas2D bootstrap draw from C++; full WebGPU port in progress. See `cpp/README.md` for roadmap and manual test matrix.
+* **No rescue:** if the wasm is missing, init fails, or the module's backend isn't WebGPU, `createView()` shows the fatal overlay and never constructs `Game`. It does **not** fall back to TS WebGPU or WebGL2 (one active renderer, one device).
+* **Current state:** C++ draws through WebGPU (emdawnwebgpu) on a device TypeScript acquires and hands in (`preinitializedWebGPUDevice`). The Canvas2D code in `cpp/src/` is a link-time stub for `TETRIS_CPP_WEBGPU=none`, not a live fallback. See `cpp/README.md` for roadmap and manual test matrix.
 
 ### Render Pipeline (simplified)
 
@@ -196,10 +196,12 @@ npm run lint:fix
 
 | URL / storage | Result |
 |---------------|--------|
-| (default / `auto`) | WebGPU if available, else WebGL2 |
-| `?renderer=webgpu` | Force TS WebGPU |
-| `?renderer=webgl2` | Force WebGL2 |
-| `?renderer=webgpu-cpp` | Emscripten C++ (fallback if no wasm) |
+| (default / `auto`) | TS WebGPU. WebGL2 **only** if no WebGPU adapter exists after the adapter retry ladder (see below); a device failure with an adapter is a hard-fail |
+| `?renderer=webgpu` | TS WebGPU; hard-fail overlay on failure, never WebGL2 |
+| `?renderer=webgl2` | WebGL2 — an explicit choice, not a rescue |
+| `?renderer=webgpu-cpp` | Emscripten C++ (WebGPU backend only); hard-fail overlay if wasm is missing or init fails, never TS WebGPU or WebGL2 |
+
+Adapter acquisition (`requestGpuAdapterAndDevice()`, the only `requestAdapter` call site) retries in order: requested `powerPreference` → default adapter (no preference) → `featureLevel: "compatibility"`. The rung that succeeded is `adapterAttempt` on `window.webgpuProbe`. Only if all three fail does boot hard-fail (or, under `auto`, pick WebGL2). Details: `docs/webgpu-boot-probe.md`.
 
 ```bash
 npm run dev
@@ -220,8 +222,9 @@ See `cpp/README.md` for the full manual test matrix.
 **Vite does NOT compile Emscripten C++ either.**
 * Edit `cpp/src/` → run `npm run cpp:release` (requires `emcc` / emsdk).
 * Artifacts: `public/cpp/tetris_renderer.{js,wasm}`.
-* Without artifacts, `?renderer=webgpu-cpp` uses a TS Canvas2D placeholder or falls back to WebGPU/WebGL2.
-* `npm run cpp:release` and `build:cpp` exit 0 when `emcc` is missing — CI-safe.
+* Without artifacts, `?renderer=webgpu-cpp` hard-fails with the fatal overlay (no TS WebGPU / WebGL2 rescue).
+* `npm run cpp:release` and `build:cpp` exit 0 **only** when `emcc` is missing (handled inside `scripts/build-cpp.mjs`) — CI-safe. A non-zero `emcc` status fails the script; the npm scripts no longer swallow it.
+* The cpp CI workflow rejects a Canvas2D-only link (`build-info.json` must have `webGpuBackendId: "emdawn"` and `pinnedEmsdkVersion` equal to `.emsdk-version`).
 
 ### 2. Import Extensions
 All TypeScript files use **`.js` extensions** in their `import` statements, even when importing `.ts` files. This matches the project's `tsconfig.json` (`module: "ESNext"`, `moduleResolution: "Node"`) and Vite's expectations.
@@ -303,7 +306,7 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
    Check that the WebGPU canvas clear color has `alpha: 0.0` and `alphaMode: 'premultiplied'`. Any opaque clear will hide the video portal.
 
 6. **C++ renderer not loading**  
-   Run `npm run cpp:release` with `source emsdk_env.sh`. Confirm `public/cpp/tetris_renderer.wasm` exists. Without it, `webgpu-cpp` falls back safely. See `cpp/README.md`.
+   Run `npm run cpp:release` with `source emsdk_env.sh`. Confirm `public/cpp/tetris_renderer.wasm` exists. Without it, `?renderer=webgpu-cpp` hard-fails with the fatal overlay (no rescue). See `cpp/README.md`.
 
 7. **"My cpp changes aren't showing up"**  
    Re-run `npm run cpp:release` after editing `cpp/src/`. Hard-refresh the browser (Vite does not rebuild wasm).

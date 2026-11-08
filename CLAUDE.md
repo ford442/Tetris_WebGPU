@@ -39,7 +39,7 @@ src/
 ├── viewCpp/
 │   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
 │   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
-├── viewWebGL2/              # WebGL2 fallback renderer
+├── viewWebGL2/              # WebGL2 renderer (auto fallback when no adapter; glBloom.ts = bloom pass)
 ├── dev/
 │   ├── textureMaskLab.ts    # Mask/material authoring UI (?masklab)
 │   └── materialDebugHotkey.ts # Shift+M material inspector
@@ -107,13 +107,20 @@ index.html                   # HTML bootstrap
   own backend isn't WebGPU — it never falls back to TS WebGPU or WebGL2 as a rescue.
 - **Docs:** `cpp/README.md`, `docs/webgpu-boot-probe.md`
 
-### WebGPU boot policy (hard-fail, no WebGL rescue)
+### WebGPU boot policy (hard-fail, WebGL2 only when no adapter exists)
 - **What:** the active renderer (TS WebGPU *or* cpp, never both) either gets a
-  real `GPUDevice` or the boot hard-fails with a blocking overlay — there is no
-  automatic fallback onto WebGL2. `?renderer=webgl2` still works as an explicit,
-  opt-in renderer choice; it is never reached for automatically on a WebGPU failure.
+  real `GPUDevice` or the boot hard-fails with a blocking overlay. The one
+  exception: with the default `auto` preference and **no adapter at all**
+  (`navigator.gpu` missing / `requestAdapter()` null), `createView()` uses WebGL2
+  (decided by an adapter-only preflight before any WebGPU view is built) and the
+  UI badge says "WebGL2 (no WebGPU)". A device failure after an adapter was
+  found, and explicit `?renderer=webgpu` / `webgpu-cpp`, never fall back.
+  `?renderer=webgl2` remains an explicit opt-in.
+- **Adapter retry:** `requestGpuAdapterAndDevice()` (the only `requestAdapter`
+  call site) tries `powerPreference` → default adapter → `featureLevel:
+  "compatibility"`; the winning rung is `adapterAttempt` on the probe.
 - **Probe:** `window.webgpuProbe` (`src/webgpu/bootProbe.ts`) — `{ ok, browser,
-  reason, adapter, renderer }`, set on every boot attempt, success or failure.
+  reason, adapter, adapterAttempt, renderer }`, set on every boot attempt, success or failure.
 - **Overlay:** `src/webgpu/fatalBootOverlay.ts`.
 - **Docs:** `docs/webgpu-boot-probe.md`
 
@@ -235,4 +242,6 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `gpu-chores-*.test.ts` — chore policy, luma/bloom math, compaction parity, runner, wiring
 - `webgpu-boot-probe.test.ts` — `window.webgpuProbe`, browser detection, acquire diagnostics
 - `fatal-boot-overlay.test.ts` — blocking overlay on a failed boot probe
-- `create-view-integration.test.ts` — no automatic WebGPU → WebGL2 rescue chain
+- `create-view-integration.test.ts` — no WebGPU → WebGL2 rescue chain after a device failure
+- `create-view-auto-fallback.test.ts` — `auto` → WebGL2 only when no adapter; explicit choices stay strict
+- `webgl2-bloom.test.ts` — WebGL2 bloom params/shaders + renderer badge labels

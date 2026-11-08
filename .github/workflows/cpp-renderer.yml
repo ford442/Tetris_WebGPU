@@ -77,6 +77,15 @@ jobs:
             if (typeof i.wasmBytes !== 'number') throw new Error('build-info.json missing wasmBytes');
             if (typeof i.jsBytes !== 'number') throw new Error('build-info.json missing jsBytes');
             console.log(i.webGpuBackend, 'wasmBytes=' + i.wasmBytes, 'jsBytes=' + i.jsBytes);
+            // A Canvas2D-only link (webGpuBackendId 'none') exits 0 from build-cpp.mjs
+            // but cannot boot: the TS loader refuses any backend other than WebGPU.
+            if (i.webGpuBackendId !== 'emdawn') {
+              throw new Error('release requires webGpuBackendId \"emdawn\", got ' + JSON.stringify(i.webGpuBackendId));
+            }
+            const pinned = require('fs').readFileSync('.emsdk-version', 'utf8').trim().split('\n')[0].trim();
+            if (i.pinnedEmsdkVersion !== pinned) {
+              throw new Error('build-info pinnedEmsdkVersion ' + JSON.stringify(i.pinnedEmsdkVersion) + ' != .emsdk-version ' + JSON.stringify(pinned));
+            }
           "
 
       - name: Upload C++ renderer artifacts

@@ -11,22 +11,50 @@ never both — either gets a real `GPUDevice` or the boot **hard-fails**: a
 blocking overlay replaces the page, and the game (`Game`, `Controller`,
 `SoundManager`, …) is never constructed.
 
-There is **no automatic WebGL rescue**. Previously, `createView()` silently
-fell back TS WebGPU → WebGL2 (and cpp → TS WebGPU → WebGL2), so a broken
-adapter/device on a WebGPU-branded game quietly drew the well on a different
-GPU API. That fallback chain is gone:
+There is **no WebGL rescue for a device failure**. Previously, `createView()`
+silently fell back TS WebGPU → WebGL2 (and cpp → TS WebGPU → WebGL2), so a
+broken adapter/device on a WebGPU-branded game quietly drew the well on a
+different GPU API. That chain is gone. The one exception is a browser with **no
+WebGPU adapter at all** under the default `auto` preference (below).
 
 | Preference (`?renderer=`) | Active renderer | On failure |
 |---|---|---|
-| `webgpu` / `auto` (default) | TS WebGPU | hard-fail, no WebGL2 |
+| `auto` (default) | TS WebGPU | **No adapter** (`navigator.gpu` missing, `requestAdapter()` null/throws) → WebGL2, logged + badge. Adapter found but device/view fails → hard-fail, no WebGL2 |
+| `webgpu` (explicit) | TS WebGPU | hard-fail, no WebGL2 |
 | `webgpu-cpp` | Emscripten C++ (WebGPU backend only) | hard-fail, no TS WebGPU, no WebGL2 |
-| `webgl2` | WebGL2 | n/a — this is a deliberate manual choice, not a rescue |
+| `webgl2` | WebGL2 | n/a — deliberate manual choice |
 
-`?renderer=webgl2` (or `localStorage.tetris_renderer=webgl2`) still works: it's
-an explicit, opt-in renderer selection, not something the boot probe reaches
-for on its own. A **WebGL tetromino renderer that the probe falls back to
-automatically** is an explicit non-goal for now — a later wave may reintroduce
-that as its own opt-in, probed path, but it is not part of this change.
+### `auto` with no adapter → WebGL2
+
+Without this, a Chromium with no adapter (`[WARNING] No available adapters.`)
+would boot a game that can't draw its board. `createView()` runs
+`isWebgpuAdapterAvailable()` (`gpuContext.ts` — adapter only, **never a device**)
+*before* constructing any WebGPU view, so there is nothing to tear down and the
+single-device rule is untouched. If it fails:
+
+- `window.webgpuProbe` is still recorded (`ok: false`, with the reason),
+- a warning is logged, then `Tetris renderer: webgl2 (preference: auto)`,
+- the view carries `fallbackReason` and the bottom-right badge reads
+  **"WebGL2 (no WebGPU)"** (hover for the reason). Every renderer gets a badge
+  (`src/view/rendererBadge.ts`: "WebGPU", "WebGPU (C++)", "WebGL2"; the C++ view
+  keeps its own more detailed one).
+
+The WebGL2 renderer keeps translucent glass blocks and the authored material,
+and has a bloom pass (`src/viewWebGL2/glBloom.ts`, pulses with line-clear flashes,
+honours the BLOOM toggle). It has no particles, post-process shaders or GPU
+chores. To get the strict behaviour back, use `?renderer=webgpu`.
+
+## Adapter retry ladder
+
+`requestGpuAdapterAndDevice()` (and the `auto` preflight, which shares the code) asks for an adapter up to three times before giving up. Each rung is still a WebGPU adapter — none switches API:
+
+1. `requestAdapter({ powerPreference })` — `high-performance` by default, `low-power` via `?gpu=low` / settings.
+2. `requestAdapter()` — default adapter, no preference. Chromium often returns `null` for a preference it can't satisfy even when the other GPU works.
+3. `requestAdapter({ featureLevel: "compatibility" })` — D3D11 / OpenGL ES class devices that only run WebGPU compatibility mode.
+
+A rung that throws counts as a miss. The winning rung is recorded as `adapterAttempt` (`power-preference` | `default` | `compatibility`) in `getLastGpuAcquireDiagnostics()` and on `window.webgpuProbe`. Only if all three fail does the acquisition return `null` (`reason: no-adapter`, or `request-adapter-threw: …` if one threw) — and only then may `auto` pick WebGL2. A *device* failure on an adapter we did get is not retried on another rung.
+
+**Compatibility caveat:** a rung-3 (`compatibility`) adapter can hand back a device that then fails at pipeline creation, because the renderer's compute / storage-buffer needs (`REQUIRED_GPU_LIMITS`) may exceed compatibility-mode limits. That is still a hard-fail by design — not a regression. When a report says "device acquired but nothing rendered", check `window.webgpuProbe.adapterAttempt` first; `compatibility` explains it. The adapter that produced the device is also the source of the perf overlay's GPU name (`readAdapterInfo(adapter)`); nothing else calls `requestAdapter`.
 
 ## Boot probe
 
@@ -43,6 +71,7 @@ interface WebgpuProbeResult {
   browser: string;           // 'chrome' | 'edge' | 'firefox' | 'safari' | 'opera' | 'other'
   reason: string | null;     // null on success
   adapter: string | null;    // adapter description, when one was obtained
+  adapterAttempt: 'power-preference' | 'default' | 'compatibility' | null; // ladder rung that won
   renderer: 'ts' | 'cpp';    // which renderer this probe is for
 }
 ```

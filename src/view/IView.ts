@@ -10,6 +10,8 @@ import type { ParticleSystemLike } from './viewTypes.js';
 export interface IView {
   state: GameState | null;
   rendererName: 'webgpu' | 'webgl2' | 'webgpu-cpp';
+  /** Set when WebGL2 was chosen automatically because WebGPU had no adapter. */
+  fallbackReason?: string;
   canvasWebGPU: HTMLCanvasElement;
   currentTheme: ThemeColors;
   visualEffects?: VisualEffects;
