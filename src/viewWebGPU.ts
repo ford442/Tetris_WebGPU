@@ -550,8 +550,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     this.perfOverlay = new PerfOverlay(this.element);
     this.perfOverlay.setVisible(showPerf);
 
-    await this.captureGpuAdapterInfo();
-
     await loadBlockTexture(this);
 
     // Scope pipeline/buffer creation so WGSL + allocation failures are logged
@@ -565,31 +563,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
 
     if (this.userGameSettings) {
       this.applyGameSettings(this.userGameSettings);
-    }
-  }
-
-  private async captureGpuAdapterInfo(): Promise<void> {
-    if (!navigator.gpu) return;
-    try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) return;
-      type AdapterInfoCapable = GPUAdapter & {
-        requestAdapterInfo?: () => Promise<GPUAdapterInfo>;
-        info?: GPUAdapterInfo;
-      };
-      const capable = adapter as AdapterInfoCapable;
-      const info = capable.requestAdapterInfo
-        ? await capable.requestAdapterInfo()
-        : capable.info;
-      if (!info) return;
-      this.gpuAdapterInfo = {
-        vendor: info.vendor,
-        architecture: info.architecture,
-        device: info.device,
-        description: info.description,
-      };
-    } catch {
-      /* adapter info is optional for overlay */
     }
   }
 

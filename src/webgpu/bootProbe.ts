@@ -12,7 +12,7 @@
  * {@link import('./gpuContext.js').requestGpuAdapterAndDevice} already left
  * behind, so recording a probe never risks a second live device.
  */
-import { getLastGpuAcquireDiagnostics } from './gpuContext.js';
+import { getLastGpuAcquireDiagnostics, type GpuAdapterAttempt } from './gpuContext.js';
 
 export type ProbeRenderer = 'ts' | 'cpp';
 
@@ -21,6 +21,8 @@ export interface WebgpuProbeResult {
   browser: string;
   reason: string | null;
   adapter: string | null;
+  /** Which adapter-request attempt succeeded (`power-preference` | `default` | `compatibility`), or null. */
+  adapterAttempt: GpuAdapterAttempt | null;
   renderer: ProbeRenderer;
 }
 
@@ -92,6 +94,7 @@ export function buildWebgpuProbe(
     browser,
     reason: rawReason ? annotateReasonForBrowser(rawReason, browser) : null,
     adapter: diagnostics.adapterDescription,
+    adapterAttempt: diagnostics.adapterAttempt,
     renderer,
   };
   recordWebgpuProbe(result);

@@ -9,6 +9,7 @@
 import { renderLogger } from '../utils/logger.js';
 import { loadGameSettings } from '../config/gameSettings.js';
 import { registerGpuDevice, type DeviceOwner } from './gpuChores/deviceRegistry.js';
+import type { PerfOverlayAdapterInfo } from './perfOverlay.js';
 
 /**
  * Optional device features we *request when present*. These are never
@@ -56,6 +57,8 @@ export interface GpuContextHost extends GpuDeviceLifecycleHost {
   preRender(): Promise<void>;
   gpuPowerPreference?: GPUPowerPreference;
   enabledGpuFeatures?: GPUFeatureName[];
+  /** Info for the adapter the device came from (perf overlay); no extra request. */
+  gpuAdapterInfo?: PerfOverlayAdapterInfo | null;
 }
 
 export interface RequestGpuDeviceOptions {
@@ -76,12 +79,30 @@ export interface RequestGpuDeviceOptions {
 export interface RequestGpuDeviceResult {
   adapter: GPUAdapter;
   device: GPUDevice;
+  /** The power preference that was *requested* (the adapter may come from a later attempt). */
   powerPreference: GPUPowerPreference;
+  /** Which rung of the adapter ladder produced `adapter`. */
+  adapterAttempt: GpuAdapterAttempt;
   enabledFeatures: GPUFeatureName[];
   enabledLimits: Record<string, number>;
 }
 
-type AdapterWithInfo = GPUAdapter & { info?: GPUAdapterInfo };
+type AdapterWithInfo = GPUAdapter & {
+  info?: GPUAdapterInfo;
+  requestAdapterInfo?: () => Promise<GPUAdapterInfo>;
+};
+
+/**
+ * The adapter-request ladder, in order. Chromium often returns `null` for a
+ * `powerPreference` it can't satisfy (e.g. `high-performance` on a single-GPU
+ * or blocklisted-dGPU machine) even though the default adapter works, and
+ * D3D11 / OpenGL ES class devices only expose WebGPU compatibility mode.
+ *  1. `power-preference` — `requestAdapter({ powerPreference })`
+ *  2. `default`          — `requestAdapter()`, no preference
+ *  3. `compatibility`    — `requestAdapter({ featureLevel: 'compatibility' })`
+ * Every rung is a WebGPU adapter; none switches graphics API.
+ */
+export type GpuAdapterAttempt = 'power-preference' | 'default' | 'compatibility';
 
 /**
  * Last-attempt diagnostics from {@link requestGpuAdapterAndDevice}, for the
@@ -95,9 +116,15 @@ export interface GpuAcquireDiagnostics {
   reason: string | null;
   /** Human-readable adapter description, when an adapter was obtained. */
   adapterDescription: string | null;
+  /** Which adapter-ladder rung succeeded, or `null` if no adapter was obtained. */
+  adapterAttempt: GpuAdapterAttempt | null;
 }
 
-let lastAcquireDiagnostics: GpuAcquireDiagnostics = { reason: null, adapterDescription: null };
+let lastAcquireDiagnostics: GpuAcquireDiagnostics = {
+  reason: null,
+  adapterDescription: null,
+  adapterAttempt: null,
+};
 
 /** Diagnostics from the most recent {@link requestGpuAdapterAndDevice} call. */
 export function getLastGpuAcquireDiagnostics(): GpuAcquireDiagnostics {
@@ -229,36 +256,85 @@ function logAdapterInfo(adapter: GPUAdapter, powerPreference: GPUPowerPreference
   }
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
- * Ask for an adapter and record why it failed. Shared by the real acquisition
- * and by {@link isWebgpuAdapterAvailable} so the failure reasons (and the
- * diagnostics the boot probe reads) stay identical.
+ * Walk the {@link GpuAdapterAttempt} ladder and return the first adapter plus
+ * the rung that produced it. Shared by the real acquisition and by
+ * {@link isWebgpuAdapterAvailable} so the ladder, failure reasons and boot-probe
+ * diagnostics stay identical. A rung that throws is treated like one that
+ * returns null — the next rung still runs. Only when every rung fails is
+ * `null` returned (hard-fail); the reason is `no-adapter` if all rungs
+ * returned null, else the first thrown error.
  */
 async function requestAdapterWithDiagnostics(
-  powerPreference: GPUPowerPreference | undefined,
-): Promise<GPUAdapter | null> {
+  powerPreference: GPUPowerPreference,
+): Promise<{ adapter: GPUAdapter; attempt: GpuAdapterAttempt } | null> {
   if (typeof navigator === 'undefined' || !navigator.gpu) {
     renderLogger.error('WebGPU is not available');
-    lastAcquireDiagnostics = { reason: 'navigator.gpu-unavailable', adapterDescription: null };
-    return null;
-  }
-  let adapter: GPUAdapter | null = null;
-  try {
-    adapter = await navigator.gpu.requestAdapter({ powerPreference });
-  } catch (err) {
-    renderLogger.error('requestAdapter threw:', err);
     lastAcquireDiagnostics = {
-      reason: `request-adapter-threw: ${err instanceof Error ? err.message : String(err)}`,
+      reason: 'navigator.gpu-unavailable',
       adapterDescription: null,
+      adapterAttempt: null,
     };
     return null;
   }
-  if (!adapter) {
-    renderLogger.error('No WebGPU adapter available');
-    lastAcquireDiagnostics = { reason: 'no-adapter', adapterDescription: null };
-    return null;
+
+  const gpu = navigator.gpu;
+  const rungs: Array<[GpuAdapterAttempt, () => Promise<GPUAdapter | null>]> = [
+    ['power-preference', () => gpu.requestAdapter({ powerPreference })],
+    ['default', () => gpu.requestAdapter()],
+    // `featureLevel` is newer than the bundled WebGPU typings.
+    ['compatibility', () => gpu.requestAdapter({ featureLevel: 'compatibility' } as GPURequestAdapterOptions)],
+  ];
+
+  let firstError: string | null = null;
+  for (const [attempt, request] of rungs) {
+    try {
+      const adapter = await request();
+      if (adapter) {
+        if (attempt !== 'power-preference') {
+          renderLogger.warn(`WebGPU adapter acquired via "${attempt}" attempt (${powerPreference} unavailable)`);
+        }
+        return { adapter, attempt };
+      }
+      renderLogger.warn(`requestAdapter (${attempt}) returned no adapter`);
+    } catch (err) {
+      renderLogger.warn(`requestAdapter (${attempt}) threw:`, err);
+      firstError ??= errorMessage(err);
+    }
   }
-  return adapter;
+
+  renderLogger.error('No WebGPU adapter available after all attempts');
+  lastAcquireDiagnostics = {
+    reason: firstError ? `request-adapter-threw: ${firstError}` : 'no-adapter',
+    adapterDescription: null,
+    adapterAttempt: null,
+  };
+  return null;
+}
+
+/**
+ * Read adapter info for the perf overlay from an adapter we already hold —
+ * never a fresh `requestAdapter()`, so the overlay can't name a different GPU
+ * than the device in use.
+ */
+export async function readAdapterInfo(adapter: GPUAdapter): Promise<PerfOverlayAdapterInfo | null> {
+  try {
+    const capable = adapter as AdapterWithInfo;
+    const info = capable.info ?? (capable.requestAdapterInfo ? await capable.requestAdapterInfo() : undefined);
+    if (!info) return null;
+    return {
+      vendor: info.vendor,
+      architecture: info.architecture,
+      device: info.device,
+      description: info.description,
+    };
+  } catch {
+    return null; // adapter info is optional for the overlay
+  }
 }
 
 /**
@@ -292,8 +368,9 @@ export async function requestGpuAdapterAndDevice(
   const powerPreference = resolvePowerPreference(options.search, storageValue);
   const deviceLabel = options.deviceLabel ?? 'tetris-main-device';
 
-  const adapter = await requestAdapterWithDiagnostics(powerPreference);
-  if (!adapter) return null;
+  const acquired = await requestAdapterWithDiagnostics(powerPreference);
+  if (!acquired) return null;
+  const { adapter, attempt: adapterAttempt } = acquired;
   logAdapterInfo(adapter, powerPreference);
   const adapterDescription = describeAdapter(adapter);
 
@@ -320,17 +397,18 @@ export async function requestGpuAdapterAndDevice(
     } catch (err2) {
       renderLogger.error('requestDevice failed:', err2);
       lastAcquireDiagnostics = {
-        reason: `request-device-failed: ${err2 instanceof Error ? err2.message : String(err2)}`,
+        reason: `request-device-failed: ${errorMessage(err2)}`,
         adapterDescription,
+        adapterAttempt,
       };
       return null;
     }
   }
   device.label = device.label || deviceLabel;
   registerGpuDevice(device, options.owner ?? 'unknown');
-  lastAcquireDiagnostics = { reason: null, adapterDescription };
+  lastAcquireDiagnostics = { reason: null, adapterDescription, adapterAttempt };
 
-  return { adapter, device, powerPreference, enabledFeatures: requiredFeatures, enabledLimits };
+  return { adapter, device, powerPreference, adapterAttempt, enabledFeatures: requiredFeatures, enabledLimits };
 }
 
 /**
@@ -370,6 +448,7 @@ export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextur
   view.device = bundle.device;
   view.gpuPowerPreference = bundle.powerPreference;
   view.enabledGpuFeatures = bundle.enabledFeatures;
+  view.gpuAdapterInfo = await readAdapterInfo(bundle.adapter);
   attachDeviceLifecycleHandlers(view);
 
   const dpr = window.devicePixelRatio || 1;

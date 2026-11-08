@@ -116,8 +116,11 @@ index.html                   # HTML bootstrap
   UI badge says "WebGL2 (no WebGPU)". A device failure after an adapter was
   found, and explicit `?renderer=webgpu` / `webgpu-cpp`, never fall back.
   `?renderer=webgl2` remains an explicit opt-in.
+- **Adapter retry:** `requestGpuAdapterAndDevice()` (the only `requestAdapter`
+  call site) tries `powerPreference` → default adapter → `featureLevel:
+  "compatibility"`; the winning rung is `adapterAttempt` on the probe.
 - **Probe:** `window.webgpuProbe` (`src/webgpu/bootProbe.ts`) — `{ ok, browser,
-  reason, adapter, renderer }`, set on every boot attempt, success or failure.
+  reason, adapter, adapterAttempt, renderer }`, set on every boot attempt, success or failure.
 - **Overlay:** `src/webgpu/fatalBootOverlay.ts`.
 - **Docs:** `docs/webgpu-boot-probe.md`
 
