@@ -77,7 +77,7 @@ source ./emsdk_env.sh   # required in every new shell
 
    Outputs:
    - `public/cpp/tetris_renderer.{js,wasm}`
-   - `public/cpp/build-info.json` — linked WebGPU backend + `emcc` version
+   - `public/cpp/build-info.json` — **committed provenance**: `emcc` version, linked WebGPU port, flags, source hash, artifact sha256 (see [Committed artifact & provenance](#committed-artifact--provenance))
    - `build/cpp/compile_commands.json` — clangd / IDE (mirrored to `cpp/compile_commands.json`)
 
 ## Build flags matrix
@@ -94,10 +94,14 @@ Set **`TETRIS_CPP_WEBGPU`** before building:
 
 | Value | Behavior |
 |-------|----------|
-| `auto` (default) | Try `emdawnwebgpu` → Canvas2D-only on pinned emsdk ≥ 5.0; on older pins also tries legacy `USE_WEBGPU` before Canvas2D |
-| `emdawn` | Force `--use-port=emdawnwebgpu`, then Canvas2D fallback |
-| `legacy` | Force `-s USE_WEBGPU=1`, then Canvas2D fallback |
-| `none` | Canvas2D bootstrap only (`TETRIS_ENABLE_WEBGPU=0`) |
+| `auto` (default) | Try `emdawnwebgpu` on pinned emsdk ≥ 5.0; on older pins also tries legacy `USE_WEBGPU`. **Release: exits non-zero if no port links.** Debug: falls back to Canvas2D-only with a warning |
+| `emdawn` | Force `--use-port=emdawnwebgpu` (release: no Canvas2D fallback) |
+| `legacy` | Force `-s USE_WEBGPU=1` (release: no Canvas2D fallback) |
+| `none` | Explicit opt-in: Canvas2D bootstrap only (`TETRIS_ENABLE_WEBGPU=0`). The TS loader refuses this module — never commit it |
+
+A **release** build never silently degrades to a Canvas2D-only module: it cannot boot, so `npm run cpp:release` fails loudly instead of leaving a useless artifact in `public/cpp/`. Only a genuine port error (the port is missing/unsupported) moves to the next rung; a real compile/link error is reported as-is rather than masked by a fallback.
+
+`TETRIS_CPP_REQUIRE_EMCC=1` turns the "emcc not found — skipping" exit-0 into an error. CI sets it; leave it unset for a fresh clone / `build:all` without emsdk.
 
 `auto` prefers `emdawnwebgpu` first: it's the port the pinned emsdk (5.0.7) actually links, so the common case builds without ever attempting — and failing — the removed legacy flag first.
 
@@ -134,10 +138,35 @@ cmake --build build/cpp-cmake
 GitHub Actions workflow **`.github/workflows/cpp-renderer.yml`**:
 
 - Caches emsdk keyed on `.emsdk-version` (`emsdk-<version>-ubuntu-22.04`) — bumping the pin automatically busts the cache and installs the new version fresh on the next run; no manual cache invalidation needed
-- Runs `npm run cpp:release` and uploads wasm + `build-info.json` + `compile_commands.json`
-- Verifies `wasmBytes`/`jsBytes` are present in `build-info.json` and enforces the release size budget (see below)
-- Runs debug + sanitizer build with `continue-on-error` (matrix documentation)
-- Skips cleanly when workflow is not triggered; main `npm test` still does **not** require `emcc`
+- Runs the debug + sanitizer build (`continue-on-error`, matrix documentation) **first**, then `TETRIS_CPP_REQUIRE_EMCC=1 npm run cpp:release` last (both write `public/cpp/` in place)
+- Runs `node scripts/verify-cpp-artifact.mjs` on the rebuilt output and enforces the release size budget (see below)
+- **Fails if the committed `public/cpp` / `build/cpp` differ from the fresh pinned-emsdk rebuild** (`git status --porcelain`)
+- Uploads wasm + `build-info.json` + `compile_commands.json`
+- Triggers on every input that is compiled in (`cpp/**`, `shared/**`, `public/block-material.json`, the shared WGSL, the build scripts, `.emsdk-version`) and on `public/cpp/**` itself
+
+The main `CI` workflow needs no emsdk: it runs `npm run cpp:verify` (static provenance check) and `npm test`.
+
+### Committed artifact & provenance
+
+`public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`) and **`public/cpp/build-info.json`** are committed together. `build-info.json` records `emccVersion`, the linked port, `optFlags`/`linkFlags`, `sourceHash`, and `artifacts.{js,wasm}.{bytes,sha256}`. It carries no timestamp or absolute path, so a rebuild with the same toolchain is byte-identical.
+
+`scripts/verify-cpp-artifact.mjs` (`npm run cpp:verify`, also `tests/cpp-artifact-provenance.test.ts`) fails when:
+
+- `emccVersion` / `pinnedEmsdkVersion` ≠ `.emsdk-version`, or the build is not `release` / not `emdawn`;
+- `sourceHash` is stale — it covers `cpp/src/**`, `public/block-material.json`, `shared/*.json`, the shared WGSL, the build scripts and `.emsdk-version` (the generated headers are derived from these, so they are not hashed);
+- the wasm/js on disk are not the files `build-info.json` describes, or `build/cpp` differs from `public/cpp`.
+
+**When you change any of those inputs, rebuild and commit the result:**
+
+```bash
+source ~/emsdk/emsdk_env.sh      # emsdk == $(cat .emsdk-version)
+npm run cpp:release
+git add public/cpp build/cpp
+```
+
+`npm run cpp:debug` overwrites `public/cpp` in place; `git checkout public/cpp build/cpp` afterwards (the verifier rejects a committed debug build).
+
+`tests/cpp-renderer-loader.test.ts` loads the committed glue + wasm and asserts every symbol `CppRendererLoader` `cwrap`s is really exported — it checks the module the loader uses, not the (minified) wasm export names.
 
 ### Release size budget
 
@@ -153,7 +182,7 @@ GitHub Actions workflow **`.github/workflows/cpp-renderer.yml`**:
 | `npm run build:cpp` | Alias for `cpp:release` (non-fatal if `emcc` missing) |
 | `npm run build:all` | AS WASM + cpp + Vite frontend |
 
-`pretest` does **not** require `emcc` — only AssemblyScript (`asbuild:release || true`).
+`pretest` (`scripts/pretest.mjs`) does **not** require `emcc` — only AssemblyScript (`asbuild:release`). A failing AssemblyScript build now fails `npm test`; `TETRIS_SKIP_ASBUILD=1 npm test` is the documented, loud escape hatch (tests then use the committed `public/release.wasm`).
 
 ## Exact emcc command (reference)
 
@@ -179,7 +208,7 @@ Release: `-O3 -flto` instead of debug flags.
 `scripts/build-cpp.mjs` automates port selection, `compile_commands.json`, and `build-info.json`:
 1. Respects `TETRIS_CPP_WEBGPU` (`auto` tries `--use-port=emdawnwebgpu` first — the port the pinned emsdk 5.0.7 actually links)
 2. Falls back to legacy `-s USE_WEBGPU=1` only if emdawn linking fails (older emsdk)
-3. Links a Canvas2D-only stub (`webGpuBackendId: "none"`) if both WebGPU ports fail to link. That exits 0 locally but **cannot boot** (the TS loader refuses any backend other than WebGPU), so the cpp CI workflow fails the release job unless `build-info.json` has `webGpuBackendId === "emdawn"` and `pinnedEmsdkVersion` matching `.emsdk-version`
+3. **Release:** exits non-zero if no WebGPU port links (a Canvas2D-only module cannot boot — the TS loader refuses any backend other than WebGPU). Only `TETRIS_CPP_WEBGPU=none` builds one, deliberately. **Debug:** falls back to the Canvas2D stub (`webGpuBackendId: "none"`) with a warning. CI/`verify-cpp-artifact` additionally require `webGpuBackendId === "emdawn"` and `emccVersion === .emsdk-version`
 
 ## Selecting the renderer
 

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "mode": "release",
+  "emccVersion": "5.0.7",
+  "pinnedEmsdkVersion": "5.0.7",
+  "webGpuBackend": "emdawnwebgpu (--use-port=emdawnwebgpu)",
+  "webGpuBackendId": "emdawn",
+  "webGpuEnv": "auto",
+  "optFlags": [
+    "-O3",
+    "-flto"
+  ],
+  "linkFlags": [
+    "-s",
+    "MODULARIZE=1",
+    "-s",
+    "EXPORT_NAME=createTetrisRendererModule",
+    "-s",
+    "ENVIRONMENT=web",
+    "-s",
+    "ALLOW_MEMORY_GROWTH=1",
+    "-s",
+    "EXPORTED_FUNCTIONS=[\"_init_renderer\",\"_resize_renderer\",\"_render_frame\",\"_render_dual_frame\",\"_update_playfield\",\"_get_playfield_ptr\",\"_get_playfield_len\",\"_get_piece_state_ptr\",\"_update_piece_state\",\"_get_renderer_backend\",\"_is_gpu_renderer_active\",\"_is_canvas_fallback_active\",\"_set_block_texture_rgba\",\"_set_block_material_map_rgba\",\"_malloc\",\"_free\"]",
+    "-s",
+    "EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"HEAP8\",\"HEAPU8\"]"
+  ],
+  "webGpuFlags": [
+    "--use-port=emdawnwebgpu",
+    "-DTETRIS_ENABLE_WEBGPU=1"
+  ],
+  "sources": [
+    "cpp/src/renderer.cpp",
+    "cpp/src/playfield_draw.cpp",
+    "cpp/src/gpu_renderer.cpp"
+  ],
+  "sourceHash": "fac2d987f8f413e0993fe0e6d8d42afe82281e8581de5f87cd516ba4c11ece50",
+  "sourceFileCount": 25,
+  "wasmBytes": 59852,
+  "jsBytes": 52771,
+  "artifacts": {
+    "js": {
+      "bytes": 52771,
+      "sha256": "72483691fa97562e26044557a7492fdaf1940cf23a29eb559af0b8544e15071b"
+    },
+    "wasm": {
+      "bytes": 59852,
+      "sha256": "46e5bc1b097d0d4240880bb0a0e876b5fa2cb513af637ef17058c09d3219c35f"
+    }
+  }
+}

@@ -109,6 +109,12 @@ index.html                   # HTML bootstrap
 - **Artifacts:** `public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`)
 - **On failure:** hard-fails (fatal overlay) if wasm is missing, init fails, or its
   own backend isn't WebGPU — it never falls back to TS WebGPU or WebGL2 as a rescue.
+- **Provenance:** `public/cpp/build-info.json` is committed with the wasm (emcc version, port,
+  flags, source hash, sha256). `npm run cpp:verify` / `tests/cpp-artifact-provenance.test.ts`
+  fail if the sources it hashes changed (cpp/src, shared uniforms/material, shared WGSL, build
+  scripts, `.emsdk-version`) without a rebuild — rebuild with the pinned emsdk and commit
+  `public/cpp` + `build/cpp`. A release `cpp:release` exits non-zero if no WebGPU port links
+  (`TETRIS_CPP_WEBGPU=none` is the explicit Canvas2D-only opt-in).
 - **Docs:** `cpp/README.md`, `docs/webgpu-boot-probe.md`
 
 ### WebGPU boot policy (hard-fail, WebGL2 only when no adapter exists)
@@ -200,7 +206,8 @@ npm run test             # Run tests (Vitest)
 npm run typecheck        # tsc --noEmit
 npm run lint             # ESLint
 npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
-npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc)
+npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc; fails if no WebGPU port links)
+npm run cpp:verify       # Check committed public/cpp artifact vs build-info.json + .emsdk-version (no emcc)
 npm run cpp:debug        # Debug Emscripten build
 npm run material:validate # Validate public/block-material.json + authored maps
 ```
