@@ -61,9 +61,11 @@ function listPresent() {
 
 function writeManifest(files, generated) {
   const manifest = {
-    version: 1,
+    version: 2,
+    themePackId: 'default',
+    fallbackBehavior: 'bg1',
     basePath: './assets/video/',
-    files,
+    files: files.map((name) => ({ name })),
     generated,
     builtAt: new Date().toISOString(),
   };

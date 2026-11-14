@@ -205,10 +205,10 @@ export interface GlassParams {
   fresnelPower: number;
 }
 
-/** Reference curve matching go.1ink.us/tetris — transmissive face-on, Fresnel edges. */
+/** Reference curve matching go.1ink.us/tetris — translucent stained-glass windows, Fresnel edges. */
 export const DEFAULT_GLASS_PARAMS: GlassParams = {
-  min: 0.05,
-  max: 0.60,
+  min: 0.80, // classic go.1ink.us build: windowAlpha = 0.8
+  max: 0.88,
   fresnelPower: 2.0,
 };
 

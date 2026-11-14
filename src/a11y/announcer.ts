@@ -21,11 +21,13 @@ export function announce(message: string, clearAfterMs = 3000): void {
   }, clearAfterMs);
 }
 
+import type { TSpinResult } from '../game/tSpin.js';
+
 export function announceLineClear(
   lineCount: number,
   score: number,
   combo: number,
-  tSpin: boolean,
+  tSpin: TSpinResult,
   prefix?: string,
 ): void {
   const lines =
@@ -39,7 +41,8 @@ export function announceLineClear(
             ? 'Tetris'
             : `${lineCount} lines`;
   const parts = [lines];
-  if (tSpin) parts.push('T-Spin');
+  if (tSpin === 'normal') parts.push('T-Spin');
+  else if (tSpin === 'mini') parts.push('T-Spin Mini');
   if (combo > 1) parts.push(`combo ${combo}`);
   parts.push(`score ${score.toLocaleString()}`);
   const body = parts.join('. ') + '.';

@@ -31,11 +31,13 @@ import {
   onLevelUpReactive as onLevelUpReactiveImpl,
   onGameOverReactive as onGameOverReactiveImpl,
 } from '../webgpu/viewPremium.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
 import { CppRendererLoader, RendererBackend } from './CppRendererLoader.js';
 import type { GpuDeviceLifecycleHost } from '../webgpu/gpuContext.js';
 import { drawPlayfield2D, drawWipBanner } from './placeholderDraw.js';
+import { buildWebgpuProbe } from '../webgpu/bootProbe.js';
 
 const noopParticleSystem = {
   emitParticles: () => {},
@@ -147,6 +149,12 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.gpuDrawActive = this.cppModuleReady &&
       CppRendererLoader.getRendererBackend() === RendererBackend.WEBGPU;
 
+    buildWebgpuProbe(
+      'cpp',
+      this.gpuDrawActive,
+      this.gpuDrawActive ? null : CppRendererLoader.getLastFailureReason(),
+    );
+
     if (!this.gpuDrawActive) {
       this.ctx2d = this.canvasWebGPU.getContext('2d', { alpha: true });
       if (!this.cppModuleReady && !this.ctx2d) {
@@ -163,6 +171,17 @@ export default class EmscriptenView implements IView, ViewEventHost {
           ? `EmscriptenView: C++ Canvas2D fallback (${CppRendererLoader.getLoadedUrl()})`
           : 'EmscriptenView: TS Canvas2D placeholder (wasm not built)',
     );
+  }
+
+  /** True only when the cpp module is actually drawing via its WebGPU backend. */
+  get isGpuReady(): boolean {
+    return this.gpuDrawActive;
+  }
+
+  /** Tear down DOM the view added, for a caller that hard-fails on `!isGpuReady`. */
+  dispose(): void {
+    this.canvasWebGPU.remove();
+    this.rendererBadge?.remove();
   }
 
   private showRendererBadge(): void {
@@ -280,6 +299,13 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.syncPlayfieldToCpp();
   }
 
+  renderDualScreen(state1: GameState, state2: GameState, offset1: [number, number], offset2: [number, number], ghostY1 = 0, ghostY2 = 0): void {
+    if (!this.cppModuleReady) return;
+
+    // Save states so the render loop can use them
+    this.dualState = { state1, ghostY1, offset1, state2, ghostY2, offset2 };
+  }
+
   renderPlayfield_WebGPU(_state: GameState): void {}
 
   renderEndScreen(state: GameState): void {
@@ -290,11 +316,11 @@ export default class EmscriptenView implements IView, ViewEventHost {
     handleRenderPauseScreen(this);
   }
 
-  onLineClear(lines: number[], tSpin = false, combo = 0, backToBack = false, isAllClear = false): void {
+  onLineClear(lines: number[], tSpin: 'none' | 'mini' | 'normal' = 'none', combo = 0, backToBack = false, isAllClear = false): void {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin = false): void {
+  onLock(isTSpin: TSpinResult = 'none'): void {
     handleLock(this, isTSpin);
   }
 
@@ -338,6 +364,11 @@ export default class EmscriptenView implements IView, ViewEventHost {
     onGameOverReactiveImpl(this as any);
   }
 
+  private dualState: {
+    state1: GameState; ghostY1: number; offset1: [number, number];
+    state2: GameState; ghostY2: number; offset2: [number, number];
+  } | null = null;
+
   render(dt: number): void {
     if (!this.ready) return;
 
@@ -345,7 +376,18 @@ export default class EmscriptenView implements IView, ViewEventHost {
     this.visualEffects.updateEffects(clampedDt);
 
     if (this.cppModuleReady) {
-      this.cppRender(clampedDt);
+      if (this.dualState) {
+        const { state1, ghostY1, offset1, state2, ghostY2, offset2 } = this.dualState;
+        CppRendererLoader.renderDualFrame(
+          clampedDt,
+          state1, ghostY1, offset1[0], offset1[1],
+          state2, ghostY2, offset2[0], offset2[1]
+        );
+        // Clear dual state so it doesn't persist if we switch back to single player
+        this.dualState = null;
+      } else {
+        this.cppRender(clampedDt);
+      }
     } else {
       this.placeholderRender();
     }

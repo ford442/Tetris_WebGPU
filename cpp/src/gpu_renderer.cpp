@@ -26,7 +26,7 @@ namespace {
 
 using namespace tetris;
 
-constexpr int kMaxInstances = kPlayfieldBytes;
+constexpr int kMaxInstances = kPlayfieldBytes * 2; // Enough for 2 full boards
 constexpr float kPi = 3.14159265358979323846f;
 
 // Authored glass/gold/roughness values are NOT declared here: they come from
@@ -250,7 +250,8 @@ static bool cell_is_active_piece(int col, int row, const PieceState* ps) {
 
 static int build_instances(const int8_t* playfield, int cols, int rows,
                            const PieceState* piece_state,
-                           BlockInstance* out, int max_out) {
+                           BlockInstance* out, int max_out,
+                           float offset_x, float offset_y) {
   int count = 0;
   for (int row = 0; row < rows; ++row) {
     for (int col = 0; col < cols; ++col) {
@@ -259,8 +260,8 @@ static int build_instances(const int8_t* playfield, int cols, int rows,
       if (count >= max_out) break;
 
       BlockInstance inst = {};
-      inst.pos[0] = blockCenterX(col);
-      inst.pos[1] = blockCenterY(row);
+      inst.pos[0] = blockCenterX(col) + offset_x;
+      inst.pos[1] = blockCenterY(row) + offset_y;
       inst.pos[2] = 0.0f;
 
       const int color_idx = value < 0 ? -value : value;
@@ -903,18 +904,44 @@ void gpu_renderer_shutdown(void) {
   g_gpu = {};
 }
 
-void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
-                         const PieceState* piece_state, float dt) {
-  if (!g_gpu.active || !playfield || !g_gpu.surface) return;
+// For accumulating instances over multiple render calls per frame.
+static BlockInstance g_frame_instances[kMaxInstances];
+static int g_frame_instance_count = 0;
+static float g_frame_lock_flash = 0.0f; // Simplified: last board to draw sets it
 
-  BlockInstance instances[kMaxInstances];
-  const int instance_count = build_instances(playfield, cols, rows, piece_state, instances, kMaxInstances);
-  if (instance_count > 0) {
-    wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.instance_buffer, 0, instances,
-                         static_cast<size_t>(instance_count) * sizeof(BlockInstance));
-  }
-  g_gpu.lock_flash = piece_state ? piece_state->lock_flash : 0.0f;
+void gpu_renderer_begin_frame(float dt) {
+  g_frame_instance_count = 0;
+  g_frame_lock_flash = 0.0f;
   update_uniforms(dt);
+}
+
+void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
+                         const PieceState* piece_state, float dt,
+                         float offset_x, float offset_y) {
+  if (!g_gpu.active || !playfield || !g_gpu.surface) return;
+  (void)dt;
+
+  const int remaining = kMaxInstances - g_frame_instance_count;
+  if (remaining > 0) {
+    const int count = build_instances(playfield, cols, rows, piece_state,
+                                      g_frame_instances + g_frame_instance_count,
+                                      remaining, offset_x, offset_y);
+    g_frame_instance_count += count;
+  }
+
+  if (piece_state && piece_state->lock_flash > g_frame_lock_flash) {
+    g_frame_lock_flash = piece_state->lock_flash;
+  }
+}
+
+void gpu_renderer_end_frame(void) {
+  if (!g_gpu.active || !g_gpu.surface) return;
+
+  if (g_frame_instance_count > 0) {
+    wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.instance_buffer, 0, g_frame_instances,
+                         static_cast<size_t>(g_frame_instance_count) * sizeof(BlockInstance));
+  }
+  g_gpu.lock_flash = g_frame_lock_flash;
 
   WGPUSurfaceTexture surface_tex = {};
   wgpuSurfaceGetCurrentTexture(g_gpu.surface, &surface_tex);
@@ -946,13 +973,13 @@ void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
 
   WGPURenderPassEncoder block_pass = wgpuCommandEncoderBeginRenderPass(encoder, &block_pass_desc);
 
-  if (instance_count > 0 && g_gpu.draw_blocks && g_gpu.pipeline) {
+  if (g_frame_instance_count > 0 && g_gpu.draw_blocks && g_gpu.pipeline) {
     wgpuRenderPassEncoderSetPipeline(block_pass, g_gpu.pipeline);
     wgpuRenderPassEncoderSetBindGroup(block_pass, 0, g_gpu.bind_group, 0, nullptr);
     wgpuRenderPassEncoderSetVertexBuffer(block_pass, 0, g_gpu.vertex_buffer, 0, WGPU_WHOLE_SIZE);
     wgpuRenderPassEncoderSetVertexBuffer(block_pass, 1, g_gpu.instance_buffer, 0, WGPU_WHOLE_SIZE);
     wgpuRenderPassEncoderSetIndexBuffer(block_pass, g_gpu.index_buffer, WGPUIndexFormat_Uint16, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderDrawIndexed(block_pass, 36, static_cast<uint32_t>(instance_count), 0, 0, 0);
+    wgpuRenderPassEncoderDrawIndexed(block_pass, 36, static_cast<uint32_t>(g_frame_instance_count), 0, 0, 0);
   }
   wgpuRenderPassEncoderEnd(block_pass);
   wgpuRenderPassEncoderRelease(block_pass);
@@ -1084,12 +1111,15 @@ void gpu_renderer_resize(int width, int height) {
 void gpu_renderer_shutdown(void) {}
 
 void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
-                         const PieceState* piece_state, float dt) {
+                         const PieceState* piece_state, float dt,
+                         float offset_x, float offset_y) {
   (void)playfield;
   (void)cols;
   (void)rows;
   (void)piece_state;
   (void)dt;
+  (void)offset_x;
+  (void)offset_y;
 }
 
 int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, int byte_len) {

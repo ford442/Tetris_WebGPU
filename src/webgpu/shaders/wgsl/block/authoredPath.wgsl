@@ -104,7 +104,7 @@ fn shadeAuthoredBlock(
                         refractEnv = proceduralEnvReflect(refract(-V, N, 1.0 / max(fUniforms.glassIor, 1.01)), time);
                     }
                     let refractedColor = refractEnv * glassTint;
-                    finalColor = mix(finalColor, refractedColor, glassMask * 0.45); // Mix in refraction
+                    finalColor = mix(finalColor, refractedColor, glassMask * 0.20); // Lighter refraction so the tinted window reads (classic look)
 
                 }
 

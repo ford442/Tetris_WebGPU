@@ -15,8 +15,17 @@ export interface EchoTrail {
     intensity: number;
 }
 
+export interface SquashAndFlashState {
+    blocks: number[][];
+    x: number;
+    y: number;
+    timer: number; // 0 to 1
+    active: boolean;
+}
+
 export class VisualEffects {
     echoTrails: EchoTrail[] = [];
+    squashAndFlash: SquashAndFlashState = { blocks: [], x: 0, y: 0, timer: 0, active: false };
     /** When true, skip shake / shockwave / flash / heavy FX (a11y). */
     reducedMotion = false;
 
@@ -25,8 +34,11 @@ export class VisualEffects {
     rotationFlashTimer: number = 0;
     lockTimer: number = 0;
     shakeIntensity: number = 0;
+    shakeDirX: number = 0;
+    shakeDirY: number = 0;
     aberrationIntensity: number = 0;
     glitchIntensity: number = 0;
+    holdWarpTimer: number = 0;
     warpSurge: number = 0;
     
     // Shockwave state
@@ -132,29 +144,36 @@ export class VisualEffects {
         if (this.lockTimer < 0) this.lockTimer = 0;
 
         // Exponential decay for smooth game feel (fast algebraic approximation for aberration, true exponential for shake)
-        const aberrationDecay = 1.0 / (1.0 + dt * 3.0);
-        this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 15.0);
-        this.aberrationIntensity *= aberrationDecay;
+        this.shakeIntensity = this.shakeIntensity * Math.exp(-dt * 8.0);
+        this.aberrationIntensity *= Math.exp(-dt / 0.33);
 
         // Supernova Line Clear Laser decay (rapid exponential decay targeting ~150ms)
         if (this.lineClearLaserIntensity > 0) {
-            this.lineClearLaserIntensity *= 1.0 / (1.0 + dt / 0.06);
+            this.lineClearLaserIntensity *= Math.exp(-dt / 0.15);
             if (this.lineClearLaserIntensity < 0.005) {
                 this.lineClearLaserIntensity = 0;
                 this.lineClearLaserY.fill(0);
             }
         }
 
+        // Squash and Flash decay
+        if (this.squashAndFlash.active) {
+            this.squashAndFlash.timer += dt * 8.0; // Fast squash recovery (roughly 120ms)
+            if (this.squashAndFlash.timer >= 1.0) {
+                this.squashAndFlash.active = false;
+            }
+        }
+
         // Warp surge decay
-        this.warpSurge *= 1.0 / (1.0 + dt * 1.5);
+        this.warpSurge *= Math.exp(-dt / 0.66);
         if (this.warpSurge < 0.01) this.warpSurge = 0;
 
         // Update combo energy (smooth decay towards 0 if no combo)
-        this.comboEnergy *= 1.0 / (1.0 + dt * 2.0);
+        this.comboEnergy *= Math.exp(-dt / 0.5);
         if (this.comboEnergy < 0.001) this.comboEnergy = 0;
 
         // Saturation Boost decay
-        this.saturationBoost *= 1.0 / (1.0 + dt * 2.0);
+        this.saturationBoost *= Math.exp(-dt / 0.5);
         if (this.saturationBoost < 0.01) this.saturationBoost = 0;
 
 
@@ -167,31 +186,35 @@ export class VisualEffects {
         }
 
         // Glitch decay
-        this.glitchIntensity *= 1.0 / (1.0 + dt * 3.0);
+        this.glitchIntensity *= Math.exp(-dt / 0.33);
         if (this.glitchIntensity < 0.01) this.glitchIntensity = 0;
+
+        // Hold Warp decay
+        this.holdWarpTimer *= Math.exp(-dt / 0.1);
+        if (this.holdWarpTimer < 0.01) this.holdWarpTimer = 0;
 
         // Neon Bloom decay
         this.neonBloomIntensity = this.neonBloomIntensity * Math.exp(-dt * 10.0); // NEON BRICKLAYER: True exponential decay for snappy flash
         if (this.neonBloomIntensity < 0.01) this.neonBloomIntensity = 0;
 
         // Background Resonance decay
-        this.backgroundResonance *= 1.0 / (1.0 + dt * 6.0);
+        this.backgroundResonance *= Math.exp(-dt / 0.16);
         if (this.backgroundResonance < 0.01) this.backgroundResonance = 0;
 
 
         // Block Emissive decay
         if (this.particleHitTimer > 0) {
-            this.particleHitTimer *= 1.0 / (1.0 + dt * 8.0); // Fast decay for snappy hits
+            this.particleHitTimer *= Math.exp(-dt / 0.12); // Fast decay for snappy hits
             if (this.particleHitTimer < 0.01) this.particleHitTimer = 0;
         }
 
-        this.movementFlashTimer *= 1.0 / (1.0 + dt * 8.0);
+        this.movementFlashTimer *= Math.exp(-dt / 0.12);
         if (this.movementFlashTimer < 0.01) this.movementFlashTimer = 0;
 
-        this.lineClearFlashTimer *= 1.0 / (1.0 + dt * 4.0);
+        this.lineClearFlashTimer *= Math.exp(-dt / 0.25);
         if (this.lineClearFlashTimer < 0.01) this.lineClearFlashTimer = 0;
 
-        this.softDropPressure *= 1.0 / (1.0 + dt * 4.0); // slower decay than movement flash
+        this.softDropPressure *= Math.exp(-dt / 0.25); // slower decay than movement flash
         if (this.softDropPressure < 0.01) {
             this.softDropPressure = 0;
             this.softDropActive = false;
@@ -211,11 +234,11 @@ export class VisualEffects {
 
         // Hard drop chromatic aberration pulse: exponential decay targeting ~300ms
         // (e^(-dt/0.08) gives strong initial dropoff, effectively gone after 0.3s)
-        this.hardDropAberrationPulse *= 1.0 / (1.0 + dt / 0.08);
+        this.hardDropAberrationPulse *= Math.exp(-dt / 0.3);
         if (this.hardDropAberrationPulse < 0.005) this.hardDropAberrationPulse = 0;
 
         // Base chromatic aberration intensity decay
-        this.baseChromaticIntensity *= Math.exp(-dt * 3.0);
+        this.baseChromaticIntensity *= Math.exp(-dt / 0.33);
         if (this.baseChromaticIntensity < 0.005) this.baseChromaticIntensity = 0;
 
         // Grid ripple decay (age the wave; render loop / shader handles visual fade at 500ms)
@@ -320,14 +343,27 @@ export class VisualEffects {
       this.hardDropTrail.colorIdx = colorIdx;
       this.hardDropTrail.duration = duration;
       this.hardDropTrail.timer = duration;
-      this.triggerGhostTrail(Math.min(0.45, duration + 0.1));
+      this.triggerGhostTrail(Math.min(0.60, duration + 0.2));
     }
 
-    triggerShake(magnitude: number, _duration: number): void {
+    triggerSquashAndFlash(blocks: number[][], x: number, y: number): void {
+        if (this.reducedMotion) return;
+        this.squashAndFlash = {
+            blocks: blocks,
+            x: x,
+            y: y,
+            timer: 0.0,
+            active: true
+        };
+    }
+
+    triggerShake(magnitude: number, _duration: number, dirX: number = 0, dirY: number = 0): void {
+        this.shakeDirX = dirX;
+        this.shakeDirY = dirY;
         if (this.reducedMotion) return;
         // Additive shake for impact accumulation (duration ignored in favor of decay)
         this.shakeIntensity += magnitude;
-        this.shakeIntensity = Math.min(this.shakeIntensity, 5.0); // JUICE: Increased max shake
+        this.shakeIntensity = Math.min(this.shakeIntensity, 7.0); // JUICE: Increased max shake
     }
 
     triggerAberration(magnitude: number): void {
@@ -414,6 +450,11 @@ export class VisualEffects {
         this.glitchIntensity = intensity;
     }
 
+    triggerHoldWarp(intensity: number = 1.0): void {
+        if (this.reducedMotion) return;
+        this.holdWarpTimer = intensity;
+    }
+
     triggerLevelUp(level: number = 1): void {
         if (this.reducedMotion) return;
         // Scale effects with level
@@ -497,8 +538,8 @@ export class VisualEffects {
     private _shakeOffset = { x: 0, y: 0 };
     getShakeOffset(): { x: number, y: number } {
         if (this.shakeIntensity > 0) {
-            this._shakeOffset.x = (Math.random() - 0.5) * this.shakeIntensity;
-            this._shakeOffset.y = (Math.random() - 0.5) * this.shakeIntensity;
+            this._shakeOffset.x = (Math.random() - 0.5 + this.shakeDirX) * this.shakeIntensity;
+            this._shakeOffset.y = (Math.random() - 0.5 + this.shakeDirY) * this.shakeIntensity;
             return this._shakeOffset;
         }
         this._shakeOffset.x = 0;

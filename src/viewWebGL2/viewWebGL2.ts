@@ -6,6 +6,7 @@ import type { IView } from '../view/IView.js';
 import type { ViewEventHost } from '../view/viewTypes.js';
 import { buildPlayfieldInstances } from '../view/playfieldInstances.js';
 import { GLBlockRenderer } from './glBlockRenderer.js';
+import { GLBloom, computeBloomParams } from './glBloom.js';
 import { themes, type ThemeColors, type Themes } from '../webgpu/themes.js';
 import {
   BOARD_WORLD_CENTER_X,
@@ -27,6 +28,7 @@ import {
 } from '../webgpu/viewGameEvents.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
+import type { TSpinResult } from '../game/tSpin.js';
 
 const glMatrix = Matrix;
 
@@ -39,6 +41,7 @@ const noopParticleSystem = {
 
 export default class ViewWebGL2 implements IView, ViewEventHost {
   readonly rendererName = 'webgl2' as const;
+  fallbackReason?: string;
 
   element: HTMLElement;
   width: number;
@@ -55,7 +58,8 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
   useGlitch = false;
   useReactiveVideo = true;
   useReactiveMusic = false;
-  bloomEnabled = false;
+  /** On by default, like the WebGPU renderer; the settings UI can turn it off. */
+  bloomEnabled = true;
   useWireframe = false;
   authoredBlockTextureLoaded = false;
   lastEffectCounter = -1;
@@ -64,6 +68,8 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
 
   private gl!: WebGL2RenderingContext;
   private blockRenderer!: GLBlockRenderer;
+  /** Null when bloom couldn't be set up (blocks still render, just without glow). */
+  private bloom: GLBloom | null = null;
   private ready = false;
   private startTime = performance.now();
 
@@ -142,20 +148,17 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     this.gl = gl;
     this.blockRenderer = new GLBlockRenderer(gl);
     this.authoredBlockTextureLoaded = await this.blockRenderer.init(import.meta.url);
+    try {
+      const bloom = new GLBloom(gl);
+      bloom.init();
+      this.bloom = bloom;
+    } catch (err) {
+      this.bloom = null;
+      renderLogger.warn('[WebGL2] bloom unavailable; rendering without it:', err);
+    }
     this.updateProjection();
     this.ready = true;
-    this.showRendererBadge();
     renderLogger.info('WebGL2 fallback renderer initialized');
-  }
-
-  private showRendererBadge(): void {
-    const badge = document.createElement('div');
-    badge.id = 'renderer-badge';
-    badge.textContent = 'WebGL2';
-    badge.style.cssText =
-      'position:fixed;bottom:8px;right:8px;z-index:9999;padding:4px 8px;' +
-      'font:12px monospace;background:rgba(0,0,0,0.55);color:#8cf;border-radius:4px;pointer-events:none;';
-    document.body.appendChild(badge);
   }
 
   resize(): void {
@@ -218,8 +221,8 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     this.useGlitch = !this.useGlitch;
   }
 
-  toggleBloom(): void {
-    this.bloomEnabled = !this.bloomEnabled;
+  toggleBloom(enabled?: boolean): void {
+    this.bloomEnabled = enabled ?? !this.bloomEnabled;
   }
 
   setWireframe(_enabled: boolean): void {}
@@ -247,11 +250,11 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     handleRenderPauseScreen(this);
   }
 
-  onLineClear(lines: number[], tSpin = false, combo = 0, backToBack = false, isAllClear = false): void {
+  onLineClear(lines: number[], tSpin: 'none' | 'mini' | 'normal' = 'none', combo = 0, backToBack = false, isAllClear = false): void {
     handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin = false): void {
+  onLock(isTSpin: TSpinResult = 'none'): void {
     handleLock(this, isTSpin);
   }
 
@@ -271,7 +274,9 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     handleHold(this);
   }
 
-  triggerNeonBloomFlashEffects(_intensity: number): void {}
+  triggerNeonBloomFlashEffects(intensity: number): void {
+    this.visualEffects.triggerNeonBloomFlash(intensity);
+  }
 
   render(dt: number): void {
     if (!this.ready || !this.gl) return;
@@ -284,6 +289,18 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
     this.updateCamera(clampedDt, time);
 
     const gl = this.gl;
+    const useBloom = this.bloomEnabled && this.bloom !== null;
+    if (useBloom) {
+      try {
+        this.bloom!.beginScene(this.canvasWebGPU.width, this.canvasWebGPU.height);
+      } catch (err) {
+        // Target allocation failed (e.g. out of memory): drop bloom, keep playing.
+        renderLogger.warn('[WebGL2] bloom targets failed; disabling bloom:', err);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        this.bloom = null;
+        return;
+      }
+    }
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -304,6 +321,14 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
       0,
       instances,
     );
+
+    if (useBloom) {
+      this.bloom!.endSceneAndComposite(
+        computeBloomParams(this.visualEffects.neonBloomIntensity),
+        this.canvasWebGPU.width,
+        this.canvasWebGPU.height,
+      );
+    }
   }
 
   private updatePieceInterpolation(clampedDt: number): void {

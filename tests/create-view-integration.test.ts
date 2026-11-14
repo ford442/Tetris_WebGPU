@@ -9,11 +9,16 @@ describe('createView integration', () => {
     expect(src).toMatch(/import\s*\(\s*['"]\.\.\/viewCpp\/EmscriptenView\.js['"]\s*\)/);
   });
 
-  it('routes webgpu-cpp preference through cpp fallback chain', () => {
+  it('hard-fails an explicit WebGPU choice instead of rescuing onto another device (#485)', () => {
     const src = readFileSync(join(process.cwd(), 'src/view/createView.ts'), 'utf8');
     expect(src).toContain("pref === 'webgpu-cpp'");
-    expect(src).toContain('createWithCppFallback');
-    expect(src).toContain('falling back to WebGPU (TS)');
-    expect(src).toContain('falling back to WebGL2');
+    expect(src).toContain('WebgpuBootFailure');
+    expect(src).toContain('showFatalWebgpuOverlay');
+    // No cpp/ts -> WebGL2 rescue chain after a device failure. WebGL2 is reached
+    // via the explicit `?renderer=webgl2` opt-in, or by `auto` when there is no
+    // adapter at all (see create-view-auto-fallback.test.ts).
+    expect(src).not.toContain('createWithCppFallback');
+    expect(src).not.toContain('createWithWebGpuFallback');
+    expect(src).not.toMatch(/falling back to WebGL2/i);
   });
 });

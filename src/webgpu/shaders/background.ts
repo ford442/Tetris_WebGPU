@@ -32,7 +32,7 @@ export const BackgroundShaders = () => {
             ghostX: f32, // Offset 72 (UV space)
             ghostWidth: f32, // Offset 76 (UV width)
             resonance: f32, // Offset 80
-            _pad1: f32,     // Offset 84
+            comboEnergy: f32, // Offset 84
             _pad2: f32,     // Offset 88
             _pad3: f32,     // Offset 92
         };
@@ -45,6 +45,7 @@ export const BackgroundShaders = () => {
           let lockPercent = uniforms.lockPercent;
           let warpSurge = uniforms.warpSurge;
           let resonance = uniforms.resonance;
+          let comboEnergy = uniforms.comboEnergy;
           var uv = vUV;
 
           // Modify parameters based on level
@@ -80,7 +81,7 @@ export const BackgroundShaders = () => {
 
           // Smoothed and clamped warp strength to prevent nausea
           // BOOSTED: Increased max warp
-          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.6, 0.6) * 1.5;
+          let warpStrength = clamp((levelFactor * 0.5 + warpSurge * 0.25) * wobble, -0.8, 0.8) * 1.5;
 
           // OPTIMIZATION: Avoid normalize() and distance() to save ALU cycles
           // normalize(centered) * dist * dist = (centered / dist) * dist^2 = centered * dist
@@ -125,7 +126,9 @@ export const BackgroundShaders = () => {
             let scale = select(1.0, 2.618, layer > 0);
 
             // Speed scales with level + warp surge
-            let warpSpeed = 1.0 + level * 3.75 + warpSurge * 12.0; // JUICE: multiplied level and warpSurge speed by 1.5
+            // comboEnergy is saturated up to 2.5
+            let ce = min(comboEnergy, 1.0);
+            let warpSpeed = 1.0 + level * 4.5 + warpSurge * 15.0 + (ce * (1.0 + ce * 0.5)) * 15.0;
             let speed = (0.15 + layer_f * 0.08) * warpSpeed;
 
             // Perspective drift
@@ -208,9 +211,9 @@ export const BackgroundShaders = () => {
           }
 
           // --- Global pulse effect ---
-          // Pulse faster at higher levels
-          let pulseSpeed = 2.0 + levelFactor * 4.0;
-          let pulse = sin(time * pulseSpeed) * 0.15 + 0.85;
+          // Pulse faster at higher levels and high combo
+          let pulseSpeed = 2.0 + levelFactor * 4.0 + min(comboEnergy, 2.0) * 2.0;
+          let pulse = sin(time * pulseSpeed) * (0.15 + min(comboEnergy, 1.5) * 0.1) + 0.85;
 
 
           // Dynamic brick wall background evolution

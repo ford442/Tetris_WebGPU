@@ -1,5 +1,6 @@
 import type Game from "./game.js";
 import type { IView } from "./view/IView.js";
+import type { TSpinResult } from "./game/tSpin.js";
 import type SoundManager from "./sound.js";
 import { TouchControls, type TouchAction, addTouchControlStyles } from "./input/touchControls.js";
 import { processDasArrInput, isActionPressed as checkActionPressed } from "./input/dasArr.js";
@@ -50,12 +51,18 @@ export default class Controller {
   // Track last horizontal direction for SOCD cleaning
   lastDirection: 'left' | 'right' | null = null;
 
+  private boundBlurOrHidden!: () => void;
+  private boundVisibilityChange!: () => void;
+
   // Experimental: Positive Reinforcement Subliminal System (wired from index.ts)
   subliminal: SubliminalReinforcement | null = null;
 
   // Input buffering for game-feel improvements
   bufferedAction: Action | null = null;
   bufferedActionTime: number = 0;
+
+  // Visual juice: Hit-stop presentation freeze
+  hitStopFrames: number = 0;
   bufferedMoveAction: 'left' | 'right' | null = null;
   bufferedMoveActionTime: number = 0;
   // Split buffer windows for better input precision:
@@ -111,6 +118,20 @@ export default class Controller {
     document.addEventListener("keydown", this.handleKeyDown.bind(this));
     document.addEventListener("keyup", this.handleKeyUp.bind(this));
 
+    // Auto-pause on tab blur or visibility change
+    this.boundBlurOrHidden = () => {
+      if (this.isPlaying && !this.isPaused && !this.game.isRunEnded) {
+        this.pause();
+      }
+    };
+    window.addEventListener("blur", this.boundBlurOrHidden);
+    this.boundVisibilityChange = () => {
+      if (document.hidden) {
+        this.boundBlurOrHidden();
+      }
+    };
+    document.addEventListener("visibilitychange", this.boundVisibilityChange);
+
     // Initialize touch controls
     addTouchControlStyles();
     new TouchControls(
@@ -142,7 +163,7 @@ export default class Controller {
   }
 
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void {
@@ -151,13 +172,13 @@ export default class Controller {
       const combo = scoreEvent?.combo ?? 0;
       const b2b = scoreEvent?.backToBack ?? false;
       this.soundManager.playLineClear(result.linesCleared.length, combo, b2b, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
       this.soundManager.musicManager.setGameplayIntensity(this.game.level, combo);
       return;
     }
     if (result.locked) {
       this.soundManager.playLock(pieceType, pieceCol);
-      if (result.tSpin) this.soundManager.playTSpin();
+      if (result.tSpin !== 'none') this.soundManager.playTSpin();
     }
   }
 
@@ -245,6 +266,12 @@ export default class Controller {
     this.isPaused = true;
     this.isPlaying = false;
 
+    // Clear physical keys and action timers so DAS doesn't keep running after alt-tab
+    this.keys = {};
+    for (const action in this.actionTimers) {
+      this.actionTimers[action as Action] = 0;
+    }
+
     stopGameLoop(this);
 
     // Pause music
@@ -304,6 +331,11 @@ export default class Controller {
       clearInterval(this.intervalID);
       this.intervalID = null;
     }
+  }
+
+  destroy(): void {
+    window.removeEventListener("blur", this.boundBlurOrHidden);
+    document.removeEventListener("visibilitychange", this.boundVisibilityChange);
   }
 
   updateView(): void {
@@ -699,7 +731,9 @@ export default class Controller {
       const finalGhostY = this.game.lastDropPos?.y
         ?? this.game.gameStateCache.lastDropPos?.y
         ?? ghostY;
-      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx);
+
+      const snap = this.game.getHardDropSnapshot?.();
+      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx, snap?.blocks);
 
       if (result.linesCleared.length > 0) {
           const scoreEvent = this.game.scoreEvent;
@@ -712,7 +746,11 @@ export default class Controller {
           announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
       } else if (result.locked) {
           this.playScoringAudio(result, pieceType, pieceCol);
-          this.viewWebGPU.onLock?.(result.tSpin);
+          if (snap && this.viewWebGPU.onLock) {
+              this.viewWebGPU.onLock(result.tSpin, snap.blocks, currentX, finalGhostY);
+          } else {
+              this.viewWebGPU.onLock?.(result.tSpin);
+          }
       }
       if (result.gameOver || this.game.victory) {
           this.soundManager.playGameOver();

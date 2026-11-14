@@ -21,6 +21,10 @@ import { lineFlashEffect } from './effects/lineFlashEffect.js';
 import { ParticleMaterialInteraction } from './webgpu/particleMaterialInteraction.js';
 import { ChaosModeController } from './webgpu/chaosMode.js';
 import { type BloomSystem, type BloomParameters } from './webgpu/bloomSystem.js';
+import type { GpuChoreRunner } from './webgpu/gpuChores/runner.js';
+import type { AutoBloomController } from './webgpu/gpuChores/autoBloom.js';
+import type { TSpinResult } from './game/tSpin.js';
+
 import {
   setPremiumVisualsPreset as setPremiumPresetImpl,
   onLineClearReactive as onLineClearReactiveImpl,
@@ -90,6 +94,7 @@ import type { BackdropCapture } from './webgpu/backdropCapture.js';
 import { PerfOverlay, isPerfOverlayEnabled } from './webgpu/perfOverlay.js';
 import type { PerfOverlayAdapterInfo } from './webgpu/perfOverlay.js';
 import { loadGameSettings } from './config/gameSettings.js';
+import { buildWebgpuProbe } from './webgpu/bootProbe.js';
 
 export default class View implements IView, ViewEventHost, WebGPUViewHost {
   readonly rendererName = 'webgpu' as const;
@@ -298,6 +303,12 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   bloomSystem!: BloomSystem;
   useMultiPassBloom: boolean = true; // Toggle between old and new bloom
 
+  // GPU chores: luma histogram / downsample / compact helpers on this device.
+  // Created by initGpuResources; absent (or on its CPU rung) means the static
+  // bloom tuning applies and the board plays exactly as before.
+  gpuChores?: GpuChoreRunner;
+  autoBloom?: AutoBloomController;
+
   // GPU pass timers + adaptive quality + perf overlay
   passTimers: GpuPassTimers | null = null;
   adaptiveState: AdaptiveQualityControllerState | null = null;
@@ -477,7 +488,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleShowFloatingText(this, text, subText);
   }
 
-  onLineClear(lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
+  onLineClear(lines: number[], tSpin: TSpinResult = 'none', combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false) {
       // Trigger DOM-based line flash effect
       lineFlashEffect.flashLines(lines);
 
@@ -488,14 +499,16 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
       handleLineClear(this, lines, tSpin, combo, backToBack, isAllClear);
   }
 
-  onLock(isTSpin: boolean = false) { handleLock(this, isTSpin); }
+  onLock(isTSpin: TSpinResult = 'none', blocks?: number[][], x?: number, y?: number) {
+    handleLock(this, isTSpin, blocks, x, y);
+  }
   onHold() { handleHold(this); }
   onRotate() { handleRotate(this); }
   triggerImpactEffects(worldX: number, impactY: number, distance: number) {
       handleImpactEffects(this, worldX, impactY, distance);
   }
-  onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0) {
-      handleHardDrop(this, x, y, distance, colorIdx);
+  onHardDrop(x: number, y: number, distance: number, colorIdx: number = 0, blocks?: number[][]) {
+      handleHardDrop(this, x, y, distance, colorIdx, blocks);
   }
 
   triggerNeonBloomFlash(strength: number = 1.0) {
@@ -522,7 +535,11 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
 
   async preRender() {
     const presentationFormat = await acquireGpuContext(this);
-    if (!presentationFormat) return;
+    const probe = buildWebgpuProbe('ts', !!presentationFormat);
+    if (!presentationFormat) {
+      this.isWebGPU = { result: false, description: probe.reason ?? 'WebGPU device acquisition failed' };
+      return;
+    }
 
     this.passTimers = new GpuPassTimers(this.device);
     this.adaptiveState = createAdaptiveControllerState();
@@ -532,8 +549,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
     const showPerf = this.userGameSettings.showPerfOverlay || isPerfOverlayEnabled();
     this.perfOverlay = new PerfOverlay(this.element);
     this.perfOverlay.setVisible(showPerf);
-
-    await this.captureGpuAdapterInfo();
 
     await loadBlockTexture(this);
 
@@ -548,31 +563,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
 
     if (this.userGameSettings) {
       this.applyGameSettings(this.userGameSettings);
-    }
-  }
-
-  private async captureGpuAdapterInfo(): Promise<void> {
-    if (!navigator.gpu) return;
-    try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) return;
-      type AdapterInfoCapable = GPUAdapter & {
-        requestAdapterInfo?: () => Promise<GPUAdapterInfo>;
-        info?: GPUAdapterInfo;
-      };
-      const capable = adapter as AdapterInfoCapable;
-      const info = capable.requestAdapterInfo
-        ? await capable.requestAdapterInfo()
-        : capable.info;
-      if (!info) return;
-      this.gpuAdapterInfo = {
-        vendor: info.vendor,
-        architecture: info.architecture,
-        device: info.device,
-        description: info.description,
-      };
-    } catch {
-      /* adapter info is optional for overlay */
     }
   }
 
@@ -756,13 +746,6 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // Material uniforms buffer (used by viewMaterials.ts)
   _materialUniforms = new Float32Array(12);
 
-  // Particle interaction uniforms
-  particleInteractionUniforms = {
-    particleInfluence: 1.0,
-    glassDistortion: 0.4,
-    goldSpecularBoost: 2.2,
-    cyberEmissivePulse: 0.0
-  };
 
   // Material/theme management (delegated to viewMaterials.ts)
   setMaterialTheme(themeName: string, pieceType: number = 1) { setMaterialThemeImpl(this as MaterialViewLike, themeName, pieceType); }
@@ -775,7 +758,7 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   // Premium visuals and reactive system hooks (delegated to viewPremium.ts)
   setPremiumVisualsPreset(options: Record<string, unknown> = {}) { setPremiumPresetImpl(this as ViewLike, options); }
   onLineClearReactive(lines: number, combo: number, isTSpin: boolean, isAllClear: boolean) { onLineClearReactiveImpl(this as ViewLike, lines, combo, isTSpin, isAllClear); }
-  onTSpinReactive() { onTSpinReactiveImpl(this as ViewLike); }
+  onTSpinReactive(type?: 'normal' | 'mini') { onTSpinReactiveImpl(this as ViewLike, type); }
   onPerfectClearReactive() { onPerfectClearReactiveImpl(this as ViewLike); }
   onLevelUpReactive(level: number) { onLevelUpReactiveImpl(this as ViewLike, level); }
   onGameOverReactive() { onGameOverReactiveImpl(this as ViewLike); }

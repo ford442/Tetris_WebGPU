@@ -178,7 +178,7 @@ fn fs_main(
       refract(-V, N, 1.0 / max(u.glassIor, 1.01)),
       u.time
     ) * glassTint;
-    finalColor = mix(finalColor, refracted, glassMask * 0.45);
+    finalColor = mix(finalColor, refracted, glassMask * 0.20); // matches TS authoredPath.wgsl
   }
 
   if (useAuthoredSampling) {

@@ -52,8 +52,8 @@ describe('updateMaterialUniforms', () => {
 
     const glassWrite = writes.find((w) => w.offset === BLOCK_FRAGMENT_UNIFORM_OFFSETS.glassParams);
     expect(glassWrite).toBeDefined();
-    expect((glassWrite!.data as Float32Array)[0]).toBeCloseTo(0.05, 5);
-    expect((glassWrite!.data as Float32Array)[1]).toBeCloseTo(0.60, 5);
+    expect((glassWrite!.data as Float32Array)[0]).toBeCloseTo(0.80, 5);
+    expect((glassWrite!.data as Float32Array)[1]).toBeCloseTo(0.88, 5);
     expect((glassWrite!.data as Float32Array)[2]).toBeCloseTo(2.0, 5);
   });
 

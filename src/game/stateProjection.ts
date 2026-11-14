@@ -35,6 +35,7 @@ export function buildPlayfieldProjection({
     // Ensure inner arrays match length
     for (let y = 0; y < playfieldHeight; y++) {
       if (playfield2D[y].length !== playfieldWidth) {
+        playfield2D[y].length = playfieldWidth;
         for(let x=0; x<playfieldWidth; x++){playfield2D[y][x]=0;}
       }
     }

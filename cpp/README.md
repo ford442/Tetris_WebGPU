@@ -1,13 +1,13 @@
 # C++ Tetris Renderer (Emscripten + WebGPU)
 
-Opt-in renderer compiled with **Emscripten**, parallel to the AssemblyScript collision core in `assembly/`. It is **behind an explicit switch** and always falls back safely to the TypeScript WebGPU or WebGL2 paths when artifacts or `emcc` are missing.
+Opt-in renderer compiled with **Emscripten**, parallel to the AssemblyScript collision core in `assembly/`. It is **behind an explicit switch** (`?renderer=webgpu-cpp`). The game builds and runs without it (`emcc` is optional), but once you select it there is **no fallback**: if the wasm is missing, init fails, or the module's backend isn't WebGPU, the boot hard-fails with the fatal overlay — it never hands off to the TS WebGPU renderer or WebGL2 (see `docs/webgpu-boot-probe.md`).
 
 ## Quick start (fresh clone)
 
 ```bash
 npm install
 npm run dev
-# Default renderer (auto → WebGPU or WebGL2)
+# Default renderer (auto → TS WebGPU)
 
 # With Emscripten installed:
 source /path/to/emsdk/emsdk_env.sh
@@ -16,14 +16,16 @@ npm run dev
 # Open: http://localhost:5173/?renderer=webgpu-cpp
 ```
 
-**Without `emcc`:** `npm run cpp:release` prints a skip message and exits 0. `npm test` and `npm run build` still succeed. The game loads via TS Canvas2D placeholder when you force `?renderer=webgpu-cpp` without wasm artifacts, then falls back to WebGPU/WebGL2 if `EmscriptenView` itself fails to init.
+**Without `emcc`:** `npm run cpp:release` prints a skip message and exits 0 (handled inside `scripts/build-cpp.mjs`, not by the npm script). `npm test` and `npm run build` still succeed. Forcing `?renderer=webgpu-cpp` without wasm artifacts shows the fatal overlay.
+
+**With `emcc` but a failing compile/link:** `npm run cpp:release` / `cpp:debug` exit non-zero, so `build:all` stops instead of shipping the previous wasm.
 
 ## Directory layout
 
 | Path | Purpose |
 |------|---------|
 | `cpp/src/renderer.cpp` | Exported API (`init_renderer`, `render_frame`, `update_playfield`) |
-| `cpp/src/gpu_renderer.cpp` | WebGPU instanced cubes + Canvas2D stub fallback |
+| `cpp/src/gpu_renderer.cpp` | WebGPU instanced cubes + link-time Canvas2D stub (not a runtime fallback) |
 | `cpp/src/shaders/block/authoredBlock.wgsl` | C++ block shader plumbing — bindings, vertex stage, sampling order (the *look* comes from shared WGSL) |
 | `cpp/src/block_bindings.h` | Documented bind-group table: where C++ matches TS binding numbers and where it deliberately omits one |
 | `cpp/src/block_sampler.h` | Sampler/view descriptors ported from `src/webgpu/blockTexture.ts` |
@@ -177,7 +179,7 @@ Release: `-O3 -flto` instead of debug flags.
 `scripts/build-cpp.mjs` automates port selection, `compile_commands.json`, and `build-info.json`:
 1. Respects `TETRIS_CPP_WEBGPU` (`auto` tries `--use-port=emdawnwebgpu` first — the port the pinned emsdk 5.0.7 actually links)
 2. Falls back to legacy `-s USE_WEBGPU=1` only if emdawn linking fails (older emsdk)
-3. Falls back to Canvas2D-only if both WebGPU ports fail to link
+3. Links a Canvas2D-only stub (`webGpuBackendId: "none"`) if both WebGPU ports fail to link. That exits 0 locally but **cannot boot** (the TS loader refuses any backend other than WebGPU), so the cpp CI workflow fails the release job unless `build-info.json` has `webGpuBackendId === "emdawn"` and `pinnedEmsdkVersion` matching `.emsdk-version`
 
 ## Selecting the renderer
 
@@ -189,9 +191,9 @@ Release: `-O3 -flto` instead of debug flags.
 
 Console on boot: `Tetris renderer: webgpu-cpp (preference: webgpu-cpp)`.
 
-**Badge:** `C++ wasm` when wasm loaded; `C++ WIP` when TS placeholder only.
+**Badge:** `C++ GPU` when the module is drawing through WebGPU.
 
-**Fallback chain for `webgpu-cpp`:** EmscriptenView → TS WebGPU → WebGL2.
+**No fallback chain for `webgpu-cpp`:** EmscriptenView either gets a WebGPU device and a WebGPU backend, or the boot hard-fails. `?renderer=webgl2` remains an explicit choice, not a rescue.
 
 ## What lives in C++ vs TypeScript today
 
@@ -201,7 +203,7 @@ Console on boot: `Tetris renderer: webgpu-cpp (preference: webgpu-cpp)`.
 | Collision WASM | AssemblyScript (`assembly/`) | Separate from cpp renderer |
 | View / `IView` contract | `EmscriptenView.ts` | Full MVC compatibility |
 | Playfield sync | TS → 200-byte HEAP view | Zero-copy like `WasmCore` |
-| Board draw (bootstrap) | C++ WebGPU instanced cubes | Canvas2D fallback if no GPU |
+| Board draw (bootstrap) | C++ WebGPU instanced cubes | Canvas2D path is a link-time stub only |
 | Block texture (`block.png`) | C++ via TS upload | Atlas tile + material-lite lighting |
 | Full PBR / premium materials | TS WebGPU renderer | C++ uses simplified shader |
 | Particles, post-process | TS WebGPU | No-op / DOM effects on cpp path |
@@ -230,7 +232,7 @@ int set_block_texture_rgba(const uint8_t* rgba, int width, int height, int byte_
 
 **WebGPU path:** each `render_frame` acquires the swap-chain texture, clears with **transparent alpha** (`a=0`) so the DOM video portal shows through the premultiplied surface, draws instanced blocks when the pipeline initialized, then presents. Surface format comes from `navigator.gpu.getPreferredCanvasFormat()` (via EM_JS). Camera aligned to `renderMetrics.ts` (FOV 42°, block size 2.2).
 
-**Fallback:** Canvas2D quads when WebGPU device/surface init fails.
+**Canvas2D stub:** with `TETRIS_CPP_WEBGPU=none` (or a failed WebGPU link) `renderer.cpp` links Canvas2D quads. This is a build-time stub, not a runtime fallback: `get_renderer_backend()` reports `1` and the TS loader refuses it.
 
 ## WebGPU init sequence (Emscripten + emdawnwebgpu)
 
@@ -243,7 +245,7 @@ Adapter/device acquisition is **async in the browser**, so the C++ side uses a s
 4. init_renderer()                  // C++: emscripten_webgpu_get_device(), surface configure (premultiplied)
 5. uploadBlockTexture()             // TS decodes block.png → set_block_texture_rgba() in wasm
 6. render_frame(dt)                 // clear (alpha=0) → textured instanced blocks → present
-7. get_renderer_backend()           // 2 (WebGPU) | 1 (Canvas2D fallback)
+7. get_renderer_backend()           // must be 2 (WebGPU); 1 (Canvas2D stub) / 0 are refused
 ```
 
 ### Device request policy (`src/webgpu/gpuContext.ts`)
@@ -253,6 +255,7 @@ Both this loader and the TS WebGPU renderer call the same `requestGpuAdapterAndD
 | Concern | Source (first match wins) | Notes |
 |---------|---------------------------|-------|
 | Power preference | `?gpu=low\|high` → `GameSettings.gpuPower` (settings UI) → `high-performance` default | Settings-UI change reloads the page so the new preference takes effect on next acquisition |
+| Adapter attempts | `requestAdapter({ powerPreference })` → `requestAdapter()` → `requestAdapter({ featureLevel: "compatibility" })` | First adapter wins; rung recorded as `adapterAttempt` on `window.webgpuProbe`. All three failing is a hard-fail |
 | Optional features | Adapter-advertised subset of `DESIRED_OPTIONAL_FEATURES` (`timestamp-query`, `texture-compression-{bc,astc,etc2}`, `shader-f16`) | Never hard-required; device still creates with none of them present |
 | Required limits | `REQUIRED_GPU_LIMITS` (4 storage buffers/stage, `workgroup_size(64)`), clamped to what the adapter reports | Matches actual line-clear + particle compute usage; a device that can't meet these fails fast at `requestDevice()` instead of deep in a dispatch |
 | Device label | `tetris-main-device` (or caller-supplied) | Retried without features/limits if the labeled+featured request is rejected |
@@ -332,12 +335,12 @@ Run `npm run dev` (or preview build) and exercise each row. Check console for er
 
 | Pref | Artifacts | Expected |
 |------|-----------|----------|
-| (none) / `auto` | any | TS WebGPU if available, else WebGL2 |
-| `?renderer=webgpu` | any | TS WebGPU or WebGL2 fallback |
-| `?renderer=webgl2` | any | WebGL2 |
+| (none) / `auto` | any | TS WebGPU; WebGL2 only if no adapter exists at all (badge "WebGL2 (no WebGPU)") |
+| `?renderer=webgpu` | any | TS WebGPU; fatal overlay on failure |
+| `?renderer=webgl2` | any | WebGL2 (explicit choice) |
 | `?renderer=webgpu-cpp` | wasm present | `C++ GPU` badge; textured blocks (block.png), ghost + lock flash |
-| `?renderer=webgpu-cpp` | wasm present, no WebGPU | `C++ wasm` badge, Canvas2D fallback draw |
-| `?renderer=webgpu-cpp` | wasm absent | `C++ WIP` or fallback warning → WebGPU/WebGL2 |
+| `?renderer=webgpu-cpp` | wasm present, no WebGPU | Fatal overlay (`window.webgpuProbe.ok === false`) |
+| `?renderer=webgpu-cpp` | wasm absent | Fatal overlay (`cpp-glue-missing` / `cpp-wasm-missing`), no TS WebGPU or WebGL2 |
 
 **Per preference, verify:**
 

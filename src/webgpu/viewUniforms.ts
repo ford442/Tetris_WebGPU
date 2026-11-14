@@ -109,6 +109,10 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
   device.queue.writeBuffer(view.backgroundUniformBuffer, 72, view._f32_1);
   view._f32_1[0] = ghostUVW;
   device.queue.writeBuffer(view.backgroundUniformBuffer, 76, view._f32_1);
+  view._f32_1[0] = view.visualEffects.backgroundResonance || 0.0;
+  device.queue.writeBuffer(view.backgroundUniformBuffer, 80, view._f32_1);
+  view._f32_1[0] = view.visualEffects.comboEnergy || 0.0;
+  device.queue.writeBuffer(view.backgroundUniformBuffer, 84, view._f32_1);
 
   // Block (fragment) uniforms — offsets match pbrBlocks.ts FragmentUniforms:
   // lightPosition(0), eyePosition(16), time(32), useGlitch(36), lockPercent(40), level(44)
@@ -192,12 +196,12 @@ export function updateFrameUniforms(view: WebGPUViewHost, dt: number, time: numb
     warpSurge: view.visualEffects.warpSurge,
     enableFXAA: view.useFXAA !== false ? 1.0 : 0.0,
     // Disable in-shader bloom when multi-pass bloom handles it (avoids double-bloom washout)
-    enableBloom: (view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom) ? 1.0 : 0.0,
+    enableBloom: (view.bloomEnabled && !view.useMultiPassBloom) ? 1.0 : 0.0,
     enableFilmGrain: view.useFilmGrain !== false ? 1.0 : 0.0,
     enableCRT: view.useCRT ? 1.0 : 0.0,
     bloomIntensity: view.bloomIntensity,
     bloomThreshold: 0.35,
-    materialAwareBloom: (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0,
+    materialAwareBloom: 1.0,
     screenResolution: [view.canvasWebGPU.width, view.canvasWebGPU.height],
     aberrationPulse: view.visualEffects.hardDropAberrationPulse || 0,
     hardDropBoost: view._postProcessParams.hardDropBoost,

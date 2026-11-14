@@ -13,8 +13,8 @@
     "preview": "vite preview",
     "asbuild:debug": "mkdir -p build && asc assembly/index.ts --target debug --importMemory --outFile build/debug.wasm && mkdir -p public && cp build/debug.wasm public/debug.wasm",
     "asbuild:release": "mkdir -p build && asc assembly/index.ts --target release --importMemory --outFile build/release.wasm && mkdir -p public && cp build/release.wasm public/release.wasm",
-    "cpp:debug": "node scripts/build-cpp.mjs debug || echo 'emcc not found, skipping C++ debug build'",
-    "cpp:release": "node scripts/build-cpp.mjs release || echo 'emcc not found, skipping C++ release build'",
+    "cpp:debug": "node scripts/build-cpp.mjs debug",
+    "cpp:release": "node scripts/build-cpp.mjs release",
     "build:cpp": "npm run cpp:release",
     "build:all": "npm run asbuild:release && npm run build:cpp && npm run build",
     "pretest": "npm run asbuild:release || true",
@@ -28,13 +28,15 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "ibl:prefilter": "node scripts/prefilter-ibl.mjs",
-    "material:validate": "node scripts/validate-block-material.mjs"
+    "material:validate": "node scripts/validate-block-material.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "gl-matrix": "^3.4.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@tauri-apps/cli": "^2.12.3",
     "@types/gl-matrix": "^2.4.5",
     "@types/node": "^25.0.3",
     "@types/ws": "^8.18.1",

@@ -5,9 +5,11 @@
 import { renderLogger } from '../utils/logger.js';
 import {
   attachDeviceLifecycleHandlers,
+  getLastGpuAcquireDiagnostics,
   requestGpuAdapterAndDevice,
   type GpuDeviceLifecycleHost,
 } from '../webgpu/gpuContext.js';
+import { releaseGpuDevice } from '../webgpu/gpuChores/deviceRegistry.js';
 import {
   flattenPlayfieldGrid,
   packPieceState,
@@ -119,7 +121,7 @@ async function importCreateModule(): Promise<{ create: CreateModuleFn; jsUrl: st
 async function createWebGpuDevice(
   lifecycleHost?: GpuDeviceLifecycleHost,
 ): Promise<GPUDevice | null> {
-  const bundle = await requestGpuAdapterAndDevice();
+  const bundle = await requestGpuAdapterAndDevice({ owner: 'webgpu-cpp' });
   if (!bundle) return null;
 
   if (lifecycleHost) {
@@ -139,10 +141,12 @@ export class CppRendererLoader {
   private static loadedUrl = '';
   private static loaded = false;
   private static backend: RendererBackendId = RendererBackend.NONE;
+  private static lastFailureReason: string | null = null;
 
   private static initFn: ((w: number, h: number) => number) | null = null;
   private static resizeFn: ((w: number, h: number) => void) | null = null;
   private static renderFn: ((dt: number) => void) | null = null;
+  private static renderDualFrameFn: ((dt: number, pf1: number, ps1: number, offx1: number, offy1: number, pf2: number, ps2: number, offx2: number, offy2: number) => void) | null = null;
   private static getPlayfieldPtrFn: (() => number) | null = null;
   private static getPieceStatePtrFn: (() => number) | null = null;
   private static updatePlayfieldFn: ((ptr: number, len: number) => void) | null = null;
@@ -174,6 +178,11 @@ export class CppRendererLoader {
 
   static getLoadedUrl(): string {
     return this.loadedUrl;
+  }
+
+  /** Stable, greppable reason from the most recent failed {@link init}, for the boot probe. */
+  static getLastFailureReason(): string | null {
+    return this.lastFailureReason;
   }
 
   /** Shared HEAP view into the C++ playfield buffer (200 bytes). */
@@ -305,20 +314,33 @@ export class CppRendererLoader {
     lifecycleHost?: GpuDeviceLifecycleHost,
   ): Promise<boolean> {
     if (this.loaded) return true;
+    this.lastFailureReason = null;
 
     const wasmProbe = await fetchWasmModule();
     if (!wasmProbe) {
+      this.lastFailureReason = 'cpp-wasm-missing';
       renderLogger.warn('[cpp] wasm not found — run npm run cpp:release');
       return false;
     }
 
     const imported = await importCreateModule();
     if (!imported) {
+      this.lastFailureReason = 'cpp-glue-missing';
       renderLogger.warn('[cpp] glue JS not found');
       return false;
     }
 
     const webgpuDevice = await createWebGpuDevice(lifecycleHost);
+    if (!webgpuDevice) {
+      // No WebGPU device, no rescue: this renderer never hands off to the TS
+      // WebGPU path or a Canvas2D placeholder as the "active" surface — that
+      // would be exactly the two-live-devices / silent-degrade the boot probe
+      // exists to prevent (#485). The caller hard-fails instead.
+      const diagnostics = getLastGpuAcquireDiagnostics();
+      this.lastFailureReason = diagnostics.reason ? `cpp-device:${diagnostics.reason}` : 'cpp-device-unavailable';
+      renderLogger.warn('[cpp] WebGPU device unavailable:', this.lastFailureReason);
+      return false;
+    }
 
     try {
       const instance = await imported.create({
@@ -337,6 +359,9 @@ export class CppRendererLoader {
         h: number,
       ) => void;
       this.renderFn = instance.cwrap('render_frame', null, ['number']) as (dt: number) => void;
+      this.renderDualFrameFn = instance.cwrap('render_dual_frame', null, [
+        'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'
+      ]) as any;
       this.getPlayfieldPtrFn = instance.cwrap('get_playfield_ptr', 'number', []) as () => number;
       this.getPieceStatePtrFn = instance.cwrap('get_piece_state_ptr', 'number', []) as () => number;
       this.updatePlayfieldFn = instance.cwrap('update_playfield', null, ['number', 'number']) as (
@@ -373,19 +398,27 @@ export class CppRendererLoader {
       this.bindHeapViews();
       this.backend = (this.getBackendFn?.() ?? this.isGpuActiveFn?.() ?? 0) as RendererBackendId;
 
-      if (this.backend === RendererBackend.WEBGPU) {
-        await this.uploadBlockTexture();
+      if (this.backend !== RendererBackend.WEBGPU) {
+        // A cpp module that fell back to its own Canvas2D backend (or came up
+        // with no backend at all) is exactly the silent-degrade this probe
+        // exists to prevent — hard-fail through the catch block below instead
+        // of handing the caller a non-GPU "WebGPU renderer".
+        const backendLabel = this.backend === RendererBackend.CANVAS2D ? 'canvas2d' : 'none';
+        throw new Error(`cpp backend is ${backendLabel}, not WebGPU`);
       }
 
+      await this.uploadBlockTexture();
+
       this.loaded = true;
-      const backendLabel =
-        this.backend === RendererBackend.WEBGPU ? 'WebGPU'
-          : this.backend === RendererBackend.CANVAS2D ? 'Canvas2D fallback'
-            : 'none';
-      renderLogger.info(`[cpp] module ready (backend=${backendLabel}, id=${this.backend}) from ${this.loadedUrl}`);
+      renderLogger.info(`[cpp] module ready (backend=WebGPU) from ${this.loadedUrl}`);
       return true;
     } catch (err) {
+      this.lastFailureReason = `cpp-init-failed: ${err instanceof Error ? err.message : String(err)}`;
       renderLogger.warn('[cpp] init failed:', err);
+      // Hand the device back rather than leaving it orphaned: the caller
+      // hard-fails on this renderer, it never hands off to another live
+      // device (#485 — never two live devices, never a rescue).
+      releaseGpuDevice(webgpuDevice, 'cpp-init-failed');
       this.reset();
       return false;
     }
@@ -397,6 +430,36 @@ export class CppRendererLoader {
 
   static render(dt: number): void {
     this.renderFn?.(dt);
+  }
+
+  static renderDualFrame(dt: number, state1: GameState, ghostY1: number, offx1: number, offy1: number,
+                         state2: GameState, ghostY2: number, offx2: number, offy2: number): void {
+    if (!this.module || !this.module._malloc || !this.module._free || !this.renderDualFrameFn) return;
+
+    // Allocate temporary buffers for both states since dual rendering needs both simultaneously
+    const pf1 = flattenPlayfieldGrid(state1.playfield);
+    const ps1 = packPieceState(state1, ghostY1);
+    const pf2 = flattenPlayfieldGrid(state2.playfield);
+    const ps2 = packPieceState(state2, ghostY2);
+
+    const pf1Ptr = this.module._malloc(pf1.byteLength);
+    const ps1Ptr = this.module._malloc(ps1.byteLength);
+    const pf2Ptr = this.module._malloc(pf2.byteLength);
+    const ps2Ptr = this.module._malloc(ps2.byteLength);
+
+    try {
+      this.module.HEAPU8.set(new Uint8Array(pf1.buffer), pf1Ptr);
+      this.module.HEAPU8.set(new Uint8Array(ps1.buffer), ps1Ptr);
+      this.module.HEAPU8.set(new Uint8Array(pf2.buffer), pf2Ptr);
+      this.module.HEAPU8.set(new Uint8Array(ps2.buffer), ps2Ptr);
+
+      this.renderDualFrameFn(dt, pf1Ptr, ps1Ptr, offx1, offy1, pf2Ptr, ps2Ptr, offx2, offy2);
+    } finally {
+      this.module._free(pf1Ptr);
+      this.module._free(ps1Ptr);
+      this.module._free(pf2Ptr);
+      this.module._free(ps2Ptr);
+    }
   }
 
   /**
@@ -482,6 +545,7 @@ export class CppRendererLoader {
     this.initFn = null;
     this.resizeFn = null;
     this.renderFn = null;
+    this.renderDualFrameFn = null;
     this.getPlayfieldPtrFn = null;
     this.getPieceStatePtrFn = null;
     this.updatePlayfieldFn = null;

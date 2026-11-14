@@ -5,6 +5,8 @@
 
 import { PostProcessUniformsWGSL } from '../postProcessUniforms.js';
 import { ShockwaveWGSL } from './wgsl/postprocess/shockwave.js';
+import { BlackholeWGSL } from './wgsl/postprocess/blackhole.js';
+
 
 export const PostProcessShaders = () => {
     const vertex = `
@@ -31,6 +33,76 @@ export const PostProcessShaders = () => {
         @binding(3) @group(0) var blockTexture: texture_2d<f32>;
 
         ${ShockwaveWGSL}
+        ${BlackholeWGSL}
+
+        // Calculate local luminance variance for texture detection
+        fn calcLuminanceVariance(uv: vec2<f32>) -> f32 {
+            let offset = vec2<f32>(1.0) / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight) * 2.0;
+
+            var lumaSqSum = 0.0;
+            var lumaSum = 0.0;
+
+            // 3x3 kernel
+            for(var y = -1; y <= 1; y++) {
+                for(var x = -1; x <= 1; x++) {
+                    let sampleUV = uv + vec2<f32>(f32(x), f32(y)) * offset;
+                    let color = textureSampleLevel(myTexture, mySampler, sampleUV, 0.0).rgb;
+                    let luma = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+                    lumaSum += luma;
+                    lumaSqSum += luma * luma;
+                }
+            }
+
+            let mean = lumaSum / 9.0;
+            let variance = (lumaSqSum / 9.0) - (mean * mean);
+            return sqrt(max(variance, 0.0));
+        }
+
+        // Material-aware bloom with texture preservation
+        fn materialAwareBloom(uv: vec2<f32>, color: vec3<f32>) -> vec3<f32> {
+            let texelSize = vec2<f32>(1.0) / vec2<f32>(uniforms.screenWidth, uniforms.screenHeight);
+            let spread = 0.008 * uniforms.bloomIntensity;
+
+            // Detect if this is a textured region (high variance = texture detail)
+            let luminanceVar = calcLuminanceVariance(uv);
+            let isTextured = step(0.02, luminanceVar); // Threshold for texture detection
+
+            // For textured regions, reduce bloom to preserve detail
+            // For smooth/emissive regions, apply full bloom
+            let textureMask = isTextured * uniforms.materialAwareBloom;
+            let adjustedIntensity = mix(uniforms.bloomIntensity, uniforms.bloomIntensity * 0.2, textureMask);
+            let adjustedSpread = mix(spread, spread * 0.5, textureMask);
+
+            var bloom = vec3<f32>(0.0);
+            let weight = 1.0 / 13.0;
+
+            // 13-tap bloom (center + 12 samples)
+            bloom += textureSampleLevel(myTexture, mySampler, uv, 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( adjustedSpread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-adjustedSpread, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  adjustedSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -adjustedSpread), 0.0).rgb * weight;
+
+            // Diagonals
+            let diagSpread = adjustedSpread * 0.707;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( diagSpread,  diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-diagSpread,  diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( diagSpread, -diagSpread), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-diagSpread, -diagSpread), 0.0).rgb * weight;
+
+            // Outer cross
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>( adjustedSpread * 2.0, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(-adjustedSpread * 2.0, 0.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0,  adjustedSpread * 2.0), 0.0).rgb * weight;
+            bloom += textureSampleLevel(myTexture, mySampler, uv + vec2<f32>(0.0, -adjustedSpread * 2.0), 0.0).rgb * weight;
+
+            // Apply threshold
+            let luma = dot(bloom, vec3<f32>(0.299, 0.587, 0.114));
+            let thresholdContribution = max(luma - uniforms.bloomThreshold, 0.0) / max(luma, 0.0001);
+
+            return color + (bloom * thresholdContribution * adjustedIntensity);
+        }
+
         @fragment
         fn main(@location(0) uv : vec2<f32>) -> @location(0) vec4<f32> {
             // Lens Distortion (Barrel)
@@ -42,28 +114,8 @@ export const PostProcessShaders = () => {
             var finalUV = distortedUV;
 
             // Black Hole Distortion Effect for Tetris/All Clears
-            if (uniforms.blackHoleTime > 0.001) {
-                let bhCenter = uniforms.blackHoleCenter;
-                let bhTime = uniforms.blackHoleTime;
-                let bhDiff = finalUV - bhCenter;
-                let bhDist = sqrt(dot(bhDiff, bhDiff));
+            finalUV = applyBlackholeDistortion(finalUV, uniforms.blackHoleCenter, uniforms.blackHoleTime);
 
-                // Exponential radius shrink as it decays
-                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
-
-                if (bhDist < bhRadius && bhDist > 0.0) {
-                    let angle = atan2(bhDiff.y, bhDiff.x);
-                    // Faster spin towards the center and over time
-                    let spin = bhTime * 10.0 * (1.0 - bhDist / bhRadius);
-                    let newAngle = angle + spin;
-
-                    // Suck inwards (gravity)
-                    let suckRatio = bhDist / bhRadius;
-                    let suck = (suckRatio * suckRatio) * bhRadius;
-
-                    finalUV = bhCenter + vec2<f32>(cos(newAngle), sin(newAngle)) * suck;
-                }
-            }
             let inBounds = (distortedUV.x >= 0.0 && distortedUV.x <= 1.0 && distortedUV.y >= 0.0 && distortedUV.y <= 1.0);
 
             // Game over kaleidoscope (must be early, before any textureSample using finalUV)
@@ -85,6 +137,15 @@ export const PostProcessShaders = () => {
             let params = uniforms.shockwaveParams;
             let hardDropBoostFromBuffer = uniforms.hardDropBoost;
             let level = uniforms.level;
+
+            // Hold Warp (UV Shear)
+            let holdWarp = uniforms.holdWarp;
+            if (holdWarp > 0.0) {
+                // Creates a diagonal wave shear that decays quickly
+                let shear = sin(finalUV.y * 20.0 + uniforms.time * 30.0) * 0.05 * holdWarp;
+                finalUV.x += shear;
+                finalUV.y -= shear * 0.5;
+            }
 
             let swResult = applyShockwave(finalUV, center, time, params, hardDropBoostFromBuffer, blockTexture, mySampler);
             finalUV = swResult.uv;
@@ -144,46 +205,14 @@ export const PostProcessShaders = () => {
             var b = textureSampleLevel(myTexture, mySampler, finalUV - vec2<f32>(horizOffset + pulseB + chromaticMusicHoriz, vertAberration + pulseR * 0.4 + chromaticMusicOffset), 0.0).b;
             let a = baseSample.a;
 
-            // Bloom-ish boost (optimized 5-tap tent filter)
             var color = vec3<f32>(r, g, b) + vec3<f32>(0.4, 0.8, 1.0) * glassOverlay;
 
-            // OPTIMIZED: 5-tap tent filter (down from 8) with weighted sampling
-            // Center + 4 directional samples = better quality, fewer ALU ops
-            let spread = 0.012 * (1.0 + levelStress * 0.6);
-            var glow = color * 0.25; // Center weight
-
-            // 4 directional samples (cardinal directions for better cache coherence)
-            let dX = vec2<f32>(spread, 0.0);
-            let dY = vec2<f32>(0.0, spread);
-            glow += textureSampleLevel(myTexture, mySampler, finalUV + dX, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV - dX, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV + dY, 0.0).rgb * 0.1875;
-            glow += textureSampleLevel(myTexture, mySampler, finalUV - dY, 0.0).rgb * 0.1875;
-
-            // Tuned bloom that preserves texture detail
-            let glowLum = dot(glow, vec3<f32>(0.299, 0.587, 0.114));
-            let bloomThreshold = 0.35;   // higher = protects glass texture
-            let knee = 0.12;
-            let contrib = max(glowLum - bloomThreshold + knee, 0.0);
-            let bloomIntensity = smoothstep(0.0, knee * 2.0, contrib) * 3.2;  // lowered from 6.0
-
-            color += glow * bloomIntensity;
+            if (uniforms.enableBloom > 0.5) {
+                color = materialAwareBloom(finalUV, color);
+            }
 
             // Darken the center of the black hole
-            if (uniforms.blackHoleTime > 0.001) {
-                let bhCenter = uniforms.blackHoleCenter;
-                let bhTime = uniforms.blackHoleTime;
-                let bhDiff = uv - bhCenter;
-                let bhDist = sqrt(dot(bhDiff, bhDiff));
-                let bhRadius = 0.6 * (1.0 - sqrt(bhTime));
-                if (bhDist < bhRadius) {
-                    let darkFactor = smoothstep(0.0, bhRadius * 0.5, bhDist);
-                    color *= darkFactor;
-                    // Event horizon cyan glow
-                    let ring = smoothstep(bhRadius * 0.8, bhRadius, bhDist) * (1.0 - smoothstep(bhRadius, bhRadius * 1.2, bhDist));
-                    color += vec3<f32>(0.2, 0.8, 1.0) * ring * 2.0 * (1.0 - bhTime);
-                }
-            }
+            color = applyBlackholeColor(color, uv, uniforms.blackHoleCenter, uniforms.blackHoleTime);
 
             // Optional softer secondary boost
             let luminance = dot(color, vec3<f32>(0.299, 0.587, 0.114));

@@ -60,15 +60,15 @@ fn particleNeonBurst(
 ) -> vec3<f32> {
     // Intense cyan/magenta emission
     let burstColor = vec3<f32>(0.0, 1.0, 1.0); // Cyan
-    let burst = burstColor * intensity * 4.0;
+    let burst = burstColor * intensity * 12.0;
 
     // Pulse effect synced to time
-    let pulse = sin(intensity * 15.0 + time * 8.0) * 0.4 + 0.6;
+    let pulse = sin(intensity * 15.0 + time * 8.0) * 0.6 + 0.8;
 
     // Ring expansion effect
     let ring = smoothstep(0.3, 0.0, abs(intensity * 0.5 - 0.25)) * 2.0;
 
-    return baseColor + (burst * pulse) + (emission * intensity * 2.0) + (burstColor * ring);
+    return baseColor + (burst * pulse) + (emission * intensity * 4.0) + (burstColor * ring * 3.0);
 }
 
 // Main particle interaction dispatcher

@@ -1,3 +1,5 @@
+import type { GpuChoreRunner } from '../gpuChores/runner.js';
+
 type PostProcessView = {
   useMultiPassBloom: boolean;
   bloomEnabled: boolean;
@@ -17,6 +19,8 @@ type PostProcessView = {
   canvasWebGPU: HTMLCanvasElement;
   recreateRenderTargets: () => void;
   hdrPlayfield?: boolean;
+  /** Optional post/juice compute helpers; absent means the static tuning. */
+  gpuChores?: Pick<GpuChoreRunner, 'encodeLumaScan'>;
 };
 
 type PassTimerLike = {
@@ -58,10 +62,23 @@ export class PostProcessor {
       passTimers?.endRegion(ppPassEncoder, 'postProcess');
       ppPassEncoder.end();
 
+      const bloomInputView = this.view._bloomInputTexture.createView();
+
+      // Measure the composited frame *before* bloom consumes it: the luma chore
+      // is what the bloom threshold is derived from, so it has to see the same
+      // pixels the threshold pass will. Read-only, self-throttled, and it
+      // encodes into this same encoder — no second submit, no extra device.
+      this.view.gpuChores?.encodeLumaScan(
+        commandEncoder,
+        bloomInputView,
+        this.view._bloomInputTexture.width,
+        this.view._bloomInputTexture.height,
+      );
+
       const textureViewScreen = this.view.ctxWebGPU.getCurrentTexture().createView();
       passTimers?.beginRegion(commandEncoder, 'bloom');
       this.view.bloomSystem.render(
-        this.view._bloomInputTexture.createView(),
+        bloomInputView,
         textureViewScreen,
         commandEncoder,
       );

@@ -32,7 +32,7 @@ struct PostProcessUniforms {
     _pad0: f32,             // 20 (pad to 8-byte align shockwaveParams)
     
     // Frame 1: Shockwave params (offset 24, but aligned to 32)
-    _pad1: f32,             // 24
+    holdWarp: f32,          // 24
     _pad2: f32,             // 28
     shockwaveParams: vec4f, // 32 - width, strength, aberration, speed
     
@@ -88,6 +88,7 @@ export interface PostProcessUniformData {
   shockwaveTime: number;
   
   // Frame 1
+  holdWarp?: number;
   shockwaveParams: [number, number, number, number]; // width, strength, aberration, speed
   
   // Frame 2
@@ -192,7 +193,7 @@ export class PostProcessUniformManager {
     this.data[5] = 0; // _pad0
     
     // Frame 1 (offset 24, but align to 32 = floats 8-11)
-    this.data[6] = 0; // _pad1
+    this.data[6] = (v as any).holdWarp || 0; // holdWarp
     this.data[7] = 0; // _pad2
     this.data[8] = v.shockwaveParams[0];  // width
     this.data[9] = v.shockwaveParams[1];  // strength

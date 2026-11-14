@@ -22,7 +22,7 @@ import {
   tickLockDelaySync,
   type LockDelayHost,
 } from './game/lockDelay.js';
-import { evaluateTSpin } from './game/tSpin.js';
+import { evaluateTSpin, type TSpinResult } from './game/tSpin.js';
 import {
   performHold as applyHold,
   refillNextQueue as refillNextQueueHost,
@@ -72,7 +72,7 @@ export default class Game implements ModeGameHooks {
   scoreEvent: ScoreEvent | null = null;
 
   // T-Spin Tracking
-  isTSpin: boolean = false;
+  isTSpin: TSpinResult = 'none';
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
@@ -90,8 +90,8 @@ export default class Game implements ModeGameHooks {
   ];
 
   // Pre-allocated result object for update loop to avoid GC
-  private _updateResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-      linesCleared: [], locked: false, gameOver: false, tSpin: false
+  private _updateResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } = {
+      linesCleared: [], locked: false, gameOver: false, tSpin: 'none'
   };
 
   // Pre-allocated temporary piece for rotation checks to avoid GC
@@ -125,8 +125,8 @@ export default class Game implements ModeGameHooks {
   private wasmBoardId = 0;
   private neonHyperInversionFlag = false;
 
-  private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } = {
-      linesCleared: [], locked: false, gameOver: false, tSpin: false
+  private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } = {
+      linesCleared: [], locked: false, gameOver: false, tSpin: 'none'
   };
 
   readonly gameStateCache: GameState = {
@@ -162,7 +162,7 @@ export default class Game implements ModeGameHooks {
     lastDropPos: null,
     lastDropDistance: 0,
     scoreEvent: null,
-    isTSpinReady: false,
+    isTSpinReady: 'none',
     runStats: {
       piecesPlaced: 0,
       moves: 0,
@@ -436,7 +436,7 @@ export default class Game implements ModeGameHooks {
     this.view?.onLevelUpReactive?.(newLevel);
   }
 
-  private triggerTSpinReactive(type: 'normal' | 'mini'): void {
+  private triggerTSpinReactive(type: TSpinResult): void {
     this.view?.onTSpinReactive?.(type);
   }
 
@@ -486,14 +486,12 @@ export default class Game implements ModeGameHooks {
     this.gameStateCache.lockDelayTime = this.lockDelayTime;
     this.gameStateCache.effectEvent = this.effectEvent;
     this.gameStateCache.effectCounter = this.effectCounter;
-    this.gameStateCache.effectFlag = this.effectEvent === 'hardDrop';
-    this.gameStateCache.neonBurstFlag = this.effectEvent === 'hardDrop';
     this.gameStateCache.neonHyperInversionFlag = this.neonHyperInversionFlag;
     this.neonHyperInversionFlag = false; // Reset after sending to view
     this.gameStateCache.lastDropPos = this.lastDropPos;
     this.gameStateCache.lastDropDistance = this.lastDropDistance;
     this.gameStateCache.scoreEvent = this.scoreEvent;
-    this.gameStateCache.isTSpinReady = this.isTSpin && this.activPiece?.type === 'T';
+    this.gameStateCache.isTSpinReady = this.activPiece?.type === 'T' ? this.isTSpin : 'none';
     this.gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
 
     return this.gameStateCache;
@@ -530,21 +528,20 @@ export default class Game implements ModeGameHooks {
     return this.collisionDetector.getGhostY(piece);
   }
 
-  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
-    this.gameStateCache.effectFlag = true;
+  hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
     void performHardDrop(this, () => this.clearLine(), this._hardDropResult);
     return this._hardDropResult;
   }
 
-  async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
+  async hardDropAsync(): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult }> {
     await performHardDrop(this, () => this.clearLineAsync(), this._hardDropResult);
     return this._hardDropResult;
   }
 
   applyLineClearScoring(
     linesScore: number[],
-    wasTSpin: boolean,
-    result: { linesCleared: number[], tSpin: boolean },
+    wasTSpin: TSpinResult,
+    result: { linesCleared: number[], tSpin: TSpinResult },
   ): void {
     if (linesScore.length > 0) {
         const isAllClear = this.isPlayfieldEmpty();
@@ -557,8 +554,8 @@ export default class Game implements ModeGameHooks {
         if (linesScore.length >= 4) {
             this.neonHyperInversionFlag = true;
         }
-        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin, isAllClear);
-        if (wasTSpin) this.triggerTSpinReactive('normal');
+        this.triggerLineClearReactive(linesScore.length, this.combo, wasTSpin !== 'none', isAllClear);
+        if (wasTSpin !== 'none') this.triggerTSpinReactive(wasTSpin);
         if (isAllClear) this.view?.onPerfectClearReactive?.();
         this.notifyModeLineClear(linesScore.length);
         if (this.scoreEvent) {
@@ -587,7 +584,7 @@ export default class Game implements ModeGameHooks {
     this.holdPieceObj = null;
     this.canHold = true;
     this.lockTimer = 0;
-    this.isTSpin = false;
+    this.isTSpin = 'none';
 
     this.nextQueue.length = 0;
     this.activPiece = this.createPiece();
@@ -603,19 +600,19 @@ export default class Game implements ModeGameHooks {
   }
 
   // Called every frame (CPU line detection — used by unit tests)
-  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean } {
+  update(dt: number): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
-      tickLockDelaySync(this as LockDelayHost, dt, () => this.clearLine(), this._updateResult);
+      tickLockDelaySync(this, dt, () => this.clearLine(), this._updateResult);
       return this._updateResult;
   }
 
   /** Game loop entry — GPU line detection when the view pipeline is ready. */
-  async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: boolean }> {
+  async updateAsync(dt: number): Promise<{ linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult }> {
       resetLockDelayResult(this._updateResult);
       if (this.isRunEnded) return this._updateResult;
       await tickLockDelay(
-        this as LockDelayHost,
+        this,
         dt,
         () => this.clearLineAsync(),
         this._updateResult,
@@ -628,7 +625,7 @@ export default class Game implements ModeGameHooks {
     if (this.hasCollision()) {
       this.activPiece.x += 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = 'none'; // Reset T-Spin on move
         this.handleMoveReset();
     }
   }
@@ -638,7 +635,7 @@ export default class Game implements ModeGameHooks {
     if (this.hasCollision()) {
       this.activPiece.x -= 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = 'none'; // Reset T-Spin on move
         this.handleMoveReset();
     }
   }
@@ -648,7 +645,7 @@ export default class Game implements ModeGameHooks {
     if (this.hasCollision()) {
       this.activPiece.y -= 1;
     } else {
-        this.isTSpin = false; // Reset T-Spin on move
+        this.isTSpin = 'none'; // Reset T-Spin on move
         this.lockTimer = 0;
     }
   }
@@ -657,7 +654,7 @@ export default class Game implements ModeGameHooks {
     const ghostY = this.getGhostY();
     const moved = this.activPiece.y !== ghostY;
     this.activPiece.y = ghostY;
-    if (moved) this.isTSpin = false;
+    if (moved) this.isTSpin = 'none';
 
     this.lockPiece();
     const linesScore = this.clearLine();
@@ -676,13 +673,14 @@ export default class Game implements ModeGameHooks {
       return isPlayfieldEmpty(this.playfield);
   }
 
-  checkTSpin(): void {
+  checkTSpin(kickIndex: number = -1): void {
       this.isTSpin = evaluateTSpin(
         this.activPiece,
         this.boundGetCell,
         this.playfieldWidth,
         this.playfieldHeight,
         this._tSpinCorners,
+        kickIndex,
       );
   }
 
@@ -724,10 +722,10 @@ export default class Game implements ModeGameHooks {
 
       this.activPiece.rotation = this._tempPiece.rotation;
       this.handleMoveReset();
-      this.checkTSpin(); // Check T-Spin after rotation
+      this.checkTSpin(-1); // Check T-Spin after rotation
       // Trigger T-Spin reactive if detected
-      if (this.isTSpin && this.activPiece.type === 'T') {
-        this.triggerTSpinReactive('normal');
+      if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
+        this.triggerTSpinReactive(this.isTSpin);
       }
       return;
     }
@@ -736,7 +734,8 @@ export default class Game implements ModeGameHooks {
     const kicks = getWallKicks(type, currentRotation, nextRotation);
     if (!kicks || kicks.length === 0) return;
 
-    for (const [ox, oy] of kicks) {
+    for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
+        const [ox, oy] = kicks[kickIndex];
         this._tempPiece.x = this.activPiece.x + ox;
         this._tempPiece.y = this.activPiece.y + oy;
 
@@ -763,13 +762,14 @@ export default class Game implements ModeGameHooks {
 
             this.activPiece.rotation = this._tempPiece.rotation;
             this.handleMoveReset();
-            this.checkTSpin(); // Check T-Spin after kick
+            this.checkTSpin(kickIndex); // Check T-Spin after kick
             // Trigger T-Spin reactive if detected
-            if (this.isTSpin && this.activPiece.type === 'T') {
-              this.triggerTSpinReactive('normal');
+            if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
+              this.triggerTSpinReactive(this.isTSpin);
             }
             return;
         }
+        kickIndex++;
     }
   }
 
@@ -817,6 +817,7 @@ export default class Game implements ModeGameHooks {
 
   lockPiece(): void {
     const { y: pieceY, x: pieceX, blocks } = this.activPiece;
+    this.hardDropSnapshot = { blocks, x: pieceX };
 
     for (let y = 0; y < blocks.length; y++) {
       for (let x = 0; x < blocks[y].length; x++) {

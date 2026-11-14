@@ -18,6 +18,7 @@ import { renderLogger, audioLogger } from '../utils/logger.js';
 import type { GameSettings } from '../config/gameSettings.js';
 import type { GameState } from '../game/gameState.js';
 import { QUALITY_PRESET_VALUES } from '../config/renderConfig.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import { applyAccessibilitySettings } from '../a11y/applyAccessibility.js';
 import { isReducedMotionActive } from '../a11y/accessibility.js';
 import { particleBudgetForQuality } from './particles/layout.js';
@@ -55,12 +56,6 @@ export interface ViewLike {
   backgroundUniformBuffer: GPUBuffer;
   currentMaterial: unknown;
   usePremiumMaterials: boolean;
-  particleInteractionUniforms: {
-    particleInfluence: number;
-    glassDistortion: number;
-    goldSpecularBoost: number;
-    cyberEmissivePulse: number;
-  };
   particleSystem: ParticleSystem | null;
   state: GameState | null;
 }
@@ -72,7 +67,6 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
   reactiveMusic?: boolean;
   materialTheme?: string;
   chaosMode?: boolean;
-  particleInteraction?: boolean;
 } = {}) {
   const {
     renderScale = 1.5,
@@ -80,8 +74,7 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
     reactiveVideo = true,
     reactiveMusic = true,
     materialTheme,
-    chaosMode = false,
-    particleInteraction = true
+    chaosMode = false
   } = options;
 
   view.setRenderScale(renderScale);
@@ -101,9 +94,6 @@ export function setPremiumVisualsPreset(view: ViewLike, options: {
 
   view.useReactiveMusic = reactiveMusic;
   renderLogger.info(`Reactive music ${reactiveMusic ? 'enabled' : 'disabled'}`);
-
-  view.useParticleInteraction = particleInteraction;
-  renderLogger.info(`Particle interaction ${particleInteraction ? 'enabled' : 'disabled'}`);
 
   if (chaosMode) {
     view.useChaosMode = true;
@@ -151,7 +141,7 @@ export function onLineClearReactive(view: ViewLike, lines: number, combo: number
   }
 }
 
-export function onTSpinReactive(view: ViewLike) {
+export function onTSpinReactive(view: ViewLike, _type: TSpinResult = 'normal') {
   if (view.useReactiveVideo) {
     view.reactiveVideoBackground.onTSpin();
   }

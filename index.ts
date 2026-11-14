@@ -1,5 +1,6 @@
 import Game from "./src/game.js";
 import { createView, getRendererPreference } from "./src/view/createView.js";
+import { showRendererBadge } from "./src/view/rendererBadge.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
@@ -303,17 +304,27 @@ void (async () => {
   const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
   const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
 
-  const view = await createView(
-      document.body,
-      window.innerWidth,
-      window.innerHeight,
-      20,
-      10,
-      nextPieceCtx,
-      holdPieceCtx
-  );
+  let view: Awaited<ReturnType<typeof createView>>;
+  try {
+    view = await createView(
+        document.body,
+        window.innerWidth,
+        window.innerHeight,
+        20,
+        10,
+        nextPieceCtx,
+        holdPieceCtx
+    );
+  } catch (err) {
+    // Fatal: the active WebGPU renderer (TS or cpp) couldn't get a device.
+    // createView() has already shown the blocking overlay — see
+    // src/webgpu/bootProbe.ts / fatalBootOverlay.ts and docs/webgpu-boot-probe.md.
+    console.error('Tetris boot failed — WebGPU unavailable:', window.webgpuProbe ?? err);
+    return;
+  }
 
   console.info(`Tetris renderer: ${view.rendererName} (preference: ${getRendererPreference()})`);
+  showRendererBadge(view);
 
   // Shift+M cycles albedo / metal / glass / roughness / normals / final on the
   // production shading path (src/dev/materialDebugHotkey.ts).

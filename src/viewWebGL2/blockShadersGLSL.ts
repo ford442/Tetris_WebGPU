@@ -164,6 +164,8 @@ void main() {
   vec3 glassColor = texRgb * (0.70 + crystalBright * 0.30)
                   + vColor.rgb * 0.22 * crystalBright
                   + vec3(crystalHi * 0.40);
+  // Classic stained-glass window, ported from authoredGlassAlbedo (authoredGlass.wgsl).
+  glassColor = mix(glassColor, texRgb * (vColor.rgb + vec3(0.2)), 0.65);
   vec3 baseColor = mix(glassColor, metalColor, metalMask);
 
   float lightFactor = mix(0.42 + NdotL * 0.58, 0.50 + NdotL * 0.42, metalMask);

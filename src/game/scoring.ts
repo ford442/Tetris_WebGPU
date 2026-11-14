@@ -4,6 +4,7 @@
  */
 
 import { gameLogger } from '../utils/logger.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface ScoreEvent {
   points: number;
@@ -276,45 +277,59 @@ export class ScoringSystem {
   }
 
   // Updates score based on action and returns a ScoreEvent for visuals
-  updateScore(linesCleared: number, tSpin: boolean = false, isAllClear: boolean = false): ScoreEvent | null {
-    if (linesCleared === 0) {
+  updateScore(linesCleared: number, tSpin: TSpinResult = 'none', isAllClear: boolean = false): ScoreEvent | null {
+    if (linesCleared === 0 && tSpin === 'none') {
       this.combo = -1;
       return null;
     }
+
+    // Zero-line spins keep the B2B flag and get no bonus
+    if (linesCleared === 0) {
+       this.combo = -1;
+       // do not reset B2B, do not score
+       return null;
+    }
+    this.combo++;
 
     // Check level before adding lines
     const previousLevel = this.level;
 
     this.lines += linesCleared;
-    this.combo++;
 
     // Check if level increased
     const levelUp = this.level > previousLevel;
 
     let baseScore = 0;
     let text = "";
-    const level = this.level;
-    const isDifficult = tSpin || linesCleared === 4;
+    const level = previousLevel; // multiply by the level BEFORE the clear
+    const isDifficult = linesCleared === 4 || (tSpin !== 'none' && linesCleared > 0);
 
     // Back-to-Back check
     let b2bMultiplier = 1.0;
     if (isDifficult) {
         if (this.backToBack) {
             b2bMultiplier = 1.5;
-            text += "B2B ";
+            if (linesCleared > 0) text += "B2B ";
         }
         this.backToBack = true;
-    } else {
+    } else if (linesCleared > 0) {
         this.backToBack = false;
     }
+    // Note: If linesCleared === 0 (e.g. zero-line t-spin), B2B is preserved but not started
 
     // T-Spin Scoring
-    if (tSpin) {
+    if (tSpin === 'normal') {
         switch (linesCleared) {
-            case 0: baseScore = 400 * level; text += "T-SPIN"; break;
+            case 0: baseScore = 400 * level; text += "T-SPIN"; break; // shouldn't happen based on early return
             case 1: baseScore = 800 * level; text += "T-SPIN SINGLE"; break;
             case 2: baseScore = 1200 * level; text += "T-SPIN DOUBLE"; break;
             case 3: baseScore = 1600 * level; text += "T-SPIN TRIPLE"; break;
+        }
+    } else if (tSpin === 'mini') {
+        switch (linesCleared) {
+            case 0: baseScore = 100 * level; text += "T-SPIN MINI"; break;
+            case 1: baseScore = 200 * level; text += "T-SPIN MINI SINGLE"; break;
+            case 2: baseScore = 400 * level; text += "T-SPIN MINI DOUBLE"; break;
         }
     } else {
         // Standard Scoring

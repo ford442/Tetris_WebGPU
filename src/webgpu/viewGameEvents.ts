@@ -74,15 +74,18 @@ export function showFloatingComboText(view: ViewEventHost, combo: number): void 
   view.showFloatingText(`COMBO x${combo}`, "OVERDRIVE");
 }
 
-export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean = false, combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
+import type { TSpinResult } from '../game/tSpin.js';
+
+export function onLineClear(view: ViewEventHost, lines: number[], tSpin: TSpinResult = 'none', combo: number = 0, backToBack: boolean = false, isAllClear: boolean = false): void {
 
   const base = 0.45;
   const lineBonus = Math.min(lines.length * 0.12, 0.35);
-  const specialBonus = (tSpin || backToBack) ? 0.15 : 0;
+  const specialBonus = (tSpin !== 'none' || backToBack) ? 0.15 : 0;
   const comboBonus = Math.min(combo * 0.03, 0.12);
 
   const strength = Math.min(base + lineBonus + specialBonus + comboBonus, 0.95);
   view.visualEffects.triggerLineClearFlash(strength);
+  view.visualEffects.setTargetCombo(combo);
 
   // New Combo Celebration System
   if (combo >= 2) {
@@ -123,19 +126,19 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   view.visualEffects.warpSurge = 1.0 + lines.length * 0.3 + (combo * 0.2);
   
   // Screen shake with more intensity for bigger clears
-  const shakeBase = tSpin ? 1.0 : (0.3 + lines.length * 0.2);
+  const shakeBase = tSpin !== 'none' ? 1.0 : (0.3 + lines.length * 0.2);
   const shakeBonus = Math.min(combo * 0.15, 1.5);
-  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin ? 0.7 : 0.6);
+  view.visualEffects.triggerShake(shakeBase + shakeBonus, tSpin !== 'none' ? 0.7 : 0.6);
   
   // Chromatic aberration for big clears
-  if (lines.length >= 4 || tSpin || combo >= 3) {
+  if (lines.length >= 4 || tSpin !== 'none' || combo >= 3) {
     view.visualEffects.triggerAberration(0.3 + lines.length * 0.1);
   }
 
   // JUICE: Supernova Line Clears
   // Variable neonBloomIntensity spike based on event importance.
   let bloomIntensity = 0.7;
-  if (lines.length >= 4 || tSpin || combo >= 5) {
+  if (lines.length >= 4 || tSpin !== 'none' || combo >= 5) {
     bloomIntensity = 2.0;
     // Trigger Black Hole on Tetris or huge clears
     if (lines.length >= 4) {
@@ -165,6 +168,20 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
     view.visualEffects.triggerChromaticSpike(1.5 + lines.length * 0.2); // NEON BRICKLAYER
   }
 
+  // Spawn-index compaction chore: 200 board flags in, the dense list of cells
+  // that still get a per-cell firework out. At the full particle budget every
+  // occupied cell survives, so this is a no-op on a healthy frame; under the
+  // adaptive budget it thins the burst evenly instead of letting the ring
+  // buffer drop whichever emits happened to land last. Positions, colours and
+  // counts below are untouched — the chore only picks cells.
+  const spawnFlags = buildSpawnFlags(lines, view.state?.playfield, {
+    maxParticles: view.particleSystem?.maxParticles,
+  });
+  const spawnCells = view.gpuChores
+    ? view.gpuChores.compactIndices(spawnFlags)
+    : compactIndicesCpu(spawnFlags);
+  const spawnable = spawnLookup(spawnCells);
+
   lines.forEach((y: number) => {
     const worldY = y * -2.2;
 
@@ -186,7 +203,7 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
       let color = [0.0, 1.0, 1.0, 1.0];
       let count = 20 + (combo * 5);
 
-      if (tSpin) {
+      if (tSpin !== 'none') {
         color = [1.0, 0.0, 1.0, 1.0];
         count = 150 + (combo * 25);
       } else if (lines.length === 4) {
@@ -208,7 +225,9 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
         count = Math.floor(count * 2.5);
       }
 
-      view.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
+      if (spawnable[y * BOARD_COLS + c]) {
+        view.particleSystem.emitParticles(worldX, worldY, 0.0, count, color);
+      }
 
       if (combo > 2 && c === 5) {
         for (let i = 0; i < 20 + combo * 5; i++) {
@@ -302,14 +321,22 @@ export function onLineClear(view: ViewEventHost, lines: number[], tSpin: boolean
   }
 }
 
-export function onLock(view: ViewEventHost, isTSpin: boolean = false): void {
-  view.visualEffects.triggerLock(0.3);
-  view.visualEffects.triggerShake(isTSpin ? 0.5 : 0.2, 0.15);
+export function onLock(view: ViewEventHost, isTSpin: TSpinResult = 'none', blocks?: number[][], pieceX?: number, pieceY?: number): void {
+  view.visualEffects.triggerLock(0.05); // Tiny tint so it doesn't stack heavily with neon bloom
+  view.visualEffects.triggerShake(isTSpin !== 'none' ? 0.5 : 0.2, 0.15);
   // JUICE: Chromatic Aberration on regular locks to make every placement tactile
-  view.visualEffects.triggerAberration(isTSpin ? 1.0 : 0.5);
+  view.visualEffects.triggerAberration(isTSpin !== 'none' ? 1.0 : 0.5);
 
-  if (view.state?.activePiece) {
-    const { x, y } = view.state.activePiece;
+  // Trigger squash & lock flash on the committed cells
+  if (blocks && pieceX !== undefined && pieceY !== undefined) {
+    view.visualEffects.triggerSquashAndFlash(blocks, pieceX, pieceY);
+  }
+
+  // Use pieceX and pieceY from snapshot if available, else activePiece
+  const x = pieceX !== undefined ? pieceX : view.state?.activePiece?.x;
+  const y = pieceY !== undefined ? pieceY : view.state?.activePiece?.y;
+
+  if (x !== undefined && y !== undefined) {
     const worldX = (x + 1.5) * 2.2;
     const worldY = (y + 1.5) * -2.2;
 
@@ -325,12 +352,12 @@ export function onLock(view: ViewEventHost, isTSpin: boolean = false): void {
     const uvX = 0.5 + (worldX - 10.0) / visibleWidth;
     const uvY = 0.5 - (worldY - camY) / visibleHeight;
 
-    view.visualEffects.triggerShockwave([uvX, uvY], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+    view.visualEffects.triggerShockwave([uvX, uvY], isTSpin !== 'none' ? 0.35 : 0.2, isTSpin !== 'none' ? 0.15 : 0.1, 0.05, 2.5);
   } else {
-    view.visualEffects.triggerShockwave([0.5, 0.5], isTSpin ? 0.35 : 0.2, isTSpin ? 0.15 : 0.1, 0.05, 2.5);
+    view.visualEffects.triggerShockwave([0.5, 0.5], isTSpin !== 'none' ? 0.35 : 0.2, isTSpin !== 'none' ? 0.15 : 0.1, 0.05, 2.5);
   }
   
-  if (isTSpin && view.state?.activePiece) {
+  if (isTSpin !== 'none' && view.state?.activePiece) {
     // Extra T-Spin lock effects
     view.visualEffects.triggerNeonBloomFlash(2.0); // JUICE: Boom!
     const { x, y } = view.state.activePiece;
@@ -359,6 +386,7 @@ export function onHold(view: ViewEventHost): void {
   // Add a subtle warp/aberration glitch to simulate "teleportation"
   view.visualEffects.triggerAberration(0.3);
   view.visualEffects.triggerGlitch(0.2);
+  view.visualEffects.triggerHoldWarp(1.0); // UV Shear effect for hold
 
   const centerX = 4.5 * 2.2;
   const centerY = -10.0 * 2.2;
@@ -400,24 +428,28 @@ export function triggerImpactEffects(view: ViewEventHost, worldX: number, impact
   const uvY = 0.5 - (impactY - camY) / visibleHeight;
 
   // JUICE: Doubled shockwave strength and width, massively amplified aberration and speed for heavier impacts
-  const strength = (5.0 + Math.min(distance * 0.3, 1.5)) * 4.5;   // NEON BRICKLAYER: INCREASED
-  const width = (2.5 + Math.min(distance * 0.2, 0.8)) * 3.5;      // NEON BRICKLAYER: INCREASED
-  const aberration = (1.0 + Math.min(distance * 0.1, 1.0)) * 6.0; // NEON BRICKLAYER: INCREASED Ultra Hyper aberration
-  const speed = (7.0 + Math.min(distance * 0.4, 4.0)) * 3.0;      // NEON BRICKLAYER: INCREASED
+  const strength = 2.1 + Math.min(distance * 0.02, 0.5);   // NEON BRICKLAYER: Tuned conservatively per memory
+  const width = 0.25 + Math.min(distance * 0.02, 0.1);      // NEON BRICKLAYER: Adjusted width
+  const aberration = 2.1 + Math.min(distance * 0.02, 0.5); // NEON BRICKLAYER: Tuned conservatively per memory
+  const speed = 2.0 + Math.min(distance * 0.2, 1.0);      // NEON BRICKLAYER: Adjusted speed
 
   view.visualEffects.triggerShockwave([uvX, uvY], width, strength, aberration, speed);
   view.visualEffects.warpSurge = 1.0 + Math.min(distance * 0.3, 2.0);
   // NEON BRICKLAYER: Slightly heavier camera shake
-  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 1.5, 0.5);
+  view.visualEffects.triggerShake((8.0 + distance * 0.5) * 2.0, 0.5, 0.0, -1.0);
 }
 
 import { loadGameSettings } from '../config/gameSettings.js';
 
-export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0): void {
+export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: number, colorIdx: number = 0, blocks?: number[][]): void {
   const worldX = x * 2.2;
   const startRow = y - distance;
 
   // First trigger removed, relying on the one at the end of onHardDrop
+
+  if (blocks) {
+    view.visualEffects.triggerSquashAndFlash(blocks, x, y);
+  }
 
   if (loadGameSettings().ghostDropTrail && view.visualEffects && distance > 0) {
     const snap = view.game?.getHardDropSnapshot?.();
@@ -437,7 +469,7 @@ export function onHardDrop(view: ViewEventHost, x: number, y: number, distance: 
   const trailColor = [...themeColors, 0.8];
 
   // JUICE: Increased particle count and trail density
-  for (let i = 0; i < distance * 6; i++) {
+  for (let i = 0; i < distance * 8; i++) {
     const r = startRow + i * 0.33;
     const worldY = r * -2.2;
     view.particleSystem.emitParticles(worldX, worldY, 0.0, 36, trailColor);
@@ -650,6 +682,12 @@ export function renderMainScreen(view: ViewEventHost, state: GameState): void {
 
 import { gameOverAnimation } from '../effects/gameOverAnimation.js';
 import { lineClearAnimator } from '../effects/lineClearAnimation.js';
+import {
+  BOARD_COLS,
+  buildSpawnFlags,
+  compactIndicesCpu,
+  spawnLookup,
+} from './gpuChores/compact.js';
 
 export function renderEndScreen(view: ViewEventHost, state: GameState): void {
   gameOverAnimation.addGameOverStyles();

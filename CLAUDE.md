@@ -39,7 +39,7 @@ src/
 ├── viewCpp/
 │   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
 │   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
-├── viewWebGL2/              # WebGL2 fallback renderer
+├── viewWebGL2/              # WebGL2 renderer (auto fallback when no adapter; glBloom.ts = bloom pass)
 ├── dev/
 │   ├── textureMaskLab.ts    # Mask/material authoring UI (?masklab)
 │   └── materialDebugHotkey.ts # Shift+M material inspector
@@ -53,10 +53,22 @@ src/
     │   ├── block/           # Block shader TS wrappers (blockShader.ts composes the WGSL; uniforms.ts = CPU offsets)
     │   └── wgsl/block/      # Block WGSL source (see File Size Guidelines)
     ├── shaders.ts           # Barrel re-export (kept for import compatibility)
+    ├── gpuContext.ts        # Adapter/device acquisition + acquire diagnostics
+    ├── bootProbe.ts         # window.webgpuProbe (see docs/webgpu-boot-probe.md)
+    ├── fatalBootOverlay.ts  # Blocking overlay on a failed WebGPU boot probe
     ├── viewGameEvents.ts    # Event → visual effect handlers
     ├── backdropCapture.ts   # Scene backdrop blit sampled by glass refraction
     ├── glassRefraction.ts   # Quality/adaptive gating for backdrop refraction
     ├── compute.ts           # GPU compute shaders for particle physics
+    ├── gpuChores/           # Post/juice compute helpers (see docs/gpu-chores.md)
+    │   ├── runner.ts        # Adopts the active renderer's device; encodes jobs
+    │   ├── shaders.ts       # luma_histogram (8,8), downsample_2d (8,8), compact_indices (64)
+    │   ├── lumaStats.ts     # Histogram → bloom threshold math (pure)
+    │   ├── autoBloom.ts     # Measured stats → BloomSystem params (smoothed)
+    │   ├── compact.ts       # Spawn-flag build + CPU compaction rung
+    │   ├── policy.ts        # `?no_gpu_compute` kill switch, WebGPU → CPU order
+    │   ├── deviceRegistry.ts# One live GPU device per session
+    │   └── breadcrumbs.ts   # `window.__tetrisGpuChores` trail
     ├── particles.ts         # Particle system (GPU-driven)
     ├── effects.ts           # Effect parameter wrappers (shockwave, glitch)
     ├── geometry.ts          # 3D mesh data (cube, quad, grid)
@@ -95,8 +107,40 @@ index.html                   # HTML bootstrap
 - **Switch:** `?renderer=webgpu-cpp` or `localStorage.tetris_renderer=webgpu-cpp`
 - **Build:** `npm run cpp:release` (requires [emsdk](https://emscripten.org/) — `source emsdk_env.sh`)
 - **Artifacts:** `public/cpp/tetris_renderer.{js,wasm}` (mirrored to `build/cpp/`)
-- **Fallback:** cpp → TS WebGPU → WebGL2 if wasm missing or init fails
-- **Docs:** `cpp/README.md`
+- **On failure:** hard-fails (fatal overlay) if wasm is missing, init fails, or its
+  own backend isn't WebGPU — it never falls back to TS WebGPU or WebGL2 as a rescue.
+- **Docs:** `cpp/README.md`, `docs/webgpu-boot-probe.md`
+
+### WebGPU boot policy (hard-fail, WebGL2 only when no adapter exists)
+- **What:** the active renderer (TS WebGPU *or* cpp, never both) either gets a
+  real `GPUDevice` or the boot hard-fails with a blocking overlay. The one
+  exception: with the default `auto` preference and **no adapter at all**
+  (`navigator.gpu` missing / `requestAdapter()` null), `createView()` uses WebGL2
+  (decided by an adapter-only preflight before any WebGPU view is built) and the
+  UI badge says "WebGL2 (no WebGPU)". A device failure after an adapter was
+  found, and explicit `?renderer=webgpu` / `webgpu-cpp`, never fall back.
+  `?renderer=webgl2` remains an explicit opt-in.
+- **Adapter retry:** `requestGpuAdapterAndDevice()` (the only `requestAdapter`
+  call site) tries `powerPreference` → default adapter → `featureLevel:
+  "compatibility"`; the winning rung is `adapterAttempt` on the probe.
+- **Probe:** `window.webgpuProbe` (`src/webgpu/bootProbe.ts`) — `{ ok, browser,
+  reason, adapter, adapterAttempt, renderer }`, set on every boot attempt, success or failure.
+- **Overlay:** `src/webgpu/fatalBootOverlay.ts`.
+- **Docs:** `docs/webgpu-boot-probe.md`
+
+### GPU chores (post/juice helpers)
+- **What:** luminance histogram, 2D downsample and index compaction for bloom and
+  line-clear juice — never board state, collision or gravity.
+- **Device:** chores *adopt* the active renderer's device (TS WebGPU **or** the
+  C++ renderer, never both); they never request one. `gpuChores/deviceRegistry.ts`
+  keeps a session to a single live device.
+- **Backends:** WebGPU compute → CPU overlay FX. No WebGL2 rung; without WebGPU
+  the board plays and the juice degrades.
+- **Kill switch:** `?no_gpu_compute` (or `localStorage.tetris_no_gpu_compute`);
+  breadcrumbs at `__tetrisGpuChores.breadcrumbs()` / `.status()`.
+- **Bloom:** the measured threshold never drops below the static baseline, so
+  auto-bloom can only bloom less than the hand-tuned look (#265 guard).
+- **Docs:** `docs/gpu-chores.md`
 
 ### Authored block material (the visual contract)
 The go.1ink.us look is **data**, not shader constants:
@@ -132,7 +176,8 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 3. Backdrop capture — blit the scene so far into a fixed-size texture (`webgpu/backdropCapture.ts`) so the glass path can refract it in screen space; blocks cannot sample the target they render into
 4. Grid shader (blocks with texture atlas + lighting)
 5. Particle system (GPU compute + render)
-6. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
+6. Luma chore — `downsample_2d` + `luma_histogram` over the composited frame, feeding the bloom threshold (`webgpu/gpuChores/`)
+7. Post-processing (bloom, lens distortion, shockwave, chromatic aberration, glitch)
 
 ## Key Game Mechanics
 
@@ -200,3 +245,9 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `block-material-schema.test.ts` — material validation + uniform packing
 - `block-material-parity.test.ts` — TS / WebGL2 / C++ material parity + shader split
 - `validate-block-material.test.ts` — the `prebuild` gate
+- `gpu-chores-*.test.ts` — chore policy, luma/bloom math, compaction parity, runner, wiring
+- `webgpu-boot-probe.test.ts` — `window.webgpuProbe`, browser detection, acquire diagnostics
+- `fatal-boot-overlay.test.ts` — blocking overlay on a failed boot probe
+- `create-view-integration.test.ts` — no WebGPU → WebGL2 rescue chain after a device failure
+- `create-view-auto-fallback.test.ts` — `auto` → WebGL2 only when no adapter; explicit choices stay strict
+- `webgl2-bloom.test.ts` — WebGL2 bloom params/shaders + renderer badge labels

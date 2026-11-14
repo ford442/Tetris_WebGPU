@@ -27,12 +27,6 @@ export interface MaterialViewLike {
   backgroundUniformBuffer: GPUBuffer;
   _f32_3: Float32Array;
   _materialUniforms: Float32Array;
-  particleInteractionUniforms: {
-    particleInfluence: number;
-    glassDistortion: number;
-    goldSpecularBoost: number;
-    cyberEmissivePulse: number;
-  };
   useWireframe: boolean;
   authoredBlockTextureLoaded?: boolean;
   /** AuthoredMaterialParams uniform buffer (@binding(14)). */

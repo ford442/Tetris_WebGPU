@@ -481,10 +481,10 @@ export async function maybeInitTextureMaskLab(uiContainer: HTMLElement): Promise
             <label>B1</label><input id="masklab-b1" type="range" min="0.2" max="1.0" step="0.005" value="0.95"/>
           </div>
           <div class="masklab-row">
-            <label>glassMin</label><input id="masklab-glassMin" type="range" min="0" max="0.5" step="0.005" value="0.05"/>
+            <label>glassMin</label><input id="masklab-glassMin" type="range" min="0" max="1.0" step="0.005" value="0.80"/>
           </div>
           <div class="masklab-row">
-            <label>glassMax</label><input id="masklab-glassMax" type="range" min="0.2" max="1.0" step="0.005" value="0.60"/>
+            <label>glassMax</label><input id="masklab-glassMax" type="range" min="0.2" max="1.0" step="0.005" value="0.88"/>
           </div>
           <div class="masklab-row">
             <label>glassFresnelPower</label><input id="masklab-glassPow" type="range" min="0.5" max="6" step="0.05" value="2"/>

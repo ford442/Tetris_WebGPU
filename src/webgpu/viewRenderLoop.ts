@@ -17,6 +17,7 @@ import type { Piece } from '../game/pieces.js';
 import {
   tickAdaptiveQuality,
 } from './adaptiveQuality.js';
+import { baselineBloomThreshold } from './gpuChores/autoBloom.js';
 
 const glMatrix = Matrix;
 
@@ -37,10 +38,13 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   const state = view.state;
   if (state && state.effectFlag && state.effectCounter !== view.lastEffectCounter) {
     view.lastEffectCounter = state.effectCounter; // consume boost pulse here only
-    view._hardDropBoostTimer = 1.0;
 
-    if (typeof view.setFresnelBoost === 'function') {
-      view.setFresnelBoost(1.0);
+    if (state.effectEvent === 'hardDrop') {
+      view._hardDropBoostTimer = 1.0;
+
+      if (typeof view.setFresnelBoost === 'function') {
+        view.setFresnelBoost(1.0);
+      }
     }
 
     // NEW: Trigger Neon Burst on hard drops
@@ -128,6 +132,11 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
 
   passTimers?.resolveAfterSubmit(view.device, commandEncoder);
   view.device.queue.submit([commandEncoder.finish()]);
+
+  // Kick the luma chore's non-blocking readback for the scan encoded above.
+  // Returns immediately; the stats land a frame or two later and are consumed
+  // by the auto-bloom controller in updatePostProcessUniforms.
+  view.gpuChores?.afterSubmit();
 
   const wallMs = performance.now() - wallStart;
   const timerSnap = passTimers?.snapshot();
@@ -418,6 +427,7 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.shockwaveCenter[0] = view.visualEffects.shockwaveCenter[0];
   view._postProcessParams.shockwaveCenter[1] = view.visualEffects.shockwaveCenter[1];
   view._postProcessParams.shockwaveTime = shockwaveActive ? view.visualEffects.shockwaveTimer : 0;
+  view._postProcessParams.holdWarp = view.visualEffects.holdWarpTimer;
   view._postProcessParams.blackHoleTime = view.visualEffects.blackHoleTime;
   if (view._postProcessParams.blackHoleCenter) {
     if (view.visualEffects.blackHoleCenter && view.visualEffects.blackHoleCenter.length >= 2) {
@@ -439,24 +449,36 @@ function updatePostProcessUniforms(view: WebGPUViewHost, time: number) {
   view._postProcessParams.warpSurge = view.visualEffects.warpSurge;
   view._postProcessParams.enableFXAA = view.useFXAA !== false ? 1.0 : 0.0;
   
-  // Update Bloom System with dynamic neon flash intensity
-  if (view.bloomSystem && view.visualEffects.neonBloomIntensity > 0) {
-    view.bloomSystem.setParameters({
-      intensity: view.bloomIntensity + view.visualEffects.neonBloomIntensity
-    });
-  } else if (view.bloomSystem) {
-    view.bloomSystem.setParameters({
-      intensity: view.bloomIntensity
-    });
+  // Update Bloom System: dynamic neon flash intensity, plus the measured
+  // threshold when the luma chore has numbers. With no chore, no stats yet, or
+  // the kill switch on, `AutoBloomController` returns the static tuning and the
+  // additive flash unscaled — byte for byte the old behavior.
+  if (view.bloomSystem) {
+    const flash = Math.max(view.visualEffects.neonBloomIntensity || 0, 0);
+    if (view.autoBloom) {
+      const auto = view.autoBloom.update(
+        view.gpuChores?.stats,
+        { baselineThreshold: baselineBloomThreshold(view.hdrPlayfield), baselineKnee: 0.1 },
+        view.bloomIntensity,
+        flash,
+      );
+      view.bloomSystem.setParameters({
+        intensity: auto.intensity,
+        threshold: auto.threshold,
+        knee: auto.knee,
+      });
+    } else {
+      view.bloomSystem.setParameters({ intensity: view.bloomIntensity + flash });
+    }
   }
 
-  const inShaderBloom = view.useEnhancedPostProcess && view.bloomEnabled && !view.useMultiPassBloom;
+  const inShaderBloom = view.bloomEnabled && !view.useMultiPassBloom;
   view._postProcessParams.enableBloom = inShaderBloom ? 1.0 : 0.0;
   view._postProcessParams.enableFilmGrain = view.useFilmGrain !== false ? 1.0 : 0.0;
   view._postProcessParams.enableCRT = view.useCRT ? 1.0 : 0.0;
   view._postProcessParams.bloomIntensity = view.bloomIntensity + view.visualEffects.neonBloomIntensity;
-  view._postProcessParams.bloomThreshold = 0.72;
-  view._postProcessParams.materialAwareBloom = (view.useEnhancedPostProcess && !view.useMultiPassBloom) ? 1.0 : 0.0;
+  view._postProcessParams.bloomThreshold = 0.35;
+  view._postProcessParams.materialAwareBloom = 1.0;
   view._postProcessParams.screenResolution[0] = view.canvasWebGPU.width;
   view._postProcessParams.screenResolution[1] = view.canvasWebGPU.height;
   view._postProcessParams.aberrationPulse = view.visualEffects.hardDropAberrationPulse || 0;

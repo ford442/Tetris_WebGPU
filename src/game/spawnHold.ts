@@ -1,6 +1,7 @@
 import type { Piece } from './pieces.js';
 import type { IView } from '../view/IView.js';
 import type { RunStats } from './runStats.js';
+import type { TSpinResult } from './tSpin.js';
 
 export interface SpawnHoldHost {
   activPiece: Piece;
@@ -13,7 +14,7 @@ export interface SpawnHoldHost {
   practiceTopOutRecovery?: boolean;
   lockTimer: number;
   lockResets: number;
-  isTSpin: boolean;
+  isTSpin: TSpinResult;
   gameOver: boolean;
   runStats: RunStats;
   view: IView | null;
@@ -43,7 +44,7 @@ export function spawnNextPiece(host: SpawnHoldHost): void {
   host.canHold = true;
   host.lockTimer = 0;
   host.lockResets = 0;
-  host.isTSpin = false;
+  host.isTSpin = 'none';
 
   if (host.hasCollision()) {
     if (host.recoverFromTopOut) {
@@ -82,5 +83,5 @@ export function performHold(host: SpawnHoldHost): void {
   }
   host.lockTimer = 0;
   host.lockResets = 0;
-  host.isTSpin = false;
+  host.isTSpin = 'none';
 }

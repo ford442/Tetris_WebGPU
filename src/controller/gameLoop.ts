@@ -1,6 +1,7 @@
 import type Game from '../game.js';
 import type { IView } from '../view/IView.js';
 import type { ReplayRecorder } from '../replay/recorder.js';
+import type { TSpinResult } from '../game/tSpin.js';
 import type { SubliminalReinforcement } from '../effects/subliminalReinforcement.js';
 import type SoundManager from '../sound.js';
 import { announceGameOver, announceLevelUp, announceLineClear } from '../a11y/announcer.js';
@@ -24,10 +25,11 @@ export interface ControllerLoopHost {
   lastLevel: number;
   playTimeMs: number;
   gravityTimer: number;
+  hitStopFrames: number;
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
   playScoringAudio(
-    result: { linesCleared: number[]; locked: boolean; tSpin: boolean },
+    result: { linesCleared: number[]; locked: boolean; tSpin: TSpinResult },
     pieceType: string,
     pieceCol: number,
   ): void;
@@ -57,6 +59,10 @@ export function startGameLoop(host: ControllerLoopHost): void {
   };
 
   host.gameLoopID = requestAnimationFrame(animate);
+}
+
+export function clampDt(dt: number, maxDt = 100): number {
+  return Math.min(dt, maxDt);
 }
 
 export function stepGravity(
@@ -94,8 +100,19 @@ export async function runControllerFrame(
     return false;
   }
 
-  const dt = time - host.lastTime;
+  const dt = clampDt(time - host.lastTime);
   host.lastTime = time;
+
+  // Render unconditionally so that hit-stop flashes and particles continue playing
+  host.viewWebGPU.render?.(dt);
+
+  // If in hit-stop, freeze the simulation but let animations run
+  const reducedMotion = host.viewWebGPU.visualEffects?.reducedMotion ?? false;
+  if (!reducedMotion && host.hitStopFrames > 0) {
+    host.hitStopFrames--;
+    return true; // skip input and state updates this frame
+  }
+
   host.replayRecorder.advanceClock(dt);
 
   if (host.isPlaying && !host.isPaused) {
@@ -135,16 +152,30 @@ export async function runControllerFrame(
     updateComboDisplay(combo, host.view);
 
     if (host.subliminal) {
-      const intensity = (combo >= 4 || result.tSpin) ? 'strong' : 'normal';
+      const intensity = (combo >= 4 || result.tSpin !== 'none') ? 'strong' : 'normal';
       host.subliminal.triggerReinforcement('lineClear', intensity);
+    }
+
+    if (result.locked && !reducedMotion) {
+      host.hitStopFrames = (host.game.effectEvent === 'hardDrop') ? 2 : 1;
     }
   } else if (result.locked) {
     host.playScoringAudio(result, pieceType, pieceCol);
-    host.viewWebGPU.onLock?.(result.tSpin);
+
+    const snap = host.game.getHardDropSnapshot?.();
+    if (snap && host.viewWebGPU.onLock) {
+      host.viewWebGPU.onLock(result.tSpin, snap.blocks, snap.x, host.game.lastDropPos?.y || 0);
+    } else {
+      host.viewWebGPU.onLock?.(result.tSpin);
+    }
+
+    if (!reducedMotion) {
+      host.hitStopFrames = (host.game.effectEvent === 'hardDrop') ? 2 : 1;
+    }
     if (host.game.scoringSystem.combo < 0) {
       updateComboDisplay(0, host.view);
     }
-    if (result.tSpin && host.subliminal) {
+    if (result.tSpin !== 'none' && host.subliminal) {
       host.subliminal.triggerReinforcement('tspin', 'strong');
     }
   }

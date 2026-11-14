@@ -3,6 +3,9 @@ import {
   resolvePowerPreference,
   selectOptionalFeatures,
   requestGpuAdapterAndDevice,
+  isWebgpuAdapterAvailable,
+  getLastGpuAcquireDiagnostics,
+  readAdapterInfo,
   resolveRequiredLimits,
   buildCanvasConfiguration,
   REQUIRED_GPU_LIMITS,
@@ -306,5 +309,142 @@ describe('requestGpuAdapterAndDevice — GameSettings.gpuPower wiring', () => {
 
     await requestGpuAdapterAndDevice({ search: '?gpu=high' });
     expect(requestAdapter).toHaveBeenCalledWith({ powerPreference: 'high-performance' });
+  });
+});
+
+describe('requestGpuAdapterAndDevice — adapter ladder', () => {
+  const originalNavigator = globalThis.navigator;
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: originalNavigator,
+      configurable: true,
+    });
+  });
+
+  function makeAdapter(tag: string) {
+    const device = { label: '', tag } as unknown as GPUDevice;
+    const requestDevice = vi.fn(async (desc?: GPUDeviceDescriptor) => {
+      if (desc?.label) device.label = desc.label;
+      return device;
+    });
+    const adapter = { features: new Set<string>(), requestDevice } as unknown as GPUAdapter;
+    return { adapter, device, requestDevice };
+  }
+
+  function stubRequestAdapter(impl: (opts?: GPURequestAdapterOptions) => Promise<GPUAdapter | null>) {
+    const requestAdapter = vi.fn(impl);
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { gpu: { requestAdapter } },
+      configurable: true,
+    });
+    return requestAdapter;
+  }
+
+  it('first attempt succeeds: one request, attempt = power-preference', async () => {
+    const { adapter } = makeAdapter('a');
+    const requestAdapter = stubRequestAdapter(async () => adapter);
+    const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+    expect(requestAdapter).toHaveBeenCalledTimes(1);
+    expect(result?.adapterAttempt).toBe('power-preference');
+    expect(getLastGpuAcquireDiagnostics().adapterAttempt).toBe('power-preference');
+  });
+
+  it('retries with no preference when high-performance yields null, and the device comes from that adapter', async () => {
+    const { adapter, device, requestDevice } = makeAdapter('default');
+    const requestAdapter = stubRequestAdapter(async (opts) =>
+      opts?.powerPreference === 'high-performance' ? null : adapter);
+
+    const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    expect(requestAdapter.mock.calls[0]?.[0]).toEqual({ powerPreference: 'high-performance' });
+    expect(requestAdapter.mock.calls[1]?.[0]).toBeUndefined();
+    expect(requestDevice).toHaveBeenCalledTimes(1);
+    expect(result?.adapter).toBe(adapter);
+    expect(result?.device).toBe(device);
+    expect(result?.adapterAttempt).toBe('default');
+    expect(result?.powerPreference).toBe('high-performance');
+    expect(getLastGpuAcquireDiagnostics()).toMatchObject({ reason: null, adapterAttempt: 'default' });
+  });
+
+  it('treats a throwing first attempt like a null and still tries the next', async () => {
+    const { adapter } = makeAdapter('default');
+    let calls = 0;
+    stubRequestAdapter(async () => {
+      if (calls++ === 0) throw new Error('blocklisted');
+      return adapter;
+    });
+    const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+    expect(result?.adapterAttempt).toBe('default');
+  });
+
+  it('falls back to featureLevel: "compatibility" on the third attempt', async () => {
+    const { adapter } = makeAdapter('compat');
+    const requestAdapter = stubRequestAdapter(async (opts) =>
+      (opts as { featureLevel?: string } | undefined)?.featureLevel === 'compatibility' ? adapter : null);
+
+    const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+
+    expect(requestAdapter).toHaveBeenCalledTimes(3);
+    expect(requestAdapter.mock.calls[2]?.[0]).toEqual({ featureLevel: 'compatibility' });
+    expect(result?.adapter).toBe(adapter);
+    expect(result?.adapterAttempt).toBe('compatibility');
+    expect(getLastGpuAcquireDiagnostics().adapterAttempt).toBe('compatibility');
+  });
+
+  it('hard-fails (null) with reason no-adapter when all three attempts return null', async () => {
+    const requestAdapter = stubRequestAdapter(async () => null);
+    await expect(requestGpuAdapterAndDevice({ search: '', storageValue: null })).resolves.toBeNull();
+    expect(requestAdapter).toHaveBeenCalledTimes(3);
+    expect(getLastGpuAcquireDiagnostics()).toEqual({
+      reason: 'no-adapter',
+      adapterDescription: null,
+      adapterAttempt: null,
+    });
+  });
+
+  it('reports the first thrown error when every attempt fails and one threw', async () => {
+    let calls = 0;
+    stubRequestAdapter(async () => {
+      if (calls++ === 0) throw new Error('adapter boom');
+      return null;
+    });
+    await expect(requestGpuAdapterAndDevice({ search: '', storageValue: null })).resolves.toBeNull();
+    expect(getLastGpuAcquireDiagnostics().reason).toBe('request-adapter-threw: adapter boom');
+  });
+
+  it('does not retry the adapter when the device request fails on an adapter we got', async () => {
+    const requestDevice = vi.fn(async () => { throw new Error('no device'); });
+    const adapter = { features: new Set<string>(), requestDevice } as unknown as GPUAdapter;
+    const requestAdapter = stubRequestAdapter(async () => adapter);
+    await expect(requestGpuAdapterAndDevice({ search: '', storageValue: null })).resolves.toBeNull();
+    expect(requestAdapter).toHaveBeenCalledTimes(1);
+    expect(getLastGpuAcquireDiagnostics()).toMatchObject({
+      reason: 'request-device-failed: no device',
+      adapterAttempt: 'power-preference',
+    });
+  });
+
+  it('isWebgpuAdapterAvailable uses the same ladder', async () => {
+    const { adapter } = makeAdapter('default');
+    const requestAdapter = stubRequestAdapter(async (opts) => (opts ? null : adapter));
+    await expect(isWebgpuAdapterAvailable({ search: '', storageValue: null })).resolves.toBe(true);
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('readAdapterInfo', () => {
+  it('reads info from the adapter it is given', async () => {
+    const adapter = { info: { vendor: 'v', architecture: 'a', device: 'd', description: 'x' } } as unknown as GPUAdapter;
+    await expect(readAdapterInfo(adapter)).resolves.toEqual({
+      vendor: 'v', architecture: 'a', device: 'd', description: 'x',
+    });
+  });
+
+  it('falls back to legacy requestAdapterInfo and tolerates absence', async () => {
+    const legacy = { requestAdapterInfo: async () => ({ vendor: 'old' }) } as unknown as GPUAdapter;
+    expect((await readAdapterInfo(legacy))?.vendor).toBe('old');
+    await expect(readAdapterInfo({} as GPUAdapter)).resolves.toBeNull();
   });
 });

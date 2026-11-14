@@ -22,16 +22,24 @@ fn applyShockwave(
         shockwaveAberration += params.z * 0.5;
     }
     if (time > 0.0 && time < 1.0) {
-        let dist = sqrt(dot(uv - center, uv - center));
+        let diffVec = uv - center;
+        let distSq = dot(diffVec, diffVec);
         let speed = max(params.w, 0.1);
         let radius = time * speed;
         let width = params.x * 1.5;
+
+        let innerRadius = max(0.0, radius - width);
+        let outerRadius = radius + width;
+        let innerRadiusSq = innerRadius * innerRadius;
+        let outerRadiusSq = outerRadius * outerRadius;
+
         let strength = (params.y * 1.55) * (1.0 + hardDropBoostFromBuffer * 0.6);
-        let diff = dist - radius;
 
-        let dir = normalize(uv - center);
+        if (distSq >= innerRadiusSq && distSq <= outerRadiusSq) {
+            let dist = sqrt(distSq);
+            let diff = dist - radius;
+            let dir = diffVec / max(dist, 0.0001);
 
-        if (abs(diff) < width) {
             let angle = (diff / width) * 3.14159;
             let distortion = cos(angle) * strength * (1.0 - time);
 
@@ -54,9 +62,15 @@ fn applyShockwave(
         // Echo rings
         for (var i: i32 = 1; i <= 2; i++) {
             let echoRadius = radius * (0.9 - f32(i) * 0.15);
-            let echoDiff = abs(dist - echoRadius);
-            if (echoDiff < width * 0.5) {
-                let angle = (echoDiff / (width * 0.5)) * 3.14159;
+            let echoWidth = width * 0.5;
+            let echoInner = max(0.0, echoRadius - echoWidth);
+            let echoOuter = echoRadius + echoWidth;
+
+            if (distSq >= echoInner * echoInner && distSq <= echoOuter * echoOuter) {
+                let dist = sqrt(distSq);
+                let echoDiff = abs(dist - echoRadius);
+                let dir = diffVec / max(dist, 0.0001);
+                let angle = (echoDiff / echoWidth) * 3.14159;
                 let distortion = cos(angle) * strength * (0.5 - f32(i) * 0.15) * (1.0 - time);
                 finalUV -= dir * distortion;
             }
