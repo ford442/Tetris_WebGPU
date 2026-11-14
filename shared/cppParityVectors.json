@@ -1,0 +1,71 @@
+{
+  "$comment": "Literal expectations held by BOTH languages. tests/cpp-parity-vectors.test.ts checks the TS renderer against them; the doctest suite in cpp/tests/ (npm run cpp:test:native) checks cpp/src/*.h against the same numbers via the generated cpp/tests/generated/parity_vectors.h. Change a number here only when the TS and C++ renderers are meant to change together. Matrices are column-major, from gl-matrix (perspectiveZO / lookAt).",
+  "tolerance": 0.0001,
+  "board": {
+    "cols": 10,
+    "rows": 20,
+    "playfieldBytes": 200,
+    "blockWorldSize": 2.2,
+    "centerX": 9.9,
+    "centerY": -20.9,
+    "worldX": [[0, 0.0], [1, 2.2], [9, 19.8]],
+    "worldY": [[0, 0.0], [1, -2.2], [19, -41.8]],
+    "blockCenterX": [[0, 1.1], [9, 20.9]],
+    "blockCenterY": [[0, -1.1], [19, -42.9]]
+  },
+  "camera": { "z": 75.0, "fovDeg": 42.0, "near": 1.0, "far": 150.0 },
+  "pieceState": {
+    "sizeBytes": 12,
+    "offsets": { "pieceType": 0, "rotation": 1, "x": 2, "y": 3, "ghostY": 4, "lockFlash": 8 }
+  },
+  "sampler": {
+    "maxLod": 4,
+    "maxAnisotropy": 16,
+    "color": {
+      "magFilter": "linear",
+      "minFilter": "linear",
+      "mipmapFilter": "linear",
+      "addressMode": "clamp-to-edge",
+      "lodMinClamp": 0
+    },
+    "mask": {
+      "magFilter": "nearest",
+      "minFilter": "nearest",
+      "mipmapFilter": "nearest",
+      "addressMode": "clamp-to-edge",
+      "lodMinClamp": 0,
+      "lodMaxClamp": 0
+    },
+    "colorByMipLevels": [
+      { "levels": 0, "lodMaxClamp": 0, "maxAnisotropy": 1, "viewMipLevels": 1 },
+      { "levels": 1, "lodMaxClamp": 0, "maxAnisotropy": 1, "viewMipLevels": 1 },
+      { "levels": 3, "lodMaxClamp": 2, "maxAnisotropy": 16, "viewMipLevels": 3 },
+      { "levels": 5, "lodMaxClamp": 4, "maxAnisotropy": 16, "viewMipLevels": 5 },
+      { "levels": 13, "lodMaxClamp": 4, "maxAnisotropy": 16, "viewMipLevels": 5 }
+    ]
+  },
+  "mat4": {
+    "perspective": {
+      "fovYDeg": 42.0,
+      "aspect": 1.6,
+      "near": 1.0,
+      "far": 150.0,
+      "expected": [1.628181, 0, 0, 0, 0, 2.605089, 0, 0, 0, 0, -1.006711, -1, 0, 0, -1.006711, 0]
+    },
+    "lookAt": [
+      {
+        "eye": [9.9, -20.9, 75], "target": [9.9, -20.9, 0], "up": [0, 1, 0],
+        "expected": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -9.9, 20.9, -75, 1]
+      },
+      {
+        "eye": [3, 4, 5], "target": [1, -2, 0.5], "up": [0, 1, 0],
+        "expected": [0.913812, -0.313940, 0.257663, 0, 0, 0.634421, 0.772988, 0, -0.406138, -0.706365, 0.579741, 0, -0.710742, 1.935964, -6.763645, 1]
+      }
+    ],
+    "multiply": {
+      "a": "perspective",
+      "b": "lookAt[1]",
+      "expected": [1.487850, -0.817842, -0.259392, -0.257663, 0, 1.652722, -0.778176, -0.772988, -0.661267, -1.840145, -0.583632, -0.579741, -1.157217, 5.043359, 5.802327, 6.763645]
+    }
+  }
+}
