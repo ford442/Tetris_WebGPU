@@ -2,6 +2,8 @@
 
 #include <emscripten/emscripten.h>
 
+// The EM_JS body below is JavaScript, not C++ — keep clang-format out of it.
+// clang-format off
 EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int canvas_w, int canvas_h, int clear_bg, float offset_x, float offset_y), {
   var canvas = Module.canvas;
   if (!canvas) {
@@ -79,6 +81,7 @@ EM_JS(void, js_draw_playfield, (const int8_t* cells, int cols, int rows, int can
     }
   }
 });
+// clang-format on
 
 void canvas_draw_playfield(const int8_t* playfield, int cols, int rows, int canvas_w, int canvas_h,
                            int clear_bg, float offset_x, float offset_y) {

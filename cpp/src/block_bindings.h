@@ -50,4 +50,4 @@ enum BlockBinding {
   kBlockBindingMaterialMap = 13,
 };
 
-} // namespace tetris
+}  // namespace tetris

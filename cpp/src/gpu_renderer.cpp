@@ -17,6 +17,7 @@
 
 #if defined(TETRIS_ENABLE_WEBGPU)
 
+#include <emscripten/console.h>
 #include <emscripten/emscripten.h>
 #include <webgpu/webgpu.h>
 
@@ -26,7 +27,7 @@ namespace {
 
 using namespace tetris;
 
-constexpr int kMaxInstances = kPlayfieldBytes * 2; // Enough for 2 full boards
+constexpr int kMaxInstances = kPlayfieldBytes * 2;  // Enough for 2 full boards
 constexpr float kPi = 3.14159265358979323846f;
 
 // Authored glass/gold/roughness values are NOT declared here: they come from
@@ -106,6 +107,8 @@ struct GpuState {
 static GpuState g_gpu;
 
 /** Maps navigator.gpu.getPreferredCanvasFormat() → WGPUTextureFormat (via EM_JS). */
+// The EM_JS body is JavaScript, not C++ — clang-format would turn `===` into `== =`.
+// clang-format off
 EM_JS(int, js_preferred_surface_format, (), {
   if (typeof navigator === 'undefined' || !navigator.gpu ||
       typeof navigator.gpu.getPreferredCanvasFormat !== 'function') {
@@ -114,6 +117,7 @@ EM_JS(int, js_preferred_surface_format, (), {
   const fmt = navigator.gpu.getPreferredCanvasFormat();
   return fmt === 'rgba8unorm' ? 1 : 0;
 });
+// clang-format on
 
 static WGPUTextureFormat preferred_surface_format() {
   return js_preferred_surface_format() ? WGPUTextureFormat_RGBA8Unorm
@@ -184,7 +188,8 @@ static void create_render_targets() {
   g_gpu.depth_view = wgpuTextureCreateView(g_gpu.depth_texture, nullptr);
 
   WGPUTextureDescriptor offscreen_desc = {};
-  offscreen_desc.size = {static_cast<uint32_t>(g_gpu.width), static_cast<uint32_t>(g_gpu.height), 1};
+  offscreen_desc.size = {static_cast<uint32_t>(g_gpu.width), static_cast<uint32_t>(g_gpu.height),
+                         1};
   offscreen_desc.format = g_gpu.surface_format;
   offscreen_desc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
   g_gpu.offscreen_texture = wgpuDeviceCreateTexture(g_gpu.device, &offscreen_desc);
@@ -225,14 +230,14 @@ static void create_surface() {
 
 static void get_piece_color(int index, float* rgba) {
   static const float palette[8][3] = {
-      {0.30f, 0.30f, 0.30f}, // 0 garbage / unknown
-      {0.95f, 0.98f, 1.00f}, // 1 I
-      {0.92f, 0.95f, 1.00f}, // 2 J
-      {1.00f, 0.96f, 0.92f}, // 3 L
-      {1.00f, 1.00f, 0.95f}, // 4 O
-      {0.92f, 1.00f, 0.95f}, // 5 S
-      {0.96f, 0.92f, 1.00f}, // 6 T
-      {1.00f, 0.94f, 0.96f}, // 7 Z
+      {0.30f, 0.30f, 0.30f},  // 0 garbage / unknown
+      {0.95f, 0.98f, 1.00f},  // 1 I
+      {0.92f, 0.95f, 1.00f},  // 2 J
+      {1.00f, 0.96f, 0.92f},  // 3 L
+      {1.00f, 1.00f, 0.95f},  // 4 O
+      {0.92f, 1.00f, 0.95f},  // 5 S
+      {0.96f, 0.92f, 1.00f},  // 6 T
+      {1.00f, 0.94f, 0.96f},  // 7 Z
   };
   int i = index;
   if (i < 0) i = -i;
@@ -249,8 +254,7 @@ static bool cell_is_active_piece(int col, int row, const PieceState* ps) {
 }
 
 static int build_instances(const int8_t* playfield, int cols, int rows,
-                           const PieceState* piece_state,
-                           BlockInstance* out, int max_out,
+                           const PieceState* piece_state, BlockInstance* out, int max_out,
                            float offset_x, float offset_y) {
   int count = 0;
   for (int row = 0; row < rows; ++row) {
@@ -268,7 +272,7 @@ static int build_instances(const int8_t* playfield, int cols, int rows,
       get_piece_color(color_idx, inst.color);
 
       if (value < 0) {
-        inst.color[3] = 0.35f; // ghost alpha
+        inst.color[3] = 0.35f;  // ghost alpha
       }
 
       if (value > 0 && piece_state && piece_state->lock_flash > 0.0f &&
@@ -288,17 +292,16 @@ static int build_instances(const int8_t* playfield, int cols, int rows,
 static void update_uniforms(float dt) {
   (void)dt;
 
-  const float aspect = g_gpu.height > 0 ? static_cast<float>(g_gpu.width) / static_cast<float>(g_gpu.height) : 1.0f;
+  const float aspect =
+      g_gpu.height > 0 ? static_cast<float>(g_gpu.width) / static_cast<float>(g_gpu.height) : 1.0f;
   const float fov = kCameraFovDeg * kPi / 180.0f;
 
   Mat4 proj, view, vp;
   mat4_perspective(&proj, fov, aspect, kCameraNear, kCameraFar);
 
   const float cam_y = kBoardWorldCenterY + 2.0f;
-  mat4_look_at(&view,
-               0.0f, cam_y, kCameraZ,
-               kBoardWorldCenterX, kBoardWorldCenterY, 0.0f,
-               0.0f, 1.0f, 0.0f);
+  mat4_look_at(&view, 0.0f, cam_y, kCameraZ, kBoardWorldCenterX, kBoardWorldCenterY, 0.0f, 0.0f,
+               1.0f, 0.0f);
   mat4_multiply(&vp, &proj, &view);
 
   static float time_acc = 0.0f;
@@ -346,11 +349,12 @@ static void update_uniforms(float dt) {
 
   PostProcessUniformData post_uniforms = {};
   post_uniforms.time = time_acc;
-  post_uniforms.intensity = 1.0f; // Could be mapped to a game state param later
-  post_uniforms.aberration = 0.01f; // Base aberration
+  post_uniforms.intensity = 1.0f;    // Could be mapped to a game state param later
+  post_uniforms.aberration = 0.01f;  // Base aberration
 
   if (g_gpu.post_uniform_buffer) {
-    wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.post_uniform_buffer, 0, &post_uniforms, sizeof(post_uniforms));
+    wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.post_uniform_buffer, 0, &post_uniforms,
+                         sizeof(post_uniforms));
   }
 }
 
@@ -496,12 +500,13 @@ static bool upload_material_map(const uint8_t* data, int width, int height) {
  */
 static bool create_flat_material_map() {
   const uint8_t flat[4] = {
-    128, 128,
-    static_cast<uint8_t>(kAuthoredMetalRoughness * 255.0f + 0.5f),
-    255,
+      128,
+      128,
+      static_cast<uint8_t>(kAuthoredMetalRoughness * 255.0f + 0.5f),
+      255,
   };
   if (!upload_material_map(flat, 1, 1)) return false;
-  g_gpu.material_map_ready = false; // flat fallback, not an authored bake
+  g_gpu.material_map_ready = false;  // flat fallback, not an authored bake
   return true;
 }
 
@@ -667,32 +672,44 @@ static bool create_post_pipeline() {
   return g_gpu.post_pipeline != nullptr;
 }
 
+// Plain-assignment builders: designated initializers are a C++20 extension under
+// -std=c++17 -Wpedantic, and they trip -Wmissing-designated-field-initializers.
+static WGPUVertexAttribute vertex_attribute(WGPUVertexFormat format, uint64_t offset,
+                                            uint32_t shader_location) {
+  WGPUVertexAttribute attr = {};
+  attr.format = format;
+  attr.offset = offset;
+  attr.shaderLocation = shader_location;
+  return attr;
+}
+
+static WGPUVertexBufferLayout vertex_buffer_layout(WGPUVertexStepMode step_mode,
+                                                   uint64_t array_stride, size_t attribute_count,
+                                                   const WGPUVertexAttribute* attributes) {
+  WGPUVertexBufferLayout layout = {};
+  layout.stepMode = step_mode;
+  layout.arrayStride = array_stride;
+  layout.attributeCount = attribute_count;
+  layout.attributes = attributes;
+  return layout;
+}
+
 static bool create_pipeline() {
   const std::string block_wgsl = compose_authored_block_wgsl();
   WGPUShaderModule shader = create_shader(block_wgsl.c_str());
   if (!shader) return false;
 
-  WGPUVertexAttribute attrs[] = {
-      {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 0},
-      {.format = WGPUVertexFormat_Float32x3, .offset = 12, .shaderLocation = 1},
-      {.format = WGPUVertexFormat_Float32x2, .offset = 24, .shaderLocation = 2},
-      {.format = WGPUVertexFormat_Float32x3, .offset = 0, .shaderLocation = 3},
-      {.format = WGPUVertexFormat_Float32x4, .offset = 12, .shaderLocation = 4},
+  const WGPUVertexAttribute attrs[] = {
+      vertex_attribute(WGPUVertexFormat_Float32x3, 0, 0),
+      vertex_attribute(WGPUVertexFormat_Float32x3, 12, 1),
+      vertex_attribute(WGPUVertexFormat_Float32x2, 24, 2),
+      vertex_attribute(WGPUVertexFormat_Float32x3, 0, 3),
+      vertex_attribute(WGPUVertexFormat_Float32x4, 12, 4),
   };
 
-  WGPUVertexBufferLayout layouts[2] = {
-      {
-          .stepMode = WGPUVertexStepMode_Vertex,
-          .arrayStride = 8 * sizeof(float),
-          .attributeCount = 3,
-          .attributes = &attrs[0],
-      },
-      {
-          .stepMode = WGPUVertexStepMode_Instance,
-          .arrayStride = sizeof(BlockInstance),
-          .attributeCount = 2,
-          .attributes = &attrs[3],
-      },
+  const WGPUVertexBufferLayout layouts[2] = {
+      vertex_buffer_layout(WGPUVertexStepMode_Vertex, 8 * sizeof(float), 3, &attrs[0]),
+      vertex_buffer_layout(WGPUVertexStepMode_Instance, sizeof(BlockInstance), 2, &attrs[3]),
   };
 
   WGPUBindGroupLayoutEntry bgl_entries[6] = {};
@@ -779,54 +796,225 @@ static bool create_mesh_buffers() {
   // pos(3) + normal(3) + uv(2) per vertex — 24 verts (unique UVs per face)
   static const float cube_verts[] = {
       // +Z
-      -0.5f,-0.5f, 0.5f,  0,0,1,  0,0,
-       0.5f,-0.5f, 0.5f,  0,0,1,  1,0,
-       0.5f, 0.5f, 0.5f,  0,0,1,  1,1,
-      -0.5f, 0.5f, 0.5f,  0,0,1,  0,1,
+      -0.5f,
+      -0.5f,
+      0.5f,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0.5f,
+      -0.5f,
+      0.5f,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0.5f,
+      0.5f,
+      0.5f,
+      0,
+      0,
+      1,
+      1,
+      1,
+      -0.5f,
+      0.5f,
+      0.5f,
+      0,
+      0,
+      1,
+      0,
+      1,
       // -Z
-       0.5f,-0.5f,-0.5f,  0,0,-1,  0,0,
-      -0.5f,-0.5f,-0.5f,  0,0,-1,  1,0,
-      -0.5f, 0.5f,-0.5f,  0,0,-1,  1,1,
-       0.5f, 0.5f,-0.5f,  0,0,-1,  0,1,
+      0.5f,
+      -0.5f,
+      -0.5f,
+      0,
+      0,
+      -1,
+      0,
+      0,
+      -0.5f,
+      -0.5f,
+      -0.5f,
+      0,
+      0,
+      -1,
+      1,
+      0,
+      -0.5f,
+      0.5f,
+      -0.5f,
+      0,
+      0,
+      -1,
+      1,
+      1,
+      0.5f,
+      0.5f,
+      -0.5f,
+      0,
+      0,
+      -1,
+      0,
+      1,
       // +X
-       0.5f,-0.5f, 0.5f,  1,0,0,  0,0,
-       0.5f,-0.5f,-0.5f,  1,0,0,  1,0,
-       0.5f, 0.5f,-0.5f,  1,0,0,  1,1,
-       0.5f, 0.5f, 0.5f,  1,0,0,  0,1,
+      0.5f,
+      -0.5f,
+      0.5f,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0.5f,
+      -0.5f,
+      -0.5f,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0.5f,
+      0.5f,
+      -0.5f,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0.5f,
+      0.5f,
+      0.5f,
+      1,
+      0,
+      0,
+      0,
+      1,
       // -X
-      -0.5f,-0.5f,-0.5f, -1,0,0,  0,0,
-      -0.5f,-0.5f, 0.5f, -1,0,0,  1,0,
-      -0.5f, 0.5f, 0.5f, -1,0,0,  1,1,
-      -0.5f, 0.5f,-0.5f, -1,0,0,  0,1,
+      -0.5f,
+      -0.5f,
+      -0.5f,
+      -1,
+      0,
+      0,
+      0,
+      0,
+      -0.5f,
+      -0.5f,
+      0.5f,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      -0.5f,
+      0.5f,
+      0.5f,
+      -1,
+      0,
+      0,
+      1,
+      1,
+      -0.5f,
+      0.5f,
+      -0.5f,
+      -1,
+      0,
+      0,
+      0,
+      1,
       // +Y
-      -0.5f, 0.5f, 0.5f,  0,1,0,  0,0,
-       0.5f, 0.5f, 0.5f,  0,1,0,  1,0,
-       0.5f, 0.5f,-0.5f,  0,1,0,  1,1,
-      -0.5f, 0.5f,-0.5f,  0,1,0,  0,1,
+      -0.5f,
+      0.5f,
+      0.5f,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0.5f,
+      0.5f,
+      0.5f,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0.5f,
+      0.5f,
+      -0.5f,
+      0,
+      1,
+      0,
+      1,
+      1,
+      -0.5f,
+      0.5f,
+      -0.5f,
+      0,
+      1,
+      0,
+      0,
+      1,
       // -Y
-      -0.5f,-0.5f,-0.5f,  0,-1,0,  0,0,
-       0.5f,-0.5f,-0.5f,  0,-1,0,  1,0,
-       0.5f,-0.5f, 0.5f,  0,-1,0,  1,1,
-      -0.5f,-0.5f, 0.5f,  0,-1,0,  0,1,
+      -0.5f,
+      -0.5f,
+      -0.5f,
+      0,
+      -1,
+      0,
+      0,
+      0,
+      0.5f,
+      -0.5f,
+      -0.5f,
+      0,
+      -1,
+      0,
+      1,
+      0,
+      0.5f,
+      -0.5f,
+      0.5f,
+      0,
+      -1,
+      0,
+      1,
+      1,
+      -0.5f,
+      -0.5f,
+      0.5f,
+      0,
+      -1,
+      0,
+      0,
+      1,
   };
   static const uint16_t cube_indices[] = {
-      0,1,2, 2,3,0,   4,5,6, 6,7,4,   8,9,10, 10,11,8,
-      12,13,14, 14,15,12,  16,17,18, 18,19,16,  20,21,22, 22,23,20,
+      0,  1,  2,  2,  3,  0,  4,  5,  6,  6,  7,  4,  8,  9,  10, 10, 11, 8,
+      12, 13, 14, 14, 15, 12, 16, 17, 18, 18, 19, 16, 20, 21, 22, 22, 23, 20,
   };
 
   g_gpu.vertex_buffer = create_buffer(cube_verts, sizeof(cube_verts), WGPUBufferUsage_Vertex);
   g_gpu.index_buffer = create_buffer(cube_indices, sizeof(cube_indices), WGPUBufferUsage_Index);
-  g_gpu.instance_buffer = create_buffer(nullptr, sizeof(BlockInstance) * kMaxInstances, WGPUBufferUsage_Vertex);
+  g_gpu.instance_buffer =
+      create_buffer(nullptr, sizeof(BlockInstance) * kMaxInstances, WGPUBufferUsage_Vertex);
   g_gpu.uniform_buffer = create_buffer(nullptr, sizeof(UniformData), WGPUBufferUsage_Uniform);
-  g_gpu.post_uniform_buffer = create_buffer(nullptr, sizeof(PostProcessUniformData), WGPUBufferUsage_Uniform);
+  g_gpu.post_uniform_buffer =
+      create_buffer(nullptr, sizeof(PostProcessUniformData), WGPUBufferUsage_Uniform);
 
   if (!create_placeholder_block_texture()) return false;
   if (!create_flat_material_map()) return false;
-  return recreate_bind_group() && recreate_post_bind_group() &&
-         g_gpu.vertex_buffer && g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer && g_gpu.post_uniform_buffer;
+  return recreate_bind_group() && recreate_post_bind_group() && g_gpu.vertex_buffer &&
+         g_gpu.index_buffer && g_gpu.instance_buffer && g_gpu.uniform_buffer &&
+         g_gpu.post_uniform_buffer;
 }
 
-} // namespace
+}  // namespace
 
 extern "C" {
 
@@ -848,7 +1036,9 @@ int gpu_renderer_init(const char* canvas_selector, int width, int height) {
   g_gpu.instance = wgpuCreateInstance(nullptr);
   g_gpu.device = emscripten_webgpu_get_device();
   if (!g_gpu.device) {
-    EM_ASM({ if (console.warn) console.warn('[cpp renderer] emscripten_webgpu_get_device() null - set preinitializedWebGPUDevice in TS'); });
+    emscripten_console_warn(
+        "[cpp renderer] emscripten_webgpu_get_device() null - set preinitializedWebGPUDevice in "
+        "TS");
     return 0;
   }
   g_gpu.queue = wgpuDeviceGetQueue(g_gpu.device);
@@ -862,12 +1052,13 @@ int gpu_renderer_init(const char* canvas_selector, int width, int height) {
 
   if (create_pipeline() && create_post_pipeline() && create_mesh_buffers()) {
     g_gpu.draw_blocks = true;
-    EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU instanced textured block pipeline ready'); });
+    emscripten_console_log("[cpp renderer] WebGPU instanced textured block pipeline ready");
   } else {
-    EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU clear-only path (block pipeline skipped)'); });
+    emscripten_console_log("[cpp renderer] WebGPU clear-only path (block pipeline skipped)");
   }
 
-  EM_ASM({ if (console.info) console.info('[cpp renderer] WebGPU surface ready (preferred format, transparent clear for video portal)'); });
+  emscripten_console_log(
+      "[cpp renderer] WebGPU surface ready (preferred format, transparent clear for video portal)");
   return 1;
 }
 
@@ -907,7 +1098,7 @@ void gpu_renderer_shutdown(void) {
 // For accumulating instances over multiple render calls per frame.
 static BlockInstance g_frame_instances[kMaxInstances];
 static int g_frame_instance_count = 0;
-static float g_frame_lock_flash = 0.0f; // Simplified: last board to draw sets it
+static float g_frame_lock_flash = 0.0f;  // Simplified: last board to draw sets it
 
 void gpu_renderer_begin_frame(float dt) {
   g_frame_instance_count = 0;
@@ -915,17 +1106,16 @@ void gpu_renderer_begin_frame(float dt) {
   update_uniforms(dt);
 }
 
-void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
-                         const PieceState* piece_state, float dt,
-                         float offset_x, float offset_y) {
+void gpu_renderer_render(const int8_t* playfield, int cols, int rows, const PieceState* piece_state,
+                         float dt, float offset_x, float offset_y) {
   if (!g_gpu.active || !playfield || !g_gpu.surface) return;
   (void)dt;
 
   const int remaining = kMaxInstances - g_frame_instance_count;
   if (remaining > 0) {
-    const int count = build_instances(playfield, cols, rows, piece_state,
-                                      g_frame_instances + g_frame_instance_count,
-                                      remaining, offset_x, offset_y);
+    const int count =
+        build_instances(playfield, cols, rows, piece_state,
+                        g_frame_instances + g_frame_instance_count, remaining, offset_x, offset_y);
     g_frame_instance_count += count;
   }
 
@@ -978,8 +1168,10 @@ void gpu_renderer_end_frame(void) {
     wgpuRenderPassEncoderSetBindGroup(block_pass, 0, g_gpu.bind_group, 0, nullptr);
     wgpuRenderPassEncoderSetVertexBuffer(block_pass, 0, g_gpu.vertex_buffer, 0, WGPU_WHOLE_SIZE);
     wgpuRenderPassEncoderSetVertexBuffer(block_pass, 1, g_gpu.instance_buffer, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderSetIndexBuffer(block_pass, g_gpu.index_buffer, WGPUIndexFormat_Uint16, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderDrawIndexed(block_pass, 36, static_cast<uint32_t>(g_frame_instance_count), 0, 0, 0);
+    wgpuRenderPassEncoderSetIndexBuffer(block_pass, g_gpu.index_buffer, WGPUIndexFormat_Uint16, 0,
+                                        WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderDrawIndexed(block_pass, 36, static_cast<uint32_t>(g_frame_instance_count),
+                                     0, 0, 0);
   }
   wgpuRenderPassEncoderEnd(block_pass);
   wgpuRenderPassEncoderRelease(block_pass);
@@ -1079,22 +1271,20 @@ int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, i
   }
 
   if (g_gpu.texture_ready) {
-    EM_ASM({
-      if (typeof console !== 'undefined' && console.info) {
-        console.info('[cpp renderer] authored block tile uploaded to GPU texture');
-      }
-    });
+    emscripten_console_log("[cpp renderer] authored block tile uploaded to GPU texture");
   }
   return g_gpu.texture_ready ? 1 : 0;
 }
 
-} // extern "C"
+}  // extern "C"
 
-#else // !TETRIS_ENABLE_WEBGPU
+#else  // !TETRIS_ENABLE_WEBGPU
 
 extern "C" {
 
-int gpu_renderer_is_active(void) { return 0; }
+int gpu_renderer_is_active(void) {
+  return 0;
+}
 
 int gpu_renderer_init(const char* canvas_selector, int width, int height) {
   (void)canvas_selector;
@@ -1110,9 +1300,8 @@ void gpu_renderer_resize(int width, int height) {
 
 void gpu_renderer_shutdown(void) {}
 
-void gpu_renderer_render(const int8_t* playfield, int cols, int rows,
-                         const PieceState* piece_state, float dt,
-                         float offset_x, float offset_y) {
+void gpu_renderer_render(const int8_t* playfield, int cols, int rows, const PieceState* piece_state,
+                         float dt, float offset_x, float offset_y) {
   (void)playfield;
   (void)cols;
   (void)rows;
@@ -1138,6 +1327,6 @@ int gpu_renderer_set_block_material_map(const uint8_t* data, int width, int heig
   return 0;
 }
 
-} // extern "C"
+}  // extern "C"
 
-#endif // TETRIS_ENABLE_WEBGPU
+#endif  // TETRIS_ENABLE_WEBGPU
