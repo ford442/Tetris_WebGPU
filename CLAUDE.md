@@ -13,7 +13,7 @@ A high-performance Tetris implementation using WebGPU for rendering, WebAssembly
 - **Emscripten (C++)** - Opt-in renderer (`cpp/`, `?renderer=webgpu-cpp`)
 - **Web Audio API** - Procedural audio synthesis
 - **gl-matrix** - Matrix math for 3D transforms
-- **Vitest/Mocha/Chai** - Testing
+- **Vitest** - Testing
 
 ## Project Structure
 
@@ -50,7 +50,8 @@ src/
     │   ├── particle.ts      # Particle vertex/fragment shaders
     │   ├── grid.ts          # Tetris grid block renderer
     │   ├── background.ts    # Procedural/video background shaders
-    │   └── main.ts          # Primary 3D block shader (lighting, texture atlas)
+    │   ├── block/           # Block shader TS wrappers (blockShader.ts composes the WGSL; uniforms.ts = CPU offsets)
+    │   └── wgsl/block/      # Block WGSL source (see File Size Guidelines)
     ├── shaders.ts           # Barrel re-export (kept for import compatibility)
     ├── gpuContext.ts        # Adapter/device acquisition + acquire diagnostics
     ├── bootProbe.ts         # window.webgpuProbe (see docs/webgpu-boot-probe.md)
@@ -86,8 +87,11 @@ assembly/
 └── tsconfig.json
 cpp/                         # Emscripten C++ renderer (opt-in, parallel to assembly/)
 ├── src/renderer.cpp
+├── src/gpu_renderer.cpp     # WebGPU instanced cubes + initial post-process pass
 ├── src/playfield_draw.cpp
-└── README.md                # emsdk setup, build commands, test matrix
+├── src/shaders/             # block/authoredBlock.wgsl, postprocess/postprocess.wgsl
+└── README.md
+shared/                      # blockMaterialSchema.json, authoredBlockUniforms.json (TS + C++ contract)                # emsdk setup, build commands, test matrix
 index.ts                     # App entry point (UI creation, wiring)
 index.html                   # HTML bootstrap
 ```
@@ -193,6 +197,8 @@ npm run dev              # Start dev server (Vite)
 npm run build            # Production build (Vite only)
 npm run build:all        # AS WASM + cpp + Vite
 npm run test             # Run tests (Vitest)
+npm run typecheck        # tsc --noEmit
+npm run lint             # ESLint
 npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
 npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc)
 npm run cpp:debug        # Debug Emscripten build
@@ -217,7 +223,7 @@ npm run material:validate # Validate public/block-material.json + authored maps
   - `particle.ts` — Particle shaders
   - `grid.ts` — Grid block renderer
   - `background.ts` — Background shaders
-  - `main.ts` — Primary 3D block shader
+  - `block/blockShader.ts` — Primary 3D block shader (composes `wgsl/block/`)
 - Add new shader categories as new files; update `shaders/index.ts` to re-export
 
 ## Performance Notes
