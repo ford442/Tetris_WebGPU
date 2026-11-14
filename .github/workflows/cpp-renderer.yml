@@ -13,8 +13,14 @@ on:
       - 'scripts/build-cpp.mjs'
       - 'scripts/generate-cpp-*.mjs'
       - 'scripts/verify-cpp-artifact.mjs'
+      - 'scripts/lint-cpp.mjs'
+      - 'scripts/cpp-size-report.mjs'
       - 'scripts/lib/cppProvenance.mjs'
+      - 'scripts/lib/cppBuildConfig.mjs'
       - 'scripts/lib/blockMaterialSchema.mjs'
+      - 'src/viewCpp/CppRendererLoader.ts'
+      - '.clang-format'
+      - '.clang-tidy'
       - '.emsdk-version'
       - '.github/workflows/cpp-renderer.yml'
   pull_request:
@@ -28,17 +34,60 @@ on:
       - 'scripts/build-cpp.mjs'
       - 'scripts/generate-cpp-*.mjs'
       - 'scripts/verify-cpp-artifact.mjs'
+      - 'scripts/lint-cpp.mjs'
+      - 'scripts/cpp-size-report.mjs'
       - 'scripts/lib/cppProvenance.mjs'
+      - 'scripts/lib/cppBuildConfig.mjs'
       - 'scripts/lib/blockMaterialSchema.mjs'
+      - 'src/viewCpp/CppRendererLoader.ts'
+      - '.clang-format'
+      - '.clang-tidy'
       - '.emsdk-version'
       - '.github/workflows/cpp-renderer.yml'
 
 jobs:
+  # Host-compiler checks: no emsdk, so this finishes in about a minute. Pinned to one
+  # Ubuntu release + clang 18 so clang-format output is the same here and locally.
+  cpp-host-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clang-format, clang-tidy, cmake, ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-18 clang-tidy-18 cmake ninja-build
+
+      # clang-format (every hand-written .cpp/.h) + clang-tidy (the doctest suite and the
+      # pure headers it includes). See scripts/lint-cpp.mjs for what is and is not covered.
+      - name: Lint (clang-format + clang-tidy)
+        env:
+          CLANG_FORMAT: clang-format-18
+          CLANG_TIDY: clang-tidy-18
+        run: npm run cpp:lint
+
+      # Host-side doctest suite for piece_state.h / board_metrics.h / math_utils.h /
+      # block_sampler.h, held to the same numbers as the TS tests (shared/cppParityVectors.json).
+      # CI=true also turns on -Werror.
+      - name: Native unit tests (doctest + ctest)
+        run: npm run cpp:test:native
+
   cpp-renderer:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
+      # Only used by the size-comment step, and only for same-repo PRs.
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,6 +157,51 @@ jobs:
             exit 1
           fi
 
+      # The CMake/Ninja path must stay a faithful second front end for the same config:
+      # build it into a scratch dir (never public/cpp) and require byte-identical glue — the
+      # glue embeds the link settings and the export list, so any divergence changes it.
+      - name: CMake path builds from the same build.config.json
+        run: |
+          source emsdk/emsdk_env.sh
+          sudo apt-get install -y --no-install-recommends ninja-build
+          emcmake cmake -S cpp -B build/cpp-cmake -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DTETRIS_CPP_WEBGPU_BACKEND=emdawn \
+            -DTETRIS_OUT_DIR="$RUNNER_TEMP/cmake-out"
+          cmake --build build/cpp-cmake
+          test -f "$RUNNER_TEMP/cmake-out/tetris_renderer.wasm"
+          cmp public/cpp/tetris_renderer.js "$RUNNER_TEMP/cmake-out/tetris_renderer.js"
+
+      # wasmBytes vs the base branch: the committed wasm at the base ref is the history.
+      - name: Size report
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            node scripts/cpp-size-report.mjs --base FETCH_HEAD
+          else
+            node scripts/cpp-size-report.mjs
+          fi
+
+      # One sticky comment per PR, updated in place. Fork PRs get a read-only token, so
+      # skip them (the job summary above still has the table).
+      - name: Comment size report on the PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('build/cpp-size/size-report.md', 'utf8');
+            const marker = '<!-- cpp-size-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
       - name: Upload C++ renderer artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -117,4 +211,6 @@ jobs:
             public/cpp/tetris_renderer.wasm
             public/cpp/build-info.json
             build/cpp/compile_commands.json
+            build/cpp-size/size-report.json
+            build/cpp-size/size-report.md
           if-no-files-found: error

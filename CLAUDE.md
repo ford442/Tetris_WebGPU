@@ -86,12 +86,15 @@ assembly/
 ├── index.ts                 # AssemblyScript collision detection (compiled to WASM)
 └── tsconfig.json
 cpp/                         # Emscripten C++ renderer (opt-in, parallel to assembly/)
+├── build.config.json        # Single source of truth: sources, flags, exports, port flags, size budget
+├── CMakeLists.txt           # Second front end for build.config.json + TETRIS_CPP_NATIVE_TESTS host build
+├── tests/                   # Host-side doctest suite for the pure headers (npm run cpp:test:native)
 ├── src/renderer.cpp
 ├── src/gpu_renderer.cpp     # WebGPU instanced cubes + initial post-process pass
 ├── src/playfield_draw.cpp
 ├── src/shaders/             # block/authoredBlock.wgsl, postprocess/postprocess.wgsl
 └── README.md
-shared/                      # blockMaterialSchema.json, authoredBlockUniforms.json (TS + C++ contract)                # emsdk setup, build commands, test matrix
+shared/                      # blockMaterialSchema.json, authoredBlockUniforms.json, cppParityVectors.json (TS + C++ contract)                # emsdk setup, build commands, test matrix
 index.ts                     # App entry point (UI creation, wiring)
 index.html                   # HTML bootstrap
 ```
@@ -115,6 +118,14 @@ index.html                   # HTML bootstrap
   scripts, `.emsdk-version`) without a rebuild — rebuild with the pinned emsdk and commit
   `public/cpp` + `build/cpp`. A release `cpp:release` exits non-zero if no WebGPU port links
   (`TETRIS_CPP_WEBGPU=none` is the explicit Canvas2D-only opt-in).
+- **One build definition:** `cpp/build.config.json` (sources, `-std=c++17 -fno-exceptions
+  -fno-rtti`, `-Wall -Wextra -Wpedantic` + `-Werror` under `CI`, link settings, exports,
+  WebGPU port flags, wasm budget) is read by `scripts/build-cpp.mjs` **and**
+  `cpp/CMakeLists.txt`. Never hand-copy a flag or export into either; `tests/cpp-build-config.test.ts`
+  fails if `exports.loader` differs from the `cwrap` names in `CppRendererLoader.ts`.
+  Glue is an ES module (`-sEXPORT_ES6=1`) so the loader's `import()` can get the factory.
+- **EM_JS bodies are JavaScript:** keep them inside `// clang-format off` / `on`
+  (clang-format rewrites `===` as `== =`).
 - **Docs:** `cpp/README.md`, `docs/webgpu-boot-probe.md`
 
 ### WebGPU boot policy (hard-fail, WebGL2 only when no adapter exists)
@@ -208,6 +219,9 @@ npm run lint             # ESLint
 npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
 npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc; fails if no WebGPU port links)
 npm run cpp:verify       # Check committed public/cpp artifact vs build-info.json + .emsdk-version (no emcc)
+npm run cpp:lint         # clang-format + clang-tidy over cpp/src and cpp/tests (cpp:format fixes in place)
+npm run cpp:test:native  # Host doctest suite for the pure C++ headers (cmake; no emsdk)
+npm run cpp:size         # wasm/js size report (-- --base origin/main for a delta)
 npm run cpp:debug        # Debug Emscripten build
 npm run material:validate # Validate public/block-material.json + authored maps
 ```
@@ -258,3 +272,6 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `create-view-integration.test.ts` — no WebGPU → WebGL2 rescue chain after a device failure
 - `create-view-auto-fallback.test.ts` — `auto` → WebGL2 only when no adapter; explicit choices stay strict
 - `webgl2-bloom.test.ts` — WebGL2 bloom params/shaders + renderer badge labels
+- `cpp-build-config.test.ts` — one build config: exports vs loader `cwrap`s vs `EMSCRIPTEN_KEEPALIVE`, no hand-copied flags, artifact records the config
+- `cpp-parity-vectors.test.ts` — `shared/cppParityVectors.json` held by the TS renderer (the C++ side is `cpp/tests/`)
+- `cpp-size-report.test.ts` — size report formatting and the base-ref delta
