@@ -1,0 +1,109 @@
+{
+  "$comment": "Single source of truth for the C++ renderer build. Read by scripts/build-cpp.mjs, cpp/CMakeLists.txt, tests/cpp-build-config.test.ts and scripts/cpp-size-report.mjs. Paths are relative to cpp/. Never hand-copy a flag, export or source list into either build script.",
+  "std": "c++17",
+  "sources": [
+    "src/renderer.cpp",
+    "src/playfield_draw.cpp",
+    "src/gpu_renderer.cpp"
+  ],
+  "includeDirs": [
+    "src"
+  ],
+  "compile": {
+    "$comment": "language flags change the emitted code; warning flags never do (so -Werror under CI=1 is not recorded in build-info.json).",
+    "language": [
+      "-fno-exceptions",
+      "-fno-rtti"
+    ],
+    "warnings": [
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic"
+    ]
+  },
+  "optimize": {
+    "release": [
+      "-O3",
+      "-flto"
+    ],
+    "debug": [
+      "-O0",
+      "-g"
+    ]
+  },
+  "optionalFlags": {
+    "$comment": "Opt-in release experiments, enabled by the named env var (=1). Off by default until a browser matrix confirms them; see cpp/README.md.",
+    "simd128": {
+      "env": "TETRIS_CPP_SIMD",
+      "flags": [
+        "-msimd128"
+      ]
+    }
+  },
+  "webgpuPorts": {
+    "$comment": "WebGPU port rungs. build-cpp.mjs walks them as a ladder (TETRIS_CPP_WEBGPU); CMake's `auto` is the first rung only (emdawn) and fails rather than degrade. Flags are shared, so a given rung produces the same command line either way.",
+    "EMDAWN": {
+      "label": "emdawnwebgpu (--use-port=emdawnwebgpu)",
+      "args": [
+        "--use-port=emdawnwebgpu",
+        "-DTETRIS_ENABLE_WEBGPU=1"
+      ]
+    },
+    "USE_WEBGPU": {
+      "label": "USE_WEBGPU (legacy -s USE_WEBGPU=1)",
+      "args": [
+        "-sUSE_WEBGPU=1",
+        "-DTETRIS_ENABLE_WEBGPU=1"
+      ]
+    },
+    "NONE": {
+      "label": "canvas2d-only (no WebGPU port linked)",
+      "args": []
+    }
+  },
+  "link": {
+    "settings": {
+      "MODULARIZE": "1",
+      "EXPORT_ES6": "1",
+      "EXPORT_NAME": "createTetrisRendererModule",
+      "ENVIRONMENT": "web",
+      "ALLOW_MEMORY_GROWTH": "1",
+      "FILESYSTEM": "0",
+      "MALLOC": "emmalloc"
+    },
+    "debugSettings": {
+      "ASSERTIONS": "2",
+      "SAFE_HEAP": "1"
+    },
+    "exportedRuntimeMethods": [
+      "ccall",
+      "cwrap",
+      "HEAP8",
+      "HEAPU8"
+    ]
+  },
+  "exports": {
+    "$comment": "loader: every name CppRendererLoader.ts cwrap()s or reads as module._name \u2014 tests/cpp-build-config.test.ts fails if this list and the loader differ. extra: exported C++ API that the TS side deliberately does not call (documented in cpp/README.md); the test pins it to the EMSCRIPTEN_KEEPALIVE set.",
+    "loader": [
+      "_init_renderer",
+      "_resize_renderer",
+      "_render_frame",
+      "_render_dual_frame",
+      "_update_playfield",
+      "_get_playfield_ptr",
+      "_get_piece_state_ptr",
+      "_update_piece_state",
+      "_get_renderer_backend",
+      "_is_gpu_renderer_active",
+      "_set_block_texture_rgba",
+      "_set_block_material_map_rgba",
+      "_malloc",
+      "_free"
+    ],
+    "extra": [
+      "_get_playfield_len",
+      "_is_canvas_fallback_active"
+    ]
+  },
+  "wasmBudgetBytes": 262144
+}
