@@ -20,6 +20,8 @@
  * this path, kBlockTextureMaxLod is the only number to raise.
  */
 
+#include <stdint.h>
+
 #include <webgpu/webgpu.h>
 
 namespace tetris {
@@ -86,4 +88,4 @@ inline WGPUTextureViewDescriptor blockMaskViewDescriptor() {
   return desc;
 }
 
-} // namespace tetris
+}  // namespace tetris

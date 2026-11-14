@@ -52,11 +52,13 @@ export const EXTRA_SOURCE_RELS = [
   'src/webgpu/shaders/wgsl/block/authoredGlass.wgsl',
   'src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl',
   'src/webgpu/shaders/wgsl/block/pbrCore.wgsl',
+  'cpp/build.config.json',
   'scripts/build-cpp.mjs',
   'scripts/generate-cpp-material.mjs',
   'scripts/generate-cpp-shaders.mjs',
   'scripts/generate-cpp-uniforms.mjs',
   'scripts/lib/blockMaterialSchema.mjs',
+  'scripts/lib/cppBuildConfig.mjs',
 ];
 
 function walk(dir, out) {

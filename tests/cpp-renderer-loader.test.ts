@@ -88,14 +88,23 @@ type CppModule = {
  * browser. Nothing is initialised (no init_renderer call, no GPU) — we only need the
  * module to come up far enough to expose its exports.
  *
- * - The glue is a classic script (`typeof exports === 'object'` branch), evaluated with
- *   `document`/`window` stubs because its top level reads them (ENVIRONMENT=web).
+ * - The glue is an ES module (-sEXPORT_ES6=1: `export default <factory>`, wasm located
+ *   via `import.meta.url`) — exactly what the browser `import()`s. Node cannot import it
+ *   from a string with web stubs, so the two ES-only constructs are rewritten and the body
+ *   evaluated with `document`/`window` stubs because its top level reads them
+ *   (ENVIRONMENT=web).
  * - Wasm imports (emdawnwebgpu's JS library, compiled to the minified module `a`) are
  *   wrapped so a call into a missing browser API returns 0 instead of throwing.
  */
 async function loadCommittedCppModule(): Promise<CppModule> {
   const dir = join(process.cwd(), 'public/cpp');
-  const glue = readFileSync(join(dir, 'tetris_renderer.js'), 'utf8');
+  const source = readFileSync(join(dir, 'tetris_renderer.js'), 'utf8');
+  expect(source, 'glue must be an ES module (-sEXPORT_ES6=1) so the loader can import() it').toMatch(
+    /export default createTetrisRendererModule;\s*$/,
+  );
+  const glue = source
+    .replace(/export default (createTetrisRendererModule);\s*$/, 'module.exports = $1;')
+    .replaceAll('import.meta.url', '"file:///cpp/tetris_renderer.js"');
   const wasmModule = await WebAssembly.compile(readFileSync(join(dir, 'tetris_renderer.wasm')));
   const wasmImports = WebAssembly.Module.imports(wasmModule);
 

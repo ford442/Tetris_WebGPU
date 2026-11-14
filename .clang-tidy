@@ -1,0 +1,27 @@
+# Static analysis for the C++ renderer (cpp/src, cpp/tests). Run via `npm run cpp:lint`.
+# A deliberate subset: bugprone + performance catch real bugs; the readability checks
+# kept are the ones that flag dead or misleading code, not taste (no braces/naming).
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  performance-*,
+  readability-container-size-empty,
+  readability-delete-null-pointer,
+  readability-else-after-return,
+  readability-misleading-indentation,
+  readability-non-const-parameter,
+  readability-redundant-control-flow,
+  readability-redundant-declaration,
+  readability-redundant-member-init,
+  readability-simplify-boolean-expr,
+  readability-static-accessed-through-instance,
+  readability-string-compare,
+  readability-uniqueptr-delete-release
+# Everything that fires is an error: a finding is either fixed or the check is dropped
+# above with a reason, never left as ignorable noise.
+WarningsAsErrors: '*'
+# Our own top-level headers only (llvm::Regex is POSIX ERE — no lookahead): never the
+# emscripten sysroot, the webgpu port, doctest, or tests/{generated,stubs}.
+HeaderFilterRegex: '.*/cpp/(src|tests)/[^/]+\.h$'

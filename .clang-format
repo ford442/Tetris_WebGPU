@@ -1,0 +1,18 @@
+# C++ renderer formatting (cpp/src, cpp/tests). Checked by `npm run cpp:lint`.
+# Matches the code that was already there (2-space, attached braces, 100 cols) so the
+# first format pass is mostly whitespace, not a rewrite.
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+ColumnLimit: 100
+IndentWidth: 2
+AccessModifierOffset: -1
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+BinPackArguments: true
+BinPackParameters: true
+SortIncludes: false     # include order here is load-bearing (webgpu.h after port flags, generated/ headers)
+ReflowComments: false   # long doc comments and URLs stay as written

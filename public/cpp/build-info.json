@@ -6,6 +6,11 @@
   "webGpuBackend": "emdawnwebgpu (--use-port=emdawnwebgpu)",
   "webGpuBackendId": "emdawn",
   "webGpuEnv": "auto",
+  "languageFlags": [
+    "-std=c++17",
+    "-fno-exceptions",
+    "-fno-rtti"
+  ],
   "optFlags": [
     "-O3",
     "-flto"
@@ -14,13 +19,19 @@
     "-s",
     "MODULARIZE=1",
     "-s",
+    "EXPORT_ES6=1",
+    "-s",
     "EXPORT_NAME=createTetrisRendererModule",
     "-s",
     "ENVIRONMENT=web",
     "-s",
     "ALLOW_MEMORY_GROWTH=1",
     "-s",
-    "EXPORTED_FUNCTIONS=[\"_init_renderer\",\"_resize_renderer\",\"_render_frame\",\"_render_dual_frame\",\"_update_playfield\",\"_get_playfield_ptr\",\"_get_playfield_len\",\"_get_piece_state_ptr\",\"_update_piece_state\",\"_get_renderer_backend\",\"_is_gpu_renderer_active\",\"_is_canvas_fallback_active\",\"_set_block_texture_rgba\",\"_set_block_material_map_rgba\",\"_malloc\",\"_free\"]",
+    "FILESYSTEM=0",
+    "-s",
+    "MALLOC=emmalloc",
+    "-s",
+    "EXPORTED_FUNCTIONS=[\"_init_renderer\",\"_resize_renderer\",\"_render_frame\",\"_render_dual_frame\",\"_update_playfield\",\"_get_playfield_ptr\",\"_get_piece_state_ptr\",\"_update_piece_state\",\"_get_renderer_backend\",\"_is_gpu_renderer_active\",\"_set_block_texture_rgba\",\"_set_block_material_map_rgba\",\"_malloc\",\"_free\",\"_get_playfield_len\",\"_is_canvas_fallback_active\"]",
     "-s",
     "EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"HEAP8\",\"HEAPU8\"]"
   ],
@@ -33,18 +44,18 @@
     "cpp/src/playfield_draw.cpp",
     "cpp/src/gpu_renderer.cpp"
   ],
-  "sourceHash": "fac2d987f8f413e0993fe0e6d8d42afe82281e8581de5f87cd516ba4c11ece50",
-  "sourceFileCount": 25,
-  "wasmBytes": 59852,
-  "jsBytes": 52771,
+  "sourceHash": "0aa2baaddceb66806dcf464fe11172f12a18de0fcd50f6e481eab85ef89c16e3",
+  "sourceFileCount": 27,
+  "wasmBytes": 55279,
+  "jsBytes": 51296,
   "artifacts": {
     "js": {
-      "bytes": 52771,
-      "sha256": "72483691fa97562e26044557a7492fdaf1940cf23a29eb559af0b8544e15071b"
+      "bytes": 51296,
+      "sha256": "7083a499a27cd597cf2a0db41f3cf6c937c4354070ff42ed5ef9612912303f93"
     },
     "wasm": {
-      "bytes": 59852,
-      "sha256": "46e5bc1b097d0d4240880bb0a0e876b5fa2cb513af637ef17058c09d3219c35f"
+      "bytes": 55279,
+      "sha256": "f101b45e7ba1aeb9469ec18626283611f1d7688164f737c5cbef7a0bc4311c31"
     }
   }
 }

@@ -5,6 +5,7 @@
  * Fallback: minimal Canvas2D draw when WebGPU device/surface unavailable.
  */
 
+#include <emscripten/console.h>
 #include <emscripten/emscripten.h>
 #include <stdint.h>
 #include <string.h>
@@ -40,17 +41,11 @@ int init_renderer(int width, int height) {
   g_backend = gpu_ok ? RENDERER_BACKEND_WEBGPU : RENDERER_BACKEND_CANVAS2D;
 
   if (gpu_ok) {
-    EM_ASM({
-      if (typeof console !== 'undefined' && console.info) {
-        console.info('[cpp renderer] init_renderer — WebGPU (textured instanced blocks when pipeline ready)');
-      }
-    });
+    emscripten_console_log(
+        "[cpp renderer] init_renderer — WebGPU (textured instanced blocks when pipeline ready)");
   } else {
-    EM_ASM({
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[cpp renderer] init_renderer — Canvas2D fallback (WebGPU unavailable)');
-      }
-    });
+    emscripten_console_warn(
+        "[cpp renderer] init_renderer — Canvas2D fallback (WebGPU unavailable)");
   }
 
   return 1;
@@ -77,9 +72,9 @@ void render_frame(float dt) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void render_dual_frame(float dt,
-                       const int8_t* pf1, const PieceState* ps1, float off_x1, float off_y1,
-                       const int8_t* pf2, const PieceState* ps2, float off_x2, float off_y2) {
+void render_dual_frame(float dt, const int8_t* pf1, const PieceState* ps1, float off_x1,
+                       float off_y1, const int8_t* pf2, const PieceState* ps2, float off_x2,
+                       float off_y2) {
   if (gpu_renderer_is_active()) {
     gpu_renderer_begin_frame(dt);
     gpu_renderer_render(pf1, kBoardCols, kBoardRows, ps1, dt, off_x1, off_y1);
@@ -120,8 +115,8 @@ PieceState* get_piece_state_ptr() {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void update_piece_state(int8_t piece_type, int8_t rotation, int8_t x, int8_t y,
-                        int8_t ghost_y, float lock_flash) {
+void update_piece_state(int8_t piece_type, int8_t rotation, int8_t x, int8_t y, int8_t ghost_y,
+                        float lock_flash) {
   g_piece_state.piece_type = piece_type;
   g_piece_state.rotation = rotation;
   g_piece_state.x = x;
@@ -155,4 +150,4 @@ int is_canvas_fallback_active() {
   return g_backend == RENDERER_BACKEND_CANVAS2D ? 1 : 0;
 }
 
-} // extern "C"
+}  // extern "C"

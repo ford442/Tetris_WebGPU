@@ -41,6 +41,13 @@ npm run dev
 | `public/cpp/tetris_renderer.wasm` | Compiled module |
 | `build/cpp/` | Mirror of build artifacts |
 | `scripts/build-cpp.mjs` | Tolerant Node driver for `emcc` |
+| `cpp/build.config.json` | **Single source of truth** for sources, language/warning/optimize flags, link settings, exports, WebGPU port flags and the wasm budget — read by `build-cpp.mjs`, `CMakeLists.txt`, the size report and the tests |
+| `cpp/CMakeLists.txt` | Second front end for the same config (Emscripten build) + host unit-test build (`TETRIS_CPP_NATIVE_TESTS`) |
+| `cpp/tests/` | Host-side doctest suite for the pure headers (no emsdk) |
+| `shared/cppParityVectors.json` | Literal numbers both the TS tests and `cpp/tests/` assert (board metrics, sampler descriptors, piece-state layout, mat4 helpers) |
+| `.clang-format`, `.clang-tidy` | `npm run cpp:lint` configuration |
+| `scripts/lint-cpp.mjs` | `cpp:lint` / `cpp:format` runner |
+| `scripts/cpp-size-report.mjs` | Size report vs a base ref (CI job summary + sticky PR comment) |
 
 ## Prerequisites: Emscripten SDK
 
@@ -80,13 +87,26 @@ source ./emsdk_env.sh   # required in every new shell
    - `public/cpp/build-info.json` — **committed provenance**: `emcc` version, linked WebGPU port, flags, source hash, artifact sha256 (see [Committed artifact & provenance](#committed-artifact--provenance))
    - `build/cpp/compile_commands.json` — clangd / IDE (mirrored to `cpp/compile_commands.json`)
 
-## Build flags matrix
+## Build configuration (`cpp/build.config.json`)
 
-| Mode | npm script | Compiler flags | Notes |
-|------|------------|----------------|-------|
-| **Debug** | `npm run cpp:debug` | `-O0 -g -sASSERTIONS=2 -sSAFE_HEAP=1` | Heap checks at link time |
-| **Release** | `npm run cpp:release` | `-O3 -flto` | Set `TETRIS_CPP_NO_LTO=1` to skip LTO |
-| **Sanitizer (local)** | `TETRIS_CPP_SANITIZE=1 npm run cpp:debug` | `+ -fsanitize=address,undefined` | Experimental; CI runs with `continue-on-error` |
+Every flag, export and source lives in `cpp/build.config.json`. `scripts/build-cpp.mjs` and `cpp/CMakeLists.txt` both read it, `tests/cpp-build-config.test.ts` forbids hand-copied literals in either, and it is hashed into `build-info.json`'s `sourceHash` — so editing it without rebuilding the committed artifact fails the provenance check.
+
+| Group | Flags | Why |
+|-------|-------|-----|
+| Language | `-std=c++17 -fno-exceptions -fno-rtti` | The renderer throws nothing and uses no RTTI; saying so shrinks the wasm slightly and removes a class of surprise |
+| Warnings | `-Wall -Wextra -Wpedantic` (+ `-Werror` when `CI=1`/`true`) | Release build is warning-clean. Warnings never change the emitted code, so they are **not** recorded in `build-info.json` |
+| Release | `-O3 -flto` (`TETRIS_CPP_NO_LTO=1` skips LTO) | |
+| Debug | `-O0 -g` + `-sASSERTIONS=2 -sSAFE_HEAP=1` (`TETRIS_CPP_SANITIZE=1` adds ASan/UBSan, local only) | |
+| Link | `MODULARIZE=1 EXPORT_ES6=1 EXPORT_NAME=createTetrisRendererModule ENVIRONMENT=web ALLOW_MEMORY_GROWTH=1 FILESYSTEM=0 MALLOC=emmalloc` | `EXPORT_ES6` so the browser can `import()` the glue (see below); `FILESYSTEM=0` because nothing reads files; `emmalloc` is ~4.5 KB smaller than dlmalloc and the allocation pattern here (a few `_malloc`s per upload) does not need more |
+| Opt-in | `TETRIS_CPP_SIMD=1` → `-msimd128` | Off until measured on a browser matrix: it grows the wasm by ~1.4 KB and the instance-packing loop (`build_instances`) is a branchy compaction the autovectorizer does not turn into SIMD |
+
+**Exports** are two lists: `exports.loader` (exactly what `CppRendererLoader.ts` `cwrap`s or reads as `module._name`, plus `_malloc`/`_free`) and `exports.extra` (C++ API the TS side deliberately does not call). `tests/cpp-build-config.test.ts` fails if `exports.loader` differs from the loader's source, or if the union differs from the `EMSCRIPTEN_KEEPALIVE` functions in `cpp/src`.
+
+### ES module output
+
+The glue is built with `-sEXPORT_ES6=1`: `import()` gets a default-exported factory, and the `.wasm` is located relative to the glue via `import.meta.url`. A classic `MODULARIZE` script exports nothing when `import()`ed in a browser and derives its wasm URL from `document.currentScript` (undefined under `import()`), so it cannot be loaded the way `CppRendererLoader` loads it. `-sMODULARIZE=instance` was evaluated and rejected: on emsdk 5.0.7 it is experimental and refuses `ccall`/`cwrap`.
+
+A Vite-native `import()` of the artifact (hashed glue + wasm, lazy chunk) was spiked and works, but deleting the candidate-path probing in `CppRendererLoader.ts` means moving the artifact into Vite's module graph (it lives in `public/cpp` and is mirrored to `build/cpp`), which also touches provenance and the service-worker precache. Left as a follow-up.
 
 ### WebGPU backend selection
 
@@ -119,19 +139,39 @@ After `npm run cpp:release` or `cpp:debug`:
 
 Jump-to-definition in `cpp/src/` should work once `compile_commands.json` exists.
 
-## Optional: CMake + Ninja
+## CMake + Ninja, and host unit tests
 
-Parallel to `scripts/build-cpp.mjs` (same sources, Emscripten-only):
+`cpp/CMakeLists.txt` is a second front end for `cpp/build.config.json` (it parses the JSON with `string(JSON …)`). Emscripten build:
 
 ```bash
 source ~/emsdk/emsdk_env.sh
 emcmake cmake -S cpp -B build/cpp-cmake -G Ninja \
-  -DTETRIS_CPP_WEBGPU_BACKEND=emdawn
+  -DCMAKE_BUILD_TYPE=Release -DTETRIS_CPP_WEBGPU_BACKEND=emdawn \
+  -DTETRIS_OUT_DIR=build/cpp-cmake-out      # default is public/cpp
 cmake --build build/cpp-cmake
 # compile_commands.json → build/cpp-cmake/compile_commands.json
 ```
 
-`npm run cpp:release` remains the canonical path (build-info, port fallbacks, artifact mirroring). Both paths regenerate `cpp/src/generated/shader_sources.h` before compiling (CMake via the `generate_cpp_shaders` custom target).
+It produces the same command lines as the Node script, and a byte-identical glue (CI `cmp`s it). The `.wasm` is ~70 bytes larger because CMake compiles objects separately and links them, where `build-cpp.mjs` hands emcc all three sources in one invocation. `TETRIS_CPP_WEBGPU_BACKEND=auto` is the **first rung** of the Node script's ladder (`emdawn`) and nothing more: CMake cannot try-link a fallback, so it fails rather than degrade to a Canvas2D-only module. `npm run cpp:release` remains the canonical path (build-info, port fallbacks, artifact mirroring).
+
+**Host unit tests** (`piece_state.h`, `board_metrics.h`, `math_utils.h`, `block_sampler.h`; plain compiler, no emsdk):
+
+```bash
+npm run cpp:test:native     # cmake -DTETRIS_CPP_NATIVE_TESTS=ON, build, ctest
+```
+
+[doctest](https://github.com/doctest/doctest) is one header fetched at configure time with a pinned SHA-256 (test-only, never linked into the wasm). `<webgpu/webgpu.h>` does not exist off-Emscripten, so `cpp/tests/stubs/webgpu/webgpu.h` declares the handful of names `block_sampler.h` touches; the emcc build is what proves those names exist upstream. The expected numbers come from `shared/cppParityVectors.json`, which `tests/cpp-parity-vectors.test.ts` asserts against the TS renderer — one file, both languages. `playfield_draw.cpp` is an `EM_JS` Canvas2D stub and is not host-compilable.
+
+## Lint
+
+```bash
+npm run cpp:lint      # clang-format --dry-run --Werror  +  clang-tidy
+npm run cpp:format    # clang-format -i
+```
+
+`.clang-tidy` is a deliberate subset (`bugprone-*`, `performance-*` and the readability checks that flag dead or misleading code); every finding is an error. clang-tidy runs over the host-compilable code (the doctest suite and the pure headers it includes). It does **not** cover the three Emscripten translation units: the emsdk ships no clang-tidy and a stock one cannot parse the emsdk's own libc++. Those get the real compiler's `-Wall -Wextra -Wpedantic` (`-Werror` in CI) on every build instead.
+
+`// clang-format off` fences the `EM_JS` bodies: they are JavaScript, and clang-format will happily rewrite `===` as `== =`.
 
 ## CI
 
@@ -140,6 +180,9 @@ GitHub Actions workflow **`.github/workflows/cpp-renderer.yml`**:
 - Caches emsdk keyed on `.emsdk-version` (`emsdk-<version>-ubuntu-22.04`) — bumping the pin automatically busts the cache and installs the new version fresh on the next run; no manual cache invalidation needed
 - Runs the debug + sanitizer build (`continue-on-error`, matrix documentation) **first**, then `TETRIS_CPP_REQUIRE_EMCC=1 npm run cpp:release` last (both write `public/cpp/` in place)
 - Runs `node scripts/verify-cpp-artifact.mjs` on the rebuilt output and enforces the release size budget (see below)
+- Builds the CMake path into a scratch dir and `cmp`s its glue against the Node build's — the guard against the two front ends diverging
+- Writes the **size report** (job summary, artifact, and one sticky PR comment with `wasmBytes` vs the base branch; the comment is skipped for fork PRs)
+- A separate **`cpp-host-checks`** job (no emsdk, Ubuntu 24.04, clang 18) runs `npm run cpp:lint` and `npm run cpp:test:native`
 - **Fails if the committed `public/cpp` / `build/cpp` differ from the fresh pinned-emsdk rebuild** (`git status --porcelain`)
 - Uploads wasm + `build-info.json` + `compile_commands.json`
 - Triggers on every input that is compiled in (`cpp/**`, `shared/**`, `public/block-material.json`, the shared WGSL, the build scripts, `.emsdk-version`) and on `public/cpp/**` itself
@@ -170,7 +213,9 @@ git add public/cpp build/cpp
 
 ### Release size budget
 
-`scripts/build-cpp.mjs` fails a **release** build if `tetris_renderer.wasm` exceeds **256 KB** (`TETRIS_CPP_WASM_BUDGET_BYTES` to override locally). This is a guardrail against accidental bloat (e.g. forgetting `-flto`, linking unused Emscripten runtime methods) — if a legitimate feature needs more, raise the budget deliberately in the same PR with a comment explaining why, rather than letting it drift silently.
+`scripts/build-cpp.mjs` fails a **release** build if `tetris_renderer.wasm` exceeds `wasmBudgetBytes` in `cpp/build.config.json` (**256 KB**; `TETRIS_CPP_WASM_BUDGET_BYTES` to override locally). This is a guardrail against accidental bloat (e.g. forgetting `-flto`, linking unused Emscripten runtime methods) — if a legitimate feature needs more, raise the budget deliberately in the same PR with a comment explaining why, rather than letting it drift silently.
+
+The budget is a ceiling, not a trend line. `npm run cpp:size [-- --base origin/main]` (what CI runs) reports raw/gzip/brotli bytes for the wasm and glue plus the delta against the committed artifact at the base ref, so growth is visible long before the ceiling.
 
 
 ## npm scripts
@@ -179,6 +224,10 @@ git add public/cpp build/cpp
 |--------|-------------|
 | `npm run cpp:debug` | Debug build (`-O0 -g -sASSERTIONS=2 -sSAFE_HEAP=1`) |
 | `npm run cpp:release` | Release build (`-O3 -flto`) |
+| `npm run cpp:lint` / `cpp:format` | clang-format + clang-tidy check / clang-format in place |
+| `npm run cpp:test:native` | Host doctest suite for the pure headers (needs cmake; no emsdk) |
+| `npm run cpp:size` | Size report (`-- --base <ref>` for a delta) |
+| `npm run cpp:verify` | Static provenance check of the committed artifact |
 | `npm run build:cpp` | Alias for `cpp:release` (non-fatal if `emcc` missing) |
 | `npm run build:all` | AS WASM + cpp + Vite frontend |
 
@@ -186,24 +235,26 @@ git add public/cpp build/cpp
 
 ## Exact emcc command (reference)
 
-Debug (`scripts/build-cpp.mjs`):
+Release, as run by `scripts/build-cpp.mjs` (every flag below comes from `cpp/build.config.json`):
 
 ```bash
 emcc cpp/src/renderer.cpp cpp/src/playfield_draw.cpp cpp/src/gpu_renderer.cpp \
+  -std=c++17 -fno-exceptions -fno-rtti \
+  -Wall -Wextra -Wpedantic \
+  -O3 -flto \
   -I cpp/src \
-  -O0 -g -s ASSERTIONS=2 -s SAFE_HEAP=1 \
   -o public/cpp/tetris_renderer.js \
-  --use-port=emdawnwebgpu \
-  -DTETRIS_ENABLE_WEBGPU=1 \
-  -s MODULARIZE=1 \
+  -s MODULARIZE=1 -s EXPORT_ES6=1 \
   -s EXPORT_NAME=createTetrisRendererModule \
   -s ENVIRONMENT=web \
   -s ALLOW_MEMORY_GROWTH=1 \
+  -s FILESYSTEM=0 -s MALLOC=emmalloc \
   -s 'EXPORTED_FUNCTIONS=["_init_renderer",...]' \
-  -s 'EXPORTED_RUNTIME_METHODS=["ccall","cwrap","HEAP8","HEAPU8"]'
+  -s 'EXPORTED_RUNTIME_METHODS=["ccall","cwrap","HEAP8","HEAPU8"]' \
+  --use-port=emdawnwebgpu -DTETRIS_ENABLE_WEBGPU=1
 ```
 
-Release: `-O3 -flto` instead of debug flags.
+Debug swaps `-O3 -flto` for `-O0 -g` and adds `-s ASSERTIONS=2 -s SAFE_HEAP=1`.
 
 `scripts/build-cpp.mjs` automates port selection, `compile_commands.json`, and `build-info.json`:
 1. Respects `TETRIS_CPP_WEBGPU` (`auto` tries `--use-port=emdawnwebgpu` first — the port the pinned emsdk 5.0.7 actually links)

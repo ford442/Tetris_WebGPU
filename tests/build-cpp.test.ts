@@ -15,7 +15,9 @@ describe('build-cpp outputs', () => {
     expect(src).toContain('TETRIS_CPP_WEBGPU');
     expect(src).toContain('build-info.json');
     expect(src).toContain('compile_commands.json');
-    expect(src).toContain('SAFE_HEAP');
+    // Debug link settings live in cpp/build.config.json, which build-cpp.mjs reads.
+    expect(src).toContain('buildLinkFlags(CONFIG, MODE)');
+    expect(readFileSync(join(ROOT, 'cpp/build.config.json'), 'utf8')).toContain('SAFE_HEAP');
     expect(src).toContain('wasmBytes');
     expect(src).toContain('jsBytes');
     expect(src).toContain('shouldSkipLegacyWebGpu');
@@ -46,7 +48,10 @@ describe('build-cpp outputs', () => {
     const src = readFileSync(join(ROOT, 'scripts/build-cpp.mjs'), 'utf8');
     expect(src).toContain('TETRIS_CPP_WASM_BUDGET_BYTES');
     expect(src).toContain('enforceWasmSizeBudget');
-    expect(src).toMatch(/DEFAULT_WASM_BUDGET_BYTES\s*=\s*256\s*\*\s*1024/);
+    // The number itself lives in cpp/build.config.json (one place, read by build + size report).
+    expect(src).toMatch(/DEFAULT_WASM_BUDGET_BYTES\s*=\s*CONFIG\.wasmBudgetBytes/);
+    const config = JSON.parse(readFileSync(join(ROOT, 'cpp/build.config.json'), 'utf8'));
+    expect(config.wasmBudgetBytes).toBe(256 * 1024);
   });
 
   it('regenerates the embedded shader header before every build (with or without emcc)', () => {

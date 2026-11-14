@@ -8,6 +8,8 @@
  *   TETRIS_CPP_WEBGPU=auto|emdawn|legacy|none  — WebGPU port selection (default: auto)
  *   TETRIS_CPP_REQUIRE_EMCC=1                  — exit 1 instead of skipping when emcc is absent
  *   TETRIS_CPP_NO_LTO=1                        — disable -flto on release builds
+ *   TETRIS_CPP_SIMD=1                          — release experiment: add -msimd128 (off until a browser matrix confirms it)
+ *   CI=1|true                                  — add -Werror (warnings are -Wall -Wextra -Wpedantic everywhere)
  *   TETRIS_CPP_SANITIZE=1                      — debug: -fsanitize=address,undefined (local only)
  *
  * WebGPU port selection (TETRIS_CPP_WEBGPU=auto):
@@ -19,6 +21,9 @@
  * (the TS loader hard-fails on it), so if no WebGPU port links the build exits non-zero.
  * Only TETRIS_CPP_WEBGPU=none opts into a Canvas2D-only release. Debug builds still
  * fall back to step 3, with a loud warning.
+ *
+ * Sources, flags, exports and the size budget live in cpp/build.config.json — the one place
+ * both this script and cpp/CMakeLists.txt read. Do not hand-copy them here.
  *
  * Pinned emsdk: see .emsdk-version (documented in cpp/README.md).
  *
@@ -49,6 +54,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  codegenCompileFlags,
+  enabledOptionalFlags,
+  linkFlags as buildLinkFlags,
+  loadBuildConfig,
+  warningFlags,
+} from './lib/cppBuildConfig.mjs';
+import {
   BUILD_INFO_SCHEMA_VERSION,
   computeSourceHash,
   describeArtifacts,
@@ -68,36 +80,16 @@ const EMSDK_VERSION_FILE = join(ROOT, '.emsdk-version');
 
 const WEBGPU_ENV = (process.env.TETRIS_CPP_WEBGPU || 'auto').toLowerCase();
 
-const SOURCES = [
-  join(ROOT, 'cpp', 'src', 'renderer.cpp'),
-  join(ROOT, 'cpp', 'src', 'playfield_draw.cpp'),
-  join(ROOT, 'cpp', 'src', 'gpu_renderer.cpp'),
-];
+const CONFIG = loadBuildConfig(ROOT);
 
-const EXPORTED_FUNCTIONS = [
-  '_init_renderer',
-  '_resize_renderer',
-  '_render_frame',
-  '_render_dual_frame',
-  '_update_playfield',
-  '_get_playfield_ptr',
-  '_get_playfield_len',
-  '_get_piece_state_ptr',
-  '_update_piece_state',
-  '_get_renderer_backend',
-  '_is_gpu_renderer_active',
-  '_is_canvas_fallback_active',
-  '_set_block_texture_rgba',
-  '_set_block_material_map_rgba',
-  '_malloc',
-  '_free',
-];
+const SOURCES = CONFIG.sources.map((rel) => join(ROOT, 'cpp', rel));
+const INCLUDE_DIRS = CONFIG.includeDirs.flatMap((rel) => ['-I', join(ROOT, 'cpp', rel)]);
 
-const PORT_LABELS = {
-  USE_WEBGPU: 'USE_WEBGPU (legacy -s USE_WEBGPU=1)',
-  EMDAWN: 'emdawnwebgpu (--use-port=emdawnwebgpu)',
-  NONE: 'canvas2d-only (no WebGPU port linked)',
-};
+const PORT_LABELS = Object.fromEntries(
+  Object.entries(CONFIG.webgpuPorts)
+    .filter(([key]) => !key.startsWith('$'))
+    .map(([key, port]) => [key, port.label]),
+);
 
 function readPinnedEmsdkVersion() {
   if (!existsSync(EMSDK_VERSION_FILE)) return null;
@@ -134,33 +126,29 @@ function getEmccVersion() {
   return match ? match[1] : firstLine.trim();
 }
 
+/** Optimization (+ optional experiment) flags; recorded in build-info.json as optFlags. */
 function getOptFlags() {
   if (MODE === 'debug') {
-    const flags = ['-O0', '-g', '-s', 'ASSERTIONS=2', '-s', 'SAFE_HEAP=1'];
+    const flags = [...CONFIG.optimize.debug];
     if (process.env.TETRIS_CPP_SANITIZE === '1') {
       flags.push('-fsanitize=address', '-fsanitize=undefined');
     }
     return flags;
   }
 
-  const flags = ['-O3'];
-  if (process.env.TETRIS_CPP_NO_LTO !== '1') {
-    flags.push('-flto');
-  }
-  return flags;
+  const flags = CONFIG.optimize.release.filter(
+    (flag) => !(flag === '-flto' && process.env.TETRIS_CPP_NO_LTO === '1'),
+  );
+  return [...flags, ...enabledOptionalFlags(CONFIG)];
 }
 
-function getCompileOnlyFlags() {
-  const flags = getOptFlags();
-  const compile = [];
-  for (let i = 0; i < flags.length; i++) {
-    if (flags[i] === '-s') {
-      i += 1;
-      continue;
-    }
-    compile.push(flags[i]);
-  }
-  return compile;
+/** Everything that is compile-only: language, warnings and optimization. */
+function getCompileFlags() {
+  return [
+    ...codegenCompileFlags(CONFIG),
+    ...warningFlags(CONFIG),
+    ...getOptFlags(),
+  ];
 }
 
 /**
@@ -194,33 +182,20 @@ function resolveLadder() {
   }
 }
 
-function webGpuArgs(useWebGpuFlag) {
-  if (useWebGpuFlag === 'USE_WEBGPU') {
-    return ['-s', 'USE_WEBGPU=1', '-DTETRIS_ENABLE_WEBGPU=1'];
-  }
-  if (useWebGpuFlag === 'EMDAWN') {
-    return ['--use-port=emdawnwebgpu', '-DTETRIS_ENABLE_WEBGPU=1'];
-  }
-  return [];
+function webGpuArgs(rung) {
+  return [...(CONFIG.webgpuPorts[rung]?.args ?? [])];
 }
 
 /** Link-time settings, recorded verbatim in build-info.json (no absolute paths). */
 function getLinkFlags() {
-  return [
-    '-s', 'MODULARIZE=1',
-    '-s', 'EXPORT_NAME=createTetrisRendererModule',
-    '-s', 'ENVIRONMENT=web',
-    '-s', 'ALLOW_MEMORY_GROWTH=1',
-    '-s', `EXPORTED_FUNCTIONS=${JSON.stringify(EXPORTED_FUNCTIONS)}`,
-    '-s', 'EXPORTED_RUNTIME_METHODS=["ccall","cwrap","HEAP8","HEAPU8"]',
-  ];
+  return buildLinkFlags(CONFIG, MODE);
 }
 
 function runEmcc(useWebGpuFlag) {
   const args = [
     ...SOURCES,
-    ...getOptFlags(),
-    '-I', join(ROOT, 'cpp', 'src'),
+    ...getCompileFlags(),
+    ...INCLUDE_DIRS,
     '-o', OUT_JS,
     ...getLinkFlags(),
     ...webGpuArgs(useWebGpuFlag),
@@ -255,7 +230,7 @@ function emitCompileCommands(linkedPort) {
   mkdirSync(OUT_BUILD, { recursive: true });
   if (existsSync(COMPILE_COMMANDS)) unlinkSync(COMPILE_COMMANDS);
 
-  const compileFlags = getCompileOnlyFlags();
+  const compileFlags = getCompileFlags();
   const portArgs = webGpuArgs(linkedPort);
   let merged = [];
 
@@ -266,7 +241,7 @@ function emitCompileCommands(linkedPort) {
       src,
       '-c',
       ...compileFlags,
-      '-I', join(ROOT, 'cpp', 'src'),
+      ...INCLUDE_DIRS,
       ...portArgs,
       '-MJ', COMPILE_COMMANDS,
       '-o', objPath,
@@ -307,6 +282,7 @@ function writeBuildInfo(linkedPort) {
     webGpuBackend: PORT_LABELS[linkedPort] || linkedPort,
     webGpuBackendId: linkedPort.toLowerCase(),
     webGpuEnv: WEBGPU_ENV,
+    languageFlags: codegenCompileFlags(CONFIG),
     optFlags: getOptFlags(),
     linkFlags: getLinkFlags(),
     webGpuFlags: webGpuArgs(linkedPort),
@@ -325,7 +301,7 @@ function writeBuildInfo(linkedPort) {
   return info;
 }
 
-const DEFAULT_WASM_BUDGET_BYTES = 256 * 1024;
+const DEFAULT_WASM_BUDGET_BYTES = CONFIG.wasmBudgetBytes;
 
 function getWasmBudgetBytes() {
   const raw = process.env.TETRIS_CPP_WASM_BUDGET_BYTES;
@@ -460,7 +436,7 @@ function main() {
   }
   console.log(`[build-cpp] Building ${MODE} → ${OUT_JS}`);
   console.log(`[build-cpp] TETRIS_CPP_WEBGPU=${WEBGPU_ENV}`);
-  console.log(`[build-cpp] Flags: ${getOptFlags().join(' ')}`);
+  console.log(`[build-cpp] Flags: ${getCompileFlags().join(' ')}`);
 
   const { result, linkedPort } = buildLinkedPort();
 

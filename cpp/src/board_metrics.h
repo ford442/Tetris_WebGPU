@@ -23,10 +23,18 @@ constexpr float kCameraFovDeg = 42.0f;
 constexpr float kCameraNear = 1.0f;
 constexpr float kCameraFar = 150.0f;
 
-inline float boardWorldX(int col) { return static_cast<float>(col) * kBlockWorldSize; }
-inline float boardWorldY(int row) { return static_cast<float>(row) * -kBlockWorldSize; }
+inline float boardWorldX(int col) {
+  return static_cast<float>(col) * kBlockWorldSize;
+}
+inline float boardWorldY(int row) {
+  return static_cast<float>(row) * -kBlockWorldSize;
+}
 
-inline float blockCenterX(int col) { return boardWorldX(col) + kBlockHalfWorldSize; }
-inline float blockCenterY(int row) { return boardWorldY(row) - kBlockHalfWorldSize; }
+inline float blockCenterX(int col) {
+  return boardWorldX(col) + kBlockHalfWorldSize;
+}
+inline float blockCenterY(int row) {
+  return boardWorldY(row) - kBlockHalfWorldSize;
+}
 
-} // namespace tetris
+}  // namespace tetris
