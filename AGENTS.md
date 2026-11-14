@@ -254,7 +254,9 @@ See `cpp/README.md` for the full manual test matrix.
 * Artifacts: `public/cpp/tetris_renderer.{js,wasm}`.
 * Without artifacts, `?renderer=webgpu-cpp` hard-fails with the fatal overlay (no TS WebGPU / WebGL2 rescue).
 * `npm run cpp:release` and `build:cpp` exit 0 **only** when `emcc` is missing (handled inside `scripts/build-cpp.mjs`) — CI-safe. A non-zero `emcc` status fails the script; the npm scripts no longer swallow it.
-* The cpp CI workflow rejects a Canvas2D-only link (`build-info.json` must have `webGpuBackendId: "emdawn"` and `pinnedEmsdkVersion` equal to `.emsdk-version`).
+* A **release** `cpp:release` exits non-zero when no WebGPU port links (no silent Canvas2D-only artifact); `TETRIS_CPP_WEBGPU=none` is the explicit opt-in. `TETRIS_CPP_REQUIRE_EMCC=1` makes a missing `emcc` an error (CI sets it).
+* `public/cpp/build-info.json` is **committed** provenance for the committed wasm (emcc version, port, flags, `sourceHash`, artifact sha256; no timestamps). `npm run cpp:verify` and `tests/cpp-artifact-provenance.test.ts` fail when `cpp/src`, `shared/`, `public/block-material.json`, the shared WGSL, the build scripts or `.emsdk-version` changed without rebuilding. After touching those: rebuild with the pinned emsdk and commit `public/cpp` + `build/cpp`. The cpp CI workflow rebuilds and fails if the committed files differ.
+* `npm test`'s `pretest` runs `asbuild:release` and now fails the run if it fails (`TETRIS_SKIP_ASBUILD=1` to skip, loudly).
 
 ### 2. Import Extensions
 All TypeScript files use **`.js` extensions** in their `import` statements, even when importing `.ts` files. This matches the project's `tsconfig.json` (`module: "ESNext"`, `moduleResolution: "Node"`) and Vite's expectations.

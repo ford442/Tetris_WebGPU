@@ -5,13 +5,31 @@ on:
   push:
     paths:
       - 'cpp/**'
+      - 'public/cpp/**'
+      - 'build/cpp/**'
+      - 'shared/**'
+      - 'public/block-material.json'
+      - 'src/webgpu/shaders/wgsl/block/**'
       - 'scripts/build-cpp.mjs'
+      - 'scripts/generate-cpp-*.mjs'
+      - 'scripts/verify-cpp-artifact.mjs'
+      - 'scripts/lib/cppProvenance.mjs'
+      - 'scripts/lib/blockMaterialSchema.mjs'
       - '.emsdk-version'
       - '.github/workflows/cpp-renderer.yml'
   pull_request:
     paths:
       - 'cpp/**'
+      - 'public/cpp/**'
+      - 'build/cpp/**'
+      - 'shared/**'
+      - 'public/block-material.json'
+      - 'src/webgpu/shaders/wgsl/block/**'
       - 'scripts/build-cpp.mjs'
+      - 'scripts/generate-cpp-*.mjs'
+      - 'scripts/verify-cpp-artifact.mjs'
+      - 'scripts/lib/cppProvenance.mjs'
+      - 'scripts/lib/blockMaterialSchema.mjs'
       - '.emsdk-version'
       - '.github/workflows/cpp-renderer.yml'
 
@@ -54,39 +72,41 @@ jobs:
           ./emsdk install "${{ steps.emsdk.outputs.version }}"
           ./emsdk activate "${{ steps.emsdk.outputs.version }}"
 
-      - name: Build C++ renderer (release)
-        run: |
-          source emsdk/emsdk_env.sh
-          npm run cpp:release
-
+      # Debug first: build-cpp writes public/cpp/ in place, so the release build must be
+      # the LAST one to run or the verified/uploaded artifact would be the debug wasm.
       - name: Build C++ renderer (debug + sanitizer matrix)
         run: |
           source emsdk/emsdk_env.sh
-          TETRIS_CPP_SANITIZE=1 npm run cpp:debug
+          TETRIS_CPP_SANITIZE=1 TETRIS_CPP_REQUIRE_EMCC=1 npm run cpp:debug
         continue-on-error: true
 
-      - name: Verify artifacts
+      # TETRIS_CPP_REQUIRE_EMCC: a missing emcc must fail here, not skip and let the
+      # stale committed wasm pass the checks below. Release + auto also fails if no
+      # WebGPU port links (no silent Canvas2D-only artifact).
+      - name: Build C++ renderer (release)
+        run: |
+          source emsdk/emsdk_env.sh
+          TETRIS_CPP_REQUIRE_EMCC=1 npm run cpp:release
+
+      - name: Verify rebuilt artifacts
         run: |
           test -f public/cpp/tetris_renderer.js
           test -f public/cpp/tetris_renderer.wasm
           test -f public/cpp/build-info.json
           test -f build/cpp/compile_commands.json
-          node -e "
-            const i = require('./public/cpp/build-info.json');
-            if (!i.emccVersion) throw new Error('build-info.json missing emccVersion');
-            if (typeof i.wasmBytes !== 'number') throw new Error('build-info.json missing wasmBytes');
-            if (typeof i.jsBytes !== 'number') throw new Error('build-info.json missing jsBytes');
-            console.log(i.webGpuBackend, 'wasmBytes=' + i.wasmBytes, 'jsBytes=' + i.jsBytes);
-            // A Canvas2D-only link (webGpuBackendId 'none') exits 0 from build-cpp.mjs
-            // but cannot boot: the TS loader refuses any backend other than WebGPU.
-            if (i.webGpuBackendId !== 'emdawn') {
-              throw new Error('release requires webGpuBackendId \"emdawn\", got ' + JSON.stringify(i.webGpuBackendId));
-            }
-            const pinned = require('fs').readFileSync('.emsdk-version', 'utf8').trim().split('\n')[0].trim();
-            if (i.pinnedEmsdkVersion !== pinned) {
-              throw new Error('build-info pinnedEmsdkVersion ' + JSON.stringify(i.pinnedEmsdkVersion) + ' != .emsdk-version ' + JSON.stringify(pinned));
-            }
-          "
+          node scripts/verify-cpp-artifact.mjs
+
+      # The committed wasm/js/build-info must be exactly what the pinned emsdk produces
+      # from this commit. If this fails: run `npm run cpp:release` with emsdk
+      # $(cat .emsdk-version) locally and commit public/cpp + build/cpp.
+      - name: Committed artifact matches a fresh pinned-emsdk rebuild
+        run: |
+          if [ -n "$(git status --porcelain -- public/cpp build/cpp)" ]; then
+            git status --short -- public/cpp build/cpp
+            git --no-pager diff --stat -- public/cpp build/cpp
+            echo "::error::Committed public/cpp / build/cpp differ from a fresh rebuild with emsdk $(cat .emsdk-version). Rebuild with the pinned emsdk and commit the result."
+            exit 1
+          fi
 
       - name: Upload C++ renderer artifacts
         uses: actions/upload-artifact@v4

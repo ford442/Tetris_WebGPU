@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * Tolerant Emscripten build for the C++ Tetris renderer.
- * Exits 0 when emcc is missing so CI / npm test keep working.
+ * Emscripten build for the C++ Tetris renderer.
+ * Exits 0 when emcc is missing so a fresh clone / `npm run build:all` keeps working
+ * (set TETRIS_CPP_REQUIRE_EMCC=1 — CI does — to make a missing emcc an error).
  *
  * Environment:
  *   TETRIS_CPP_WEBGPU=auto|emdawn|legacy|none  — WebGPU port selection (default: auto)
+ *   TETRIS_CPP_REQUIRE_EMCC=1                  — exit 1 instead of skipping when emcc is absent
  *   TETRIS_CPP_NO_LTO=1                        — disable -flto on release builds
  *   TETRIS_CPP_SANITIZE=1                      — debug: -fsanitize=address,undefined (local only)
  *
@@ -13,11 +15,17 @@
  *   2. -s USE_WEBGPU=1          (legacy; removed upstream around the emsdk 5.0 line)
  *   3. (none)                   Canvas2D bootstrap only — gpu_renderer.cpp stubs
  *
+ * A RELEASE build never ends in step 3 on its own: a Canvas2D-only module cannot boot
+ * (the TS loader hard-fails on it), so if no WebGPU port links the build exits non-zero.
+ * Only TETRIS_CPP_WEBGPU=none opts into a Canvas2D-only release. Debug builds still
+ * fall back to step 3, with a loud warning.
+ *
  * Pinned emsdk: see .emsdk-version (documented in cpp/README.md).
  *
  * Outputs:
  *   public/cpp/tetris_renderer.{js,wasm}
- *   public/cpp/build-info.json
+ *   public/cpp/build-info.json  (COMMITTED provenance: emcc version, port, flags, source
+ *     hash, artifact sha256 — verified by scripts/verify-cpp-artifact.mjs; no timestamps)
  *   build/cpp/compile_commands.json  (+ cpp/compile_commands.json mirror for clangd)
  *   cpp/src/generated/shader_sources.h  (embedded cpp/src/shaders/**\/*.wgsl plus
  *     the WGSL shared with the TS renderer — via scripts/generate-cpp-shaders.mjs,
@@ -39,6 +47,12 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+  BUILD_INFO_SCHEMA_VERSION,
+  computeSourceHash,
+  describeArtifacts,
+} from './lib/cppProvenance.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -149,7 +163,21 @@ function getCompileOnlyFlags() {
   return compile;
 }
 
+/**
+ * Whether a link that ends without any WebGPU port is acceptable: only when asked for
+ * explicitly (TETRIS_CPP_WEBGPU=none) or for a throwaway debug build. A release `auto`
+ * build must never "succeed" into a module the loader refuses to boot.
+ */
+function allowsCanvasOnly() {
+  return WEBGPU_ENV === 'none' || MODE !== 'release';
+}
+
 function resolveWebGpuAttempts() {
+  const ladder = resolveLadder();
+  return allowsCanvasOnly() ? ladder : ladder.filter((attempt) => attempt !== 'NONE');
+}
+
+function resolveLadder() {
   switch (WEBGPU_ENV) {
     case 'emdawn':
       return ['EMDAWN', 'NONE'];
@@ -176,18 +204,25 @@ function webGpuArgs(useWebGpuFlag) {
   return [];
 }
 
-function runEmcc(useWebGpuFlag) {
-  const args = [
-    ...SOURCES,
-    ...getOptFlags(),
-    '-I', join(ROOT, 'cpp', 'src'),
-    '-o', OUT_JS,
+/** Link-time settings, recorded verbatim in build-info.json (no absolute paths). */
+function getLinkFlags() {
+  return [
     '-s', 'MODULARIZE=1',
     '-s', 'EXPORT_NAME=createTetrisRendererModule',
     '-s', 'ENVIRONMENT=web',
     '-s', 'ALLOW_MEMORY_GROWTH=1',
     '-s', `EXPORTED_FUNCTIONS=${JSON.stringify(EXPORTED_FUNCTIONS)}`,
     '-s', 'EXPORTED_RUNTIME_METHODS=["ccall","cwrap","HEAP8","HEAPU8"]',
+  ];
+}
+
+function runEmcc(useWebGpuFlag) {
+  const args = [
+    ...SOURCES,
+    ...getOptFlags(),
+    '-I', join(ROOT, 'cpp', 'src'),
+    '-o', OUT_JS,
+    ...getLinkFlags(),
     ...webGpuArgs(useWebGpuFlag),
   ];
 
@@ -260,22 +295,27 @@ function emitCompileCommands(linkedPort) {
 
 function writeBuildInfo(linkedPort) {
   const pinned = readPinnedEmsdkVersion();
-  const emccVersion = getEmccVersion();
-  const wasmPublic = join(OUT_PUBLIC, 'tetris_renderer.wasm');
-  const wasmBytes = existsSync(wasmPublic) ? readFileSync(wasmPublic).byteLength : null;
-  const jsBytes = existsSync(OUT_JS) ? readFileSync(OUT_JS).byteLength : null;
+  const artifacts = describeArtifacts(ROOT);
+  const { sourceHash, sourceFileCount } = computeSourceHash(ROOT);
+  // Deliberately no timestamp, host or absolute path: this file is committed next to
+  // the wasm and a rebuild with the same toolchain must reproduce it byte-for-byte.
   const info = {
+    schemaVersion: BUILD_INFO_SCHEMA_VERSION,
     mode: MODE,
-    builtAt: new Date().toISOString(),
-    emccVersion,
+    emccVersion: getEmccVersion(),
     pinnedEmsdkVersion: pinned,
     webGpuBackend: PORT_LABELS[linkedPort] || linkedPort,
     webGpuBackendId: linkedPort.toLowerCase(),
     webGpuEnv: WEBGPU_ENV,
     optFlags: getOptFlags(),
+    linkFlags: getLinkFlags(),
+    webGpuFlags: webGpuArgs(linkedPort),
     sources: SOURCES.map((s) => s.replace(`${ROOT}/`, '')),
-    wasmBytes,
-    jsBytes,
+    sourceHash,
+    sourceFileCount,
+    wasmBytes: artifacts.wasm.bytes,
+    jsBytes: artifacts.js.bytes,
+    artifacts,
   };
 
   const payload = `${JSON.stringify(info, null, 2)}\n`;
@@ -345,7 +385,7 @@ function warnEmsdkDrift() {
 
 function buildLinkedPort() {
   const attempts = resolveWebGpuAttempts();
-  let linkedPort = attempts[attempts.length - 1];
+  let linkedPort = null;
   let result = { status: 1, stderr: '', stdout: '' };
 
   for (let i = 0; i < attempts.length; i++) {
@@ -360,28 +400,15 @@ function buildLinkedPort() {
     }
 
     const err = `${result.stderr || ''}${result.stdout || ''}`;
-    const hasNext = i < attempts.length - 1;
-    if (!hasNext) break;
+    if (i === attempts.length - 1) break;
 
-    if (attempt === 'USE_WEBGPU' && isWebGpuPortError(err)) {
-      console.warn('[build-cpp] -s USE_WEBGPU=1 unavailable on this emsdk; trying next port');
-      continue;
-    }
-    if (attempt === 'EMDAWN' && isWebGpuPortError(err)) {
-      console.warn('[build-cpp] --use-port=emdawnwebgpu failed; trying Canvas2D-only build');
-      continue;
-    }
-    if (WEBGPU_ENV !== 'auto') {
-      console.warn('[build-cpp] explicit TETRIS_CPP_WEBGPU=' + WEBGPU_ENV + ' failed; trying fallback');
+    // Only a missing/unsupported port justifies the next rung. A genuine compile or
+    // link error must surface as-is, never get masked by a fallback that "works".
+    if (isWebGpuPortError(err)) {
+      console.warn(`[build-cpp] ${PORT_LABELS[attempt] || attempt} unavailable on this emsdk; trying next`);
       continue;
     }
     break;
-  }
-
-  if (result.status !== 0 && linkedPort !== 'NONE' && !attempts.includes('NONE')) {
-    console.warn('[build-cpp] WebGPU ports failed; building Canvas2D bootstrap only.');
-    result = runEmcc('NONE');
-    if (result.status === 0) linkedPort = 'NONE';
   }
 
   return { result, linkedPort };
@@ -413,6 +440,11 @@ function main() {
   generateShaderHeaders();
 
   if (!hasEmcc()) {
+    if (process.env.TETRIS_CPP_REQUIRE_EMCC === '1') {
+      console.error('[build-cpp] emcc not found and TETRIS_CPP_REQUIRE_EMCC=1 — failing.');
+      console.error(`[build-cpp] Install emsdk ${readPinnedEmsdkVersion() || '(see .emsdk-version)'} and \`source emsdk_env.sh\`.`);
+      process.exit(1);
+    }
     console.log('[build-cpp] emcc not found — skipping C++ renderer build (TS fallbacks remain available).');
     console.log('[build-cpp] Linked WebGPU port: (skipped — no emcc)');
     console.log(`[build-cpp] Pinned emsdk (when installed): ${readPinnedEmsdkVersion() || '(none)'}`);
@@ -432,9 +464,27 @@ function main() {
 
   const { result, linkedPort } = buildLinkedPort();
 
-  if (result.status !== 0) {
+  if (result.status !== 0 || !linkedPort) {
     console.error(result.stderr || result.stdout || '[build-cpp] emcc failed');
-    process.exit(result.status ?? 1);
+    if (!allowsCanvasOnly()) {
+      console.error(
+        `[build-cpp] ERROR: no WebGPU port linked (TETRIS_CPP_WEBGPU=${WEBGPU_ENV}, emcc ${getEmccVersion()}). ` +
+        'A release build must not fall back to a Canvas2D-only module — it cannot boot. ' +
+        `Use the pinned emsdk (${readPinnedEmsdkVersion() || 'see .emsdk-version'}), or set TETRIS_CPP_WEBGPU=none ` +
+        'to explicitly build the Canvas2D-only bootstrap.'
+      );
+    }
+    process.exit(result.status || 1);
+  }
+
+  if (linkedPort === 'NONE') {
+    console.warn(
+      '[build-cpp] WARNING: linked the Canvas2D-only bootstrap (no WebGPU port). ' +
+      (WEBGPU_ENV === 'none'
+        ? 'Requested via TETRIS_CPP_WEBGPU=none.'
+        : 'Debug fallback only.') +
+      ' The TS loader refuses this module — do not commit it.'
+    );
   }
 
   emitCompileCommands(linkedPort);

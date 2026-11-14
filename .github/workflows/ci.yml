@@ -38,6 +38,12 @@ jobs:
       - name: Build release WASM
         run: npm run asbuild:release
 
+      # Pure Node, no emsdk: the committed public/cpp artifact must be the release build
+      # of the pinned emcc (.emsdk-version) from the current cpp/shared sources.
+      # The byte-level rebuild-and-diff lives in cpp-renderer.yml.
+      - name: Verify committed C++ renderer artifact
+        run: npm run cpp:verify
+
       - name: Typecheck
         run: npm run typecheck
 
