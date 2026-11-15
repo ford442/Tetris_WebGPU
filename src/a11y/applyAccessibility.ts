@@ -55,7 +55,7 @@ export function applyColorPalette(view: A11yView, paletteId: ColorPaletteId): vo
   }
   if (view.currentTheme) {
     for (let i = 0; i <= 8; i++) {
-      if (merged[i]) view.currentTheme[i] = merged[i];
+      if (merged[i]) view.currentTheme[i] = merged[i]!;
     }
     view.currentTheme.paletteId = paletteId;
     view.currentTheme.border = merged.border;

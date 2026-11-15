@@ -44,9 +44,9 @@ export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, target
   } else {
     // Ensure inner arrays match length
     for (let i = 0; i < length; i++) {
-      if (temp[i].length !== length) {
-        temp[i].length = length;
-        for(let j=0; j<length; j++) temp[i][j] = 0;
+      if (temp[i]!.length !== length) {
+        temp[i]!.length = length;
+        for(let j=0; j<length; j++) temp[i]![j] = 0;
       }
     }
   }
@@ -55,13 +55,13 @@ export function rotatePieceBlocks(blocks: number[][], clockwise: boolean, target
   if (clockwise) {
     for (let y = 0; y < length; y++) {
       for (let x = 0; x < length; x++) {
-        temp[x][y] = blocks[length - 1 - y][x];
+        temp[x]![y] = blocks[length - 1 - y]![x]!;
       }
     }
   } else {
     for (let y = 0; y < length; y++) {
       for (let x = 0; x < length; x++) {
-        temp[x][y] = blocks[y][length - 1 - x];
+        temp[x]![y] = blocks[y]![length - 1 - x]!;
       }
     }
   }

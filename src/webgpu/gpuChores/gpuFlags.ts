@@ -9,8 +9,9 @@
 
 interface FlagBag { readonly [key: string]: number }
 
-function bag(global: unknown, fallback: FlagBag): FlagBag {
-  return (global as FlagBag | undefined) ?? fallback;
+/** Keeps the fallback's literal key set, so `BufferUsage.STORAGE` is `number`, not `number | undefined`. */
+function bag<T extends FlagBag>(global: unknown, fallback: T): T {
+  return (global as T | undefined) ?? fallback;
 }
 
 export const BufferUsage = bag(typeof GPUBufferUsage !== 'undefined' ? GPUBufferUsage : undefined, {

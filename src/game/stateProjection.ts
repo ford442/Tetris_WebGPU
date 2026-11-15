@@ -34,16 +34,16 @@ export function buildPlayfieldProjection({
   } else {
     // Ensure inner arrays match length
     for (let y = 0; y < playfieldHeight; y++) {
-      if (playfield2D[y].length !== playfieldWidth) {
-        playfield2D[y].length = playfieldWidth;
-        for(let x=0; x<playfieldWidth; x++){playfield2D[y][x]=0;}
+      if (playfield2D[y]!.length !== playfieldWidth) {
+        playfield2D[y]!.length = playfieldWidth;
+        for(let x=0; x<playfieldWidth; x++){playfield2D[y]![x]=0;}
       }
     }
   }
 
   for (let y = 0; y < playfieldHeight; y++) {
     for (let x = 0; x < playfieldWidth; x++) {
-      playfield2D[y][x] = getCell(x, y);
+      playfield2D[y]![x] = getCell(x, y);
     }
   }
 
@@ -51,14 +51,14 @@ export function buildPlayfieldProjection({
     const { x: pieceX, blocks } = activePiece;
 
     for (let y = 0; y < blocks.length; y++) {
-      for (let x = 0; x < blocks[y].length; x++) {
-        if (blocks[y][x]) {
+      for (let x = 0; x < blocks[y]!.length; x++) {
+        if (blocks[y]![x]) {
           const targetY = ghostY + y;
           const targetX = pieceX + x;
           if (targetY >= 0 && targetY < playfieldHeight &&
             targetX >= 0 && targetX < playfieldWidth) {
-            if (playfield2D[targetY][targetX] === 0) {
-              playfield2D[targetY][targetX] = -blocks[y][x];
+            if (playfield2D[targetY]![targetX] === 0) {
+              playfield2D[targetY]![targetX] = -blocks[y]![x]!;
             }
           }
         }
@@ -67,13 +67,13 @@ export function buildPlayfieldProjection({
 
     const { y: pY, x: pX } = activePiece;
     for (let y = 0; y < blocks.length; y++) {
-      for (let x = 0; x < blocks[y].length; x++) {
-        if (blocks[y][x]) {
+      for (let x = 0; x < blocks[y]!.length; x++) {
+        if (blocks[y]![x]) {
           const targetY = pY + y;
           const targetX = pX + x;
           if (targetY >= 0 && targetY < playfieldHeight &&
             targetX >= 0 && targetX < playfieldWidth) {
-            playfield2D[targetY][targetX] = blocks[y][x];
+            playfield2D[targetY]![targetX] = blocks[y]![x]!;
           }
         }
       }

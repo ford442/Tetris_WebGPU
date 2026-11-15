@@ -9,6 +9,8 @@ export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
 
   const base = import.meta.env.BASE_URL || '/';
+  // Relative base (VITE_BASE=./, desktop shell): no stable scope/URL prefix, no precache SW.
+  if (base.startsWith('.')) return;
   const swUrl = `${base}sw.js`;
 
   window.addEventListener('load', () => {

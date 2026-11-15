@@ -1,0 +1,17 @@
+{
+  // Build-time Node code: Vite/Vitest config and the scripts/ tree (.mjs/.cjs are
+  // type-checked too — checkJs — so a typo in build-cpp.mjs fails `npm run typecheck`).
+  "extends": "./tsconfig.project.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.cache/tsc/node",
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/node.tsbuildinfo",
+    "lib": ["ESNext", "DOM"],
+    // Untyped JS: surface real type errors (wrong property, bad call) without demanding
+    // JSDoc on every parameter. New scripts should still annotate.
+    "noImplicitAny": false,
+    "allowJs": true,
+    "checkJs": true,
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts", "vitest.config.ts", "scripts/**/*.mjs", "scripts/**/*.cjs", "scripts/**/*.d.ts"]
+}

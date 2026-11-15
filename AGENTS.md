@@ -1,8 +1,14 @@
 # AGENTS.md
 
-## Project Overview
+**Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** for everything about how this repo is built
+(stack, structure, renderers and boot policy, authored block material, WASM/C++ build rules,
+conventions, pitfalls, TypeScript configuration, `VITE_BASE`, CI & deploy). It is the single source of
+truth shared by `CLAUDE.md`, `AGENTS.md` and `.github/copilot-instructions.md`; keep architecture facts
+there so they only need updating once.
 
-**Tetris_WebGPU** is a browser-based Tetris implementation designed to showcase high-performance web graphics. It targets modern WebGPU-enabled browsers and features advanced visual effects including particle systems, dynamic lighting, PBR material shaders, post-processing (bloom, chromatic aberration, shockwave, film grain, CRT, FXAA), and level-based background video portals.
+Quick orientation: **Tetris_WebGPU** — TypeScript 5.8 + Vite 6, WebGPU rendering (opt-in Emscripten C++
+renderer, WebGL2 only when there is no adapter or explicitly chosen), AssemblyScript collision WASM,
+procedural Web Audio, Vitest.
 
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
 * **Frontend:** TypeScript 5.8 + Vite 6.
@@ -380,6 +386,7 @@ The WebGPU canvas **must** use `alphaMode: 'premultiplied'` and the background r
   credentials in tracked files; use env vars or a secret store. The legacy
   `deploy_old.py` (which contained a plaintext SFTP password) has been removed —
   that password lives in git history and **must be rotated**.
+Before finishing: `npm run typecheck && npm run lint && npm test`.
 
 ## Cursor Cloud specific instructions
 
@@ -400,6 +407,7 @@ C++ renderer (`public/cpp/`) is also a build artifact. Run `npm run cpp:release`
 
 ```bash
 npm test              # Vitest (pretest rebuilds collision WASM only)
+npm run typecheck     # tsc -b over src, tests, scripts, workers
 npm run lint          # ESLint
 npm run build:all     # collision WASM + cpp (if emcc) + Vite → /dist
 ```
@@ -423,4 +431,4 @@ Lint runs in the main CI job via `npm run lint` (ESLint + typescript-eslint).
 
 ### Production preview
 
-`npm run build:all` then `npm run preview` serves `/dist` with base path `/tetris-webgpu/` (see `vite.config.ts`).
+`npm run build:all` then `npm run preview` serves `/dist` with base path `/tetris-webgpu/` (override with `VITE_BASE`; see `docs/ARCHITECTURE.md`).

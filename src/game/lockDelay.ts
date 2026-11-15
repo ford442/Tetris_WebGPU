@@ -72,7 +72,7 @@ export function finishLockUpdate(
     host.scoreEvent = host.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
     result.linesCleared.length = 0;
     for (let i = 0; i < linesScore.length; i++) {
-      result.linesCleared.push(linesScore[i]);
+      result.linesCleared.push(linesScore[i]!);
     }
     result.tSpin = wasTSpin;
     host.triggerLineClearReactive(linesScore.length, host.combo, wasTSpin !== 'none', isAllClear);

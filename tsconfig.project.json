@@ -1,0 +1,11 @@
+{
+  // Settings every referenced project shares: composite so `tsc -b` can chain them, but
+  // declaration-only output parked in node_modules/.cache — nothing here is ever emitted
+  // into the source tree (Vite builds the app; this is purely the typecheck surface).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "declaration": true
+  }
+}

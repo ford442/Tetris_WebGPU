@@ -347,7 +347,7 @@ export class GpuChoreRunner {
       await readBuffer.mapAsync(MapMode.READ);
       const mapped = new Uint32Array(readBuffer.getMappedRange().slice(0));
       readBuffer.unmap();
-      const produced = Math.min(mapped[mapped.length - 1], limit);
+      const produced = Math.min(mapped[mapped.length - 1]!, limit);
       return mapped.slice(0, produced);
     } catch (err) {
       this.disableGpu('compact:failed', err);

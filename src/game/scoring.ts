@@ -193,7 +193,7 @@ export class HighScoreManager {
     const lowestQualifying =
       this.highScores.length < this.MAX_ENTRIES
         ? -1
-        : this.highScores[this.highScores.length - 1].score;
+        : this.highScores[this.highScores.length - 1]!.score;
 
     if (score <= lowestQualifying) return false;
 
@@ -209,7 +209,7 @@ export class HighScoreManager {
   }
 
   getHighestScore(): HighScoreEntry | null {
-    return this.highScores.length > 0 ? this.highScores[0] : null;
+    return this.highScores[0] ?? null;
   }
 
   clearScores(): void {
@@ -249,7 +249,7 @@ export class ScoringSystem {
     let clearedLines: number[] = [];
 
     for (let y = playfield.length - 1; y >= 0; y--) {
-      const line = playfield[y];
+      const line = playfield[y]!;
       let linesFull = true;
 
       for (let x = 0; x < line.length; x++) {
@@ -266,7 +266,7 @@ export class ScoringSystem {
 
     // Remove cleared lines and add new empty lines at the top
     for (let index = 0; index < clearedLines.length; index++) {
-      const element = clearedLines[index];
+      const element = clearedLines[index]!;
       playfield.splice(element, 1);
       const arr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
       playfield.unshift(arr);

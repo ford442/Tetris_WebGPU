@@ -90,18 +90,18 @@ export class PieceGenerator {
       default:
         throw new Error('Something went wrong!');
     }
-    piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
+    piece.x = Math.floor((10 - piece.blocks[0]!.length) / 2);
     piece.y = -2;
     piece._bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
     // Attach getBounds method
     piece.getBounds = function() {
-      let minX = this.blocks[0].length, maxX = 0;
+      let minX = this.blocks[0]!.length, maxX = 0;
       let minY = this.blocks.length, maxY = 0;
 
       for (let y = 0; y < this.blocks.length; y++) {
-        for (let x = 0; x < this.blocks[y].length; x++) {
-          if (this.blocks[y][x]) {
+        for (let x = 0; x < this.blocks[y]!.length; x++) {
+          if (this.blocks[y]![x]) {
             minX = Math.min(minX, x);
             maxX = Math.max(maxX, x);
             minY = Math.min(minY, y);
@@ -166,13 +166,13 @@ export class PieceGenerator {
     const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
     for (let i = pieces.length - 1; i > 0; i--) {
       const j = Math.floor(this.rng() * (i + 1));
-      [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
+      [pieces[i], pieces[j]] = [pieces[j]!, pieces[i]!];
     }
     this.bag.push(...pieces);
   }
 
   resetPiecePosition(piece: Piece): void {
-    piece.x = Math.floor((10 - piece.blocks[0].length) / 2);
+    piece.x = Math.floor((10 - piece.blocks[0]!.length) / 2);
     piece.y = -2;
     piece.rotation = 0;
 

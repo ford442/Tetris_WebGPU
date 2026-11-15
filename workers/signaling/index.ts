@@ -85,7 +85,7 @@ export default {
     let peerId = generatePeerId();
     let room: Room | null = null;
 
-    server.addEventListener('message', (event) => {
+    server.addEventListener('message', (event: MessageEvent) => {
       try {
         const msg = JSON.parse(String(event.data)) as Record<string, unknown>;
 

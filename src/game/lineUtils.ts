@@ -53,7 +53,7 @@ export function compactClearedRows(
   const linesCleared: number[] = outLinesCleared || [];
   linesCleared.length = 0;
   for (let i = 0; i < rows.length; i++) {
-    const y = rows[i];
+    const y = rows[i]!;
     if (y >= 0 && y < playfieldHeight) linesCleared.push(y);
   }
   if (linesCleared.length === 0) return linesCleared;

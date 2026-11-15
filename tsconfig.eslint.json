@@ -1,4 +1,10 @@
 {
-  "extends": "./tsconfig.json",
+  // ESLint's typed-linting program: every TS file in the repo, in one project.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "types": ["@webgpu/types", "vite/client", "node"]
+  },
   "include": ["src", "tests", "index.ts", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "scripts/validate-wgsl.ts", "workers"]
 }
