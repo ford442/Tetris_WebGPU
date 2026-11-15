@@ -51,6 +51,14 @@ cpp/src/generated/
 # Host doctest suite + CMake/Ninja build trees (npm run cpp:test:native; cpp/CMakeLists.txt).
 # parity_vectors.h is generated from shared/cppParityVectors.json on every build.
 cpp/tests/generated/
+build/cpp-size/
+
+# Playwright E2E (playwright.config.ts): diffs/actuals and the HTML report. Uploaded as a CI
+# artifact, never committed. Goldens live in tests/e2e/goldens/ and ARE committed.
+test-results/
+playwright-report/
+# The Playwright MCP server's default output dir; .vscode/mcp.json now points it at test-results/.
+.playwright-mcp/
 
 # Merge/patch leftovers
 *.orig

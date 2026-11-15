@@ -50,7 +50,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # lavapipe + TETRIS_REQUIRE_GPU=1: the WGSL compile and chore-kernel parity suites run on a
+      # software WebGPU adapter as part of `npm test`, and a missing adapter fails instead of skipping.
+      - name: Install software Vulkan (lavapipe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+
       - name: Run tests
+        env:
+          TETRIS_REQUIRE_GPU: "1"
         run: npm test
 
       - name: Build production bundle

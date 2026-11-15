@@ -3,6 +3,7 @@ import { createView, getRendererPreference } from "./src/view/createView.js";
 import type { IView } from "./src/view/IView.js";
 import { showRendererBadge } from "./src/view/rendererBadge.js";
 import Controller from "./src/controller.js";
+import { installDeterministicRuntime } from "./src/deterministic.js";
 import SoundManager from "./src/sound.js";
 import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.js';
 import { initSettingsUI } from './src/settings/settingsUI.js';
@@ -33,6 +34,10 @@ declare global {
     subliminalReinforcement?: SubliminalReinforcement;
   }
 }
+
+// `?deterministic[&seed=N]`: seeded Math.random + frozen video background, for visual regression
+// (src/deterministic.ts). Must run before anything draws a random number. Inert without the flag.
+const deterministic = installDeterministicRuntime(window, window.location.search);
 
 const uiContainer = document.getElementById('ui-container')!;
 
@@ -305,6 +310,7 @@ void (async () => {
   await loadAuthoredBlockTextureConfig();
 
   const game = new Game();
+  if (deterministic) game.reset({ seed: deterministic.seed });
   const soundManager = new SoundManager();
   const nextPieceCtx = (document.getElementById('next-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
   const holdPieceCtx = (document.getElementById('hold-piece-canvas') as HTMLCanvasElement).getContext('2d')!;
