@@ -39,7 +39,7 @@ describe('recordWebgpuProbe / getWebgpuProbe', () => {
   it('round-trips through window.webgpuProbe', () => {
     const fakeWindow = {} as Window;
     vi.stubGlobal('window', fakeWindow);
-    const probe = { ok: true, browser: 'chrome', reason: null, adapter: 'test-adapter', renderer: 'ts' as const };
+    const probe = { ok: true, browser: 'chrome', reason: null, adapter: 'test-adapter', adapterAttempt: null, renderer: 'ts' as const };
     recordWebgpuProbe(probe);
     expect(getWebgpuProbe()).toEqual(probe);
     expect((fakeWindow as unknown as { webgpuProbe: unknown }).webgpuProbe).toEqual(probe);

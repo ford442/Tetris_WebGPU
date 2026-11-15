@@ -105,7 +105,7 @@ export function cellToRowCol(index: number): { row: number; col: number } {
 export function spawnLookup(indices: ArrayLike<number>): Uint8Array {
   const lookup = new Uint8Array(BOARD_CELLS);
   for (let i = 0; i < indices.length; i++) {
-    const idx = indices[i];
+    const idx = indices[i]!;
     if (idx >= 0 && idx < BOARD_CELLS) lookup[idx] = 1;
   }
   return lookup;

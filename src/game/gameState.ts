@@ -108,3 +108,57 @@ export function createEmptyGameState(): GameState {
     },
   };
 }
+
+/**
+ * The long-lived, mutated-in-place state object `Game.getState()` returns every frame
+ * (no per-frame allocation). Starts with empty pieces/playfield; `Game` fills it in.
+ */
+export function createGameStateCache(): GameState {
+  return {
+      score: 0,
+      level: 1,
+      lines: 0,
+      nextPiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
+      nextQueue: [],
+      holdPiece: null,
+      activePiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
+      isGameOver: false,
+      isVictory: false,
+      modeId: 'marathon',
+      modeLabel: 'Marathon',
+      modePrimaryLabel: 'GOAL',
+      modePrimaryValue: 'Survive',
+      modeSecondaryLabel: 'TIME',
+      modeSecondaryValue: '0:00',
+      modeShowSecondary: true,
+      modeShowLevel: true,
+      modeShowScore: true,
+      modeShowHighScore: true,
+      modeHighScoreLabel: 'HIGH SCORE',
+      elapsedMs: 0,
+      playfield: [],
+      lockTimer: 0,
+      lockDelayTime: 0,
+      effectEvent: null,
+      effectCounter: 0,
+      effectFlag: false,
+      neonBurstFlag: false,
+      neonHyperInversionFlag: false,
+      lastDropPos: null,
+      lastDropDistance: 0,
+      scoreEvent: null,
+      isTSpinReady: 'none',
+      runStats: {
+        piecesPlaced: 0,
+        moves: 0,
+        rotations: 0,
+        hardDrops: 0,
+        finesseFaults: 0,
+        peakCombo: 0,
+        peakB2BChain: 0,
+        elapsedMs: 0,
+        pps: 0,
+        apm: 0,
+      },
+  };
+}

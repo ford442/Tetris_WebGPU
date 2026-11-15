@@ -6,7 +6,6 @@ on:
     paths:
       - 'cpp/**'
       - 'public/cpp/**'
-      - 'build/cpp/**'
       - 'shared/**'
       - 'public/block-material.json'
       - 'src/webgpu/shaders/wgsl/block/**'
@@ -27,7 +26,6 @@ on:
     paths:
       - 'cpp/**'
       - 'public/cpp/**'
-      - 'build/cpp/**'
       - 'shared/**'
       - 'public/block-material.json'
       - 'src/webgpu/shaders/wgsl/block/**'
@@ -147,13 +145,13 @@ jobs:
 
       # The committed wasm/js/build-info must be exactly what the pinned emsdk produces
       # from this commit. If this fails: run `npm run cpp:release` with emsdk
-      # $(cat .emsdk-version) locally and commit public/cpp + build/cpp.
+      # $(cat .emsdk-version) locally and commit public/cpp.
       - name: Committed artifact matches a fresh pinned-emsdk rebuild
         run: |
-          if [ -n "$(git status --porcelain -- public/cpp build/cpp)" ]; then
-            git status --short -- public/cpp build/cpp
-            git --no-pager diff --stat -- public/cpp build/cpp
-            echo "::error::Committed public/cpp / build/cpp differ from a fresh rebuild with emsdk $(cat .emsdk-version). Rebuild with the pinned emsdk and commit the result."
+          if [ -n "$(git status --porcelain -- public/cpp)" ]; then
+            git status --short -- public/cpp
+            git --no-pager diff --stat -- public/cpp
+            echo "::error::Committed public/cpp differs from a fresh rebuild with emsdk $(cat .emsdk-version). Rebuild with the pinned emsdk and commit the result."
             exit 1
           fi
 

@@ -1,3 +1,4 @@
+/* global window -- referenced inside page.evaluate() bodies, which run in the browser */
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { withRendererParam, VALID_RENDERERS } from './rendererUrl.mjs';

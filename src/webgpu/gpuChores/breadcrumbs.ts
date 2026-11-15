@@ -64,7 +64,7 @@ export function clearChoreBreadcrumbs(): void {
 /** Most recent crumb whose event matches, or `null`. */
 export function lastChoreBreadcrumb(event?: string): ChoreBreadcrumb | null {
   for (let i = trail.length - 1; i >= 0; i--) {
-    if (!event || trail[i].event === event) return trail[i];
+    if (!event || trail[i]!.event === event) return trail[i]!;
   }
   return null;
 }

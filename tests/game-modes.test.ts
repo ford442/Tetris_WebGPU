@@ -158,7 +158,7 @@ describe('game modes', () => {
     beforeAll(async () => {
       global.fetch = vi.fn(async (url: string) => {
         if (typeof url === 'string' && url.includes('release.wasm')) {
-          const wasmPath = path.resolve(__dirname, '../build/release.wasm');
+          const wasmPath = path.resolve(__dirname, '../public/release.wasm');
           const buffer = fs.readFileSync(wasmPath);
           return {
             arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
@@ -166,7 +166,7 @@ describe('game modes', () => {
           } as Response;
         }
         throw new Error(`Unexpected fetch: ${url}`);
-      });
+      }) as unknown as typeof fetch;
       await WasmCore.init();
     });
 

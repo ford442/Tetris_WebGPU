@@ -114,7 +114,7 @@ export class TouchControls {
       (e) => {
         if (e.touches.length !== 1) return;
         this.handleFirstTouch();
-        this.swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        this.swipeStart = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY };
       },
       { passive: true },
     );
@@ -123,8 +123,8 @@ export class TouchControls {
       'touchend',
       (e) => {
         if (!this.swipeStart || e.changedTouches.length !== 1) return;
-        const dx = e.changedTouches[0].clientX - this.swipeStart.x;
-        const dy = e.changedTouches[0].clientY - this.swipeStart.y;
+        const dx = e.changedTouches[0]!.clientX - this.swipeStart.x;
+        const dy = e.changedTouches[0]!.clientY - this.swipeStart.y;
         this.swipeStart = null;
         const ax = Math.abs(dx);
         const ay = Math.abs(dy);

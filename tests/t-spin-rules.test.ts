@@ -24,7 +24,7 @@ describe('T-Spin Rules', () => {
     } as any;
 
     if (!WasmCore.get().isReady) {
-      const wasmPath = path.resolve(__dirname, '../build/release.wasm');
+      const wasmPath = path.resolve(__dirname, '../public/release.wasm');
       if (fs.existsSync(wasmPath)) {
         const wasmBuffer = fs.readFileSync(wasmPath);
         global.fetch = vi.fn().mockResolvedValue({
@@ -33,7 +33,7 @@ describe('T-Spin Rules', () => {
           headers: { get: () => 'application/wasm' }
         });
         try {
-          await WasmCore.get().init();
+          await WasmCore.init();
         } catch (_e) {
           // Ignore
         }
@@ -275,7 +275,7 @@ describe('T-Spin Rules', () => {
 
 describe('T-Spin orientation edge cases', () => {
   it('should detect a normal T-Spin with 3 corners occupied and 2 front corners', () => {
-    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [] };
     // Assuming corners 0 and 1 are front for rotation 0
     const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
     const getCell = (x: number, y: number) => {
@@ -290,7 +290,7 @@ describe('T-Spin orientation edge cases', () => {
   });
 
   it('should detect a mini T-Spin with 3 corners occupied and 1 front corner', () => {
-    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [] };
     const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
     const getCell = (x: number, y: number) => {
       if (x === 0 && y === 0) return 1; // front
@@ -302,7 +302,7 @@ describe('T-Spin orientation edge cases', () => {
   });
 
   it('should promote to normal T-Spin if kick index is 4 (Kick 5)', () => {
-    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [] };
     const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
     const getCell = (x: number, y: number) => {
       if (x === 0 && y === 0) return 1; // front
@@ -314,7 +314,7 @@ describe('T-Spin orientation edge cases', () => {
   });
 
   it('should return none if less than 3 corners occupied', () => {
-    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 };
+    const piece: Piece = { type: 'T', x: 0, y: 0, rotation: 0, blocks: [] };
     const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
     const getCell = (x: number, y: number) => {
       if (x === 0 && y === 0) return 1;
@@ -325,7 +325,7 @@ describe('T-Spin orientation edge cases', () => {
   });
 
   it('should treat walls and floor as occupied corners', () => {
-    const piece: Piece = { type: 'T', x: -1, y: 19, rotation: 0, blocks: [], color: 0 };
+    const piece: Piece = { type: 'T', x: -1, y: 19, rotation: 0, blocks: [] };
     // x = -1 is out of bounds (left wall), y = 19 is near floor, y = 21 is below floor
     const corners = [{ x: -1, y: 19 }, { x: 1, y: 19 }, { x: -1, y: 21 }, { x: 1, y: 21 }];
     const getCell = (_x: number, _y: number) => {
@@ -350,13 +350,13 @@ describe('T-Spin orientation edge cases', () => {
     const corners = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 2 }, { x: 2, y: 2 }];
 
     // R0
-    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 0, blocks: [], color: 0 }, getCell, 10, 20, corners, 0)).toBe('normal');
+    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 0, blocks: [] }, getCell, 10, 20, corners, 0)).toBe('normal');
     // R1
-    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 1, blocks: [], color: 0 }, getCell, 10, 20, corners, 0)).toBe('normal');
+    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 1, blocks: [] }, getCell, 10, 20, corners, 0)).toBe('normal');
     // R2
-    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 2, blocks: [], color: 0 }, getCell, 10, 20, corners, 0)).toBe('normal');
+    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 2, blocks: [] }, getCell, 10, 20, corners, 0)).toBe('normal');
     // R3
-    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 3, blocks: [], color: 0 }, getCell, 10, 20, corners, 0)).toBe('normal');
+    expect(evaluateTSpin({ type: 'T', x: 0, y: 0, rotation: 3, blocks: [] }, getCell, 10, 20, corners, 0)).toBe('normal');
   });
 
 });

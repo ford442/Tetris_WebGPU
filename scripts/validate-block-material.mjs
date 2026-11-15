@@ -111,7 +111,7 @@ function checkMapFile(name, path, material) {
   try {
     header = readPngHeader(buffer);
   } catch (e) {
-    fail(`maps.${name}: ${path} is not a readable PNG (${e.message})`);
+    fail(`maps.${name}: ${path} is not a readable PNG (${/** @type {Error} */ (e).message})`);
     return;
   }
   if (header.width < 64 || header.height < 64) {
@@ -130,7 +130,7 @@ function checkMapFile(name, path, material) {
   try {
     decoded = decodePngRgba(buffer);
   } catch (e) {
-    fail(`maps.${name}: ${path} could not be decoded for coverage analysis (${e.message})`);
+    fail(`maps.${name}: ${path} could not be decoded for coverage analysis (${/** @type {Error} */ (e).message})`);
     return;
   }
 
@@ -176,7 +176,7 @@ function main() {
   try {
     material = JSON.parse(readFileSync(MATERIAL_PATH, 'utf8'));
   } catch (e) {
-    console.error(`[validate-block-material] ${rel} is not valid JSON: ${e.message}`);
+    console.error(`[validate-block-material] ${rel} is not valid JSON: ${/** @type {Error} */ (e).message}`);
     process.exit(warnOnly ? 0 : 1);
   }
 

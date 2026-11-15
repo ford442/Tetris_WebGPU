@@ -116,7 +116,7 @@ export class WasmCore {
   }
 
   getPlayfieldView(boardId: number): Int8Array {
-    return this.playfieldViews[boardId];
+    return this.playfieldViews[boardId]!;
   }
 
   resolveBoardId(playfield: Int8Array): number | null {
@@ -159,10 +159,10 @@ export class WasmCore {
     if (!fn) return false;
 
     const args = [
-      coords[0].x + offsetX, coords[0].y + offsetY,
-      coords[1].x + offsetX, coords[1].y + offsetY,
-      coords[2].x + offsetX, coords[2].y + offsetY,
-      coords[3].x + offsetX, coords[3].y + offsetY,
+      coords[0]!.x + offsetX, coords[0]!.y + offsetY,
+      coords[1]!.x + offsetX, coords[1]!.y + offsetY,
+      coords[2]!.x + offsetX, coords[2]!.y + offsetY,
+      coords[3]!.x + offsetX, coords[3]!.y + offsetY,
     ];
 
     if (boardFn) {
@@ -193,7 +193,7 @@ export class WasmCore {
       const count = clearBoardFn ? clearBoardFn(boardId) : clearFn!();
       const scratch = this.rowScratchViews[boardId];
       for (let i = 0; i < count; i++) {
-        out.push(scratch[i]);
+        out.push(scratch![i]!);
       }
       return out;
     }
@@ -213,10 +213,10 @@ export class WasmCore {
     if (!fn) return -1;
 
     const blockArgs = [
-      coords[0].x, coords[0].y,
-      coords[1].x, coords[1].y,
-      coords[2].x, coords[2].y,
-      coords[3].x, coords[3].y,
+      coords[0]!.x, coords[0]!.y,
+      coords[1]!.x, coords[1]!.y,
+      coords[2]!.x, coords[2]!.y,
+      coords[3]!.x, coords[3]!.y,
     ];
 
     if (boardFn) {

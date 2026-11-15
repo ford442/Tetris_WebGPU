@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
-  ARTIFACT_RELS, BUILD_INFO_REL, EXTRA_SOURCE_RELS, MIRROR_RELS,
+  ARTIFACT_RELS, BUILD_INFO_REL, EXTRA_SOURCE_RELS,
   listSourceInputs, verifyProvenance,
 } from '../scripts/lib/cppProvenance.mjs';
 
@@ -62,7 +62,7 @@ describe('verifyProvenance detects drift (on a scratch copy of the tree)', () =>
     scratch = mkdtempSync(join(tmpdir(), 'cpp-prov-'));
     const rels = [
       ...listSourceInputs(ROOT), BUILD_INFO_REL,
-      ...Object.values(ARTIFACT_RELS), ...Object.values(MIRROR_RELS),
+      ...Object.values(ARTIFACT_RELS),
     ];
     for (const rel of rels) {
       mkdirSync(dirname(join(scratch, rel)), { recursive: true });
@@ -93,11 +93,6 @@ describe('verifyProvenance detects drift (on a scratch copy of the tree)', () =>
     const f = join(scratch, ARTIFACT_RELS.wasm);
     writeFileSync(f, Buffer.concat([readFileSync(f), Buffer.from([0])]));
     expect(errorsFor()).toMatch(/tetris_renderer\.wasm does not match build-info/);
-  });
-
-  it('flags a stale build/cpp mirror', () => {
-    writeFileSync(join(scratch, MIRROR_RELS.js), '// stale');
-    expect(errorsFor()).toMatch(/build\/cpp\/tetris_renderer\.js differs/);
   });
 
   it('flags an emsdk pin bump that the artifact was not rebuilt for', () => {

@@ -2,7 +2,7 @@
 export function hashPlayfield(playfield: Int8Array): number {
   let h = 2166136261;
   for (let i = 0; i < playfield.length; i++) {
-    h ^= playfield[i] & 0xff;
+    h ^= playfield[i]! & 0xff;
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;

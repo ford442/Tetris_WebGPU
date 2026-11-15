@@ -353,7 +353,7 @@ export class SfxEngine {
   playLock(payload: LockPayload = {}): void {
     if (!this.enabled) return;
     const key = String(payload.pieceType ?? 'T');
-    const base = LOCK_TIMBRE[key] ?? LOCK_TIMBRE.T;
+    const base = LOCK_TIMBRE[key] ?? LOCK_TIMBRE.T!;
     const pan = payload.column !== undefined ? this.bus.columnToPan(payload.column) * 0.65 : 0;
 
     this.playThud(0.8, 0, pan);
@@ -399,7 +399,7 @@ export class SfxEngine {
       3: [baseFreq, baseFreq * 1.2, baseFreq * 1.5, baseFreq * 1.8],
       4: [baseFreq * 0.5, baseFreq, baseFreq * 1.25, baseFreq * 1.5, baseFreq * 2],
     };
-    const chord = chords[Math.min(lines, 4)] || chords[1];
+    const chord = chords[Math.min(lines, 4)] || chords[1]!;
 
     if (lines >= 4) {
       this.playTetrisClear(chord, combo, backToBack, pan);
@@ -445,7 +445,7 @@ export class SfxEngine {
 
     if (backToBack) {
       setTimeout(() => {
-        this.playTone(chord[0] * 2, 'sawtooth', 0.2, 0, vol * 0.4, {
+        this.playTone(chord[0]! * 2, 'sawtooth', 0.2, 0, vol * 0.4, {
           attack: 0.01,
           release: 0.1,
           pan,

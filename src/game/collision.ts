@@ -20,7 +20,7 @@ export class CollisionDetector {
         this.playfieldHeight = 20;
     } else {
         this.playfieldHeight = (playfield as number[][]).length;
-        this.playfieldWidth = (playfield as number[][])[0].length;
+        this.playfieldWidth = (playfield as number[][])[0]!.length;
     }
   }
 
@@ -42,11 +42,11 @@ export class CollisionDetector {
         bounds = piece.getBounds();
     } else {
         // Fallback calculation
-        let minX = blocks[0].length, maxX = 0;
+        let minX = blocks[0]!.length, maxX = 0;
         let minY = blocks.length, maxY = 0;
         for (let y = 0; y < blocks.length; y++) {
-            for (let x = 0; x < blocks[y].length; x++) {
-                if (blocks[y][x]) {
+            for (let x = 0; x < blocks[y]!.length; x++) {
+                if (blocks[y]![x]) {
                     minX = Math.min(minX, x);
                     maxX = Math.max(maxX, x);
                     minY = Math.min(minY, y);
@@ -64,7 +64,7 @@ export class CollisionDetector {
     // Only iterate within bounds
     for (let y = bounds.minY; y <= bounds.maxY; y++) {
       for (let x = bounds.minX; x <= bounds.maxX; x++) {
-        if (blocks[y][x]) {
+        if (blocks[y]![x]) {
           const targetX = pieceX + x;
           const targetY = pieceY + y;
 
@@ -79,7 +79,7 @@ export class CollisionDetector {
           if (targetY >= 0) {
               let cell = isTypedArray
                   ? playfield1D![targetY * this.playfieldWidth + targetX]
-                  : playfield2D![targetY][targetX];
+                  : playfield2D![targetY]![targetX];
               if (cell !== 0) {
                   return true;
               }

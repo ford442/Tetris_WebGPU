@@ -108,14 +108,14 @@ export class ProceduralMusicGenerator {
 
   private scheduleNote(time: number): void {
     const chordIndex = Math.floor(this.beatIndex / 8) % this.chords.length;
-    const chord = this.chords[chordIndex];
-    const pattern = this.arpPatterns[this.currentArpPattern];
+    const chord = this.chords[chordIndex]!;
+    const pattern = this.arpPatterns[this.currentArpPattern]!;
     const noteInPattern = this.beatIndex % 8;
-    const freq = chord[pattern[noteInPattern]];
+    const freq = chord[pattern[noteInPattern]!]!;
 
     // Play bass on beats 0 and 4
     if (noteInPattern === 0 || noteInPattern === 4) {
-      this.playBass(chord[0], time);
+      this.playBass(chord[0]!, time);
     }
 
     // Play arpeggio

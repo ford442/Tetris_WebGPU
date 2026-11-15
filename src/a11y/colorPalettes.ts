@@ -85,9 +85,9 @@ export function paletteMinPairwiseDistance(palette: PieceColorMap): number {
   let min = Infinity;
   for (let i = 0; i < keys.length; i++) {
     for (let j = i + 1; j < keys.length; j++) {
-      const a = palette[keys[i]];
-      const b = palette[keys[j]];
-      const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const a = palette[keys[i]!]!;
+      const b = palette[keys[j]!]!;
+      const d = Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
       if (d < min) min = d;
     }
   }

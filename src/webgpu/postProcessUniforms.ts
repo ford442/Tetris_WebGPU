@@ -80,6 +80,22 @@ struct PostProcessUniforms {
 // JS UNIFORM BUFFER MANAGER
 // ============================================================================
 
+/** Effect uniforms packed when present; absent ones pack as 0 (or the noted default). */
+export interface PostProcessUniformExtras {
+  holdWarp?: number;
+  dangerLevel?: number;
+  aberrationPulse?: number;
+  hardDropBoost?: number;
+  levelUpFlashColor?: ArrayLike<number>;
+  levelUpFlashIntensity?: number;
+  gameOverKaleidoTime?: number;
+  lineClearLaserY?: ArrayLike<number>;
+  lineClearLaserIntensity?: number;
+  blackHoleTime?: number;
+  blackHoleCenter?: ArrayLike<number>;
+  neonHyperInversionTime?: number;
+}
+
 export interface PostProcessUniformData {
   // Frame 0
   time: number;
@@ -181,8 +197,8 @@ export class PostProcessUniformManager {
    * Pack all uniforms into the Float32Array
    * Layout matches WGSL struct exactly
    */
-  pack(values: Partial<PostProcessUniformData> = {}): Float32Array {
-    const v = { ...this.defaults, ...values };
+  pack(values: Partial<PostProcessUniformData> & PostProcessUniformExtras = {}): Float32Array {
+    const v: PostProcessUniformData & PostProcessUniformExtras = { ...this.defaults, ...values };
     
     // Frame 0 (offset 0, floats 0-3, but we need 5 with padding)
     this.data[0] = v.time;
@@ -193,7 +209,7 @@ export class PostProcessUniformManager {
     this.data[5] = 0; // _pad0
     
     // Frame 1 (offset 24, but align to 32 = floats 8-11)
-    this.data[6] = (v as any).holdWarp || 0; // holdWarp
+    this.data[6] = v.holdWarp || 0; // holdWarp
     this.data[7] = 0; // _pad2
     this.data[8] = v.shockwaveParams[0];  // width
     this.data[9] = v.shockwaveParams[1];  // strength
@@ -219,34 +235,34 @@ export class PostProcessUniformManager {
     this.data[23] = 0; // _pad3
     
     // dangerLevel @ 96 (float 24), aberration @ 100 (float 25)
-    this.data[24] = (v as any).dangerLevel || 0;
-    this.data[25] = (v as any).aberrationPulse || 0;
-    this.data[26] = (v as any).hardDropBoost || 0; // hardDropBoost @ 104
+    this.data[24] = v.dangerLevel || 0;
+    this.data[25] = v.aberrationPulse || 0;
+    this.data[26] = v.hardDropBoost || 0; // hardDropBoost @ 104
     this.data[27] = 0; // removed duplicate neonBurst @ 108
-    const flashCol = (v as any).levelUpFlashColor || [0, 0, 0];
+    const flashCol = v.levelUpFlashColor || [0, 0, 0];
     this.data[28] = flashCol[0] || 0; // levelUpFlashColor @ 112
     this.data[29] = flashCol[1] || 0;
     this.data[30] = flashCol[2] || 0;
-    this.data[31] = (v as any).levelUpFlashIntensity || 0; // @ 124
-    this.data[32] = (v as any).gameOverKaleidoTime || 0; // @ 128
+    this.data[31] = v.levelUpFlashIntensity || 0; // @ 124
+    this.data[32] = v.gameOverKaleidoTime || 0; // @ 128
     this.data[33] = 0; // _padBeforeLaser @ 132
     this.data[34] = 0; // _padLaserAlign.x @ 136
     this.data[35] = 0; // _padLaserAlign.y @ 140
 
-    const laserY = (v as any).lineClearLaserY || [0, 0, 0, 0];
+    const laserY = v.lineClearLaserY || [0, 0, 0, 0];
     this.data[36] = laserY[0]; // lineClearLaserY @ 144
     this.data[37] = laserY[1];
     this.data[38] = laserY[2];
     this.data[39] = laserY[3];
-    this.data[40] = (v as any).lineClearLaserIntensity || 0; // @ 160
-    this.data[41] = (v as any).blackHoleTime || 0; // @ 164
-    const bhCenter = (v as any).blackHoleCenter || [0.5, 0.5];
+    this.data[40] = v.lineClearLaserIntensity || 0; // @ 160
+    this.data[41] = v.blackHoleTime || 0; // @ 164
+    const bhCenter = v.blackHoleCenter || [0.5, 0.5];
     this.data[42] = bhCenter[0]; // blackHoleCenter @ 168
     this.data[43] = bhCenter[1];
     this.data[44] = v.neonBurst ?? 0; // neonBurst @ 176
     this.data[45] = v.saturationBoost ?? 0; // saturationBoost @ 180
     this.data[46] = v.chromaticIntensity ?? 0; // chromaticIntensity @ 184
-    this.data[47] = (v as any).neonHyperInversionTime || 0; // neonHyperInversionTime @ 188
+    this.data[47] = v.neonHyperInversionTime || 0; // neonHyperInversionTime @ 188
 
     return this.data;
   }

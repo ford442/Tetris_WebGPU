@@ -30,11 +30,11 @@ export function initKeyboardNavigation(): void {
     if (e.shiftKey) {
       if (active === first || !pauseMenu.contains(active)) {
         e.preventDefault();
-        last.focus();
+        last?.focus();
       }
     } else if (active === last) {
       e.preventDefault();
-      first.focus();
+      first?.focus();
     }
   });
 

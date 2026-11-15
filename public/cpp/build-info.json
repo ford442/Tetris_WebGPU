@@ -44,7 +44,7 @@
     "cpp/src/playfield_draw.cpp",
     "cpp/src/gpu_renderer.cpp"
   ],
-  "sourceHash": "0aa2baaddceb66806dcf464fe11172f12a18de0fcd50f6e481eab85ef89c16e3",
+  "sourceHash": "7ae272e731c3679aa3468164605ee41154de6b881e4f87cbe68426152dd743ce",
   "sourceFileCount": 27,
   "wasmBytes": 55279,
   "jsBytes": 51296,

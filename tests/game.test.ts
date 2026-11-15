@@ -8,7 +8,7 @@ import { WasmCore } from '../src/wasm/WasmCore';
 // Mock global.fetch to load the local WASM file
 global.fetch = vi.fn(async (url: string) => {
   if (typeof url === 'string' && url.includes('release.wasm')) {
-    const wasmPath = path.resolve(__dirname, '../build/release.wasm');
+    const wasmPath = path.resolve(__dirname, '../public/release.wasm');
     const buffer = fs.readFileSync(wasmPath);
     return {
       arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
@@ -16,7 +16,7 @@ global.fetch = vi.fn(async (url: string) => {
     } as Response;
   }
   throw new Error(`Unexpected fetch call: ${url}`);
-});
+}) as unknown as typeof fetch;
 
 describe('Tetris WASM Core & Game Integration', () => {
   let game: Game;

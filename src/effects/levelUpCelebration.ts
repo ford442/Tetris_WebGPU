@@ -27,7 +27,7 @@ const levelThemes: Record<number, { primary: string; secondary: string }> = {
 export function getLevelTheme(level: number): { primary: string; secondary: string } {
   // Cycle through themes for levels beyond 9
   const themeLevel = ((level - 1) % 9) + 1;
-  return levelThemes[themeLevel] || levelThemes[1];
+  return levelThemes[themeLevel] || levelThemes[1]!;
 }
 
 export function getLevelConfig(level: number): LevelUpConfig {
