@@ -77,7 +77,7 @@ export function generateReplaySeed(): number {
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     const buf = new Uint32Array(1);
     crypto.getRandomValues(buf);
-    return buf[0] >>> 0;
+    return buf[0]! >>> 0;
   }
   return (Math.random() * 0x1_0000_0000) >>> 0;
 }

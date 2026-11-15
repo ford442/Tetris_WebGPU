@@ -142,7 +142,7 @@ export function applyAdaptiveStep(options: ApplyAdaptiveStepOptions): GameSettin
   let particles = baseline.particles;
 
   for (let i = 0; i <= step; i++) {
-    const s = ADAPTIVE_STEPS[i];
+    const s = ADAPTIVE_STEPS[i]!;
     if (s.renderScaleDelta !== 0) {
       renderScale = Math.max(RENDER_SCALE_CONFIG.MIN, renderScale + s.renderScaleDelta);
     }
@@ -171,7 +171,7 @@ export function applyAdaptiveStep(options: ApplyAdaptiveStepOptions): GameSettin
 export function adaptiveDisablesIbl(stepIndex: number): boolean {
   const step = Math.max(0, Math.min(stepIndex, ADAPTIVE_STEP_COUNT - 1));
   for (let i = 0; i <= step; i++) {
-    if (ADAPTIVE_STEPS[i].disableIbl) return true;
+    if (ADAPTIVE_STEPS[i]!.disableIbl) return true;
   }
   return false;
 }
@@ -186,7 +186,7 @@ export function adaptiveParticleCap(
   let cap = baselineBudget;
 
   for (let i = 0; i <= stepIndex && i < ADAPTIVE_STEPS.length; i++) {
-    const stepCap = ADAPTIVE_STEPS[i].particleCap;
+    const stepCap = ADAPTIVE_STEPS[i]!.particleCap;
     if (stepCap !== null) cap = Math.min(cap, stepCap);
   }
 

@@ -1,3 +1,4 @@
+/* global location, document -- referenced inside page.evaluate() bodies, which run in the browser */
 import { chromium } from 'playwright';
 import fs from 'fs';
 
@@ -44,8 +45,9 @@ await page.screenshot({ path: `${outDir}/live-full.png`, fullPage: false });
 const pixelSample = await page.evaluate(() => {
   const c = document.querySelector('#canvaswebgpu');
   if (!c) return null;
-  const ctx = c.getContext('webgpu');
-  return { w: c.width, h: c.height, hasWebGPU: !!ctx, clientW: c.clientWidth };
+  const canvas = /** @type {HTMLCanvasElement} */ (c);
+  const ctx = canvas.getContext('webgpu');
+  return { w: canvas.width, h: canvas.height, hasWebGPU: !!ctx, clientW: canvas.clientWidth };
 });
 
 console.log(JSON.stringify({ URL, webgpu, blockHead, theme, pixelSample, logCount: logs.length }, null, 2));

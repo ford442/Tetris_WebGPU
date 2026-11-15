@@ -115,7 +115,7 @@ describe('C++ block bind-group numbering', () => {
       // Binding 0 is the documented uniform merge: TS splits vertex/fragment
       // uniforms, the single instanced C++ draw does not.
       if (binding === 0) continue;
-      expect(tsNames.get(binding), `binding ${binding} is not a TS binding`).toBe(name);
+      expect(tsNames.get(binding as never), `binding ${binding} is not a TS binding`).toBe(name);
     }
   });
 });

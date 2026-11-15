@@ -14,15 +14,16 @@ import {
   showComboMilestone as showComboMilestoneDom,
 } from "./controller/hudBridge.js";
 import { startGameLoop, stopGameLoop } from "./controller/gameLoop.js";
+import { applyKeyDownAction, releaseKey, type Action } from "./controller/keyboard.js";
+import { runHardDrop } from "./controller/hardDropFlow.js";
+import { emitSoftDropTrail } from "./controller/softDropFx.js";
 import { type SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 import { INPUT_CONFIG } from "./config/gameConfig.js";
 import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
 import type { ReplayActionName } from "./replay/actions.js";
 import type { ReplayFile } from "./replay/format.js";
-import { announceLineClear } from "./a11y/announcer.js";
 
 // Logical actions
-type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
 
 export default class Controller {
   game: Game;
@@ -153,12 +154,12 @@ export default class Controller {
     return this.game.activPiece?.type ?? 'T';
   }
 
-  private playMoveSound(direction: 'left' | 'right' | 'down'): void {
+  playMoveSound(direction: 'left' | 'right' | 'down'): void {
     this.game.runStats.recordMove();
     this.soundManager.playMove(direction, this.audioColumn());
   }
 
-  private recordFinesseFault(): void {
+  recordFinesseFault(): void {
     this.game.runStats.recordFinesseFault();
   }
 
@@ -384,7 +385,7 @@ export default class Controller {
     this.lastReplayFile = null;
   }
 
-  private recordReplay(action: ReplayActionName): void {
+  recordReplay(action: ReplayActionName): void {
     this.replayRecorder.recordAction(action);
   }
 
@@ -467,232 +468,11 @@ export default class Controller {
     this.keys[code] = true;
 
     // Handle initial press actions
-    switch (action) {
-        case 'left':
-            this.lastDirection = 'left';
-            {
-                const pxBefore = this.game.activPiece.x;
-                this.game.movePieceLeft();
-                if (this.game.activPiece.x === pxBefore) {
-                    this.bufferedMoveAction = 'left';
-                    this.bufferedMoveActionTime = performance.now();
-                    this.recordFinesseFault();
-                } else {
-                    this.recordReplay('left');
-                    this.playMoveSound('left');
-                }
-            }
-            this.actionTimers.left = 0;
-            break;
-        case 'right':
-            this.lastDirection = 'right';
-            {
-                const pxBefore = this.game.activPiece.x;
-                this.game.movePieceRight();
-                if (this.game.activPiece.x === pxBefore) {
-                    this.bufferedMoveAction = 'right';
-                    this.bufferedMoveActionTime = performance.now();
-                    this.recordFinesseFault();
-                } else {
-                    this.recordReplay('right');
-                    this.playMoveSound('right');
-                }
-            }
-            this.actionTimers.right = 0;
-            break;
-        case 'down':
-            this.game.movePieceDown();
-            this.recordReplay('down');
-            this.playMoveSound('down');
-            // Remove heavy movement flash to let continuous soft drop take over
-            this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.2);
-            if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
-                const worldX = (this.game.activPiece.x + 1.5) * 2.2;
-                const worldY = (this.game.activPiece.y + 1.5) * -2.2;
-                for(let i = 0; i < 2; i++) {
-                    const spreadX = (Math.random() - 0.5) * 2.0;
-                    const spreadY = (Math.random() - 0.5) * 2.0;
-                    (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
-                        worldX + spreadX, worldY + spreadY, 0.0,
-                        Math.PI / 2 + (Math.random() - 0.5) * 0.5,
-                        10.0 + Math.random() * 10.0,
-                        [0.2, 0.8, 1.0, 0.4] // Subtle cyan trail
-                    );
-                }
-            }
-            this.actionTimers.down = 0;
-            break;
-        case 'rotateCW':
-            {
-                const rBefore = this.game.activPiece.rotation;
-                this.game.rotatePiece(true);
-                if (this.game.activPiece.rotation !== rBefore) {
-                     this.recordReplay('rotateCW');
-                     this.game.runStats.recordRotate();
-                     this.viewWebGPU.onRotate?.();
-                } else {
-                     this.bufferedAction = 'rotateCW';
-                     this.bufferedActionTime = performance.now();
-                     this.recordFinesseFault();
-                }
-                this.soundManager.playRotate();
-            }
-            break;
-        case 'rotateCCW':
-            {
-                const rBefore = this.game.activPiece.rotation;
-                this.game.rotatePiece(false);
-                if (this.game.activPiece.rotation !== rBefore) {
-                     this.recordReplay('rotateCCW');
-                     this.viewWebGPU.onRotate?.();
-                } else {
-                     // Jump buffer: if rotation failed, buffer it
-                     this.bufferedAction = 'rotateCCW';
-                     this.bufferedActionTime = performance.now();
-                }
-                this.soundManager.playRotate();
-            }
-            break;
-        case 'hardDrop':
-            {
-                const yBefore = this.game.activPiece?.y;
-                this.recordReplay('hardDrop');
-                this.performHardDrop();
-                if (this.game.activPiece?.y === yBefore && !this.game.getState().isGameOver) {
-                    this.bufferedAction = 'hardDrop';
-                    this.bufferedActionTime = performance.now();
-                }
-            }
-            break;
-        case 'hold':
-            if (this.game.canHold) {
-                this.game.hold();
-                this.recordReplay('hold');
-              const holdEl = document.querySelector('.hold-piece-container');
-              if (holdEl) {
-                  holdEl.classList.remove('swap-whoosh-active');
-                  void (holdEl as HTMLElement).offsetWidth; // trigger reflow
-                  holdEl.classList.add('swap-whoosh-active');
-              }
-                this.soundManager.playHold();
-                this.viewWebGPU.onHold?.();
-            } else {
-                this.bufferedAction = 'hold';
-                this.bufferedActionTime = performance.now();
-            }
-            break;
-    }
+    applyKeyDownAction(this, action);
   }
 
   handleKeyUp(event: KeyboardEvent): void {
-    const code = event.code;
-    if (this.keys[code]) {
-        this.keys[code] = false;
-        const action = this.keyMap[code];
-        if (action === 'left' && this.lastDirection === 'left') {
-          if (this.isActionPressed('right')) {
-            this.lastDirection = 'right';
-          } else {
-            this.lastDirection = null;
-          }
-        } else if (action === 'right' && this.lastDirection === 'right') {
-          if (this.isActionPressed('left')) {
-            this.lastDirection = 'left';
-          } else {
-            this.lastDirection = null;
-          }
-        }
-    }
-  }
-
-  onKeyPress(code: string): void {
-      const action = this.keyMap[code];
-      if (!action) return;
-
-      switch (action) {
-          case 'left':
-              this.game.movePieceLeft();
-              this.recordReplay('left');
-              this.playMoveSound('left');
-              this.actionTimers.left = 0;
-              break;
-          case 'right':
-              this.game.movePieceRight();
-              this.recordReplay('right');
-              this.playMoveSound('right');
-              this.actionTimers.right = 0;
-              break;
-          case 'down':
-              this.game.movePieceDown();
-              this.recordReplay('down');
-              this.playMoveSound('down');
-              // Remove heavy movement flash to let continuous soft drop take over
-              this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.2);
-            if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
-                const worldX = (this.game.activPiece.x + 1.5) * 2.2;
-                const worldY = (this.game.activPiece.y + 1.5) * -2.2;
-                for(let i = 0; i < 2; i++) {
-                    const spreadX = (Math.random() - 0.5) * 2.0;
-                    const spreadY = (Math.random() - 0.5) * 2.0;
-                    (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
-                        worldX + spreadX, worldY + spreadY, 0.0,
-                        Math.PI / 2 + (Math.random() - 0.5) * 0.5,
-                        10.0 + Math.random() * 10.0,
-                        [0.2, 0.8, 1.0, 0.4] // Subtle cyan trail
-                    );
-                }
-            }
-              this.actionTimers.down = 0;
-              break;
-          case 'rotateCW':
-              {
-                const rBefore = this.game.activPiece.rotation;
-                this.game.rotatePiece(true);
-                if (this.game.activPiece.rotation !== rBefore) {
-                     this.recordReplay('rotateCW');
-                     this.viewWebGPU.onRotate?.();
-                }
-                this.soundManager.playRotate();
-              }
-              break;
-          case 'rotateCCW':
-              {
-                const rBefore = this.game.activPiece.rotation;
-                this.game.rotatePiece(false);
-                if (this.game.activPiece.rotation !== rBefore) {
-                     this.recordReplay('rotateCCW');
-                     this.viewWebGPU.onRotate?.();
-                }
-                this.soundManager.playRotate();
-              }
-              break;
-          case 'hardDrop':
-              {
-                  const yBefore = this.game.activPiece?.y;
-                  this.recordReplay('hardDrop');
-                  this.performHardDrop();
-                  if (this.game.activPiece?.y !== yBefore) {
-                      // Successfully dropped
-                  }
-              }
-              break;
-          case 'hold':
-              if (this.game.canHold) {
-                  this.game.hold();
-                  this.recordReplay('hold');
-              const holdEl = document.querySelector('.hold-piece-container');
-              if (holdEl) {
-                  holdEl.classList.remove('swap-whoosh-active');
-                  void (holdEl as HTMLElement).offsetWidth; // trigger reflow
-                  holdEl.classList.add('swap-whoosh-active');
-              }
-                  this.soundManager.playHold();
-              } else {
-                  this.bufferedAction = 'hold';
-                  this.bufferedActionTime = performance.now();
-              }
-              break;
-      }
+    releaseKey(this, event.code);
   }
 
   performHardDrop(): void {
@@ -700,67 +480,7 @@ export default class Controller {
   }
 
   async performHardDropAsync(): Promise<void> {
-      this.game.runStats.recordHardDrop();
-      const ghostY = this.game.getGhostY();
-      const dropDist = ghostY - this.game.activPiece.y;
-      const currentX = this.game.activPiece.x;
-
-      // NEON BRICKLAYER: Get Color Index for visual flair
-      // Map piece type to theme color index
-      const type = this.game.activPiece.type;
-      let colorIdx = 1;
-      // Map standard pieces to index 1-7 (I,J,L,O,S,T,Z)
-      // This mapping assumes standard order or theme alignment
-      if (type === 'I') colorIdx = 1;
-      else if (type === 'J') colorIdx = 2;
-      else if (type === 'L') colorIdx = 3;
-      else if (type === 'O') colorIdx = 4;
-      else if (type === 'S') colorIdx = 5;
-      else if (type === 'T') colorIdx = 6;
-      else if (type === 'Z') colorIdx = 7;
-
-      const pieceType = this.audioPieceType();
-      const pieceCol = this.audioColumn();
-
-      const result = await this.game.hardDropAsync();
-      this.soundManager.playHardDrop();
-
-      // Prefer the lock coordinate written by performHardDrop (host.lastDropPos).
-      // gameStateCache.lastDropPos is the same object after the first getState(),
-      // but the host field is updated immediately and does not depend on a cache sync.
-      const finalGhostY = this.game.lastDropPos?.y
-        ?? this.game.gameStateCache.lastDropPos?.y
-        ?? ghostY;
-
-      const snap = this.game.getHardDropSnapshot?.();
-      this.viewWebGPU.onHardDrop?.(currentX, finalGhostY, dropDist, colorIdx, snap?.blocks);
-
-      if (result.linesCleared.length > 0) {
-          const scoreEvent = this.game.scoreEvent;
-          const combo = scoreEvent ? scoreEvent.combo : 0;
-          const b2b = scoreEvent ? scoreEvent.backToBack : false;
-          const isAllClear = scoreEvent ? scoreEvent.isAllClear : false;
-
-          this.playScoringAudio(result, pieceType, pieceCol);
-          this.viewWebGPU.onLineClear?.(result.linesCleared, result.tSpin, combo, b2b, isAllClear);
-          announceLineClear(result.linesCleared.length, this.game.score, combo, result.tSpin);
-      } else if (result.locked) {
-          this.playScoringAudio(result, pieceType, pieceCol);
-          if (snap && this.viewWebGPU.onLock) {
-              this.viewWebGPU.onLock(result.tSpin, snap.blocks, currentX, finalGhostY);
-          } else {
-              this.viewWebGPU.onLock?.(result.tSpin);
-          }
-      }
-      if (result.gameOver || this.game.victory) {
-          this.soundManager.playGameOver();
-          // Save leaderboard on run end
-          const isNewHigh = this.game.saveModeLeaderboard();
-          this.updateHighScoreDisplay();
-          if (isNewHigh && this.subliminal) {
-            this.subliminal.triggerReinforcement('highScore', 'strong');
-          }
-      }
+    await runHardDrop(this);
   }
 
   updateHighScoreDisplay(): void {
@@ -854,16 +574,7 @@ export default class Controller {
         this.game.movePieceDown();
         // Replace heavy onMove flash spam with continuous soft drop pressure
         this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.1);
-        if (this.game.activPiece && (this.viewWebGPU as any).particleSystem) {
-          const worldX = (this.game.activPiece.x + 1.5) * 2.2;
-          const worldY = (this.game.activPiece.y + 1.5) * -2.2;
-          (this.viewWebGPU as any).particleSystem.emitParticlesRadial(
-            worldX, worldY, 0.0,
-            Math.PI / 2 + (Math.random() - 0.5) * 0.5,
-            5.0 + Math.random() * 10.0,
-            [0.2, 0.8, 1.0, 0.4] // Very subtle cyan trail
-          );
-        }
+        emitSoftDropTrail(this.game, this.viewWebGPU);
         return prevY !== this.game.activPiece.y;
       },
       recordDownReplay: () => { this.recordReplay('down'); },

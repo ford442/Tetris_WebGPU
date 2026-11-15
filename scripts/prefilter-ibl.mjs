@@ -19,7 +19,7 @@ import { deflateSync } from 'node:zlib';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'public', 'ibl');
 const BASE = 128;
-const MIPS = 6;
+const MIPS = /** @type {number} */ (6);
 const LUT = 128;
 const RGBM_RANGE = 6;
 
@@ -41,6 +41,7 @@ function studio(dx, dy, dz) {
   let r = 0.22 + (1.35 - 0.22) * up;
   let g = 0.12 + (1.05 - 0.12) * up;
   let b = 0.05 + (0.72 - 0.05) * up;
+  /** @type {[number[], number[], number][]} */
   const lights = [
     [[0.28, 0.62, 0.72], [6.5, 5.4, 3.6], 80],
     [[-0.55, 0.35, 0.55], [2.2, 1.4, 0.7], 22],

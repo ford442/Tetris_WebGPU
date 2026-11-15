@@ -22,14 +22,14 @@ export function evaluateTSpin(
   const px = piece.x;
   const py = piece.y;
 
-  corners[0].x = px;
-  corners[0].y = py;
-  corners[1].x = px + 2;
-  corners[1].y = py;
-  corners[2].x = px;
-  corners[2].y = py + 2;
-  corners[3].x = px + 2;
-  corners[3].y = py + 2;
+  corners[0]!.x = px;
+  corners[0]!.y = py;
+  corners[1]!.x = px + 2;
+  corners[1]!.y = py;
+  corners[2]!.x = px;
+  corners[2]!.y = py + 2;
+  corners[3]!.x = px + 2;
+  corners[3]!.y = py + 2;
 
   const isCornerOccupied = (x: number, y: number) => {
     if (x < 0 || x >= playfieldWidth || y >= playfieldHeight) return true;
@@ -37,10 +37,10 @@ export function evaluateTSpin(
     return getCell(x, y) !== 0;
   };
 
-  const c0 = isCornerOccupied(corners[0].x, corners[0].y); // Top-Left
-  const c1 = isCornerOccupied(corners[1].x, corners[1].y); // Top-Right
-  const c2 = isCornerOccupied(corners[2].x, corners[2].y); // Bottom-Left
-  const c3 = isCornerOccupied(corners[3].x, corners[3].y); // Bottom-Right
+  const c0 = isCornerOccupied(corners[0]!.x, corners[0]!.y); // Top-Left
+  const c1 = isCornerOccupied(corners[1]!.x, corners[1]!.y); // Top-Right
+  const c2 = isCornerOccupied(corners[2]!.x, corners[2]!.y); // Bottom-Left
+  const c3 = isCornerOccupied(corners[3]!.x, corners[3]!.y); // Bottom-Right
 
   let occupied = 0;
   if (c0) occupied++;

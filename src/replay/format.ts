@@ -56,9 +56,9 @@ export function decodeInputStream(b64: string): ReplayInputEvent[] {
   const events: ReplayInputEvent[] = [];
   let frame = 0;
   for (let i = 0; i + 2 < bytes.length; i += 3) {
-    const delta = bytes[i] | (bytes[i + 1] << 8);
+    const delta = bytes[i]! | (bytes[i + 1]! << 8);
     frame += delta;
-    events.push({ frame, mask: bytes[i + 2] });
+    events.push({ frame, mask: bytes[i + 2]! });
   }
   return events;
 }
@@ -156,7 +156,7 @@ export function eventsFromActionNames(
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    binary += String.fromCharCode(bytes[i]!);
   }
   return btoa(binary);
 }

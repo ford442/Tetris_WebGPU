@@ -124,8 +124,8 @@ export class ModeLeaderboard {
 
     const isBetter = this.entries.length < this.maxEntries || (
       this.higherIsBetter
-        ? entry.value > this.entries[this.entries.length - 1].value
-        : entry.value < this.entries[this.entries.length - 1].value
+        ? entry.value > this.entries[this.entries.length - 1]!.value
+        : entry.value < this.entries[this.entries.length - 1]!.value
     );
     if (!isBetter && this.entries.some((e) => e.value === entry.value)) {
       return false;
@@ -136,11 +136,11 @@ export class ModeLeaderboard {
     this.sortEntries(this.entries);
     this.entries = this.entries.slice(0, this.maxEntries);
     this.save();
-    return this.entries[0].value === entry.value;
+    return this.entries[0]!.value === entry.value;
   }
 
   getBest(): ModeLeaderboardEntry | null {
-    return this.entries.length > 0 ? this.entries[0] : null;
+    return this.entries[0] ?? null;
   }
 
   getEntries(): ModeLeaderboardEntry[] {

@@ -8,11 +8,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isRelativeBase, resolveBase } from './lib/viteBase.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const BASE = (process.env.VITE_BASE || '/tetris-webgpu/').replace(/\/?$/, '/');
+const BASE = resolveBase(process.env, true);
 
 function walkFiles(dir, prefix = '') {
   const out = [];
@@ -52,6 +53,12 @@ function extractUrlsFromHtml(html) {
 }
 
 function main() {
+  if (isRelativeBase(BASE)) {
+    // A relative base (desktop/Tauri, file-like hosts) has no URL prefix to precache under,
+    // and the app does not register a service worker there (registerServiceWorker.ts).
+    console.log(`[generate-sw] VITE_BASE=${BASE} is relative — skipping service worker.`);
+    return;
+  }
   if (!fs.existsSync(DIST)) {
     console.error('[generate-sw] dist/ not found — run vite build first');
     process.exit(1);

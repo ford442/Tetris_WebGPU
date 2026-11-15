@@ -179,8 +179,8 @@ export class VisualEffects {
 
         // Update echo trails
         for (let i = this.echoTrails.length - 1; i >= 0; i--) {
-            this.echoTrails[i].age += dt;
-            if (this.echoTrails[i].age > 0.22) {
+            this.echoTrails[i]!.age += dt;
+            if (this.echoTrails[i]!.age > 0.22) {
                 this.echoTrails.splice(i, 1);
             }
         }
@@ -439,7 +439,7 @@ export class VisualEffects {
         const visibleHeight = 2.0 * Math.tan(fov / 2.0) * camZ;
 
         for (let i = 0; i < Math.min(lines.length, 4); i++) {
-            const worldY = lines[i] * -2.2;
+            const worldY = lines[i]! * -2.2;
             const uvY = 0.5 - (worldY - camY) / visibleHeight;
             this.lineClearLaserY[i] = uvY;
         }
@@ -477,7 +477,7 @@ export class VisualEffects {
     triggerShockwave(center: number[], width: number = 0.15, strength: number = 0.08, aberration: number = 0.03, speed: number = 2.0): void {
         if (this.reducedMotion) return;
         // NEON BRICKLAYER: Prevent weaker shockwaves from overwriting massive ones
-        if (this.shockwaveTimer > 0 && this.shockwaveParams[1] > strength) {
+        if (this.shockwaveTimer > 0 && this.shockwaveParams[1]! > strength) {
             return;
         }
 

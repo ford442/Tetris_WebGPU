@@ -119,8 +119,8 @@ export class GpuPassTimers {
         const mapped = new BigUint64Array(staging.getMappedRange());
         let totalNs = 0;
         for (let r = 0; r < REGION_COUNT; r++) {
-          const start = mapped[r * 2];
-          const end = mapped[r * 2 + 1];
+          const start = mapped[r * 2]!;
+          const end = mapped[r * 2 + 1]!;
           const deltaNs = end > start ? Number(end - start) : 0;
           regionMs[r] = deltaNs / 1_000_000;
           totalNs += deltaNs;
@@ -140,7 +140,7 @@ export class GpuPassTimers {
   snapshot(): PassTimerSnapshot {
     const regions = {} as Record<PassTimerRegion, number>;
     for (let i = 0; i < REGION_COUNT; i++) {
-      regions[PASS_TIMER_REGIONS[i]] = this.regionMs[i];
+      regions[PASS_TIMER_REGIONS[i]!] = this.regionMs[i]!;
     }
     return {
       enabled: this.enabled,

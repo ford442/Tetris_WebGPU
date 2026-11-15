@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GameSimulator } from '../src/replay/simulator.js';
 import { REPLAY_ACTION } from '../src/replay/actions.js';
+import type { IView } from '../src/view/IView.js';
 
 describe('Replay simulator onHardDrop', () => {
   it('calls the view onHardDrop hook exactly once during playback of a hard drop', () => {
@@ -14,7 +15,7 @@ describe('Replay simulator onHardDrop', () => {
       render: vi.fn(),
       init: vi.fn(),
       destroy: vi.fn(),
-    };
+    } as unknown as IView;
 
     // The piece is I because seed 1234 might give I, wait, let's just assert onHardDrop is called.
     sim.tick(0);

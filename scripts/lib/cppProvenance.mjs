@@ -30,11 +30,6 @@ export const ARTIFACT_RELS = {
   js: 'public/cpp/tetris_renderer.js',
   wasm: 'public/cpp/tetris_renderer.wasm',
 };
-/** Tracked mirror copies (build/cpp) that must stay byte-identical to public/cpp. */
-export const MIRROR_RELS = {
-  js: 'build/cpp/tetris_renderer.js',
-  wasm: 'build/cpp/tetris_renderer.wasm',
-};
 
 /**
  * Everything compiled into the module, besides cpp/src/** (walked, `generated/` skipped
@@ -139,7 +134,7 @@ export function verifyProvenance(root = DEFAULT_ROOT) {
   try {
     info = JSON.parse(readFileSync(infoPath, 'utf8'));
   } catch (err) {
-    return { ok: false, info: null, errors: [`${BUILD_INFO_REL} is not valid JSON: ${err.message}`] };
+    return { ok: false, info: null, errors: [`${BUILD_INFO_REL} is not valid JSON: ${/** @type {Error} */ (err).message}`] };
   }
 
   const pinned = readPinnedEmsdk(root);
@@ -167,7 +162,7 @@ export function verifyProvenance(root = DEFAULT_ROOT) {
   if (info.sourceHash !== sourceHash) {
     errors.push(
       'sourceHash is stale: cpp/src, shared uniforms/material, shared WGSL or the build scripts changed since the committed wasm was built. ' +
-      `recorded ${info.sourceHash}, tree ${sourceHash}. Run \`npm run cpp:release\` with emsdk ${pinned ?? '(pinned)'} and commit public/cpp + build/cpp.`,
+      `recorded ${info.sourceHash}, tree ${sourceHash}. Run \`npm run cpp:release\` with emsdk ${pinned ?? '(pinned)'} and commit public/cpp.`,
     );
   }
 
@@ -183,10 +178,6 @@ export function verifyProvenance(root = DEFAULT_ROOT) {
       errors.push(`${rel} does not match build-info (sha256 ${actual}, recorded ${recorded?.sha256 ?? 'none'}) — artifact and build-info were not committed together`);
     } else if (recorded.bytes !== statSync(full).size) {
       errors.push(`${rel} size ${statSync(full).size} != recorded ${recorded.bytes}`);
-    }
-    const mirror = join(root, MIRROR_RELS[kind]);
-    if (!existsSync(mirror) || sha256File(mirror) !== actual) {
-      errors.push(`${MIRROR_RELS[kind]} differs from ${rel} (build-cpp mirrors both; commit them together)`);
     }
   }
 

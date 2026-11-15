@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlayfieldInstances } from '../src/view/playfieldInstances.js';
 import { themes } from '../src/webgpu/themes.js';
+import type { GameState } from '../src/game/gameState.js';
 
 describe('buildPlayfieldInstances', () => {
   it('creates one instance per occupied cell', () => {
@@ -8,7 +9,7 @@ describe('buildPlayfieldInstances', () => {
     playfield[5][3] = 2;
     playfield[5][4] = 2;
     const instances = buildPlayfieldInstances(
-      { playfield, activePiece: null },
+      { playfield, activePiece: null } as unknown as GameState,
       themes.imageSampled,
       0,
       0,

@@ -1,0 +1,10 @@
+{
+  // The app: src/ plus the index.ts entry point.
+  "extends": "./tsconfig.project.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.cache/tsc/src",
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/src.tsbuildinfo",
+    "types": ["@webgpu/types", "vite/client"]
+  },
+  "include": ["src", "index.ts", "shared/*.json"]
+}

@@ -82,6 +82,7 @@ describe('showFatalWebgpuOverlay / removeFatalWebgpuOverlay', () => {
       browser: 'chrome',
       reason: 'no-adapter (Chrome: check chrome://flags/#enable-unsafe-webgpu and GPU drivers)',
       adapter: null,
+      adapterAttempt: null,
       renderer: 'ts',
     };
 
@@ -102,7 +103,7 @@ describe('showFatalWebgpuOverlay / removeFatalWebgpuOverlay', () => {
   it('is a no-op when document is unavailable', () => {
     vi.stubGlobal('document', undefined);
     expect(() =>
-      showFatalWebgpuOverlay(undefined, { ok: false, browser: 'other', reason: null, adapter: null, renderer: 'cpp' }),
+      showFatalWebgpuOverlay(undefined, { ok: false, browser: 'other', reason: null, adapter: null, adapterAttempt: null, renderer: 'cpp' }),
     ).not.toThrow();
     expect(() => removeFatalWebgpuOverlay()).not.toThrow();
   });

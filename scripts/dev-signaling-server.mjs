@@ -51,7 +51,7 @@ const wss = new WebSocketServer({ server: httpServer });
 
 wss.on('connection', (ws) => {
   const peerId = crypto.randomUUID();
-  /** @type {typeof rooms extends Map<string, infer R> ? R : never | null} */
+  /** @type {any} */
   let room = null;
 
   ws.on('message', (data) => {

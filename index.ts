@@ -1,5 +1,6 @@
 import Game from "./src/game.js";
 import { createView, getRendererPreference } from "./src/view/createView.js";
+import type { IView } from "./src/view/IView.js";
 import { showRendererBadge } from "./src/view/rendererBadge.js";
 import Controller from "./src/controller.js";
 import SoundManager from "./src/sound.js";
@@ -7,7 +8,7 @@ import { SubliminalReinforcement } from './src/effects/subliminalReinforcement.j
 import { initSettingsUI } from './src/settings/settingsUI.js';
 import { inferQualityFromToggles, saveGameSettings } from './src/config/gameSettings.js';
 import { WasmCore } from './src/wasm/WasmCore.js';
-import { maybeInitTextureMaskLab } from './src/dev/textureMaskLab.js';
+import { isTextureMaskLabRequested } from './src/dev/maskLabGate.js';
 import { installMaterialDebugHotkey } from './src/dev/materialDebugHotkey.js';
 import { loadAuthoredBlockTextureConfig } from "./src/webgpu/blockTexture.js";
 import { parseGameModeId } from './src/game/modes/createGameMode.js';
@@ -26,7 +27,7 @@ import { watchReducedMotion } from './src/a11y/accessibility.js';
 declare global {
   interface Window {
     game: Game;
-    view: View;
+    view: IView;
     controller: Controller;
     soundManager: SoundManager;
     subliminalReinforcement?: SubliminalReinforcement;
@@ -285,7 +286,11 @@ void (async () => {
   // Dev-only CPU tool for iterating on authored block texture masking.
   // localhost-only + `localStorage.tetris_texture_mask_lab='1'` (or `?masklab=1`).
   try {
-    await maybeInitTextureMaskLab(uiContainer);
+    if (isTextureMaskLabRequested()) {
+      // Lazy chunk: the lab (and its bakers) never ship in the main bundle's hot path.
+      const { maybeInitTextureMaskLab } = await import('./src/dev/textureMaskLab.js');
+      await maybeInitTextureMaskLab(uiContainer);
+    }
   } catch (e) {
     console.warn('Texture Mask Lab init failed:', e);
   }
@@ -502,7 +507,7 @@ void (async () => {
         versusController.play();
       } else {
         if (!controller.isPlaying) {
-          game.setMode(mode);
+          game.setMode(mode as GameModeId);
           controller.updateHighScoreDisplay();
           controller.updateModeHud();
         }

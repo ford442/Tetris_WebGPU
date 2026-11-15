@@ -24,7 +24,7 @@ describe('material debug view cycle', () => {
       MaterialDebugView.normal,
       MaterialDebugView.off,
     ];
-    let current = MaterialDebugView.off;
+    let current: number = MaterialDebugView.off;
     for (const expected of order) {
       current = nextMaterialDebugView(current);
       expect(current).toBe(expected);

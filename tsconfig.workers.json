@@ -1,0 +1,12 @@
+{
+  // Cloudflare Worker (workers/signaling). The runtime globals it needs are declared in
+  // workers/cloudflare.d.ts rather than pulling in all of @cloudflare/workers-types.
+  "extends": "./tsconfig.project.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.cache/tsc/workers",
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/workers.tsbuildinfo",
+    "lib": ["ESNext", "DOM"],
+    "types": []
+  },
+  "include": ["workers"]
+}

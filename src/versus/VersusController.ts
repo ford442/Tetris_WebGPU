@@ -271,7 +271,7 @@ export default class VersusController {
     if (!this.isPlaying || this.isPaused) return;
 
     for (let i = 0; i < 2; i++) {
-      const slot = this.players[i];
+      const slot = this.players[i]!;
       const action = slot.keyMap[code];
       if (!action || slot.game.isRunEnded) continue;
       slot.keys[code] = true;
@@ -379,7 +379,7 @@ export default class VersusController {
   private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
     const rows = attackRowsFromClear(linesCleared, tSpin);
     if (rows > 0) {
-      this.players[1 - from].game.queueGarbage(rows);
+      this.players[1 - from]!.game.queueGarbage(rows);
     }
   }
 
@@ -431,7 +431,7 @@ export default class VersusController {
 
     let anyAlive = false;
     for (let i = 0; i < 2; i++) {
-      const slot = this.players[i];
+      const slot = this.players[i]!;
       if (slot.game.isRunEnded) continue;
       anyAlive = true;
       slot.game.tickMode(dt);

@@ -1,10 +1,13 @@
 import { type Piece, PieceGenerator } from './game/pieces.js';
-import { rotatePieceBlocks, getWallKicks } from './game/rotation.js';
 import { CollisionDetector } from './game/collision.js';
 import { ScoringSystem, type ScoreEvent, type HighScoreManager } from './game/scoring.js';
 import { compactClearedRows, isPlayfieldEmpty, countGarbageCells, clearTopRows } from './game/lineUtils.js';
 import { buildPlayfieldProjection } from './game/stateProjection.js';
-import type { GameState } from './game/gameState.js';
+import { createGameStateCache, type GameState } from './game/gameState.js';
+import { rotateActivePiece, type RotateHost } from './game/rotateFlow.js';
+import { getGhostY as queryGhostY, hasCollisionPiece as queryHasCollision, type CollisionQueryHost } from './game/collisionQuery.js';
+import { fillGameStateCache, type StateSnapshotHost } from './game/stateSnapshot.js';
+import { saveModeLeaderboard as saveLeaderboardFor, type LeaderboardSaveHost } from './game/leaderboardSave.js';
 import { RunStats } from './game/runStats.js';
 import { NEXT_QUEUE_CONFIG } from './config/gameConfig.js';
 import { loadGameSettings } from './config/gameSettings.js';
@@ -76,16 +79,16 @@ export default class Game implements ModeGameHooks {
 
   // Subsystems
   private pieceGenerator: PieceGenerator;
-  private collisionDetector: CollisionDetector;
+  collisionDetector: CollisionDetector;
   scoringSystem: ScoringSystem;
-  private mode: GameMode;
+  mode: GameMode;
   private projectedPlayfield: number[][] = [];
 
   // Bound methods to prevent per-frame garbage collection
   private boundGetCell: (x: number, y: number) => number;
 
   // Pre-allocated array for WASM collision checks to avoid GC
-  private collisionCoordsCache: {x: number, y: number}[] = [
+  collisionCoordsCache: {x: number, y: number}[] = [
       {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}
   ];
 
@@ -95,8 +98,8 @@ export default class Game implements ModeGameHooks {
   };
 
   // Pre-allocated temporary piece for rotation checks to avoid GC
-  private _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
-  private _tempBlocks: number[][] = [];
+  _tempPiece: Piece = { blocks: [], x: 0, y: 0, rotation: 0, type: '' };
+  _tempBlocks: number[][] = [];
 
   // Pre-allocated corners for T-Spin checks to avoid GC
   private _tSpinCorners: { x: number, y: number }[] = [
@@ -121,61 +124,15 @@ export default class Game implements ModeGameHooks {
     return this.practiceInfiniteHold;
   }
 
-  private useWasmCollision = true;
-  private wasmBoardId = 0;
-  private neonHyperInversionFlag = false;
+  useWasmCollision = true;
+  wasmBoardId = 0;
+  neonHyperInversionFlag = false;
 
   private _hardDropResult: { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } = {
       linesCleared: [], locked: false, gameOver: false, tSpin: 'none'
   };
 
-  readonly gameStateCache: GameState = {
-    score: 0,
-    level: 1,
-    lines: 0,
-    nextPiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
-    nextQueue: [],
-    holdPiece: null,
-    activePiece: { blocks: [], x: 0, y: 0, rotation: 0, type: '' },
-    isGameOver: false,
-    isVictory: false,
-    modeId: 'marathon',
-    modeLabel: 'Marathon',
-    modePrimaryLabel: 'GOAL',
-    modePrimaryValue: 'Survive',
-    modeSecondaryLabel: 'TIME',
-    modeSecondaryValue: '0:00',
-    modeShowSecondary: true,
-    modeShowLevel: true,
-    modeShowScore: true,
-    modeShowHighScore: true,
-    modeHighScoreLabel: 'HIGH SCORE',
-    elapsedMs: 0,
-    playfield: [],
-    lockTimer: 0,
-    lockDelayTime: 0,
-    effectEvent: null,
-    effectCounter: 0,
-    effectFlag: false,
-    neonBurstFlag: false,
-    neonHyperInversionFlag: false,
-    lastDropPos: null,
-    lastDropDistance: 0,
-    scoreEvent: null,
-    isTSpinReady: 'none',
-    runStats: {
-      piecesPlaced: 0,
-      moves: 0,
-      rotations: 0,
-      hardDrops: 0,
-      finesseFaults: 0,
-      peakCombo: 0,
-      peakB2BChain: 0,
-      elapsedMs: 0,
-      pps: 0,
-      apm: 0,
-    },
-  };
+  readonly gameStateCache: GameState = createGameStateCache();
 
   // View reference for reactive system hooks
   view: IView | null = null;
@@ -281,7 +238,7 @@ export default class Game implements ModeGameHooks {
     return true;
   }
 
-  private buildModeContext(): ModeContext {
+  buildModeContext(): ModeContext {
     return {
       lines: this.lines,
       score: this.score,
@@ -372,7 +329,7 @@ export default class Game implements ModeGameHooks {
   // Helper for TypedArray access
   getCell(x: number, y: number): number {
       if (x < 0 || x >= this.playfieldWidth || y < 0 || y >= this.playfieldHeight) return 0;
-      return this.playfield[y * this.playfieldWidth + x];
+      return this.playfield[y * this.playfieldWidth + x]!;
   }
 
   setCell(x: number, y: number, value: number): void {
@@ -402,28 +359,7 @@ export default class Game implements ModeGameHooks {
   }
 
   saveModeLeaderboard(): boolean {
-    const save = {
-      score: this.score,
-      lines: this.lines,
-      level: this.level,
-      elapsedMs: this.modeElapsedMs,
-      victory: this.victory,
-      gameOver: this.gameOver,
-    };
-
-    if (!this.mode.shouldSaveLeaderboard(save)) {
-      return false;
-    }
-
-    const board = getModeLeaderboard(this.mode);
-    const metricValue = this.mode.getLeaderboardValue(save);
-    const isNewBest = board.addEntry(metricValue, save.lines, save.level);
-
-    if (this.mode.id === 'marathon') {
-      this.scoringSystem.saveHighScore();
-    }
-
-    return isNewBest;
+    return saveLeaderboardFor(this as unknown as LeaderboardSaveHost);
   }
 
   // Set view reference for reactive events
@@ -436,7 +372,7 @@ export default class Game implements ModeGameHooks {
     this.view?.onLevelUpReactive?.(newLevel);
   }
 
-  private triggerTSpinReactive(type: TSpinResult): void {
+  triggerTSpinReactive(type: TSpinResult): void {
     this.view?.onTSpinReactive?.(type);
   }
 
@@ -451,48 +387,7 @@ export default class Game implements ModeGameHooks {
       targetArray: this.projectedPlayfield
     });
 
-    this.gameStateCache.score = this.score;
-    this.gameStateCache.level = this.level;
-    this.gameStateCache.lines = this.lines;
-    this.gameStateCache.nextPiece = this.nextPiece;
-    if (this.gameStateCache.nextQueue.length !== this.nextQueue.length) {
-      this.gameStateCache.nextQueue.length = this.nextQueue.length;
-    }
-    for (let i = 0; i < this.nextQueue.length; i++) {
-      this.gameStateCache.nextQueue[i] = this.nextQueue[i];
-    }
-    this.gameStateCache.holdPiece = this.holdPieceObj;
-    this.gameStateCache.activePiece = this.activPiece;
-    this.gameStateCache.isGameOver = this.gameOver;
-    this.gameStateCache.isVictory = this.victory;
-
-    const hud = this.mode.getHud(this.buildModeContext());
-    this.gameStateCache.modeId = hud.modeId;
-    this.gameStateCache.modeLabel = hud.modeLabel;
-    this.gameStateCache.modePrimaryLabel = hud.primaryLabel;
-    this.gameStateCache.modePrimaryValue = hud.primaryValue;
-    this.gameStateCache.modeSecondaryLabel = hud.secondaryLabel;
-    this.gameStateCache.modeSecondaryValue = hud.secondaryValue;
-    this.gameStateCache.modeShowSecondary = hud.showSecondary;
-    this.gameStateCache.modeShowLevel = hud.showLevel;
-    this.gameStateCache.modeShowScore = hud.showScore;
-    this.gameStateCache.modeShowHighScore = hud.showHighScore;
-    this.gameStateCache.modeHighScoreLabel = hud.highScoreLabel;
-    this.gameStateCache.elapsedMs = this.modeElapsedMs;
-    this.gameStateCache.pendingGarbageRows = this.pendingGarbageRows;
-
-    this.gameStateCache.playfield = playfield2D;
-    this.gameStateCache.lockTimer = this.lockTimer;
-    this.gameStateCache.lockDelayTime = this.lockDelayTime;
-    this.gameStateCache.effectEvent = this.effectEvent;
-    this.gameStateCache.effectCounter = this.effectCounter;
-    this.gameStateCache.neonHyperInversionFlag = this.neonHyperInversionFlag;
-    this.neonHyperInversionFlag = false; // Reset after sending to view
-    this.gameStateCache.lastDropPos = this.lastDropPos;
-    this.gameStateCache.lastDropDistance = this.lastDropDistance;
-    this.gameStateCache.scoreEvent = this.scoreEvent;
-    this.gameStateCache.isTSpinReady = this.activPiece?.type === 'T' ? this.isTSpin : 'none';
-    this.gameStateCache.runStats = this.runStats.snapshot(this.modeElapsedMs);
+    fillGameStateCache(this as unknown as StateSnapshotHost, playfield2D);
 
     return this.gameStateCache;
   }
@@ -502,30 +397,7 @@ export default class Game implements ModeGameHooks {
   }
 
   getGhostY(): number {
-    const piece = this.activPiece;
-    let count = 0;
-    const blocks = piece.blocks;
-    for (let r = 0; r < blocks.length; r++) {
-      for (let c = 0; c < blocks[r].length; c++) {
-        if (blocks[r][c] !== 0) {
-          if (count < 4) {
-            this.collisionCoordsCache[count].x = c;
-            this.collisionCoordsCache[count].y = r;
-          }
-          count++;
-        }
-      }
-    }
-
-    if (count === 4) {
-      const core = WasmCore.get();
-      if (core.hasHardDrop) {
-        const dist = core.hardDropDistance(piece.x, piece.y, this.collisionCoordsCache, this.wasmBoardId);
-        if (dist >= 0) return piece.y + dist;
-      }
-    }
-
-    return this.collisionDetector.getGhostY(piece);
+    return queryGhostY(this as unknown as CollisionQueryHost, this.activPiece);
   }
 
   hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
@@ -548,7 +420,7 @@ export default class Game implements ModeGameHooks {
         this.scoreEvent = this.scoringSystem.updateScore(linesScore.length, wasTSpin, isAllClear);
         result.linesCleared.length = 0;
         for (let i = 0; i < linesScore.length; i++) {
-            result.linesCleared.push(linesScore[i]);
+            result.linesCleared.push(linesScore[i]!);
         }
         result.tSpin = wasTSpin;
         if (linesScore.length >= 4) {
@@ -685,92 +557,7 @@ export default class Game implements ModeGameHooks {
   }
 
   rotatePiece(rightRurn: boolean = true): void {
-    const blocks = this.activPiece.blocks;
-    const type = this.activPiece.type;
-    const currentRotation = this.activPiece.rotation;
-    let nextRotation = rightRurn ? (currentRotation + 1) % 4 : (currentRotation + 3) % 4;
-
-    if (type === 'O') return;
-
-    // Use temp piece for testing rotation to avoid mutation
-    // Replace Object.assign with explicit assignments to avoid GC overhead
-    this._tempPiece.x = this.activPiece.x;
-    this._tempPiece.y = this.activPiece.y;
-    this._tempPiece.type = this.activPiece.type;
-    // getBounds isn't strictly needed for the temp piece if hasCollisionPiece uses fallback
-    // or WASM uses exact blocks array. We copy the exact blocks anyway.
-    this._tempPiece.blocks = rotatePieceBlocks(blocks, rightRurn, this._tempBlocks);
-    this._tempPiece.rotation = nextRotation;
-
-    if (!this.hasCollisionPiece(this._tempPiece)) {
-      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-
-      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-      for (let i = 0; i < this._tempPiece.blocks.length; i++) {
-        if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
-            if (!this.activPiece.blocks[i]) this.activPiece.blocks[i] = [];
-            this.activPiece.blocks[i].length = this._tempPiece.blocks[i].length;
-        }
-        for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
-            this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];
-        }
-      }
-      // Trim excess rows if any (should not happen for tetrominoes)
-      if (this.activPiece.blocks.length > this._tempPiece.blocks.length) {
-          this.activPiece.blocks.length = this._tempPiece.blocks.length;
-      }
-
-      this.activPiece.rotation = this._tempPiece.rotation;
-      this.handleMoveReset();
-      this.checkTSpin(-1); // Check T-Spin after rotation
-      // Trigger T-Spin reactive if detected
-      if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
-        this.triggerTSpinReactive(this.isTSpin);
-      }
-      return;
-    }
-
-    // Wall Kicks
-    const kicks = getWallKicks(type, currentRotation, nextRotation);
-    if (!kicks || kicks.length === 0) return;
-
-    for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
-        const [ox, oy] = kicks[kickIndex];
-        this._tempPiece.x = this.activPiece.x + ox;
-        this._tempPiece.y = this.activPiece.y + oy;
-
-        if (!this.hasCollisionPiece(this._tempPiece)) {
-            // Apply successful kick
-            this.activPiece.x = this._tempPiece.x;
-            this.activPiece.y = this._tempPiece.y;
-            // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-
-      // Create a copy of the blocks array for the active piece, because _tempBlocks will be overwritten in the next rotation
-      for (let i = 0; i < this._tempPiece.blocks.length; i++) {
-        if (!this.activPiece.blocks[i] || this.activPiece.blocks[i].length !== this._tempPiece.blocks[i].length) {
-            if (!this.activPiece.blocks[i]) this.activPiece.blocks[i] = [];
-            this.activPiece.blocks[i].length = this._tempPiece.blocks[i].length;
-        }
-        for (let j = 0; j < this._tempPiece.blocks[i].length; j++) {
-            this.activPiece.blocks[i][j] = this._tempPiece.blocks[i][j];
-        }
-      }
-      // Trim excess rows if any (should not happen for tetrominoes)
-      if (this.activPiece.blocks.length > this._tempPiece.blocks.length) {
-          this.activPiece.blocks.length = this._tempPiece.blocks.length;
-      }
-
-            this.activPiece.rotation = this._tempPiece.rotation;
-            this.handleMoveReset();
-            this.checkTSpin(kickIndex); // Check T-Spin after kick
-            // Trigger T-Spin reactive if detected
-            if (this.isTSpin !== 'none' && this.activPiece.type === 'T') {
-              this.triggerTSpinReactive(this.isTSpin);
-            }
-            return;
-        }
-        kickIndex++;
-    }
+    rotateActivePiece(this as unknown as RotateHost, rightRurn);
   }
 
   handleMoveReset(): void {
@@ -782,37 +569,7 @@ export default class Game implements ModeGameHooks {
   }
 
   hasCollisionPiece(piece: Piece): boolean {
-    if (!this.useWasmCollision) {
-      return this.collisionDetector.hasCollision(piece);
-    }
-    // --- WASM ACCELERATION ---
-    let count = 0;
-    
-    const blocks = piece.blocks;
-    for (let r = 0; r < blocks.length; r++) {
-        for (let c = 0; c < blocks[r].length; c++) {
-            if (blocks[r][c] !== 0) {
-                if (count < 4) {
-                    this.collisionCoordsCache[count].x = c;
-                    this.collisionCoordsCache[count].y = r;
-                }
-                count++;
-            }
-        }
-    }
-    
-    // Only use WASM for standard tetrominoes (4 blocks)
-    if (count === 4) {
-        try {
-            return WasmCore.get().checkCollision(this.collisionCoordsCache, piece.x, piece.y, this.wasmBoardId);
-        } catch (_e) {
-            // WASM not available or failed, fallback to JS
-            return this.collisionDetector.hasCollision(piece);
-        }
-    }
-    
-    // Fallback for non-standard pieces
-    return this.collisionDetector.hasCollision(piece);
+    return queryHasCollision(this as unknown as CollisionQueryHost, piece);
   }
 
   lockPiece(): void {
@@ -820,8 +577,8 @@ export default class Game implements ModeGameHooks {
     this.hardDropSnapshot = { blocks, x: pieceX };
 
     for (let y = 0; y < blocks.length; y++) {
-      for (let x = 0; x < blocks[y].length; x++) {
-        if (blocks[y][x]) {
+      for (let x = 0; x < blocks[y]!.length; x++) {
+        if (blocks[y]![x]) {
             if (pieceY + y < 0) {
                 if (this.practiceTopOutRecovery) {
                     continue;
@@ -829,7 +586,7 @@ export default class Game implements ModeGameHooks {
                 this.gameOver = true;
                 return;
             }
-            this.setCell(pieceX + x, pieceY + y, blocks[y][x]);
+            this.setCell(pieceX + x, pieceY + y, blocks[y]![x]!);
         }
       }
     }

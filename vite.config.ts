@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
+import { resolveBase } from './scripts/lib/viteBase.mjs';
 
 /** Content hash for public/block.png — busts browser/CDN cache after texture edits. */
 function blockTextureCacheKey(): string {
@@ -13,7 +14,9 @@ function blockTextureCacheKey(): string {
 }
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/tetris-webgpu/' : '/',
+  // VITE_BASE overrides; default '/tetris-webgpu/' (Pages) in production, '/' in dev.
+  // Desktop/Tauri and non-Pages hosts: VITE_BASE=./ (see scripts/lib/viteBase.mjs).
+  base: resolveBase(),
   define: {
     __BLOCK_TEXTURE_CACHE_KEY__: JSON.stringify(blockTextureCacheKey()),
   },

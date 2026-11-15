@@ -43,7 +43,6 @@
 
 import { spawnSync } from 'node:child_process';
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -75,7 +74,6 @@ const OUT_JS = join(OUT_PUBLIC, 'tetris_renderer.js');
 const COMPILE_COMMANDS = join(OUT_BUILD, 'compile_commands.json');
 const COMPILE_COMMANDS_CPP = join(ROOT, 'cpp', 'compile_commands.json');
 const BUILD_INFO_PUBLIC = join(OUT_PUBLIC, 'build-info.json');
-const BUILD_INFO_MIRROR = join(OUT_BUILD, 'build-info.json');
 const EMSDK_VERSION_FILE = join(ROOT, '.emsdk-version');
 
 const WEBGPU_ENV = (process.env.TETRIS_CPP_WEBGPU || 'auto').toLowerCase();
@@ -296,7 +294,6 @@ function writeBuildInfo(linkedPort) {
 
   const payload = `${JSON.stringify(info, null, 2)}\n`;
   writeFileSync(BUILD_INFO_PUBLIC, payload);
-  writeFileSync(BUILD_INFO_MIRROR, payload);
   console.log(`[build-cpp] Wrote ${BUILD_INFO_PUBLIC}`);
   return info;
 }
@@ -332,18 +329,6 @@ function enforceWasmSizeBudget(info) {
   }
 }
 
-function mirrorArtifacts() {
-  mkdirSync(OUT_BUILD, { recursive: true });
-  copyFileSync(OUT_JS, join(OUT_BUILD, 'tetris_renderer.js'));
-  const wasmPublic = join(OUT_PUBLIC, 'tetris_renderer.wasm');
-  if (existsSync(wasmPublic)) {
-    copyFileSync(wasmPublic, join(OUT_BUILD, 'tetris_renderer.wasm'));
-  }
-  if (existsSync(BUILD_INFO_PUBLIC)) {
-    copyFileSync(BUILD_INFO_PUBLIC, BUILD_INFO_MIRROR);
-  }
-}
-
 function warnEmsdkDrift() {
   const pinned = readPinnedEmsdkVersion();
   const emccVersion = getEmccVersion();
@@ -362,6 +347,7 @@ function warnEmsdkDrift() {
 function buildLinkedPort() {
   const attempts = resolveWebGpuAttempts();
   let linkedPort = null;
+  /** @type {{ status: number | null, stderr: string, stdout: string }} */
   let result = { status: 1, stderr: '', stdout: '' };
 
   for (let i = 0; i < attempts.length; i++) {
@@ -465,7 +451,6 @@ function main() {
 
   emitCompileCommands(linkedPort);
   const info = writeBuildInfo(linkedPort);
-  mirrorArtifacts();
 
   console.log(`[build-cpp] Linked WebGPU port: ${PORT_LABELS[linkedPort] || linkedPort}`);
   console.log('[build-cpp] Wrote public/cpp/tetris_renderer.js (+ wasm)');

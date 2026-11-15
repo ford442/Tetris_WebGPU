@@ -1,0 +1,23 @@
+{
+  // Ratchet for `noUncheckedIndexedAccess`. Everything reachable from the directories in
+  // "include" is checked with the flag on (imports are followed, so the clean set is the
+  // listed directories plus their import closure). Add a directory once it is clean; never
+  // take one out. When every directory of src/ is listed, move the flag into
+  // tsconfig.base.json and delete this file.
+  // Still to migrate (each pulls in the WebGPU renderer): src/webgpu, src/view, src/viewCpp,
+  // src/viewWebGL2, src/dev, index.ts.
+  // Not a composite project (so it need not enumerate its import closure); it runs as
+  // the second half of `npm run typecheck`.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["@webgpu/types", "vite/client"]
+  },
+  "include": [
+    "src/game.ts", "src/game", "src/wasm",
+    "src/controller.ts", "src/controller", "src/input", "src/replay",
+    "src/versus", "src/net", "src/audio", "src/effects", "src/sound.ts",
+    "src/a11y", "src/settings", "src/config", "src/pwa", "src/ui", "src/utils"
+  ]
+}

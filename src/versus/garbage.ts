@@ -41,7 +41,7 @@ export function injectGarbageRows(
       const src = (y + 1) * width;
       const dst = y * width;
       for (let x = 0; x < width; x++) {
-        playfield[dst + x] = playfield[src + x];
+        playfield[dst + x] = playfield[src + x]!;
       }
     }
     const bottom = (height - 1) * width;

@@ -211,10 +211,10 @@ export function cpuLumaHistogram(
   for (let p = 0; p < pixels; p += stride) {
     const i = p * 4;
     const luma =
-      (rgba[i] / 255) * LUMA_WEIGHTS[0] +
-      (rgba[i + 1] / 255) * LUMA_WEIGHTS[1] +
-      (rgba[i + 2] / 255) * LUMA_WEIGHTS[2];
-    histogram[lumaBin(luma, bins, max)] += 1;
+      (rgba[i]! / 255) * LUMA_WEIGHTS[0] +
+      (rgba[i + 1]! / 255) * LUMA_WEIGHTS[1] +
+      (rgba[i + 2]! / 255) * LUMA_WEIGHTS[2];
+    histogram[lumaBin(luma, bins, max)]! += 1;
   }
   return histogram;
 }
