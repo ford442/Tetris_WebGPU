@@ -40,6 +40,7 @@ src/
 │   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
 │   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
 ├── viewWebGL2/              # WebGL2 renderer (auto fallback when no adapter; glBloom.ts = bloom pass)
+├── deterministic.ts         # ?deterministic[&seed=N]: seeded Math.random + frozen video (visual regression)
 ├── dev/
 │   ├── textureMaskLab.ts    # Mask/material authoring UI (?masklab)
 │   └── materialDebugHotkey.ts # Shift+M material inspector
@@ -224,6 +225,9 @@ npm run cpp:test:native  # Host doctest suite for the pure C++ headers (cmake; n
 npm run cpp:size         # wasm/js size report (-- --base origin/main for a delta)
 npm run cpp:debug        # Debug Emscripten build
 npm run material:validate # Validate public/block-material.json + authored maps
+npm run wgsl:validate    # Compile every WGSL module with Tint (Dawn Node, software Vulkan); file:line on error
+npm run test:gpu         # WGSL compile + compute-kernel parity tests only (TETRIS_REQUIRE_GPU=1 to forbid skipping)
+npm run build && npm run e2e   # Playwright: boot policy + deterministic-frame goldens (UPDATE_GOLDENS=1 to rewrite)
 ```
 
 **Try C++ renderer:** `npm run cpp:release` then open `?renderer=webgpu-cpp`
@@ -275,3 +279,11 @@ Tests live in `tests/`. Run with `npm run test`. Key test files:
 - `cpp-build-config.test.ts` — one build config: exports vs loader `cwrap`s vs `EMSCRIPTEN_KEEPALIVE`, no hand-copied flags, artifact records the config
 - `cpp-parity-vectors.test.ts` — `shared/cppParityVectors.json` held by the TS renderer (the C++ side is `cpp/tests/`)
 - `cpp-size-report.test.ts` — size report formatting and the base-ref delta
+- `wgsl-compile.test.ts` — every shipped WGSL module (TS strings, `.wgsl` stages, generated C++ header) compiles under Tint; C++ shared WGSL is byte-identical to `src/`; known failures are listed in `tests/helpers/wgslBaseline.ts` (strict both ways)
+- `gpu-chores-dawn.test.ts` — `luma_histogram`, `downsample_2d`, `compact_indices`, `detect_lines` and the particle compute actually run on a software adapter and match their CPU rungs
+- `visual-diff.test.ts`, `deterministic.test.ts`, `e2e-frame-fixture.test.ts` — the pixelmatch helper, the `?deterministic` flag, and the replay-simulator frame fixture
+- `tests/e2e/*.spec.ts` — Playwright (not Vitest): `boot.spec.ts` boot policy / probe / overlay, `visual.spec.ts` goldens + cross-renderer agreement. Docs: `docs/gpu-testing.md`
+
+### GPU tests need an adapter
+
+The Vitest GPU suites use Dawn Node on a software Vulkan driver (`mesa-vulkan-drivers`, or the SwiftShader inside Playwright's Chromium). Without one they **skip with a printed `[gpu-skip]` reason**; CI sets `TETRIS_REQUIRE_GPU=1` so a missing adapter fails. When extending `tests/helpers/dawn.ts`, keep the Dawn instance/adapter referenced for the life of the process — letting them be GC'd is a use-after-free that surfaces as random SIGSEGV/futex aborts (details in `docs/gpu-testing.md`). Screenshots and diffs go to `test-results/`, never `.playwright-mcp/`.

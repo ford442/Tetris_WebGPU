@@ -6,7 +6,7 @@
 
 * **Live Demo:** https://konstantin84ukr.github.io/Tetris_WebGPU/
 * **Frontend:** TypeScript 5.8 + Vite 6.
-* **Testing:** Vitest 3.x.
+* **Testing:** Vitest 3.x; WGSL compile + compute-kernel parity on a software adapter (Dawn Node); Playwright E2E + visual regression (`docs/gpu-testing.md`).
 * **Rendering:** WebGPU (WGSL shaders); optional Emscripten C++ (`webgpu-cpp`); WebGL2 only when explicitly chosen (`?renderer=webgl2`) or under `auto` when the browser has no WebGPU adapter at all. Boot policy: `docs/webgpu-boot-probe.md`.
 * **Game Logic:** Hybrid TypeScript and AssemblyScript 0.27 (WASM) for collision; C++ renderer is rendering-only.
 * **Audio:** Web Audio API (procedural synthesis + sample playback).
@@ -161,6 +161,9 @@ index.ts               # App entry point at repo root (UI injection, MVC wiring,
   shader-optimizations.test.ts
   texture-sampling.test.ts
   block-material-*.test.ts  # Authored material contract, maps, schema, TS/WebGL2/C++ parity
+  wgsl-compile.test.ts      # Every shipped WGSL module compiles (Tint via Dawn Node); known failures in tests/helpers/wgslBaseline.ts
+  gpu-chores-dawn.test.ts   # Compute kernels run on a software adapter vs their CPU rungs
+  e2e/*.spec.ts             # Playwright (npm run build && npm run e2e): boot policy, deterministic-frame goldens
   cpp-block-parity.test.ts
 
 /public                # Static assets served by Vite
@@ -209,6 +212,8 @@ npm run build:cpp      # alias for cpp:release
 npm run build:all
 
 # Run unit tests (Vitest). pretest compiles collision WASM only (not cpp).
+# GPU suites skip with a printed reason when no software Vulkan adapter exists
+# (apt install mesa-vulkan-drivers); TETRIS_REQUIRE_GPU=1 makes that a failure.
 npm test
 
 # Type-check (tsc --noEmit)

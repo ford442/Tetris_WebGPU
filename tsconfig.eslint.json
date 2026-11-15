@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src", "tests", "index.ts", "vite.config.ts", "vitest.config.ts", "workers"]
+  "include": ["src", "tests", "index.ts", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "scripts/validate-wgsl.ts", "workers"]
 }
