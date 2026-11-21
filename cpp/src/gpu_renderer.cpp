@@ -57,7 +57,15 @@ struct PostProcessUniformData {
   float time;
   float intensity;
   float aberration;
-  float pad1;
+  /** 0 = SDR surface; > 0 = HDR output peak (see hdrOutput.wgsl). Mirrors `hdrPeak` in the shader. */
+  float hdr_peak;
+};
+
+/** HDR surface outcome, exported via get_surface_hdr_state(). */
+enum HdrSurfaceState : int {
+  kHdrOff = 0,       // not requested (the default): SDR surface, behaviour unchanged
+  kHdrActive = 1,    // rgba16float + display-p3 + extended tone mapping confirmed by the browser
+  kHdrRejected = 2,  // requested but the browser would not take it: SDR surface
 };
 
 struct GpuState {
@@ -95,6 +103,8 @@ struct GpuState {
   WGPUBuffer post_uniform_buffer = nullptr;
 
   WGPUTextureFormat surface_format = WGPUTextureFormat_BGRA8Unorm;
+  HdrSurfaceState hdr_state = kHdrOff;
+  float hdr_peak = 1.4f;
   bool draw_blocks = false;
   bool texture_ready = false;
   float lock_flash = 0.0f;
@@ -116,6 +126,49 @@ EM_JS(int, js_preferred_surface_format, (), {
   }
   const fmt = navigator.gpu.getPreferredCanvasFormat();
   return fmt === 'rgba8unorm' ? 1 : 0;
+});
+// clang-format on
+
+/**
+ * HDR output is requested by TS through module options (`tetrisHdrOutput`, `tetrisHdrPeak`):
+ * TS owns the policy (?hdr, Settings, display capability), C++ only honours the outcome.
+ */
+// clang-format off
+EM_JS(int, js_hdr_requested, (), {
+  return (typeof Module !== 'undefined' && Module['tetrisHdrOutput']) ? 1 : 0;
+});
+
+EM_JS(double, js_hdr_peak, (), {
+  const peak = (typeof Module !== 'undefined') ? Module['tetrisHdrPeak'] : 0;
+  return (typeof peak === 'number' && peak > 1) ? peak : 1.4;
+});
+
+/**
+ * Try the extended-range configuration on the canvas context first, entirely inside JS where a
+ * thrown TypeError is caught — an exception escaping into wasm would hard-fail the boot. Returns
+ * 1 only when getConfiguration() reads back toneMapping 'extended' on rgba16float: WebIDL drops a
+ * dictionary member a browser doesn't know, so the read-back is the only proof it was accepted.
+ * The real surface is configured right after by configure_surface(), which overrides this probe.
+ */
+EM_JS(int, js_probe_hdr_surface, (const char* canvas_id), {
+  try {
+    const canvas = document.getElementById(UTF8ToString(canvas_id));
+    const context = canvas && canvas.getContext('webgpu');
+    const device = Module['preinitializedWebGPUDevice'];
+    if (!context || !device || typeof context.getConfiguration !== 'function') return 0;
+    context.configure({
+      device: device,
+      format: 'rgba16float',
+      alphaMode: 'premultiplied',
+      colorSpace: 'display-p3',
+      toneMapping: { mode: 'extended' },
+    });
+    const applied = context.getConfiguration();
+    return (applied && applied.format === 'rgba16float' && applied.toneMapping &&
+            applied.toneMapping.mode === 'extended') ? 1 : 0;
+  } catch (e) {
+    return 0;
+  }
 });
 // clang-format on
 
@@ -207,6 +260,15 @@ static void configure_surface() {
   surf_cfg.height = static_cast<uint32_t>(g_gpu.height);
   surf_cfg.presentMode = WGPUPresentMode_Fifo;
   surf_cfg.alphaMode = WGPUCompositeAlphaMode_Premultiplied;
+
+  // Extended-range output: Display P3 + extended tone mapping (SDR chains nothing, as before).
+  WGPUSurfaceColorManagement color_management = {};
+  if (g_gpu.hdr_state == kHdrActive) {
+    color_management.chain.sType = WGPUSType_SurfaceColorManagement;
+    color_management.colorSpace = WGPUPredefinedColorSpace_DisplayP3;
+    color_management.toneMappingMode = WGPUToneMappingMode_Extended;
+    surf_cfg.nextInChain = &color_management.chain;
+  }
   wgpuSurfaceConfigure(g_gpu.surface, &surf_cfg);
 }
 
@@ -351,6 +413,7 @@ static void update_uniforms(float dt) {
   post_uniforms.time = time_acc;
   post_uniforms.intensity = 1.0f;    // Could be mapped to a game state param later
   post_uniforms.aberration = 0.01f;  // Base aberration
+  post_uniforms.hdr_peak = g_gpu.hdr_state == kHdrActive ? g_gpu.hdr_peak : 0.0f;
 
   if (g_gpu.post_uniform_buffer) {
     wgpuQueueWriteBuffer(g_gpu.queue, g_gpu.post_uniform_buffer, 0, &post_uniforms,
@@ -620,7 +683,10 @@ static bool recreate_bind_group() {
 static bool create_post_pipeline() {
   if (g_gpu.post_pipeline) return true;
 
-  WGPUShaderModule shader = create_shader(tetris::shaders::kPostprocessWgsl);
+  // Shared HDR helpers (byte-identical to the TS composite's) + the C++-owned post pass.
+  const std::string post_wgsl =
+      std::string(tetris::shaders::kSharedHdrOutputWgsl) + "\n" + tetris::shaders::kPostprocessWgsl;
+  WGPUShaderModule shader = create_shader(post_wgsl.c_str());
   if (!shader) return false;
 
   WGPUBindGroupLayoutEntry bgl_entries[3] = {};
@@ -1022,6 +1088,10 @@ int gpu_renderer_is_active(void) {
   return g_gpu.active ? 1 : 0;
 }
 
+int gpu_renderer_hdr_state(void) {
+  return static_cast<int>(g_gpu.hdr_state);
+}
+
 int gpu_renderer_init(const char* canvas_selector, int width, int height) {
   gpu_renderer_shutdown();
 
@@ -1032,6 +1102,20 @@ int gpu_renderer_init(const char* canvas_selector, int width, int height) {
   g_gpu.width = width > 0 ? width : 1;
   g_gpu.height = height > 0 ? height : 1;
   g_gpu.surface_format = preferred_surface_format();
+  g_gpu.hdr_state = kHdrOff;
+  g_gpu.hdr_peak = static_cast<float>(js_hdr_peak());
+  if (js_hdr_requested()) {
+    // The format and colour management must be settled before any pipeline or render target
+    // is built, because they all follow surface_format.
+    if (js_probe_hdr_surface(g_gpu.canvas_selector)) {
+      g_gpu.hdr_state = kHdrActive;
+      g_gpu.surface_format = WGPUTextureFormat_RGBA16Float;
+      emscripten_console_log("[cpp renderer] HDR output: rgba16float / display-p3 / extended");
+    } else {
+      g_gpu.hdr_state = kHdrRejected;
+      emscripten_console_warn("[cpp renderer] HDR output requested but not accepted; using SDR");
+    }
+  }
 
   g_gpu.instance = wgpuCreateInstance(nullptr);
   g_gpu.device = emscripten_webgpu_get_device();
@@ -1283,6 +1367,10 @@ int gpu_renderer_set_block_texture(const uint8_t* data, int width, int height, i
 extern "C" {
 
 int gpu_renderer_is_active(void) {
+  return 0;
+}
+
+int gpu_renderer_hdr_state(void) {
   return 0;
 }
 

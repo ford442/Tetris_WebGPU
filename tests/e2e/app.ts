@@ -27,6 +27,8 @@ export interface BootOptions {
   noGpu?: boolean;
   /** Make `requestAdapter()` resolve null (a browser that has WebGPU but no adapter). */
   nullAdapter?: boolean;
+  /** Extra query parameters, e.g. `{ hdr: '1', capture: '1' }`. */
+  query?: Record<string, string>;
 }
 
 export interface ConsoleLog {
@@ -60,6 +62,7 @@ export function bootUrl(options: BootOptions, seed = FRAME_FIXTURE.seed): string
     params.set('deterministic', '1');
     params.set('seed', String(seed));
   }
+  for (const [k, v] of Object.entries(options.query ?? {})) params.set(k, v);
   const q = params.toString();
   return q ? `?${q}` : '';
 }

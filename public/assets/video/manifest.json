@@ -1,10 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
+  "themePackId": "default",
+  "fallbackBehavior": "bg1",
   "basePath": "./assets/video/",
   "files": [
-    "bg1.mp4",
-    "bg3.mp4"
+    {
+      "name": "bg1.mp4"
+    },
+    {
+      "name": "bg3.mp4"
+    }
   ],
   "generated": false,
-  "builtAt": "2026-10-21T00:22:45.632Z"
+  "builtAt": "2026-11-21T05:59:14.440Z"
 }

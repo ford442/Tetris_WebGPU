@@ -13,6 +13,8 @@
  * behind, so recording a probe never risks a second live device.
  */
 import { getLastGpuAcquireDiagnostics, type GpuAdapterAttempt } from './gpuContext.js';
+import type { GpuLimitsReport } from './gpuLimits.js';
+import { getLastPresentation, type PresentationInfo } from './presentation.js';
 
 export type ProbeRenderer = 'ts' | 'cpp';
 
@@ -24,6 +26,12 @@ export interface WebgpuProbeResult {
   /** Which adapter-request attempt succeeded (`power-preference` | `default` | `compatibility`), or null. */
   adapterAttempt: GpuAdapterAttempt | null;
   renderer: ProbeRenderer;
+  /** Device features that were actually enabled. */
+  features: string[];
+  /** Limits: what the game asked for, what the adapter offers, what the device was granted. */
+  limits: GpuLimitsReport | null;
+  /** Canvas format / colour space / tone mapping / usage, and why HDR is or isn't active. */
+  presentation: PresentationInfo | null;
 }
 
 declare global {
@@ -96,6 +104,9 @@ export function buildWebgpuProbe(
     adapter: diagnostics.adapterDescription,
     adapterAttempt: diagnostics.adapterAttempt,
     renderer,
+    features: [...diagnostics.enabledFeatures],
+    limits: diagnostics.limits,
+    presentation: ok ? getLastPresentation() : null,
   };
   recordWebgpuProbe(result);
   return result;

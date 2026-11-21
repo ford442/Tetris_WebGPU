@@ -11,6 +11,16 @@ import {
 } from '../webgpu/gpuContext.js';
 import { releaseGpuDevice } from '../webgpu/gpuChores/deviceRegistry.js';
 import {
+  DEFAULT_HDR_PEAK,
+  detectHdrDisplay,
+  presentationFromCppState,
+  recordPresentation,
+  resolveHdrIntent,
+  shouldRequestHdr,
+  type PresentationInfo,
+} from '../webgpu/presentation.js';
+import { loadGameSettings } from '../config/gameSettings.js';
+import {
   flattenPlayfieldGrid,
   packPieceState,
   PIECE_STATE_BYTES,
@@ -75,6 +85,15 @@ export interface CppRendererModule {
 }
 
 type CreateModuleFn = (options?: Record<string, unknown>) => Promise<CppRendererModule>;
+
+/** Persisted "HDR (if supported)" choice; `null` when settings are unreadable. */
+function readHdrSetting(): boolean | null {
+  try {
+    return loadGameSettings().hdrOutput;
+  } catch {
+    return null;
+  }
+}
 
 function isWasmMagic(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 4) return false;
@@ -160,6 +179,8 @@ export class CppRendererLoader {
   ) => void) | null = null;
   private static isGpuActiveFn: (() => number) | null = null;
   private static getBackendFn: (() => number) | null = null;
+  private static getSurfaceHdrStateFn: (() => number) | null = null;
+  private static presentation: PresentationInfo | null = null;
   private static setBlockTextureFn: ((ptr: number, w: number, h: number, len: number) => number) | null = null;
   private static setMaterialMapFn: ((ptr: number, w: number, h: number, len: number) => number) | null = null;
   private static blockTextureReady = false;
@@ -170,6 +191,11 @@ export class CppRendererLoader {
 
   static isGpuActive(): boolean {
     return this.backend === RendererBackend.WEBGPU;
+  }
+
+  /** Canvas format / colour space / tone mapping the C++ surface ended up with (after a successful init). */
+  static getPresentation(): PresentationInfo | null {
+    return this.presentation;
   }
 
   static getRendererBackend(): RendererBackendId {
@@ -343,9 +369,14 @@ export class CppRendererLoader {
     }
 
     try {
+      // TS owns the HDR policy (?hdr, Settings, display capability); C++ confirms the surface.
+      const hdrIntent = resolveHdrIntent(undefined, readHdrSetting());
+      const displayHdr = detectHdrDisplay();
       const instance = await imported.create({
         canvas,
         preinitializedWebGPUDevice: webgpuDevice ?? undefined,
+        tetrisHdrOutput: shouldRequestHdr(hdrIntent, displayHdr),
+        tetrisHdrPeak: DEFAULT_HDR_PEAK,
       });
       this.module = instance;
       this.loadedUrl = `${imported.jsUrl} (wasm from ${wasmProbe.url})`;
@@ -380,6 +411,7 @@ export class CppRendererLoader {
       ) => void;
       this.isGpuActiveFn = instance.cwrap('is_gpu_renderer_active', 'number', []) as () => number;
       this.getBackendFn = instance.cwrap('get_renderer_backend', 'number', []) as () => number;
+      this.getSurfaceHdrStateFn = instance.cwrap('get_surface_hdr_state', 'number', []) as () => number;
       this.setMaterialMapFn = instance.cwrap('set_block_material_map_rgba', 'number', [
         'number',
         'number',
@@ -397,6 +429,13 @@ export class CppRendererLoader {
 
       this.bindHeapViews();
       this.backend = (this.getBackendFn?.() ?? this.isGpuActiveFn?.() ?? 0) as RendererBackendId;
+      this.presentation = presentationFromCppState({
+        intent: hdrIntent,
+        displayHdr,
+        surfaceState: this.getSurfaceHdrStateFn?.() ?? 0,
+        sdrFormat: navigator.gpu.getPreferredCanvasFormat(),
+      });
+      recordPresentation(this.presentation);
 
       if (this.backend !== RendererBackend.WEBGPU) {
         // A cpp module that fell back to its own Canvas2D backend (or came up
@@ -552,6 +591,8 @@ export class CppRendererLoader {
     this.updatePieceStateFn = null;
     this.isGpuActiveFn = null;
     this.getBackendFn = null;
+    this.getSurfaceHdrStateFn = null;
+    this.presentation = null;
     this.setBlockTextureFn = null;
     this.setMaterialMapFn = null;
     this.blockTextureReady = false;

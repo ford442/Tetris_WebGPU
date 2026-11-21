@@ -141,6 +141,11 @@ int get_renderer_backend() {
 }
 
 EMSCRIPTEN_KEEPALIVE
+int get_surface_hdr_state() {
+  return gpu_renderer_hdr_state();
+}
+
+EMSCRIPTEN_KEEPALIVE
 int is_gpu_renderer_active() {
   return g_backend == RENDERER_BACKEND_WEBGPU ? 1 : 0;
 }

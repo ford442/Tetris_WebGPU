@@ -16,6 +16,7 @@ import type * as Matrix from 'gl-matrix';
 import type { GameSettings } from '../config/gameSettings.js';
 import type { GpuPassTimers } from '../webgpu/gpuPassTimers.js';
 import type { AdaptiveQualityControllerState } from '../webgpu/adaptiveQuality.js';
+import type { ResolutionGovernorState } from '../webgpu/renderResolution.js';
 import type { PerfOverlay, PerfOverlayAdapterInfo } from '../webgpu/perfOverlay.js';
 import type { AutoBloomController } from '../webgpu/gpuChores/autoBloom.js';
 import type { GpuChoreRunner } from '../webgpu/gpuChores/runner.js';
@@ -222,6 +223,11 @@ export interface WebGPUViewHost extends ViewEventHost {
   adaptiveParticleCap?: number;
   gpuAdapterInfo?: PerfOverlayAdapterInfo | null;
   renderScale: number;
+  presentation?: { info: { hdr: boolean } };
+  frameCapture?: { afterSubmit(): void };
+  resolutionGovernor?: ResolutionGovernorState;
+  resolutionFactor?: number;
+  resize?(): void;
   applyGameSettings?(settings: GameSettings): void;
   applyAdaptiveSettings?(settings: GameSettings, particleCap: number): void;
 }

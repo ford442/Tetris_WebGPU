@@ -84,6 +84,9 @@ describe('showFatalWebgpuOverlay / removeFatalWebgpuOverlay', () => {
       adapter: null,
       adapterAttempt: null,
       renderer: 'ts',
+      features: [],
+      limits: null,
+      presentation: null,
     };
 
     showFatalWebgpuOverlay(container as unknown as HTMLElement, probe);
@@ -103,7 +106,7 @@ describe('showFatalWebgpuOverlay / removeFatalWebgpuOverlay', () => {
   it('is a no-op when document is unavailable', () => {
     vi.stubGlobal('document', undefined);
     expect(() =>
-      showFatalWebgpuOverlay(undefined, { ok: false, browser: 'other', reason: null, adapter: null, adapterAttempt: null, renderer: 'cpp' }),
+      showFatalWebgpuOverlay(undefined, { ok: false, browser: 'other', reason: null, adapter: null, adapterAttempt: null, renderer: 'cpp', features: [], limits: null, presentation: null }),
     ).not.toThrow();
     expect(() => removeFatalWebgpuOverlay()).not.toThrow();
   });

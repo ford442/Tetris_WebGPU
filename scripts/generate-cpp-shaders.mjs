@@ -29,6 +29,7 @@ const SHARED_TS_SHADERS = [
   { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'authoredMaterial.wgsl'), identifier: 'kSharedAuthoredMaterialWgsl' },
   { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'authoredGlass.wgsl'), identifier: 'kSharedAuthoredGlassWgsl' },
   { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'block', 'pbrCore.wgsl'), identifier: 'kSharedPbrCoreWgsl' },
+  { file: join(ROOT, 'src', 'webgpu', 'shaders', 'wgsl', 'postprocess', 'hdrOutput.wgsl'), identifier: 'kSharedHdrOutputWgsl' },
 ];
 
 /** Shared sources must not reference bind-group resources — see SHARED_TS_SHADERS. */

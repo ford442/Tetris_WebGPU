@@ -19,6 +19,10 @@ type PostProcessView = {
   canvasWebGPU: HTMLCanvasElement;
   recreateRenderTargets: () => void;
   hdrPlayfield?: boolean;
+  /** HDR *output* (rgba16float / extended canvas). It must go through the bloom composite, which owns the tone map. */
+  presentation?: { info: { hdr: boolean } };
+  /** `?capture`: copies the presented frame out; absent otherwise. */
+  frameCapture?: { encode(encoder: GPUCommandEncoder, texture: GPUTexture): void };
   /** Optional post/juice compute helpers; absent means the static tuning. */
   gpuChores?: Pick<GpuChoreRunner, 'encodeLumaScan'>;
 };
@@ -49,7 +53,7 @@ export class PostProcessor {
     }
 
     if ((this.view.useMultiPassBloom && this.view.bloomEnabled && this.view._bloomInputTexture)
-      || (this.view.hdrPlayfield && this.view._bloomInputTexture)) {
+      || ((this.view.hdrPlayfield || this.view.presentation?.info.hdr) && this.view._bloomInputTexture)) {
       const ppColorAttachment0 = (this.view._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
       ppColorAttachment0.view = this.view._bloomInputTexture.createView();
 
@@ -75,7 +79,8 @@ export class PostProcessor {
         this.view._bloomInputTexture.height,
       );
 
-      const textureViewScreen = this.view.ctxWebGPU.getCurrentTexture().createView();
+      const screenTexture = this.view.ctxWebGPU.getCurrentTexture();
+      const textureViewScreen = screenTexture.createView();
       passTimers?.beginRegion(commandEncoder, 'bloom');
       this.view.bloomSystem.render(
         bloomInputView,
@@ -83,10 +88,12 @@ export class PostProcessor {
         commandEncoder,
       );
       passTimers?.endRegion(commandEncoder, 'bloom');
+      this.view.frameCapture?.encode(commandEncoder, screenTexture);
       return;
     }
 
-    const textureViewScreen = this.view.ctxWebGPU.getCurrentTexture().createView();
+    const screenTexture = this.view.ctxWebGPU.getCurrentTexture();
+    const textureViewScreen = screenTexture.createView();
     const ppColorAttachment0 = (this.view._ppPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
     ppColorAttachment0.view = textureViewScreen;
 
@@ -98,5 +105,6 @@ export class PostProcessor {
     ppPassEncoder.draw(6);
     passTimers?.endRegion(ppPassEncoder, 'postProcess');
     ppPassEncoder.end();
+    this.view.frameCapture?.encode(commandEncoder, screenTexture);
   }
 }

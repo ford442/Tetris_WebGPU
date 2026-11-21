@@ -6,6 +6,7 @@ import {
   getWebgpuProbe,
 } from '../src/webgpu/bootProbe.js';
 import { requestGpuAdapterAndDevice, getLastGpuAcquireDiagnostics } from '../src/webgpu/gpuContext.js';
+import { configurePresentation } from '../src/webgpu/presentation.js';
 
 describe('detectBrowser', () => {
   it('tells Chrome and Edge apart even though both are Chromium', () => {
@@ -39,7 +40,7 @@ describe('recordWebgpuProbe / getWebgpuProbe', () => {
   it('round-trips through window.webgpuProbe', () => {
     const fakeWindow = {} as Window;
     vi.stubGlobal('window', fakeWindow);
-    const probe = { ok: true, browser: 'chrome', reason: null, adapter: 'test-adapter', adapterAttempt: null, renderer: 'ts' as const };
+    const probe = { ok: true, browser: 'chrome', reason: null, adapter: 'test-adapter', adapterAttempt: null, renderer: 'ts' as const, features: [], limits: null, presentation: null };
     recordWebgpuProbe(probe);
     expect(getWebgpuProbe()).toEqual(probe);
     expect((fakeWindow as unknown as { webgpuProbe: unknown }).webgpuProbe).toEqual(probe);
@@ -87,6 +88,51 @@ describe('buildWebgpuProbe', () => {
     expect(probe.adapter).toContain('Acme GPU');
     expect(probe.renderer).toBe('ts');
     expect(getWebgpuProbe()).toEqual(probe);
+  });
+
+  it('reports enabled features, requested/adapter/granted limits and the presentation', async () => {
+    const device = { label: '', limits: { maxTextureDimension2D: 8192, maxBindGroups: 1, maxStorageBuffersPerShaderStage: 4 } } as unknown as GPUDevice;
+    const adapter = {
+      features: new Set<string>(['timestamp-query', 'shader-f16']),
+      limits: { maxTextureDimension2D: 16384, maxBindGroups: 4, maxStorageBuffersPerShaderStage: 10 },
+      info: { vendor: 'acme', architecture: 'arm', device: 'gpu-1', description: 'Acme GPU' },
+      requestDevice: vi.fn(async () => device),
+    } as unknown as GPUAdapter;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { gpu: { requestAdapter: vi.fn(async () => adapter) }, userAgent: 'Chrome/120.0.0.0' },
+      configurable: true,
+    });
+    await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+    const configure = vi.fn();
+    configurePresentation({ configure }, device, { sdrFormat: 'bgra8unorm', search: '', hdrSetting: false });
+
+    const probe = buildWebgpuProbe('ts', true);
+    // shader-f16 is advertised by the adapter but not used, so it is not enabled.
+    expect(probe.features).toEqual(['timestamp-query']);
+    expect(probe.limits?.requested).toMatchObject({ maxStorageBuffersPerShaderStage: 4, maxBindGroups: 1 });
+    expect(probe.limits?.adapter).toMatchObject({ maxTextureDimension2D: 16384, maxBindGroups: 4 });
+    expect(probe.limits?.granted).toMatchObject({ maxTextureDimension2D: 8192, maxBindGroups: 1 });
+    expect(probe.presentation).toMatchObject({
+      format: 'bgra8unorm',
+      colorSpace: 'srgb',
+      toneMapping: 'standard',
+      hdr: false,
+      hdrStatus: 'off',
+    });
+    // JSON-serializable, like the rest of the probe.
+    expect(() => JSON.stringify(probe)).not.toThrow();
+  });
+
+  it('has no presentation on a failed boot', async () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { gpu: { requestAdapter: vi.fn(async () => null) }, userAgent: 'Chrome/120.0.0.0' },
+      configurable: true,
+    });
+    await requestGpuAdapterAndDevice({ search: '', storageValue: null });
+    const probe = buildWebgpuProbe('ts', false);
+    expect(probe.presentation).toBeNull();
+    expect(probe.features).toEqual([]);
+    expect(probe.limits).toBeNull();
   });
 
   it('reports different reason text for Chrome vs Edge on the same failure', async () => {

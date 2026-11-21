@@ -230,6 +230,16 @@ uiContainer.innerHTML = `
           </select>
         </div>
 
+        <div class="settings-group settings-hdr-row">
+          <label class="settings-toggle"><input type="checkbox" id="settings-hdr"> HDR (if supported)</label>
+          <span id="settings-hdr-status" class="settings-hint" role="status"></span>
+        </div>
+
+        <div class="settings-group settings-capture-row" id="settings-capture-row" hidden>
+          <button type="button" id="settings-save-screenshot" class="settings-button">Save screenshot (PNG)</button>
+          <span class="settings-hint">Capture mode (<code>?capture</code>)</span>
+        </div>
+
         <div class="settings-group settings-a11y-row">
           <label class="settings-label" for="settings-color-palette">Piece colors</label>
           <select id="settings-color-palette" class="settings-select" aria-label="Color vision palette">

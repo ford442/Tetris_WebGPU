@@ -37,6 +37,7 @@ import { UNIFORM_BUFFER_SIZES } from '../config/renderConfig.js';
 import { textureLogger, shaderLogger, isDebugEnabled } from '../utils/logger.js';
 import { DebugTextureShaders } from './debug_shaders.js';
 import { BloomSystem } from './bloomSystem.js';
+import { FrameCapture } from './frameCapture.js';
 import {
   AutoBloomController,
   GpuChoreRunner,
@@ -452,7 +453,14 @@ export async function initGpuResources(view: any, presentationFormat: GPUTexture
   });
 
   // Initialize multi-pass bloom system.
-  view.bloomSystem = new BloomSystem(device, view.canvasWebGPU.width, view.canvasWebGPU.height);
+  // The composite pass writes to the canvas, so it follows the presentation: SDR ACES into the
+  // preferred 8-bit format by default, the extended-range Display P3 permutation under HDR output.
+  view.bloomSystem = new BloomSystem(device, view.canvasWebGPU.width, view.canvasWebGPU.height, {
+    format: presentationFormat,
+    hdr: view.presentation?.info.hdr === true,
+  });
+  view.frameCapture?.destroy();
+  view.frameCapture = view.presentation?.info.capture ? new FrameCapture(device) : undefined;
   // Conservative values to prevent block washout. These stay the *floor* under
   // auto-bloom: the luma chore can raise the threshold on a bright frame, never
   // lower it below this hand-tuned baseline.
