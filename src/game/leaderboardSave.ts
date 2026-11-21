@@ -16,10 +16,13 @@ export interface LeaderboardSaveHost {
   gameOver: boolean;
   mode: GameMode;
   scoringSystem: ScoringSystem;
+  /** The run used the CPU's placement hints: it is not a fair score. */
+  assistUsed?: boolean;
 }
 
 /** @returns true when the run set a new best for the mode. */
 export function saveModeLeaderboard(host: LeaderboardSaveHost): boolean {
+    if (host.assistUsed) return false;
     const save = {
       score: host.score,
       lines: host.lines,

@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "Default evaluator weights for the CPU opponent (assembly/bot/eval.ts). Names/order come from",
+    "shared/botDataSchema.json. Penalties are negative. Edit, run `npm run bot:generate`, rebuild wasm.",
+    "The ranges are chosen so one hole (~ -6) outweighs a few rows of height, and a 4-line clear (+12)",
+    "outweighs a hole, which is what produces stack-clean / tetris-well play."
+  ],
+  "version": 1,
+  "weights": {
+    "heightAgg": -0.5,
+    "maxHeight": -0.3,
+    "holes": -6,
+    "holeRows": -3,
+    "covered": -0.4,
+    "bumpiness": -0.6,
+    "wellSum": -0.5,
+    "rowTrans": -0.35,
+    "colTrans": -0.5,
+    "tSlot": 3,
+    "tetrisReady": 1.5,
+    "danger": -8,
+    "line1": 0,
+    "line2": 3,
+    "line3": 5,
+    "line4": 12,
+    "attack": 4,
+    "spinMini": 3,
+    "spinNormal": 8,
+    "combo": 1.5,
+    "b2b": 4,
+    "allClear": 40,
+    "score": 0,
+    "b2bKeep": 3,
+    "comboKeep": 1.5
+  }
+}

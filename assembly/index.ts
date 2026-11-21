@@ -9,7 +9,11 @@
 //   Offset 460 – 479 : Board 1 temp cleared-index staging
 //   clearLinesBoard(id) publishes indices to scratch[0..count) for the JS host
 //
-// Scoring, T-spin, and lock delay stay in TypeScript.
+// Scoring, T-spin, and lock delay stay in TypeScript (the CPU opponent keeps a bit-exact port of the
+// T-spin/kick rules in assembly/bot/, pinned against the TS game by tests/bot-parity.test.ts).
+//
+//   Offset 2048+ : CPU opponent working memory (assembly/bot/layout.ts) — bitboards, BFS tables, beam levels.
+//                  Never overlaps the boards above; ends at botMemoryEnd() (< 64 KiB).
 
 export const WIDTH: i32 = 10;
 export const HEIGHT: i32 = 20;
@@ -215,3 +219,6 @@ export function hardDropDistance(
 ): i32 {
   return hardDropDistanceBoard(0, pieceX, pieceY, x1, y1, x2, y2, x3, y3, x4, y4);
 }
+
+// CPU opponent: move generator, evaluator and beam search (see assembly/bot/).
+export * from './bot/api';

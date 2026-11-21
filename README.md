@@ -78,6 +78,7 @@ Select a mode from the left panel before **START**. Mode rules also appear in th
 | **Cheese Race** | Clear all cheese blocks | No garbage cells remain | Top-out | Best time |
 | **Zen Practice** | Relaxed practice | — (no end) | Never | None |
 | **Local 2P** | Beat opponent | Opponent tops out | Top-out | — |
+| **vs CPU** | Beat the computer | CPU tops out | Top-out | — |
 
 **Cheese Race** starts with 7 rows of garbage (one hole per row). Clear every gray cheese block to win; your own piece colors can stay on the board. Customize row count with `?cheeseRows=5` through `?cheeseRows=10`.
 
@@ -87,10 +88,17 @@ Select a mode from the left panel before **START**. Mode rules also appear in th
 
 Split-screen on one keyboard with garbage attacks. Select **Local 2P** → **START**. See [`docs/VERSUS.md`](docs/VERSUS.md).
 
+### vs CPU and the hint overlay
+
+**vs CPU** plays Local 2P against a computer opponent (Easy / Normal / Hard / Expert; no network) — pick it in the
+mode list or open `?mode=versus-cpu&cpu=hard`. In any single-player mode, **H** cycles a hint overlay showing the CPU's
+best placement, then its top three (using a hint keeps the run off the leaderboards). The opponent is a WebAssembly
+placement search running in a Web Worker; see [`docs/BOT.md`](docs/BOT.md).
+
 ### Continuous Integration
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`.
-It installs dependencies with `npm ci`, builds the release WASM, runs `npm run typecheck`,
+It installs dependencies with `npm ci`, checks the generated bot constants, builds the release WASM, runs `npm run typecheck`,
 `npm run lint`, `npm test`, and produces the production build across a Node LTS matrix
 (20 and 22). PRs must be green before merge.
 

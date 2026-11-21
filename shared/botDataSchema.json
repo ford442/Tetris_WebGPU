@@ -1,0 +1,52 @@
+{
+  "$comment": [
+    "Schema for the two data files the CPU opponent shares across languages:",
+    "  * shared/versusAttack.json  garbage rows sent per clear (read by src/versus/garbage.ts AND the",
+    "                              AssemblyScript bot via the generated assembly/bot/generated.ts)",
+    "  * shared/botWeights.json    evaluator weights (read by src/bot/ AND baked in as the wasm defaults)",
+    "",
+    "ONE declarative description, read by scripts/lib/botData.mjs (generator + tests) and src/bot/botData.ts",
+    "(runtime), so neither side can accept a file the other rejects. `features` is the canonical weight order:",
+    "it IS the f32 table layout, and the generator emits a W_<NAME> index constant per entry for AssemblyScript.",
+    "Add a feature by appending here AND a value in botWeights.json; reordering changes every shipped table."
+  ],
+  "version": 1,
+  "attack": {
+    "tables": ["none", "tSpinMini", "tSpin"],
+    "length": 5,
+    "min": 0,
+    "max": 40
+  },
+  "weights": {
+    "capacity": 32,
+    "min": -1000,
+    "max": 1000,
+    "features": [
+      "heightAgg",
+      "maxHeight",
+      "holes",
+      "holeRows",
+      "covered",
+      "bumpiness",
+      "wellSum",
+      "rowTrans",
+      "colTrans",
+      "tSlot",
+      "tetrisReady",
+      "danger",
+      "line1",
+      "line2",
+      "line3",
+      "line4",
+      "attack",
+      "spinMini",
+      "spinNormal",
+      "combo",
+      "b2b",
+      "allClear",
+      "score",
+      "b2bKeep",
+      "comboKeep"
+    ]
+  }
+}

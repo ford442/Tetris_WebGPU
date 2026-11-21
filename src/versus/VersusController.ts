@@ -18,6 +18,8 @@ import {
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
 import { clampDt } from '../controller/gameLoop.js';
+import { CpuOpponent } from '../bot/CpuOpponent.js';
+import { REPLAY_ACTION } from '../replay/actions.js';
 
 type Action = PlayerAction;
 
@@ -49,6 +51,9 @@ export default class VersusController {
   isPaused = false;
   gameLoopID: number | null = null;
   wins: [number, number] = [0, 0];
+
+  /** When set, player 2 is the computer: no keyboard, inputs come from the bot as action masks. */
+  private cpu: CpuOpponent | null = null;
 
   private lastTime = 0;
   private boundKeyDown: (e: KeyboardEvent) => void;
@@ -119,7 +124,25 @@ export default class VersusController {
     document.addEventListener('visibilitychange', this.boundVisibilityChange);
   }
 
+  /**
+   * Make player 2 a CPU (`difficulty` = easy|normal|hard|expert) or hand it back to a human (null).
+   * Loads the bot wasm + Worker, so await it before play(). Safe to call repeatedly.
+   */
+  async setCpu(difficulty: string | null): Promise<void> {
+    this.cpu?.dispose();
+    this.cpu = null;
+    if (difficulty !== null) {
+      this.cpu = await CpuOpponent.create(difficulty, generateReplaySeed());
+    }
+    this.updateModeHud();
+  }
+
+  get hasCpu(): boolean {
+    return this.cpu !== null;
+  }
+
   destroy(): void {
+    this.cpu?.dispose();
     document.removeEventListener('keydown', this.boundKeyDown);
     document.removeEventListener('keyup', this.boundKeyUp);
     window.removeEventListener('blur', this.boundBlurOrHidden);
@@ -206,14 +229,14 @@ export default class VersusController {
     const secondaryValue = document.getElementById('mode-hud-secondary-value');
     const levelBox = document.getElementById('level-panel-box');
 
-    if (modeLabel) modeLabel.textContent = 'Local 2P';
+    if (modeLabel) modeLabel.textContent = this.cpu ? `vs CPU (${this.cpu.difficulty.label})` : 'Local 2P';
     if (primaryLabel) primaryLabel.textContent = 'P1';
     if (primaryValue) primaryValue.textContent = 'Arrows';
     if (secondaryLabel && secondaryValue) {
       secondaryLabel.style.display = '';
       secondaryValue.style.display = '';
-      secondaryLabel.textContent = 'P2';
-      secondaryValue.textContent = 'WASD';
+      secondaryLabel.textContent = this.cpu ? 'CPU' : 'P2';
+      secondaryValue.textContent = this.cpu ? this.cpu.difficulty.label : 'WASD';
     }
     if (levelBox) levelBox.style.display = 'none';
     this.updateHighScoreDisplay();
@@ -227,6 +250,7 @@ export default class VersusController {
       p.lastLevel = p.game.level;
       Object.assign(p.actionTimers, emptyTimers());
     }
+    this.cpu?.reset(seed ^ 0x5bd1e995);
   }
 
   private enableSplitScreen(): void {
@@ -272,6 +296,7 @@ export default class VersusController {
 
     for (let i = 0; i < 2; i++) {
       const slot = this.players[i]!;
+      if (i === 1 && this.cpu) continue; // the computer owns player 2's board
       const action = slot.keyMap[code];
       if (!action || slot.game.isRunEnded) continue;
       slot.keys[code] = true;
@@ -327,6 +352,22 @@ export default class VersusController {
         }
         break;
     }
+  }
+
+  /** Apply one bot action mask to player 2 through the same game calls a human's keys end up in. */
+  private applyCpuMask(mask: number): void {
+    const g = this.players[1].game;
+    if (g.isRunEnded) return;
+    if (mask & REPLAY_ACTION.LEFT) g.movePieceLeft();
+    if (mask & REPLAY_ACTION.RIGHT) g.movePieceRight();
+    if (mask & REPLAY_ACTION.DOWN) g.movePieceDown();
+    if (mask & REPLAY_ACTION.ROTATE_CW) g.rotatePiece(true);
+    if (mask & REPLAY_ACTION.ROTATE_CCW) g.rotatePiece(false);
+    if (mask & REPLAY_ACTION.HOLD && g.canHold) {
+      g.hold();
+      this.soundManager.playHold();
+    }
+    if (mask & REPLAY_ACTION.HARD_DROP) void this.hardDrop(1);
   }
 
   private async hardDrop(player: 0 | 1): Promise<void> {
@@ -389,7 +430,7 @@ export default class VersusController {
     this.updateHighScoreDisplay();
     this.soundManager.playGameOver();
     const winnerState = this.players[winner].game.getState();
-    announce(`Player ${winner + 1} wins. Score ${winnerState.score.toLocaleString()}.`);
+    announce(`${winner === 1 && this.cpu ? 'The computer' : `Player ${winner + 1}`} wins. Score ${winnerState.score.toLocaleString()}.`);
     this.isPlaying = false;
     if (this.gameLoopID) cancelAnimationFrame(this.gameLoopID);
     this.gameLoopID = null;
@@ -435,7 +476,11 @@ export default class VersusController {
       if (slot.game.isRunEnded) continue;
       anyAlive = true;
       slot.game.tickMode(dt);
-      this.handleInput(slot, dt);
+      if (i === 1 && this.cpu) {
+        this.cpu.advance(dt, slot.game, (mask) => this.applyCpuMask(mask));
+      } else {
+        this.handleInput(slot, dt);
+      }
 
       const level = slot.game.getEffectiveLevel();
       if (level > slot.lastLevel) {
