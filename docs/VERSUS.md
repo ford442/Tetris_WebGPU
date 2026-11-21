@@ -12,6 +12,18 @@ Split-screen local multiplayer on one keyboard with garbage attacks.
 4. **P2:** WASD, W (hard drop), Tab (hold), Q/E or K/L (rotate).
 5. Clear 2+ lines to send garbage rows to your opponent.
 
+## vs CPU
+
+Play Local 2P against the computer — no second human, no network.
+
+1. Select **vs CPU** in the mode dropdown, pick **Easy / Normal / Hard / Expert**, click **START**.
+2. You are P1 (**Arrow keys**, Space, C, X/Z). The CPU owns the right-hand board.
+3. Or open `?mode=versus-cpu&cpu=hard` (`cpu` is optional, default `normal`).
+
+The CPU searches in a Web Worker (a time-sliced main-thread search is the automatic fallback), so the
+render loop never stalls. It uses the same garbage rules and the same inputs a person has — see
+[`docs/BOT.md`](BOT.md) for how it decides, how the difficulties differ and how to tune it.
+
 ## Online 2P (Phase B)
 
 Ephemeral room-based online versus with lockstep simulation. No accounts.
@@ -78,6 +90,7 @@ Garbage rows rise from the bottom with one random hole per row (deterministic se
 | `src/versus/VersusController.ts` | Local dual game loop, input, attacks |
 | `src/versus/OnlineVersusController.ts` | Online lockstep + transport + render |
 | `src/versus/VersusLockstepSim.ts` | Fixed 60 Hz dual-board simulation |
+| `src/bot/CpuOpponent.ts` | CPU slot for player 2 in `VersusController` (vs CPU) |
 | `src/versus/garbageRng.ts` | Deterministic garbage hole columns |
 | `src/versus/garbage.ts` | Attack math + playfield injection |
 | `src/net/` | Signaling, WebRTC, codec, lockstep engine |

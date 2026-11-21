@@ -47,6 +47,17 @@ src/
 │   └── gameState.ts         # GameState type + createGameStateCache()
 ├── wasm/
 │   └── WasmCore.ts          # WASM loader and collision API wrapper
+├── bot/                     # CPU opponent (see docs/BOT.md)
+│   ├── BotCore.ts           # Own-memory wasm instance wrapper: setPosition / search / plan
+│   ├── BotPlayer.ts         # Pilot: placement -> per-tick action mask (closed-loop, humanized)
+│   ├── CpuOpponent.ts       # Pilot + searcher + 60 Hz tick accumulator bolted onto a live Game
+│   ├── searchers.ts         # Sync / time-sliced / module-Worker searchers + AutoSearcher fallback
+│   ├── botWorker.ts         # Module Worker entry (logic in workerHandler.ts)
+│   ├── hint.ts              # H-key assist overlay (ghost-rendered top-3 placements)
+│   ├── difficulty.ts        # Easy/Normal/Hard/Expert ladder (data)
+│   ├── botData.ts           # Validates + packs shared/versusAttack.json and shared/botWeights.json
+│   ├── selfPlay.ts / versusMatch.ts  # Headless drivers (tests, `npm run bot:selfplay`)
+│   └── …                    # types, protocol, gameSnapshot, loadWasm, url
 ├── view/
 │   ├── IView.ts             # Shared view contract (all renderers)
 │   ├── createView.ts        # Factory + dynamic cpp import
@@ -104,7 +115,15 @@ src/
     ├── debug_shaders.ts     # Debug visualization shaders
     └── renderMetrics.ts     # Render coordinate constants
 assembly/
-├── index.ts                 # AssemblyScript collision detection (compiled to WASM)
+├── index.ts                 # AssemblyScript collision detection (compiled to WASM) + re-exports bot/api
+├── bot/                     # CPU opponent: bitboard move generator, evaluator, beam search (docs/BOT.md)
+│   ├── layout.ts            # Fixed memory map above the boards (no heap, no static data)
+│   ├── shapes.ts            # Piece geometry, SRS kicks, collision, T-spin class (bit-exact port of the TS rules)
+│   ├── moves.ts             # BFS over reachable lock states + shortest input paths
+│   ├── eval.ts              # Board features, attack rows, scoring points
+│   ├── search.ts            # Resumable beam search over hold + next queue
+│   ├── api.ts               # Flat export surface used by src/bot/BotCore.ts
+│   └── generated.ts         # GENERATED from shared/*.json by scripts/generate-bot-constants.mjs
 └── tsconfig.json
 cpp/                         # Emscripten C++ renderer (opt-in, parallel to assembly/)
 ├── build.config.json        # Single source of truth: sources, flags, exports, port flags, size budget
@@ -115,7 +134,8 @@ cpp/                         # Emscripten C++ renderer (opt-in, parallel to asse
 ├── src/playfield_draw.cpp
 ├── src/shaders/             # block/authoredBlock.wgsl, postprocess/postprocess.wgsl
 └── README.md
-shared/                      # blockMaterialSchema.json, authoredBlockUniforms.json, cppParityVectors.json (TS + C++ contract)                # emsdk setup, build commands, test matrix
+shared/                      # blockMaterialSchema.json, authoredBlockUniforms.json, cppParityVectors.json (TS + C++ contract);
+                             # versusAttack.json, botWeights.json, botDataSchema.json (TS + AssemblyScript contract)                # emsdk setup, build commands, test matrix
 index.ts                     # App entry point (UI creation, wiring)
 index.html                   # HTML bootstrap
 ```
@@ -245,6 +265,14 @@ Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
 - **Fallback:** if WASM fails to load, each `Game` falls back to the JS collision path. Tests assert the WASM path is the active one.
 - The C++ renderer is rendering-only; it never touches game logic or collision.
 
+### CPU opponent (placement search in WASM)
+- **What:** a pure, headless bot — move generator → evaluator → resumable beam search over hold + the visible next queue — in `assembly/bot/`, wrapped by `src/bot/`. It plays `vs CPU` (`?mode=versus-cpu[&cpu=easy|normal|hard|expert]`), powers the **H** hint overlay, and drives headless self-play. Full design, memory map and tuning loop: `docs/BOT.md`.
+- **One wasm, two memories:** it lives in `release.wasm` (same module as collision) but a `BotCore` always instantiates its **own** 1-page memory, so it runs on the main thread, in a module Worker, and never touches the shared board memory. The module has **no static data** (AssemblyScript would place it over the boards); every table is built by `botInit()`. `tests/bot-wasm-core.test.ts` proves instantiation writes nothing.
+- **Same rules as the game, pinned by tests:** the SRS kick tables (including the `kickIndex` quirk above), the T-spin classifier and the lock/rotation reachability are a bit-exact port; `tests/bot-parity.test.ts` drives the real `Game` and the bot through the same random positions and a brute-force reachability search and requires identical answers.
+- **Speaks the replay mask language:** `BotPlayer.nextMask()` returns the same `REPLAY_ACTION` bitmask a keyboard produces (one action per 60 Hz tick), so bot games record/replay like human ones and plug into `GameSimulator.tick(mask)`.
+- **Shared data, never copied:** `shared/versusAttack.json` is the garbage table (`src/versus/garbage.ts` reads it; AssemblyScript reads it through `assembly/bot/generated.ts`), `shared/botWeights.json` the evaluator weights, `shared/botDataSchema.json` their schema. `npm run bot:generate` writes the generated file; CI fails if it is stale.
+- **Hints taint the run:** using **H** sets `Game.assistUsed`, which keeps the run off the leaderboards.
+
 ### Render Pipeline
 1. Background layer (video or procedural shader)
 2. Frosted glass backboard
@@ -275,7 +303,10 @@ npm run build:desktop    # Vite build with VITE_BASE=./ (Tauri shell; see Build 
 npm run test             # Run tests (Vitest)
 npm run typecheck        # tsc -b (src, tests, node/scripts, workers) + the noUncheckedIndexedAccess ratchet
 npm run lint             # ESLint (src/tests/workers via typescript-eslint; scripts/ with a Node block)
-npm run asbuild:release  # Compile AssemblyScript → public/release.wasm
+npm run asbuild:release  # Regenerate assembly/bot/generated.ts, then compile AssemblyScript → public/release.wasm
+npm run bot:generate     # Rewrite assembly/bot/generated.ts from shared/*.json (-- --check = fail if stale)
+npm run bot:selfplay     # CPU self-play report per difficulty (-- --weights candidate.json to try a weight set)
+npm run bot:bench        # Decision-latency benchmark (vitest bench)
 npm run cpp:release      # Compile C++ renderer → public/cpp/ (skips if no emcc; fails if no WebGPU port links)
 npm run cpp:verify       # Check committed public/cpp artifact vs build-info.json + .emsdk-version (no emcc)
 npm run cpp:lint         # clang-format + clang-tidy over cpp/src and cpp/tests (cpp:format fixes in place)
@@ -379,12 +410,13 @@ protocol or a static server at any prefix. `npm run preview` after a default bui
 - **WebGPU resource management** (`viewWebGPU.ts` + `webgpu/`): no wrapper engine — `GPUDevice`, buffers, bind groups and pipelines are managed by hand. The `View` constructor starts async init (`preRender`); the render loop guards `!this.device`, but calling view methods from the controller before init completes can crash if unguarded.
 - **Input timing:** physics uses `performance.now()` deltas while key state comes from DOM events; keep repeat logic in the frame loop.
 - **Rotation kicks:** `game/rotateFlow.ts` advances `kickIndex` twice per loop iteration (every second kick offset is skipped). It is long-standing behaviour that the T-Spin kick indices and tests depend on, so treat any change as a gameplay change, not a refactor.
+- **Hard-drop stepping (sim clock, #561):** `Game.hardDrop()` finishes — line clear, scoring, next-piece spawn — one microtask AFTER the call. A synchronous `GameSimulator.tick()` loop therefore keeps steering an already-locked piece, `runSimulation()` of a bot (or human) stream diverges, and `VersusLockstepSim` never sees the clear inside its tick, so it never sends garbage. `src/bot/selfPlay.ts` (`stepMask`) and `src/bot/versusMatch.ts` flush a microtask after any tick containing a hard drop and do their own attack accounting; they are the single place to change when the unified sim step lands.
 - **Video background:** relies on DOM layering (`z-index`) behind the transparent canvas; large aspect-ratio changes can drift the portal alignment.
 - **Block bind groups** are rebuilt per frame in some paths, which pressures the browser's resource tracker.
 
 ## CI & deployment
 
-- `.github/workflows/ci.yml` (PRs and `main`, Node 20 and 22): `npm ci` → `asbuild:release` → `cpp:verify` → `typecheck` → `lint` → `test` → `build`. `cpp-renderer.yml` rebuilds the C++ renderer with the pinned emsdk and fails if `public/cpp` differs. `copilot-setup-steps.yml` is setup-only, not a gate.
+- `.github/workflows/ci.yml` (PRs and `main`, Node 20 and 22): `npm ci` → `bot:generate --check` → `asbuild:release` → `cpp:verify` → `typecheck` → `lint` → `test` → `build`. `cpp-renderer.yml` rebuilds the C++ renderer with the pinned emsdk and fails if `public/cpp` differs. `copilot-setup-steps.yml` is setup-only, not a gate.
 - `package.json` `engines.node` is `>=20`.
 - Deploy: `deploy.py` uploads `dist/` (after `npm run build:all`) to the Contabo storage manager with `DEPLOY_TOKEN` from the environment. The removed `deploy_old.py` held a plaintext SFTP password that remains in git history and **must be rotated**.
 - Repo size: `.git` carries historical binary churn (wasm/png). Rewriting history (`git filter-repo --invert-paths --path build --path block.png --path public/block-2.png …`) is an optional, separate, coordinated step — never part of a normal PR.
@@ -413,5 +445,12 @@ Tests live in `tests/` (a few are co-located, e.g. `src/webgpu/materials.test.ts
 - `presentation.test.ts` / `bloom-composite-hdr.test.ts` / `cpp-hdr-post.test.ts` — canvas configuration, the SDR-pinned composite, and both HDR tone maps executed on a software adapter against CPU references
 - `render-resolution.test.ts` / `gpu-limits.test.ts` / `webgl2-context.test.ts` / `frame-capture.test.ts` — resolution policy, requested features/limits, pinned WebGL2 attributes, capture readback
 - `tests/e2e/presentation.spec.ts` — probe `presentation` / `?hdr` / Settings round trip / `?capture` configuration in a real browser
+- `bot-wasm-core.test.ts` — bot memory contract (inside the page, nothing written at instantiation) + textbook placement counts
+- `bot-parity.test.ts` — bot ↔ real `Game`: shapes, kicks (incl. the quirk), collision, rotation, T-spin class, scoring points, attack rows, generator vs brute-force reachability, planned paths replayed on the engine
+- `bot-eval-search.test.ts` — every evaluator feature vs an independent reference; search decisions, determinism, resumability, node budget
+- `bot-selfplay.test.ts` — seeded 200-piece self-play regression, replay round trip, humanizing cadence, CPU-vs-CPU versus
+- `bot-searchers.test.ts` / `bot-cpu-opponent.test.ts` / `bot-hint.test.ts` — Sync/Sliced/Worker searchers (real handler behind a fake Worker), the live-game glue, the hint overlay + leaderboard gate
+- `bot-shared-data.test.ts` / `bot-performance.test.ts` — shared JSON + generated file contract; decision budget (<2 ms median at depth 2) and wasm size guard
+- `tests/e2e/cpu-opponent.spec.ts` — the production Worker + wasm under the `/tetris-webgpu/` base, CPU moves pieces on a live board, H overlay
 - `ts-escape-hatches.test.ts` — `as any` / `@ts-ignore` ratchet + the typecheck-surface wiring
 - `vite-base.test.ts` — `VITE_BASE` resolution

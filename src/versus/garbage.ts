@@ -2,23 +2,17 @@
 export const GARBAGE_CELL = 8;
 
 import type { TSpinResult } from '../game/tSpin.js';
+import { ATTACK_TABLES } from '../bot/botData.js';
 
-/** Lines cleared → garbage rows sent to opponent. */
+/**
+ * Lines cleared → garbage rows sent to opponent.
+ * The numbers live in shared/versusAttack.json so the AssemblyScript CPU opponent plans against the very
+ * same table (see src/bot/botData.ts for validation); this function only indexes it.
+ */
 export function attackRowsFromClear(linesCleared: number, tSpin: TSpinResult = 'none'): number {
   if (linesCleared <= 0) return 0;
-  if (tSpin === 'mini') {
-    if (linesCleared === 1) return 0;
-    if (linesCleared === 2) return 1;
-  }
-  if (tSpin === 'normal') {
-    if (linesCleared === 1) return 2;
-    if (linesCleared === 2) return 4;
-    if (linesCleared >= 3) return 6;
-  }
-  if (linesCleared === 1) return 0;
-  if (linesCleared === 2) return 1;
-  if (linesCleared === 3) return 2;
-  return 4;
+  const table = tSpin === 'normal' ? ATTACK_TABLES.tSpin : tSpin === 'mini' ? ATTACK_TABLES.tSpinMini : ATTACK_TABLES.none;
+  return table[Math.min(linesCleared, table.length - 1)]!;
 }
 
 /**

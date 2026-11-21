@@ -1,0 +1,13 @@
+{
+  "$comment": [
+    "Garbage rows sent to the opponent, indexed by lines cleared (0..4). Single source of truth:",
+    "src/versus/garbage.ts attackRowsFromClear() and the AssemblyScript bot both read this file.",
+    "none      = plain clear; tSpinMini / tSpin = clear completed by a T-spin (mini / full).",
+    "A mini T-spin only has its own entries for 1 and 2 lines; 3 and 4 fall through to the plain table,",
+    "and a full T-spin sends 6 for anything >= 3 lines (matching the original if-chain exactly)."
+  ],
+  "version": 1,
+  "none":      [0, 0, 1, 2, 4],
+  "tSpinMini": [0, 0, 1, 2, 4],
+  "tSpin":     [0, 2, 4, 6, 6]
+}

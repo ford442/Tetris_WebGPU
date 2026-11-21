@@ -113,6 +113,12 @@ export default class Game implements ModeGameHooks {
   /** Incoming garbage rows from opponent (applied on next lock). */
   pendingGarbageRows = 0;
 
+  /** Assist-hint cells (x, y, colour) triples for up to 3 placements x 4 cells — see src/bot/hint.ts. */
+  readonly hintCells = new Int8Array(3 * 4 * 3);
+  hintCellCount = 0;
+  /** True once a hint was shown this run: the run no longer counts for the leaderboards. */
+  assistUsed = false;
+
   /** Deterministic garbage hole RNG for lockstep (optional). */
   private garbageRngFactory: (() => () => number) | null = null;
 
@@ -384,7 +390,9 @@ export default class Game implements ModeGameHooks {
       isGameOver: this.gameOver,
       activePiece: this.activPiece,
       ghostY: this.gameOver ? this.activPiece.y : this.getGhostY(),
-      targetArray: this.projectedPlayfield
+      targetArray: this.projectedPlayfield,
+      hintCells: this.hintCells,
+      hintCellCount: this.hintCellCount,
     });
 
     fillGameStateCache(this as unknown as StateSnapshotHost, playfield2D);
@@ -444,6 +452,8 @@ export default class Game implements ModeGameHooks {
       this.pieceGenerator.setSeed(options.seed);
     }
     this.scoringSystem.reset();
+    this.hintCellCount = 0;
+    this.assistUsed = false;
     this.gameOver = false;
     this.victory = false;
     this.modeElapsedMs = 0;
