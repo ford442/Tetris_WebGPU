@@ -8,6 +8,9 @@ interface PlayfieldProjectionParams {
   activePiece: Piece;
   ghostY: number;
   targetArray?: number[][];
+  /** Flat (x, y, colourIndex) triples of assist-hint cells, drawn like the ghost (negative index). */
+  hintCells?: Int8Array | null;
+  hintCellCount?: number;
 }
 
 export function buildPlayfieldProjection({
@@ -17,7 +20,9 @@ export function buildPlayfieldProjection({
   isGameOver,
   activePiece,
   ghostY,
-  targetArray
+  targetArray,
+  hintCells,
+  hintCellCount = 0,
 }: PlayfieldProjectionParams): number[][] {
   const playfield2D: number[][] = targetArray || [];
 
@@ -61,6 +66,17 @@ export function buildPlayfieldProjection({
               playfield2D[targetY]![targetX] = -blocks[y]![x]!;
             }
           }
+        }
+      }
+    }
+
+    // Assist hints (the CPU's suggested placements) reuse the ghost rendering: a negative colour index.
+    if (hintCells && hintCellCount > 0) {
+      for (let i = 0; i < hintCellCount; i++) {
+        const hx = hintCells[i * 3]!;
+        const hy = hintCells[i * 3 + 1]!;
+        if (hy >= 0 && hy < playfieldHeight && hx >= 0 && hx < playfieldWidth && playfield2D[hy]![hx] === 0) {
+          playfield2D[hy]![hx] = -hintCells[i * 3 + 2]!;
         }
       }
     }

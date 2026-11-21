@@ -22,6 +22,7 @@ import { INPUT_CONFIG } from "./config/gameConfig.js";
 import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
 import type { ReplayActionName } from "./replay/actions.js";
 import type { ReplayFile } from "./replay/format.js";
+import { HintOverlay } from "./bot/hint.js";
 
 // Logical actions
 
@@ -100,6 +101,9 @@ export default class Controller {
   lastLevel: number = 1;
   playTimeMs: number = 0;
   gravityTimer: number = 0;
+
+  /** Assist hints (H): the CPU's best placements drawn as ghost cells. */
+  readonly hint = new HintOverlay();
 
   /** Replay capture for the current run. */
   readonly replayRecorder = new ReplayRecorder();
@@ -461,6 +465,12 @@ export default class Controller {
       return;
     }
 
+    // Assist hint overlay: off -> best placement -> top 3 -> off (marks the run as assisted).
+    if (code === 'KeyH') {
+      this.hint.cycle(this.game);
+      return;
+    }
+
     // Map key to action
     const action = this.keyMap[code];
     if (!action) return;
@@ -552,6 +562,7 @@ export default class Controller {
   }
 
   handleInput(dt: number): void {
+    this.hint.update(this.game);
     processDasArrInput({
       keys: this.keys,
       keyMap: this.keyMap,

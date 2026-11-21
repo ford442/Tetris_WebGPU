@@ -21,6 +21,8 @@ import { initFullscreenButton } from './src/pwa/fullscreen.js';
 import VersusController from './src/versus/VersusController.js';
 import OnlineVersusController from './src/versus/OnlineVersusController.js';
 import { initOnlineVersusUI, parseOnlineVersusUrl } from './src/ui/onlineVersusUI.js';
+import { parseCpuVersusUrl } from './src/bot/url.js';
+import { parseBotDifficulty } from './src/bot/difficulty.js';
 import { initAnnouncer } from './src/a11y/announcer.js';
 import { initKeyboardNavigation, enhanceControlAccessibility } from './src/a11y/keyboardNav.js';
 import { watchReducedMotion } from './src/a11y/accessibility.js';
@@ -65,7 +67,14 @@ uiContainer.innerHTML = `
               <option value="cheese">Cheese Race</option>
               <option value="zen">Zen Practice</option>
               <option value="versus">Local 2P</option>
+              <option value="versus-cpu">vs CPU</option>
               <option value="online-versus">Online 2P</option>
+            </select>
+            <select id="cpu-difficulty-select" class="mode-select" aria-label="CPU difficulty" style="display:none">
+              <option value="easy">CPU: Easy</option>
+              <option value="normal">CPU: Normal</option>
+              <option value="hard">CPU: Hard</option>
+              <option value="expert">CPU: Expert</option>
             </select>
             <p id="mode-label" class="mode-current-label">Marathon</p>
           </div>
@@ -281,6 +290,7 @@ uiContainer.innerHTML = `
           <div class="control-item"><span class="key">SPACE</span> Hard Drop</div>
           <div class="control-item"><span class="key">C</span> Hold Piece</div>
           <div class="control-item"><span class="key">ESC</span> Pause</div>
+          <div class="control-item"><span class="key">H</span> Hint: CPU's best placement (off → 1 → 3; run no longer ranks)</div>
           <div class="control-item versus-controls-hint"><span class="key">P1</span> Arrows + Space/C/X/Z</div>
           <div class="control-item versus-controls-hint"><span class="key">P2</span> WASD + Q/E/Tab</div>
         </div>
@@ -455,11 +465,20 @@ void (async () => {
   // Initialize high score display for current mode
   const savedMode = parseGameModeId(localStorage.getItem('tetris_game_mode'));
   const modeSelect = document.getElementById('game-mode-select') as HTMLSelectElement;
+  const cpuSelect = document.getElementById('cpu-difficulty-select') as HTMLSelectElement | null;
+  const syncCpuSelect = () => {
+    if (cpuSelect) cpuSelect.style.display = modeSelect?.value === 'versus-cpu' ? '' : 'none';
+  };
+  if (cpuSelect) {
+    cpuSelect.value = parseBotDifficulty(localStorage.getItem('tetris_cpu_difficulty')).id;
+    cpuSelect.addEventListener('change', () => localStorage.setItem('tetris_cpu_difficulty', cpuSelect.value));
+  }
   if (modeSelect) {
     modeSelect.value = savedMode;
     modeSelect.addEventListener('change', () => {
+      syncCpuSelect();
       if (controller.isPlaying) return;
-      game.setMode(modeSelect.value as GameModeId);
+      game.setMode((modeSelect.value === 'versus-cpu' ? 'versus' : modeSelect.value) as GameModeId);
       controller.updateHighScoreDisplay();
       controller.updateModeHud();
     });
@@ -500,7 +519,7 @@ void (async () => {
         }
         onlineUI.show();
         onlineVersusController.play();
-      } else if (mode === 'versus') {
+      } else if (mode === 'versus' || mode === 'versus-cpu') {
         if (controller.isPlaying) {
           controller.pause();
           controller.isPlaying = false;
@@ -520,7 +539,16 @@ void (async () => {
           window.controller = versusController as unknown as Controller;
           versusController.updateModeHud();
         }
-        versusController.play();
+        // vs CPU loads the bot wasm + Worker first; plain Local 2P resolves immediately.
+        const vc = versusController;
+        void vc
+          .setCpu(mode === 'versus-cpu' ? (cpuSelect?.value ?? 'normal') : null)
+          .catch((error: unknown) => {
+            // No bot wasm (offline, blocked): play it as ordinary Local 2P instead of not starting at all.
+            console.warn('[CPU] opponent unavailable, starting Local 2P:', error);
+            return vc.setCpu(null);
+          })
+          .then(() => vc.play());
       } else {
         if (!controller.isPlaying) {
           game.setMode(mode as GameModeId);
@@ -685,6 +713,14 @@ void (async () => {
   initOfflineBanner();
   initFullscreenButton();
   registerServiceWorker();
+
+  const cpuUrl = parseCpuVersusUrl(window.location.search);
+  if (cpuUrl && modeSelect) {
+    modeSelect.value = 'versus-cpu';
+    if (cpuSelect) cpuSelect.value = cpuUrl.difficulty;
+    syncCpuSelect();
+    document.getElementById('start-button')?.click();
+  }
 
   const onlineUrl = parseOnlineVersusUrl();
   if (onlineUrl) {

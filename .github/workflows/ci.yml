@@ -35,6 +35,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # asbuild:release REGENERATES assembly/bot/generated.ts, so check the committed copy first:
+      # otherwise a forgotten `npm run bot:generate` would be silently papered over by the build.
+      - name: Verify generated bot constants are committed
+        run: npm run bot:generate -- --check
+
       - name: Build release WASM
         run: npm run asbuild:release
 
