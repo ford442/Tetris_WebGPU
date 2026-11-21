@@ -24,8 +24,9 @@ import {
   BlurHorizontalShader,
   BlurVerticalShader,
   UpsampleCombineShader,
-  CompositeShader,
+  createCompositeShader,
 } from './bloomShaders.js';
+import { DEFAULT_HDR_PEAK } from './presentation.js';
 
 export interface BloomParameters {
   /** Luminance threshold (0.0 - 1.0), default 0.35 */
@@ -61,6 +62,21 @@ const DEFAULT_BLOOM_PARAMS: BloomParameters = {
   knee: 0.1
 };
 
+/**
+ * Where the composite pass writes. Omitted = the SDR canvas format, byte-identical to
+ * the pre-HDR behaviour.
+ */
+export interface BloomOutputOptions {
+  /** Canvas texture format (`PresentationInfo.format`). */
+  format?: GPUTextureFormat;
+  /** Use the extended-range, Display P3 tone map (canvas accepted `toneMapping: 'extended'`). */
+  hdr?: boolean;
+  /** Peak output value for HDR, in output units where 1.0 is SDR white. */
+  hdrPeak?: number;
+}
+
+export { DEFAULT_HDR_PEAK };
+
 // Number of mip levels for the bloom pyramid
 const BLOOM_MIP_LEVELS = 3;
 
@@ -75,6 +91,10 @@ export class BloomSystem implements BloomSystemScratch {
   _compositeData?: Float32Array;
 
   private device: GPUDevice;
+  /** Canvas format the composite pass writes to (rgba16float under HDR output). */
+  private outputFormat: GPUTextureFormat;
+  private hdrOutput: boolean;
+  private hdrPeak: number;
   private width: number;
   private height: number;
   
@@ -113,10 +133,13 @@ export class BloomSystem implements BloomSystemScratch {
   // Fullscreen quad vertex buffer (shared)
   private vertexBuffer!: GPUBuffer;
   
-  constructor(device: GPUDevice, width: number, height: number) {
+  constructor(device: GPUDevice, width: number, height: number, output: BloomOutputOptions = {}) {
     this.device = device;
     this.width = width;
     this.height = height;
+    this.outputFormat = output.format ?? navigator.gpu.getPreferredCanvasFormat();
+    this.hdrOutput = output.hdr === true;
+    this.hdrPeak = output.hdrPeak ?? DEFAULT_HDR_PEAK;
     this.params = { ...DEFAULT_BLOOM_PARAMS };
     
     this.initialize();
@@ -281,12 +304,16 @@ export class BloomSystem implements BloomSystemScratch {
       primitive: { topology: 'triangle-list' }
     });
     
-    // Composite pipeline
+    // Composite pipeline (SDR ACES, or the extended-range permutation under HDR output)
+    const compositeModule = this.device.createShaderModule({
+      label: this.hdrOutput ? 'Bloom Composite Shader (HDR)' : 'Bloom Composite Shader',
+      code: createCompositeShader({ hdr: this.hdrOutput }),
+    });
     this.compositePipeline = this.device.createRenderPipeline({
       label: 'Bloom Composite Pipeline',
       layout: 'auto',
       vertex: {
-        module: this.device.createShaderModule({ code: CompositeShader }),
+        module: compositeModule,
         entryPoint: 'vsMain',
         buffers: [{
           arrayStride: 12,
@@ -294,9 +321,9 @@ export class BloomSystem implements BloomSystemScratch {
         }]
       },
       fragment: {
-        module: this.device.createShaderModule({ code: CompositeShader }),
+        module: compositeModule,
         entryPoint: 'fsMain',
-        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }]  // Output to screen format
+        targets: [{ format: this.outputFormat }]  // Output to screen format
       },
       primitive: { topology: 'triangle-list' }
     });
@@ -427,12 +454,12 @@ export class BloomSystem implements BloomSystemScratch {
       this.device.queue.writeBuffer(this.upsampleUniformBuffers[i], 0, this._upsampleData);
     }
     
-    // Composite uniforms: intensity, clamp, padding x2
+    // Composite uniforms: intensity, clamp, hdrPeak (0 under SDR), padding
     if(!this._compositeData) this._compositeData = new Float32Array(4);
     this._compositeData.set([
       this.params.intensity,
       this.params.clamp,
-      0.0,
+      this.hdrOutput ? this.hdrPeak : 0.0,
       0.0
     ]);
     this.device.queue.writeBuffer(this.compositeUniformBuffer, 0, this._compositeData);

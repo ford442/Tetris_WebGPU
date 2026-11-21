@@ -33,6 +33,11 @@ export interface GameSettings {
   crt: boolean;
   fxaa: boolean;
   gpuPower: GpuPowerPreference;
+  /**
+   * "HDR (if supported)": present through an extended-range Display P3 canvas when the
+   * display and browser allow it. Off by default; `?hdr=0|1` overrides. Needs a reload.
+   */
+  hdrOutput: boolean;
   /** Master mute — persisted. */
   mute: boolean;
   /** SFX bus 0–1 */
@@ -86,6 +91,7 @@ export function inferQualityFromToggles(settings: Pick<GameSettings,
       reactiveVideo: false,
       glitch: false,
       gpuPower: 'auto',
+      hdrOutput: false,
     }, preset)) {
       return preset;
     }
@@ -105,7 +111,7 @@ export function detectDefaultQuality(): QualityPreset {
 
 export function settingsFromPreset(
   preset: QualityPreset,
-  overrides: Partial<Pick<GameSettings, 'reactiveVideo' | 'glitch' | 'gpuPower'>> = {},
+  overrides: Partial<Pick<GameSettings, 'reactiveVideo' | 'glitch' | 'gpuPower' | 'hdrOutput'>> = {},
 ): GameSettings {
   const p: QualityPresetValues = QUALITY_PRESET_VALUES[preset];
   return {
@@ -121,6 +127,7 @@ export function settingsFromPreset(
     crt: p.crt,
     fxaa: p.fxaa,
     gpuPower: overrides.gpuPower ?? 'auto',
+    hdrOutput: overrides.hdrOutput ?? false,
     mute: false,
     sfxVolume: VOLUME_CONFIG.SFX,
     musicVolume: VOLUME_CONFIG.MUSIC,
@@ -176,6 +183,7 @@ export function parseGameSettings(raw: unknown, fallback: GameSettings = createD
         reactiveVideo: parseBool(o.reactiveVideo, fallback.reactiveVideo),
         glitch: parseBool(o.glitch, fallback.glitch),
         gpuPower: parseGpuPower(o.gpuPower),
+        hdrOutput: parseBool(o.hdrOutput, fallback.hdrOutput),
       })
     : { ...fallback };
 
@@ -192,6 +200,7 @@ export function parseGameSettings(raw: unknown, fallback: GameSettings = createD
     crt: parseBool(o.crt, base.crt),
     fxaa: parseBool(o.fxaa, base.fxaa),
     gpuPower: parseGpuPower(o.gpuPower),
+    hdrOutput: parseBool(o.hdrOutput, fallback.hdrOutput),
     mute: parseBool(o.mute, fallback.mute),
     sfxVolume: parseNumber(o.sfxVolume, fallback.sfxVolume),
     musicVolume: parseNumber(o.musicVolume, fallback.musicVolume),
@@ -258,6 +267,7 @@ export function applyQualityPreset(
     reactiveVideo: current.reactiveVideo,
     glitch: current.glitch,
     gpuPower: current.gpuPower,
+    hdrOutput: current.hdrOutput,
   });
   return next;
 }

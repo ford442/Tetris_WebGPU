@@ -14,6 +14,8 @@ import {
   type SettingsQuality,
 } from '../config/gameSettings.js';
 import { getRendererPreference } from '../view/rendererPreference.js';
+import { getWebgpuProbe } from '../webgpu/bootProbe.js';
+import { describeHdrStatus } from '../webgpu/presentation.js';
 import type { ColorPaletteId } from '../a11y/colorPalettes.js';
 import type { ReducedMotionPref } from '../a11y/accessibility.js';
 
@@ -24,6 +26,9 @@ type SettingsView = IView & {
   toggleBloom?(enabled?: boolean): void;
   useGlitch?: boolean;
   bloomEnabled?: boolean;
+  /** WebGPU `?capture` only: the canvas was configured with COPY_SRC. */
+  canCaptureFrame?: boolean;
+  captureScreenshot?(): Promise<void>;
 };
 
 const RENDERER_LABELS: Record<string, string> = {
@@ -75,6 +80,10 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
   const toggleLockQuality = document.getElementById('settings-lock-quality') as HTMLInputElement | null;
   const togglePerfOverlay = document.getElementById('settings-perf-overlay') as HTMLInputElement | null;
   const gpuPowerSelect = document.getElementById('settings-gpu-power') as HTMLSelectElement | null;
+  const captureRow = document.getElementById('settings-capture-row');
+  const screenshotButton = document.getElementById('settings-save-screenshot') as HTMLButtonElement | null;
+  const toggleHdr = document.getElementById('settings-hdr') as HTMLInputElement | null;
+  const hdrStatus = document.getElementById('settings-hdr-status');
   const colorPaletteSelect = document.getElementById('settings-color-palette') as HTMLSelectElement | null;
   const reducedMotionSelect = document.getElementById('settings-reduced-motion') as HTMLSelectElement | null;
   const rendererDisplay = document.getElementById('settings-renderer-display');
@@ -111,6 +120,8 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
     if (toggleLockQuality) toggleLockQuality.checked = settings.lockQuality;
     if (togglePerfOverlay) togglePerfOverlay.checked = settings.showPerfOverlay;
     if (gpuPowerSelect) gpuPowerSelect.value = settings.gpuPower;
+    if (toggleHdr) toggleHdr.checked = settings.hdrOutput;
+    if (hdrStatus) hdrStatus.textContent = describeHdrStatus(getWebgpuProbe()?.presentation ?? null);
     if (colorPaletteSelect) colorPaletteSelect.value = settings.colorPalette;
     if (reducedMotionSelect) reducedMotionSelect.value = settings.reducedMotion;
     updateRendererDisplay();
@@ -168,6 +179,13 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
   toggleLockQuality?.addEventListener('change', onIndividualToggleChange);
   togglePerfOverlay?.addEventListener('change', onIndividualToggleChange);
 
+  // HDR changes the canvas format and every pipeline target that follows it: reload, like GPU power.
+  toggleHdr?.addEventListener('change', () => {
+    if (suppressEvents) return;
+    persistAndApply({ ...settings, hdrOutput: toggleHdr.checked });
+    window.location.reload();
+  });
+
   gpuPowerSelect?.addEventListener('change', () => {
     if (suppressEvents) return;
     const gpuPower = (gpuPowerSelect.value as GpuPowerPreference) || 'auto';
@@ -184,6 +202,14 @@ export function initSettingsUI(view: SettingsView): SettingsUIHandle {
     if (suppressEvents) return;
     const reducedMotion = (reducedMotionSelect.value as ReducedMotionPref) || 'auto';
     persistAndApply({ ...settings, reducedMotion });
+  });
+
+  // "Save screenshot" exists only when the canvas can be read back (`?capture`).
+  if (captureRow && view.canCaptureFrame === true) captureRow.hidden = false;
+  screenshotButton?.addEventListener('click', () => {
+    void view.captureScreenshot?.().catch((err: unknown) => {
+      console.warn('Screenshot failed:', err);
+    });
   });
 
   syncControls();

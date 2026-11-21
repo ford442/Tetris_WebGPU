@@ -28,6 +28,9 @@ import {
 } from '../webgpu/viewGameEvents.js';
 import { renderPiece as renderPieceImpl } from '../webgpu/viewMaterials.js';
 import { renderLogger } from '../utils/logger.js';
+import { resolveBackingSize } from '../webgpu/renderResolution.js';
+import { loadGameSettings } from '../config/gameSettings.js';
+import { grantedDesynchronized, webgl2ContextAttributes } from './contextAttributes.js';
 import type { TSpinResult } from '../game/tSpin.js';
 
 const glMatrix = Matrix;
@@ -137,15 +140,16 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
   }
 
   private async init(): Promise<void> {
-    const gl = this.canvasWebGPU.getContext('webgl2', {
-      alpha: true,
-      premultipliedAlpha: true,
-      antialias: true,
-    });
+    const attributes = webgl2ContextAttributes();
+    const gl = this.canvasWebGPU.getContext('webgl2', attributes);
     if (!gl) {
       throw new Error('WebGL2 is not available in this browser.');
     }
     this.gl = gl;
+    renderLogger.info(
+      `WebGL2 context: powerPreference=${attributes.powerPreference}, ` +
+        `desynchronized=${grantedDesynchronized(gl)}, antialias=${gl.getContextAttributes()?.antialias}`,
+    );
     this.blockRenderer = new GLBlockRenderer(gl);
     this.authoredBlockTextureLoaded = await this.blockRenderer.init(import.meta.url);
     try {
@@ -162,11 +166,19 @@ export default class ViewWebGL2 implements IView, ViewEventHost {
   }
 
   resize(): void {
-    const dpr = window.devicePixelRatio || 1;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.canvasWebGPU.width = Math.floor(this.width * dpr);
-    this.canvasWebGPU.height = Math.floor(this.height * dpr);
+    // Same render-resolution policy as the WebGPU path (DPR ceiling, pixel budget, texture limit).
+    const backing = resolveBackingSize({
+      cssWidth: this.width,
+      cssHeight: this.height,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      renderScale: 1,
+      quality: loadGameSettings().quality,
+      maxTextureDimension: this.gl?.getParameter(this.gl.MAX_TEXTURE_SIZE) as number | undefined,
+    });
+    this.canvasWebGPU.width = backing.width;
+    this.canvasWebGPU.height = backing.height;
     this.canvasWebGPU.style.width = `${this.width}px`;
     this.canvasWebGPU.style.height = `${this.height}px`;
     this.visualEffects.updateVideoPosition(this.width, this.height);

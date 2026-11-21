@@ -11,6 +11,13 @@ extern "C" {
 /** Returns 1 when the WebGPU instanced draw path initialized successfully. */
 int gpu_renderer_is_active(void);
 
+/**
+ * HDR surface outcome: 0 = off (not requested), 1 = active (rgba16float / display-p3 / extended),
+ * 2 = requested but rejected by the browser (SDR surface). TS requests it through the module
+ * options `tetrisHdrOutput` / `tetrisHdrPeak`.
+ */
+int gpu_renderer_hdr_state(void);
+
 /** Initialize WebGPU surface + pipeline. canvas_selector is the HTML canvas id (no #). */
 int gpu_renderer_init(const char* canvas_selector, int width, int height);
 

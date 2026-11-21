@@ -1,8 +1,12 @@
+// The HDR output helpers (srgbToDisplayP3, hdrShoulder) are prepended from the shared
+// src/webgpu/shaders/wgsl/postprocess/hdrOutput.wgsl — see create_post_pipeline().
 struct PostProcessUniforms {
     time: f32,
     intensity: f32,
     aberration: f32,
-    pad1: f32,
+    // 0 = SDR surface (output unchanged). > 0 = HDR output: the peak, in encoded units where
+    // 1.0 is SDR white. Set only when the browser confirmed an extended-range surface.
+    hdrPeak: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: PostProcessUniforms;
@@ -46,21 +50,30 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     let totalAberration = vignetteAberration + uniforms.aberration;
 
-    // Split RGB
+    // Split RGB. textureSampleLevel, not textureSample: the offscreen target has one mip, so level 0
+    // is what textureSample resolved to anyway, and it is legal after the non-uniform early return above.
     let horizOffset = totalAberration;
     let r_uv = finalUV + vec2<f32>(horizOffset, 0.0);
     let b_uv = finalUV - vec2<f32>(horizOffset, 0.0);
 
-    let colorR = textureSample(screenTexture, screenSampler, r_uv).r;
-    let colorG = textureSample(screenTexture, screenSampler, finalUV).g;
-    let colorB = textureSample(screenTexture, screenSampler, b_uv).b;
-    let a = textureSample(screenTexture, screenSampler, finalUV).a;
+    let colorR = textureSampleLevel(screenTexture, screenSampler, r_uv, 0.0).r;
+    let colorG = textureSampleLevel(screenTexture, screenSampler, finalUV, 0.0).g;
+    let colorB = textureSampleLevel(screenTexture, screenSampler, b_uv, 0.0).b;
+    let a = textureSampleLevel(screenTexture, screenSampler, finalUV, 0.0).a;
 
     var rgb = vec3<f32>(colorR, colorG, colorB);
 
     // Scanlines
     let scanline = sin(finalUV.y * 800.0) * 0.04 * uniforms.intensity;
     rgb -= vec3<f32>(scanline);
+
+    if (uniforms.hdrPeak > 0.0) {
+        // The offscreen target is premultiplied: work on straight colour, then re-premultiply.
+        let straight = rgb / max(a, 0.0001);
+        let extended = min(straight, vec3<f32>(1.0)) +
+            hdrShoulder(max(straight - vec3<f32>(1.0), vec3<f32>(0.0)), uniforms.hdrPeak);
+        rgb = srgbToDisplayP3(extended) * a;
+    }
 
     return vec4<f32>(rgb, a);
 }

@@ -79,6 +79,9 @@ import {
   triggerImpactEffects as handleImpactEffects,
 } from './webgpu/viewGameEvents.js';
 import { executeRenderLoop } from './webgpu/viewRenderLoop.js';
+import type { PresentationState } from './webgpu/presentation.js';
+import { createResolutionGovernor, type ResolutionGovernorState } from './webgpu/renderResolution.js';
+import { downloadBlob, type FrameCapture } from './webgpu/frameCapture.js';
 import { acquireGpuContext, resizeGpuContext, pushGpuErrorScopes, popGpuErrorScopes } from './webgpu/gpuContext.js';
 import { loadBlockTexture, initGpuResources } from './webgpu/viewPipelines.js';
 import { GpuPassTimers } from './webgpu/gpuPassTimers.js';
@@ -189,6 +192,13 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   offscreenTexture!: GPUTexture;
   depthTexture!: GPUTexture;
   _bloomInputTexture: GPUTexture | null = null;
+  /** Canvas configuration actually applied (format / colour space / tone mapping / usage). */
+  presentation?: PresentationState;
+  /** Render-resolution governor (frame-time driven); factor 1 = not engaged. */
+  resolutionGovernor: ResolutionGovernorState = createResolutionGovernor();
+  resolutionFactor: number = 1;
+  /** Present only under `?capture`. */
+  frameCapture?: FrameCapture;
   sampler!: GPUSampler;
   postProcessor!: PostProcessor;
   iblSpecularTexture!: GPUTexture;
@@ -444,6 +454,21 @@ export default class View implements IView, ViewEventHost, WebGPUViewHost {
   }
 
   resize() { resizeGpuContext(this); }
+
+  /** True when the canvas was configured with `COPY_SRC` (`?capture`). */
+  get canCaptureFrame(): boolean { return this.frameCapture !== undefined; }
+
+  /** Next presented frame as a PNG (`?capture` only). */
+  captureFrame(): Promise<Blob> {
+    if (!this.frameCapture) return Promise.reject(new Error('capture-disabled: add ?capture to the URL'));
+    return this.frameCapture.request();
+  }
+
+  /** Save the next presented frame as `tetris-<timestamp>.png`. */
+  async captureScreenshot(): Promise<void> {
+    const blob = await this.captureFrame();
+    downloadBlob(blob, `tetris-${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
+  }
 
   recreateRenderTargets() { void recreateRenderTargetsImpl(this); } // Note: recreateRenderTargetsImpl is now async
 

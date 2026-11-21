@@ -83,6 +83,16 @@ describe('gameSettings', () => {
     expect(next.gpuPower).toBe('low-power');
   });
 
+  it('HDR output is opt-in, persists, and survives preset changes', () => {
+    expect(createDefaultSettings().hdrOutput).toBe(false);
+    const on = { ...settingsFromPreset('ultra'), hdrOutput: true };
+    saveGameSettings(on);
+    expect(loadGameSettings().hdrOutput).toBe(true);
+    expect(applyQualityPreset(on, 'low').hdrOutput).toBe(true);
+    expect(parseGameSettings({ version: 1, quality: 'high', hdrOutput: 'yes' }).hdrOutput).toBe(false);
+    expect(settingsFromPreset('high', { hdrOutput: true }).hdrOutput).toBe(true);
+  });
+
   it('infers custom when toggles diverge from presets', () => {
     const custom = {
       ...settingsFromPreset('medium'),

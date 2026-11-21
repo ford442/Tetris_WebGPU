@@ -73,8 +73,33 @@ interface WebgpuProbeResult {
   adapter: string | null;    // adapter description, when one was obtained
   adapterAttempt: 'power-preference' | 'default' | 'compatibility' | null; // ladder rung that won
   renderer: 'ts' | 'cpp';    // which renderer this probe is for
+  features: string[];        // device features actually enabled (only ones something uses)
+  limits: {                  // null when no adapter was obtained
+    requested: Record<string, number>;  // what the game asked for (REQUIRED_GPU_LIMITS + screen-derived)
+    adapter: Record<string, number>;    // what the adapter offers, for the same keys + headline limits
+    granted: Record<string, number>;    // what the device was actually given
+  } | null;
+  presentation: {            // null on a failed boot
+    format: string;          // 'bgra8unorm' | 'rgba8unorm' | 'rgba16float' (HDR)
+    colorSpace: 'srgb' | 'display-p3';
+    toneMapping: 'standard' | 'extended';
+    alphaMode: string;
+    usage: string[];         // ['RENDER_ATTACHMENT'] (+ 'COPY_SRC' under ?capture)
+    hdr: boolean;            // true only when the browser confirmed an extended-range canvas
+    hdrRequested: boolean; hdrSource: 'url' | 'settings' | 'default';
+    hdrStatus: 'active' | 'off' | 'no-hdr-display' | 'configure-rejected' | 'tone-mapping-unsupported';
+    displayHdr: boolean;     // (dynamic-range: high) at configure time
+    capture: boolean;
+  } | null;
 }
 ```
+
+`presentation` is what the canvas context was configured with (`src/webgpu/presentation.ts`); the
+C++ renderer configures its own surface, so its record is built from `get_surface_hdr_state()`.
+`hdrStatus` is the first thing to read in an HDR bug report: `no-hdr-display` means the display did
+not report `(dynamic-range: high)` (use `?hdr=1` to try anyway), `tone-mapping-unsupported` means
+the browser dropped `toneMapping: { mode: 'extended' }` (no read-back through `getConfiguration()`),
+`configure-rejected` means `configure()` threw — the game then runs on the SDR configuration.
 
 `browser` and `reason` deliberately don't collapse Chrome and Edge into one
 "Chromium" bucket: both gate WebGPU behind different flags

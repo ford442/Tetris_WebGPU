@@ -31,7 +31,7 @@
     "-s",
     "MALLOC=emmalloc",
     "-s",
-    "EXPORTED_FUNCTIONS=[\"_init_renderer\",\"_resize_renderer\",\"_render_frame\",\"_render_dual_frame\",\"_update_playfield\",\"_get_playfield_ptr\",\"_get_piece_state_ptr\",\"_update_piece_state\",\"_get_renderer_backend\",\"_is_gpu_renderer_active\",\"_set_block_texture_rgba\",\"_set_block_material_map_rgba\",\"_malloc\",\"_free\",\"_get_playfield_len\",\"_is_canvas_fallback_active\"]",
+    "EXPORTED_FUNCTIONS=[\"_init_renderer\",\"_resize_renderer\",\"_render_frame\",\"_render_dual_frame\",\"_update_playfield\",\"_get_playfield_ptr\",\"_get_piece_state_ptr\",\"_update_piece_state\",\"_get_renderer_backend\",\"_get_surface_hdr_state\",\"_is_gpu_renderer_active\",\"_set_block_texture_rgba\",\"_set_block_material_map_rgba\",\"_malloc\",\"_free\",\"_get_playfield_len\",\"_is_canvas_fallback_active\"]",
     "-s",
     "EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"HEAP8\",\"HEAPU8\"]"
   ],
@@ -44,18 +44,18 @@
     "cpp/src/playfield_draw.cpp",
     "cpp/src/gpu_renderer.cpp"
   ],
-  "sourceHash": "7ae272e731c3679aa3468164605ee41154de6b881e4f87cbe68426152dd743ce",
+  "sourceHash": "5520be7a3ef41c6e5bd2c04627252ceb73e5f9b6d3f4ac5b29b00dad79115c09",
   "sourceFileCount": 27,
-  "wasmBytes": 55279,
-  "jsBytes": 51296,
+  "wasmBytes": 59080,
+  "jsBytes": 52264,
   "artifacts": {
     "js": {
-      "bytes": 51296,
-      "sha256": "7083a499a27cd597cf2a0db41f3cf6c937c4354070ff42ed5ef9612912303f93"
+      "bytes": 52264,
+      "sha256": "42ad460dca103f708493bb1f8585c1fc21b84f727faaf21e5adfe46b40054024"
     },
     "wasm": {
-      "bytes": 55279,
-      "sha256": "f101b45e7ba1aeb9469ec18626283611f1d7688164f737c5cbef7a0bc4311c31"
+      "bytes": 59080,
+      "sha256": "9462edfc219284dc200bb70a9a9a11f67ccaf57f5ace4a14972d92960ced269d"
     }
   }
 }

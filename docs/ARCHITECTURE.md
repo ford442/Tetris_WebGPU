@@ -54,7 +54,7 @@ src/
 ├── viewCpp/
 │   ├── EmscriptenView.ts    # C++ renderer IView adapter (opt-in)
 │   └── CppRendererLoader.ts # Loads public/cpp/tetris_renderer.*
-├── viewWebGL2/              # WebGL2 renderer (auto fallback when no adapter; glBloom.ts = bloom pass)
+├── viewWebGL2/              # WebGL2 renderer (auto fallback when no adapter; glBloom.ts = bloom pass; contextAttributes.ts = pinned context attributes)
 ├── dev/
 │   ├── maskLabGate.ts       # Tiny always-loaded gate for ?masklab (imports nothing)
 │   ├── textureMaskLab.ts    # Mask/material authoring UI — lazy chunk, loaded only under ?masklab
@@ -71,6 +71,10 @@ src/
     │   └── wgsl/block/      # Block WGSL source (see File Size Guidelines)
     ├── shaders.ts           # Barrel re-export (kept for import compatibility)
     ├── gpuContext.ts        # Adapter/device acquisition + acquire diagnostics
+    ├── presentation.ts      # Canvas configure(): format / colour space / tone mapping / usage; ?hdr, ?capture
+    ├── gpuLimits.ts         # Which limits are requested (derived from what is allocated) + probe report
+    ├── renderResolution.ts  # Backing-store size policy (DPR cap, pixel budget, texture limit) + frame-time governor
+    ├── frameCapture.ts      # ?capture: canvas texture → PNG readback
     ├── bootProbe.ts         # window.webgpuProbe (see docs/webgpu-boot-probe.md)
     ├── fatalBootOverlay.ts  # Blocking overlay on a failed WebGPU boot probe
     ├── viewGameEvents.ts    # Event → visual effect handlers
@@ -158,9 +162,38 @@ index.html                   # HTML bootstrap
   call site) tries `powerPreference` → default adapter → `featureLevel:
   "compatibility"`; the winning rung is `adapterAttempt` on the probe.
 - **Probe:** `window.webgpuProbe` (`src/webgpu/bootProbe.ts`) — `{ ok, browser,
-  reason, adapter, adapterAttempt, renderer }`, set on every boot attempt, success or failure.
+  reason, adapter, adapterAttempt, renderer, features, limits, presentation }`, set on every boot attempt, success or failure.
 - **Overlay:** `src/webgpu/fatalBootOverlay.ts`.
 - **Docs:** `docs/webgpu-boot-probe.md`
+
+### Canvas presentation (what we ask the context for)
+- **Default (SDR):** `configure({ device, format: getPreferredCanvasFormat(), alphaMode: 'premultiplied', viewFormats: [] })`
+  — exactly as before `presentation.ts` existed. The bloom composite ACES-tone-maps into it. Nothing
+  below changes this path.
+- **HDR output (opt-in):** Settings → "HDR (if supported)" (`GameSettings.hdrOutput`, reload on change)
+  or `?hdr=0|1` (URL wins). `rgba16float` + `colorSpace: 'display-p3'` + `toneMapping: { mode: 'extended' }`.
+  Capability, not user agent: the display must report `(dynamic-range: high)` (`?hdr=1` skips this — "try
+  anyway") **and** `getConfiguration()` must read `extended` back, because WebIDL silently drops a
+  dictionary member a browser doesn't know. Anything else reconfigures SDR and records why in
+  `window.webgpuProbe.presentation.hdrStatus`.
+- **Where the tone map lives:** the bloom composite (`bloomShaders.ts#createCompositeShader`), not `postProcess`.
+  `{ hdr: false }` is byte-identical to the pre-HDR shader (sha256-pinned by `tests/bloom-composite-hdr.test.ts`);
+  `{ hdr: true }` keeps ACES for the SDR range, passes energy past SDR white through a soft shoulder up to
+  `DEFAULT_HDR_PEAK` (1.4 encoded ≈ 2.2× SDR white), and re-expresses the result in Display P3 primaries.
+  The helpers are `wgsl/postprocess/hdrOutput.wgsl`, binding-free and shared verbatim with the C++ post pass.
+  HDR output forces the composite path (`PostProcessor`), since nothing else owns the tone map.
+- **Resize** reuses `view.presentation.configuration` so acquisition and resize cannot drift; `?capture` adds `COPY_SRC`
+  to it, and the C++ renderer receives the HDR choice as module options (see `cpp/README.md`).
+- **Features and limits:** `DESIRED_OPTIONAL_FEATURES` lists only features something reads
+  (`tests/gpu-limits.test.ts` greps for each). Required limits are the compute floor plus `maxBindGroups: 1`
+  (every shader binds `@group(0)` only — also grep-tested); `maxTextureDimension2D` is raised only if the
+  render-resolution policy could need more than 8192 on this screen. The probe reports requested / adapter / granted.
+- **Render resolution:** `renderResolution.ts` caps the backing store (DPR ≤ 2, per-quality pixel budget, device
+  `maxTextureDimension2D`) for both the WebGPU and WebGL2 views, and a slow frame-time governor
+  (`resolutionFactor`, 5 quantised steps, only above 1.5 MP, only with adaptive quality on and unlocked) sits behind
+  `adaptiveQuality.ts`. Screens that fit the budget get exactly what they got before.
+- **WebGL2 context attributes** are pinned in `viewWebGL2/contextAttributes.ts` (no MSAA, `powerPreference` from the
+  same `resolvePowerPreference()`, `desynchronized`, `preserveDrawingBuffer: false`).
 
 ### GPU chores (post/juice helpers)
 - **What:** luminance histogram, 2D downsample and index compaction for bloom and
@@ -377,5 +410,8 @@ Tests live in `tests/` (a few are co-located, e.g. `src/webgpu/materials.test.ts
 - `cpp-build-config.test.ts` — one build config: exports vs loader `cwrap`s vs `EMSCRIPTEN_KEEPALIVE`, no hand-copied flags, artifact records the config
 - `cpp-parity-vectors.test.ts` — `shared/cppParityVectors.json` held by the TS renderer (the C++ side is `cpp/tests/`)
 - `cpp-size-report.test.ts` — size report formatting and the base-ref delta
+- `presentation.test.ts` / `bloom-composite-hdr.test.ts` / `cpp-hdr-post.test.ts` — canvas configuration, the SDR-pinned composite, and both HDR tone maps executed on a software adapter against CPU references
+- `render-resolution.test.ts` / `gpu-limits.test.ts` / `webgl2-context.test.ts` / `frame-capture.test.ts` — resolution policy, requested features/limits, pinned WebGL2 attributes, capture readback
+- `tests/e2e/presentation.spec.ts` — probe `presentation` / `?hdr` / Settings round trip / `?capture` configuration in a real browser
 - `ts-escape-hatches.test.ts` — `as any` / `@ts-ignore` ratchet + the typecheck-surface wiring
 - `vite-base.test.ts` — `VITE_BASE` resolution

@@ -51,11 +51,6 @@ export const KNOWN_WGSL_FAILURES: readonly KnownFailure[] = [
     message: "'dpdx' must only be called from uniform control flow",
     note: 'pbrCore.wgsl tangentFromUv(), shared with the TS block shader; same hoisting fix as ts/block.fragment.',
   },
-  {
-    id: 'cpp/postprocess',
-    message: "'textureSample' must only be called from uniform control flow",
-    note: 'cpp/src/shaders/postprocess/postprocess.wgsl: textureSample after a non-uniform branch; sample before the branch or use textureSampleLevel.',
-  },
 ];
 
 export interface Classified {

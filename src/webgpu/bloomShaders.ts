@@ -9,6 +9,8 @@
  * - Final composite blend
  */
 
+import hdrOutputWgsl from './shaders/wgsl/postprocess/hdrOutput.wgsl?raw';
+
 // MODIFIED: Changed from 9-tap to 5-tap kernel for sharper block rendering
 // Previous 9-tap kernel with sigma=2.0 spread blur over 8 texels, causing blurry blocks
 // New 5-tap kernel with sigma=1.0 spreads over only 4 texels for 50% tighter blur
@@ -367,9 +369,18 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
 
 /**
  * Composite Shader
- * Final blend of bloom with original image
+ * Final blend of bloom with original image.
+ *
+ * Two permutations share everything up to the tone map:
+ *  - SDR (default): ACES, clamped to [0, 1] for an 8-bit surface. This text is
+ *    pinned byte-for-byte by `tests/bloom-composite-hdr.test.ts` — the SDR path
+ *    must not change when HDR output is added.
+ *  - HDR (`?hdr=1` / Settings, only when the canvas accepted `toneMapping:
+ *    'extended'`): ACES for the SDR range, then energy past SDR white is passed
+ *    through a soft shoulder up to `hdrPeak`, and the result is re-expressed in
+ *    Display P3 primaries to match the canvas `colorSpace`.
  */
-export const CompositeShader = `
+const COMPOSITE_PRE_TONEMAP = `
 struct Params {
   intensity: f32,
   clamp: f32,
@@ -419,7 +430,9 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   var hdr = original + bloom * params.intensity;
   hdr = min(hdr, vec3<f32>(params.clamp));
 
-  let a = 2.51;
+`;
+
+const COMPOSITE_TONEMAP_SDR = `  let a = 2.51;
   let b = 0.03;
   let c = 2.43;
   let d = 0.59;
@@ -429,3 +442,37 @@ fn fsMain(input: VertexOutput) -> @location(0) vec4<f32> {
   return vec4<f32>(mapped * alpha, alpha);
 }
 `;
+
+const COMPOSITE_TONEMAP_HDR = `
+  // params.padding1 carries the HDR peak (output units; 1.0 = SDR white).
+  let hdrPeak = params.padding1;
+
+  let a = 2.51;
+  let b = 0.03;
+  let c = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  let sdr = clamp((hdr * (a * hdr + b)) / (hdr * (c * hdr + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+
+  // Soft shoulder for energy beyond SDR white. Continuous at hdr == 1, bounded by hdrPeak.
+  let extended = sdr + hdrShoulder(max(hdr - vec3<f32>(1.0), vec3<f32>(0.0)), hdrPeak);
+
+  return vec4<f32>(srgbToDisplayP3(extended) * alpha, alpha);
+}
+`;
+
+export interface CompositeShaderOptions {
+  /** Emit the extended-range / Display P3 tone map instead of the clamped SDR one. */
+  hdr?: boolean;
+}
+
+/** Bloom composite WGSL for the requested output (SDR when omitted). */
+export function createCompositeShader(options: CompositeShaderOptions = {}): string {
+  if (!options.hdr) return COMPOSITE_PRE_TONEMAP + COMPOSITE_TONEMAP_SDR;
+  // Helpers must precede `fsMain`, which sits inside the pre-tone-map text.
+  const at = COMPOSITE_PRE_TONEMAP.indexOf('@fragment');
+  return COMPOSITE_PRE_TONEMAP.slice(0, at) + hdrOutputWgsl + '\n' +
+    COMPOSITE_PRE_TONEMAP.slice(at) + COMPOSITE_TONEMAP_HDR;
+}
+
+export const CompositeShader = createCompositeShader();

@@ -7,23 +7,36 @@
  * and later surfaces (C++ handoff) can share the same behavior.
  */
 import { renderLogger } from '../utils/logger.js';
-import { loadGameSettings } from '../config/gameSettings.js';
+import { loadGameSettings, type GameSettings } from '../config/gameSettings.js';
 import { registerGpuDevice, type DeviceOwner } from './gpuChores/deviceRegistry.js';
 import type { PerfOverlayAdapterInfo } from './perfOverlay.js';
+import {
+  buildCanvasConfiguration,
+  configurePresentation,
+  type PresentationState,
+} from './presentation.js';
+import { buildLimitsReport, desiredDisplayLimits, type GpuLimitsReport } from './gpuLimits.js';
+import { resolveBackingSize } from './renderResolution.js';
+
+export { buildCanvasConfiguration };
 
 /**
  * Optional device features we *request when present*. These are never
  * hard-required — the device is created with only the subset the adapter
  * actually advertises, so absence degrades gracefully.
+ *
+ * **Every entry must be read by something** (`tests/gpu-context.test.ts` greps
+ * `src/` and `cpp/src/` for it). Requesting a feature nothing uses still costs
+ * device-creation work and can make `requestDevice` fail on a driver that
+ * advertises it badly. `shader-f16` and `float32-filterable` were dropped for
+ * exactly that reason (no `enable f16;`, no 32-bit-float texture); ASTC/ETC2 too —
+ * the KTX2 albedo upgrade only handles BC7. Add a feature here in the same change
+ * that adds its first use.
  */
 export const DESIRED_OPTIONAL_FEATURES: GPUFeatureName[] = [
-  'timestamp-query',
-  'texture-compression-bc',
-  'texture-compression-astc',
-  'texture-compression-etc2',
-  'shader-f16',
-  'rg11b10ufloat-renderable',
-  'float32-filterable',
+  'timestamp-query', // gpuPassTimers.ts
+  'texture-compression-bc', // ktx2.ts (BC7 albedo upgrade)
+  'rg11b10ufloat-renderable', // ibl/iblResources.ts (HDR playfield format)
 ];
 
 /** Minimal host for device-loss recovery and uncaptured-error logging. */
@@ -59,6 +72,11 @@ export interface GpuContextHost extends GpuDeviceLifecycleHost {
   enabledGpuFeatures?: GPUFeatureName[];
   /** Info for the adapter the device came from (perf overlay); no extra request. */
   gpuAdapterInfo?: PerfOverlayAdapterInfo | null;
+  /** Result of {@link configurePresentation}: what the canvas was configured with. */
+  presentation?: PresentationState;
+  /** Resolution-governor factor (1 = not engaged); see `renderResolution.ts`. */
+  resolutionFactor?: number;
+  userGameSettings?: Pick<GameSettings, 'quality'> | null;
 }
 
 export interface RequestGpuDeviceOptions {
@@ -85,6 +103,8 @@ export interface RequestGpuDeviceResult {
   adapterAttempt: GpuAdapterAttempt;
   enabledFeatures: GPUFeatureName[];
   enabledLimits: Record<string, number>;
+  /** Requested vs adapter vs granted limits, for the boot probe. */
+  limits: GpuLimitsReport;
 }
 
 type AdapterWithInfo = GPUAdapter & {
@@ -118,12 +138,18 @@ export interface GpuAcquireDiagnostics {
   adapterDescription: string | null;
   /** Which adapter-ladder rung succeeded, or `null` if no adapter was obtained. */
   adapterAttempt: GpuAdapterAttempt | null;
+  /** Features enabled on the device (empty when no device was created). */
+  enabledFeatures: GPUFeatureName[];
+  /** Requested vs adapter vs granted limits, or `null` when no adapter was obtained. */
+  limits: GpuLimitsReport | null;
 }
 
 let lastAcquireDiagnostics: GpuAcquireDiagnostics = {
   reason: null,
   adapterDescription: null,
   adapterAttempt: null,
+  enabledFeatures: [],
+  limits: null,
 };
 
 /** Diagnostics from the most recent {@link requestGpuAdapterAndDevice} call. */
@@ -142,18 +168,26 @@ function describeAdapter(adapter: GPUAdapter): string {
 /**
  * GPU limits this renderer actually depends on: line-clear compute reads/
  * writes 4 storage buffers (board, dissolve, clearFlags, results) in one
- * shader stage, and both the line-clear and particle compute passes dispatch
- * `@workgroup_size(64)`. These sit comfortably below WebGPU's default-limits
- * tier (8 storage buffers/stage, 256 invocations/workgroup) — requesting them
- * as `requiredLimits` turns an adapter that somehow can't provide them into a
- * clear `requestDevice()` rejection instead of a cryptic validation error
- * deep inside a compute dispatch.
+ * shader stage, both the line-clear and particle compute passes dispatch
+ * `@workgroup_size(64)`, and every shader binds `@group(0)` only. These sit at
+ * or below WebGPU's default-limits tier (8 storage buffers/stage, 256
+ * invocations/workgroup, 4 bind groups) — requesting them as `requiredLimits`
+ * documents the floor and turns an adapter that somehow can't provide them into
+ * a clear `requestDevice()` rejection instead of a cryptic validation error
+ * deep inside a compute dispatch. Limits that must be *raised* for the current
+ * screen (`maxTextureDimension2D`) come from `gpuLimits.ts#desiredDisplayLimits`.
  */
 export const REQUIRED_GPU_LIMITS: Record<string, number> = {
   maxStorageBuffersPerShaderStage: 4,
   maxComputeWorkgroupSizeX: 64,
   maxComputeInvocationsPerWorkgroup: 64,
+  maxBindGroups: 1,
 };
+
+/** The floor plus whatever this screen needs raised. */
+export function defaultDesiredLimits(): Record<string, number> {
+  return { ...REQUIRED_GPU_LIMITS, ...desiredDisplayLimits() };
+}
 
 /**
  * Clamp desired limits to what the adapter actually reports so `requestDevice`
@@ -162,7 +196,7 @@ export const REQUIRED_GPU_LIMITS: Record<string, number> = {
  */
 export function resolveRequiredLimits(
   adapter: { limits?: GPUSupportedLimits | Record<string, number> } | null | undefined,
-  desired: Record<string, number> = REQUIRED_GPU_LIMITS,
+  desired: Record<string, number> = defaultDesiredLimits(),
 ): Record<string, number> {
   if (!adapter?.limits) return {};
   const limits = adapter.limits as unknown as Record<string, number>;
@@ -212,7 +246,7 @@ export function resolvePowerPreference(
  * override) and the in-game GPU power select resolve through the exact same
  * policy instead of two disconnected mechanisms.
  */
-function resolveGpuPowerFromSettings(): string | null {
+export function resolveGpuPowerFromSettings(): string | null {
   try {
     const gpuPower = loadGameSettings().gpuPower;
     return gpuPower === 'auto' ? null : gpuPower;
@@ -278,6 +312,8 @@ async function requestAdapterWithDiagnostics(
       reason: 'navigator.gpu-unavailable',
       adapterDescription: null,
       adapterAttempt: null,
+      enabledFeatures: [],
+      limits: null,
     };
     return null;
   }
@@ -312,6 +348,8 @@ async function requestAdapterWithDiagnostics(
     reason: firstError ? `request-adapter-threw: ${firstError}` : 'no-adapter',
     adapterDescription: null,
     adapterAttempt: null,
+    enabledFeatures: [],
+    limits: null,
   };
   return null;
 }
@@ -383,6 +421,7 @@ export async function requestGpuAdapterAndDevice(
 
   let device: GPUDevice;
   let enabledLimits = requiredLimits;
+  let enabledFeatures = requiredFeatures;
   try {
     device = await adapter.requestDevice({
       label: deviceLabel,
@@ -394,44 +433,25 @@ export async function requestGpuAdapterAndDevice(
     try {
       device = await adapter.requestDevice({ label: deviceLabel });
       enabledLimits = {};
+      enabledFeatures = [];
     } catch (err2) {
       renderLogger.error('requestDevice failed:', err2);
       lastAcquireDiagnostics = {
         reason: `request-device-failed: ${errorMessage(err2)}`,
         adapterDescription,
         adapterAttempt,
+        enabledFeatures: [],
+        limits: buildLimitsReport(requiredLimits, adapter.limits, null),
       };
       return null;
     }
   }
   device.label = device.label || deviceLabel;
   registerGpuDevice(device, options.owner ?? 'unknown');
-  lastAcquireDiagnostics = { reason: null, adapterDescription, adapterAttempt };
+  const limits = buildLimitsReport(enabledLimits, adapter.limits, device.limits);
+  lastAcquireDiagnostics = { reason: null, adapterDescription, adapterAttempt, enabledFeatures, limits };
 
-  return { adapter, device, powerPreference, adapterAttempt, enabledFeatures: requiredFeatures, enabledLimits };
-}
-
-/**
- * Single source of truth for `GPUCanvasContext.configure()` — used by both
- * initial acquisition and resize so the two paths can never drift apart.
- *
- * `alphaMode: 'premultiplied'` is required for the video-portal compositing
- * (the DOM `<video>` shows through the canvas's transparent regions). `usage`
- * is left at the spec default (`RENDER_ATTACHMENT`) since nothing samples the
- * canvas texture directly today; `viewFormats` is listed explicitly as `[]`
- * so a future need (e.g. `COPY_SRC` for a screenshot path, or a `-srgb` view
- * format) has one call site to extend instead of two to keep in sync.
- */
-export function buildCanvasConfiguration(
-  device: GPUDevice,
-  format: GPUTextureFormat,
-): GPUCanvasConfiguration {
-  return {
-    device,
-    format,
-    alphaMode: 'premultiplied',
-    viewFormats: [],
-  };
+  return { adapter, device, powerPreference, adapterAttempt, enabledFeatures, enabledLimits, limits };
 }
 
 /**
@@ -451,15 +471,52 @@ export async function acquireGpuContext(view: GpuContextHost): Promise<GPUTextur
   view.gpuAdapterInfo = await readAdapterInfo(bundle.adapter);
   attachDeviceLifecycleHandlers(view);
 
-  const dpr = window.devicePixelRatio || 1;
-  view.canvasWebGPU.width = view.width * dpr;
-  view.canvasWebGPU.height = view.height * dpr;
+  const backing = backingSizeFor(view);
+  view.canvasWebGPU.width = backing.width;
+  view.canvasWebGPU.height = backing.height;
 
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  view.ctxWebGPU.configure(buildCanvasConfiguration(view.device, presentationFormat));
+  view.presentation = configurePresentation(view.ctxWebGPU, view.device, {
+    sdrFormat: navigator.gpu.getPreferredCanvasFormat(),
+    hdrSetting: resolveHdrSettingFromSettings(),
+  });
+  if (view.presentation.info.hdr) {
+    renderLogger.info('HDR output active: rgba16float / display-p3 / extended tone mapping');
+  } else if (view.presentation.info.hdrRequested) {
+    renderLogger.warn(`HDR output requested but not active (${view.presentation.info.hdrStatus}); using SDR`);
+  }
 
   view.reactiveVideoBackground.setWebGPUDevice(view.device);
-  return presentationFormat;
+  return view.presentation.info.format;
+}
+
+/** Persisted "HDR (if supported)" choice; `null` when settings are unreadable. */
+function resolveHdrSettingFromSettings(): boolean | null {
+  try {
+    return loadGameSettings().hdrOutput;
+  } catch {
+    return null;
+  }
+}
+
+/** Backing-store size from the render-resolution policy for the view's current state. */
+function backingSizeFor(view: GpuContextHost) {
+  let quality: GameSettings['quality'] = view.userGameSettings?.quality ?? 'ultra';
+  if (!view.userGameSettings) {
+    try {
+      quality = loadGameSettings().quality;
+    } catch {
+      /* keep the default tier */
+    }
+  }
+  return resolveBackingSize({
+    cssWidth: view.width,
+    cssHeight: view.height,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    renderScale: view.renderScale,
+    quality,
+    factor: view.resolutionFactor,
+    maxTextureDimension: view.device?.limits?.maxTextureDimension2D,
+  });
 }
 
 /**
@@ -596,13 +653,14 @@ export async function popGpuErrorScopes(view: GpuContextHost): Promise<void> {
  */
 export function resizeGpuContext(view: GpuContextHost): void {
   if (!view.device || view._deviceLost) return;
-  const dpr = window.devicePixelRatio || 1;
   view.width = window.innerWidth;
   view.height = window.innerHeight;
 
-  // Apply render scale for supersampling.
-  const scaledWidth = Math.floor(view.width * dpr * view.renderScale);
-  const scaledHeight = Math.floor(view.height * dpr * view.renderScale);
+  // Render scale for supersampling, capped by the render-resolution policy
+  // (DPR ceiling, per-quality pixel budget, device texture limit, governor factor).
+  const backing = backingSizeFor(view);
+  const scaledWidth = backing.width;
+  const scaledHeight = backing.height;
 
   view.canvasWebGPU.width = scaledWidth;
   view.canvasWebGPU.height = scaledHeight;
@@ -617,8 +675,11 @@ export function resizeGpuContext(view: GpuContextHost): void {
 
   view.visualEffects.updateVideoPosition(view.width, view.height);
 
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  view.ctxWebGPU.configure(buildCanvasConfiguration(view.device, presentationFormat));
+  // Reuse exactly what acquisition applied (HDR / capture included) so the two paths cannot drift.
+  view.ctxWebGPU.configure(
+    view.presentation?.configuration ??
+      buildCanvasConfiguration(view.device, navigator.gpu.getPreferredCanvasFormat()),
+  );
 
   view.postProcessor.resize(scaledWidth, scaledHeight);
 

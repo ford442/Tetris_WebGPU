@@ -36,6 +36,7 @@ import {
   BlurVerticalShader,
   UpsampleCombineShader,
   CompositeShader,
+  createCompositeShader,
 } from '../../src/webgpu/bloomShaders.js';
 import { LineClearComputeShader, ParticleComputeShader } from '../../src/webgpu/compute.js';
 import { CompactIndicesShader, Downsample2dShader, LumaHistogramShader } from '../../src/webgpu/gpuChores/shaders.js';
@@ -171,6 +172,7 @@ function tsEntries(): ShaderEntry[] {
     ['bloom.blurVertical', 'src/webgpu/bloomShaders.ts', BlurVerticalShader, [v('vsMain'), f('fsMain')]],
     ['bloom.upsampleCombine', 'src/webgpu/bloomShaders.ts', UpsampleCombineShader, [v('vsMain'), f('fsMain')]],
     ['bloom.composite', 'src/webgpu/bloomShaders.ts', CompositeShader, [v('vsMain'), f('fsMain')]],
+    ['bloom.composite.hdr', 'src/webgpu/bloomShaders.ts', createCompositeShader({ hdr: true }), [v('vsMain'), f('fsMain')]],
     ['compute.particles', 'src/webgpu/compute.ts', ParticleComputeShader, [c('main')]],
     ['compute.lineClear', 'src/webgpu/compute.ts', LineClearComputeShader, [c('detect_lines')]],
     ['chore.luma_histogram', 'src/webgpu/gpuChores/shaders.ts', LumaHistogramShader, [c('luma_histogram')]],
@@ -240,6 +242,7 @@ function readCppGenerated(): CppGenerated {
     ['kSharedPbrCoreWgsl', 'src/webgpu/shaders/wgsl/block/pbrCore.wgsl'],
     ['kSharedAuthoredMaterialWgsl', 'src/webgpu/shaders/wgsl/block/authoredMaterial.wgsl'],
     ['kSharedAuthoredGlassWgsl', 'src/webgpu/shaders/wgsl/block/authoredGlass.wgsl'],
+    ['kSharedHdrOutputWgsl', 'src/webgpu/shaders/wgsl/postprocess/hdrOutput.wgsl'],
   ]);
   return { literals, sharedSources };
 }
@@ -277,8 +280,10 @@ function cppEntries(): ShaderEntry[] {
     {
       id: 'cpp/postprocess',
       origin: 'cpp/src/shaders/postprocess/postprocess.wgsl',
+      parts: ['src/webgpu/shaders/wgsl/postprocess/hdrOutput.wgsl'],
       renderer: 'cpp-webgpu',
-      code: get('kPostprocessWgsl'),
+      // Order create_post_pipeline() concatenates: shared HDR helpers, then the C++-owned pass.
+      code: [get('kSharedHdrOutputWgsl'), get('kPostprocessWgsl')].join('\n'),
       expectEntries: [v('vs_main'), f('fs_main')],
     },
   ];

@@ -18,6 +18,7 @@ import {
   tickAdaptiveQuality,
 } from './adaptiveQuality.js';
 import { baselineBloomThreshold } from './gpuChores/autoBloom.js';
+import { governorFactor, tickResolutionGovernor } from './renderResolution.js';
 
 const glMatrix = Matrix;
 
@@ -137,6 +138,7 @@ export function executeRenderLoop(view: WebGPUViewHost, dt: number) {
   // Returns immediately; the stats land a frame or two later and are consumed
   // by the auto-bloom controller in updatePostProcessUniforms.
   view.gpuChores?.afterSubmit();
+  view.frameCapture?.afterSubmit();
 
   const wallMs = performance.now() - wallStart;
   const timerSnap = passTimers?.snapshot();
@@ -726,12 +728,32 @@ function updateAdaptiveQuality(view: WebGPUViewHost, frameMs: number): void {
     config: { budgetMs: view.frameBudgetMs },
   });
 
+  updateResolutionGovernor(view, adaptive.emaMs, baseline.adaptiveQuality && !baseline.lockQuality);
+
   if (tick.changed && view.applyAdaptiveSettings) {
     view.applyAdaptiveSettings(tick.settings, tick.particleCap);
   } else if (view.adaptiveParticleCap !== tick.particleCap) {
     view.particleSystem.maxParticles = tick.particleCap;
     view.adaptiveParticleCap = tick.particleCap;
   }
+}
+
+/**
+ * Frame-time driven resolution factor (`renderResolution.ts`). Slower than the adaptive steps
+ * above, so those react first; a change recreates the full-screen targets via `resize()`.
+ */
+function updateResolutionGovernor(view: WebGPUViewHost, emaMs: number, enabled: boolean): void {
+  const governor = view.resolutionGovernor;
+  if (!governor || !view.resize) return;
+  const changed = tickResolutionGovernor(governor, {
+    emaMs,
+    budgetMs: view.frameBudgetMs,
+    enabled,
+    backingPixels: view.canvasWebGPU.width * view.canvasWebGPU.height,
+  });
+  if (!changed) return;
+  view.resolutionFactor = governorFactor(governor);
+  view.resize();
 }
 
 function updatePerfOverlay(

@@ -68,7 +68,8 @@ describe('IBL / HDR feature gates', () => {
 
   it('requests HDR renderable formats and skips HDR playfield on low power', () => {
     expect(DESIRED_OPTIONAL_FEATURES).toContain('rg11b10ufloat-renderable');
-    expect(DESIRED_OPTIONAL_FEATURES).toContain('float32-filterable');
+    // float32-filterable / shader-f16 were requested but nothing used them; see gpu-context.test.ts.
+    expect(DESIRED_OPTIONAL_FEATURES).not.toContain('float32-filterable');
     expect(shouldEnableHdrPlayfield({ powerPreference: 'low-power' })).toBe(false);
     expect(shouldEnableHdrPlayfield({ quality: 'high' })).toBe(true);
   });

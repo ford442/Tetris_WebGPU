@@ -51,11 +51,12 @@ describe('resolvePowerPreference', () => {
 
 describe('selectOptionalFeatures', () => {
   it('returns only features the adapter advertises', () => {
-    const adapterFeatures = new Set<string>(['shader-f16', 'timestamp-query']);
+    const adapterFeatures = new Set<string>(['texture-compression-bc', 'timestamp-query', 'shader-f16']);
     const selected = selectOptionalFeatures(adapterFeatures);
-    expect(selected).toContain('shader-f16');
+    expect(selected).toContain('texture-compression-bc');
     expect(selected).toContain('timestamp-query');
-    expect(selected).not.toContain('texture-compression-astc');
+    // Advertised by the adapter but unused by the game, so never requested.
+    expect(selected).not.toContain('shader-f16');
   });
 
   it('returns empty for null adapter features', () => {
@@ -110,7 +111,7 @@ describe('resolveRequiredLimits', () => {
   });
 
   it('never requests more than REQUIRED_GPU_LIMITS asks for', () => {
-    const adapter = { limits: { maxStorageBuffersPerShaderStage: 999, maxComputeWorkgroupSizeX: 999, maxComputeInvocationsPerWorkgroup: 999 } };
+    const adapter = { limits: { maxStorageBuffersPerShaderStage: 999, maxComputeWorkgroupSizeX: 999, maxComputeInvocationsPerWorkgroup: 999, maxBindGroups: 999 } };
     const resolved = resolveRequiredLimits(adapter);
     for (const key of Object.keys(REQUIRED_GPU_LIMITS)) {
       expect(resolved[key]).toBeLessThanOrEqual(REQUIRED_GPU_LIMITS[key]);
@@ -183,13 +184,13 @@ describe('requestGpuAdapterAndDevice', () => {
 
   it('requests optional features supported by the adapter', async () => {
     const { requestDevice } = mockGpu({
-      features: new Set<string>(['shader-f16', 'timestamp-query']),
+      features: new Set<string>(['texture-compression-bc', 'timestamp-query']),
     });
     const result = await requestGpuAdapterAndDevice({ search: '', storageValue: null });
-    expect(result?.enabledFeatures).toEqual(['timestamp-query', 'shader-f16']);
+    expect(result?.enabledFeatures).toEqual(['timestamp-query', 'texture-compression-bc']);
     expect(requestDevice).toHaveBeenCalledWith({
       label: 'tetris-main-device',
-      requiredFeatures: ['timestamp-query', 'shader-f16'],
+      requiredFeatures: ['timestamp-query', 'texture-compression-bc'],
       requiredLimits: {},
     });
   });
@@ -401,6 +402,8 @@ describe('requestGpuAdapterAndDevice — adapter ladder', () => {
       reason: 'no-adapter',
       adapterDescription: null,
       adapterAttempt: null,
+      enabledFeatures: [],
+      limits: null,
     });
   });
 

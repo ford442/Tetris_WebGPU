@@ -306,11 +306,14 @@ void update_piece_state(int8_t type, int8_t rot, int8_t x, int8_t y,
                         int8_t ghost_y, float lock_flash);
 int get_renderer_backend();     // 0=none, 1=canvas2d, 2=webgpu (for TS badge)
 int is_gpu_renderer_active();   // shorthand: backend == 2
+int get_surface_hdr_state();    // 0=off (default), 1=HDR active, 2=requested but rejected (SDR surface)
 int is_canvas_fallback_active();
 int set_block_texture_rgba(const uint8_t* rgba, int width, int height, int byte_len);
 ```
 
 **WebGPU path:** each `render_frame` acquires the swap-chain texture, clears with **transparent alpha** (`a=0`) so the DOM video portal shows through the premultiplied surface, draws instanced blocks when the pipeline initialized, then presents. Surface format comes from `navigator.gpu.getPreferredCanvasFormat()` (via EM_JS). Camera aligned to `renderMetrics.ts` (FOV 42°, block size 2.2).
+
+**HDR output (opt-in):** TS owns the policy (`?hdr=0|1`, Settings → "HDR (if supported)", `(dynamic-range: high)`) and passes the outcome as module options `tetrisHdrOutput` / `tetrisHdrPeak` next to `preinitializedWebGPUDevice`. C++ first probes the extended-range configuration in an `EM_JS` `try`/`catch` (`rgba16float` + `display-p3` + `toneMapping: extended`, read back through `getConfiguration()` — an exception escaping into wasm would hard-fail the boot), and only on success sets `surface_format = RGBA16Float` *before* any pipeline or render target exists and chains `WGPUSurfaceColorManagement` into the surface configuration. The post pass then applies the shoulder + sRGB→Display P3 conversion (`hdrOutput.wgsl`, shared byte-for-byte with the TS bloom composite) when its `hdrPeak` uniform is non-zero. Not requested ⇒ nothing changes: same format, no chained struct, `hdrPeak == 0`. `get_surface_hdr_state()` reports the outcome to `window.webgpuProbe.presentation`.
 
 **Canvas2D stub:** with `TETRIS_CPP_WEBGPU=none` (or a failed WebGPU link) `renderer.cpp` links Canvas2D quads. This is a build-time stub, not a runtime fallback: `get_renderer_backend()` reports `1` and the TS loader refuses it.
 
@@ -321,7 +324,7 @@ Adapter/device acquisition is **async in the browser**, so the C++ side uses a s
 ```
 1. requestGpuAdapterAndDevice()     // shared gpuContext policy (?gpu= / GameSettings.gpuPower, optional features, required limits, label)
 2. attachDeviceLifecycleHandlers()  // overlay + device-lost event on fatal loss
-3. createTetrisRendererModule({ canvas, preinitializedWebGPUDevice: device })
+3. createTetrisRendererModule({ canvas, preinitializedWebGPUDevice: device, tetrisHdrOutput, tetrisHdrPeak })
 4. init_renderer()                  // C++: emscripten_webgpu_get_device(), surface configure (premultiplied)
 5. uploadBlockTexture()             // TS decodes block.png → set_block_texture_rgba() in wasm
 6. render_frame(dt)                 // clear (alpha=0) → textured instanced blocks → present

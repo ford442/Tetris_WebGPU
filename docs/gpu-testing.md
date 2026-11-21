@@ -43,7 +43,8 @@ for, and compute modules get a real `createComputePipeline` (catches binding con
 
 The first run found six modules that **real Chromium (153) also rejects**, with identical messages:
 `let dangerOpacity` assigned in three post-process shaders, and derivative / `textureSample` calls in
-non-uniform control flow in the block shaders and the C++ post-process. They are listed in
+non-uniform control flow in the block shaders and the C++ post-process (the last one is fixed — the HDR
+rung needed that pass to compile, so it now uses `textureSampleLevel`; five remain). They are listed in
 `KNOWN_WGSL_FAILURES` so the gate could be switched on without changing rendering code. The list is strict
 both ways: a new error fails, and a listed error that no longer occurs also fails ("fixed — delete the
 entry"), so it can only shrink. Fixing a shader means deleting its entry in the same change.
@@ -123,6 +124,15 @@ WGSL baseline above breaks the TS WebGPU block and post-process pipelines; the C
 the production build). Their visual tests are declared `test.fail()`: they pass while the renderer is broken
 and fail with "expected to fail, but passed" the moment it is fixed — the cue to delete the entry, run
 `UPDATE_GOLDENS=1 npm run e2e`, and commit the goldens. Only the WebGL2 golden exists today.
+
+### What SwiftShader cannot present
+
+Playwright's software adapter accepts an HDR (`rgba16float` / `extended`) or `COPY_SRC` canvas
+*configuration* — `getConfiguration()` reads it back — but cannot create the swap-chain shared image for
+it (`Could not find SharedImageBackingFactory … RGBA_F16 / WebgpuRead`) and the page crashes on the first
+presented frame. `tests/e2e/presentation.spec.ts` therefore asserts the configuration and the probe only;
+the HDR tone maps and the capture readback are run on Dawn instead (`bloom-composite-hdr`, `cpp-hdr-post`,
+`frame-capture`). Seeing HDR highlights needs a real HDR display.
 
 ### App bug found while building this
 

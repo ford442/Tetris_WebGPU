@@ -94,6 +94,7 @@
       "_get_piece_state_ptr",
       "_update_piece_state",
       "_get_renderer_backend",
+      "_get_surface_hdr_state",
       "_is_gpu_renderer_active",
       "_set_block_texture_rgba",
       "_set_block_material_map_rgba",
