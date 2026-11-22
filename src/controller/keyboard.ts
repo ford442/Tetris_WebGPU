@@ -2,6 +2,9 @@
  * Keyboard handling split out of controller.ts: what a fresh key press / release does to the
  * game (initial-press actions, input-buffer fallbacks, SOCD direction tracking). Continuous
  * DAS/ARR repeat lives in input/dasArr.ts; Controller owns the DOM listeners and lifecycle.
+ *
+ * Every game mutation goes through `host.press(action)` (the shared FrameStepper), which also
+ * records it — a key event between two rules ticks is the same as a press at the start of the next.
  */
 
 import type Game from '../game.js';
@@ -26,7 +29,8 @@ export interface ControllerInputHost {
   bufferedActionTime: number;
   bufferedMoveAction: 'left' | 'right' | null;
   bufferedMoveActionTime: number;
-  recordReplay(action: ReplayActionName): void;
+  /** Apply `action` through the shared FrameStepper (recorded for replay). */
+  press(action: ReplayActionName): void;
   playMoveSound(direction: 'left' | 'right' | 'down'): void;
   recordFinesseFault(): void;
   performHardDrop(): void;
@@ -40,13 +44,12 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
             host.lastDirection = 'left';
             {
                 const pxBefore = host.game.activPiece.x;
-                host.game.movePieceLeft();
+                host.press('left');
                 if (host.game.activPiece.x === pxBefore) {
                     host.bufferedMoveAction = 'left';
                     host.bufferedMoveActionTime = performance.now();
                     host.recordFinesseFault();
                 } else {
-                    host.recordReplay('left');
                     host.playMoveSound('left');
                 }
             }
@@ -56,21 +59,19 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
             host.lastDirection = 'right';
             {
                 const pxBefore = host.game.activPiece.x;
-                host.game.movePieceRight();
+                host.press('right');
                 if (host.game.activPiece.x === pxBefore) {
                     host.bufferedMoveAction = 'right';
                     host.bufferedMoveActionTime = performance.now();
                     host.recordFinesseFault();
                 } else {
-                    host.recordReplay('right');
                     host.playMoveSound('right');
                 }
             }
             host.actionTimers.right = 0;
             break;
         case 'down':
-            host.game.movePieceDown();
-            host.recordReplay('down');
+            host.press('down');
             host.playMoveSound('down');
             // Remove heavy movement flash to let continuous soft drop take over
             host.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.2);
@@ -80,9 +81,8 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
         case 'rotateCW':
             {
                 const rBefore = host.game.activPiece.rotation;
-                host.game.rotatePiece(true);
+                host.press('rotateCW');
                 if (host.game.activPiece.rotation !== rBefore) {
-                     host.recordReplay('rotateCW');
                      host.game.runStats.recordRotate();
                      host.viewWebGPU.onRotate?.();
                 } else {
@@ -96,9 +96,8 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
         case 'rotateCCW':
             {
                 const rBefore = host.game.activPiece.rotation;
-                host.game.rotatePiece(false);
+                host.press('rotateCCW');
                 if (host.game.activPiece.rotation !== rBefore) {
-                     host.recordReplay('rotateCCW');
                      host.viewWebGPU.onRotate?.();
                 } else {
                      // Jump buffer: if rotation failed, buffer it
@@ -111,7 +110,6 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
         case 'hardDrop':
             {
                 const yBefore = host.game.activPiece?.y;
-                host.recordReplay('hardDrop');
                 host.performHardDrop();
                 if (host.game.activPiece?.y === yBefore && !host.game.getState().isGameOver) {
                     host.bufferedAction = 'hardDrop';
@@ -121,8 +119,7 @@ export function applyKeyDownAction(host: ControllerInputHost, action: Action): v
             break;
         case 'hold':
             if (host.game.canHold) {
-                host.game.hold();
-                host.recordReplay('hold');
+                host.press('hold');
               const holdEl = document.querySelector('.hold-piece-container');
               if (holdEl) {
                   holdEl.classList.remove('swap-whoosh-active');

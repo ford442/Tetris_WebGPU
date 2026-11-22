@@ -63,6 +63,21 @@ export function decodeInputStream(b64: string): ReplayInputEvent[] {
   return events;
 }
 
+/**
+ * Frame -> masks in stream order. A frame can carry several entries (delta-0) when the recorder
+ * had to keep presses ordered; they apply one after another (see FrameStepper.press).
+ */
+export function inputEventsToFrames(events: ReplayInputEvent[]): Map<number, number[]> {
+  const map = new Map<number, number[]>();
+  for (const ev of events) {
+    const list = map.get(ev.frame);
+    if (list) list.push(ev.mask);
+    else map.set(ev.frame, [ev.mask]);
+  }
+  return map;
+}
+
+/** Frame -> OR of that frame's masks. Lossy when a frame has several ordered entries. */
 export function inputEventsToMap(events: ReplayInputEvent[]): Map<number, number> {
   const map = new Map<number, number>();
   for (const ev of events) {

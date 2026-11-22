@@ -52,7 +52,10 @@ export interface SelfPlayOptions {
   planner: BotCore;
 }
 
-/** One tick of a simulator, flushing the hard-drop microtask. */
+/**
+ * One tick of a simulator. Hard drops are synchronous now (FrameStepper); the await is kept so
+ * async callers keep yielding between ticks.
+ */
 export async function stepMask(tick: () => void, mask: number): Promise<void> {
   tick();
   if (mask & REPLAY_ACTION.HARD_DROP) await Promise.resolve();

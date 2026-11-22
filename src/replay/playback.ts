@@ -1,19 +1,21 @@
 import type Game from '../game.js';
 import {
   decodeInputStream,
-  inputEventsToMap,
+  inputEventsToFrames,
   parseReplayFile,
   REPLAY_TICK_MS,
   type ReplayFile,
 } from './format.js';
-import { GameSimulator } from './simulator.js';
+import { GameSimulator, simulateFrames } from './simulator.js';
+
+const NO_MASKS: readonly number[] = [];
 
 export type PlaybackState = 'idle' | 'playing' | 'paused' | 'ended';
 
 /** Re-simulates a recorded game; scrub by resetting and fast-forwarding. */
 export class ReplayPlayback {
   private readonly file: ReplayFile;
-  private readonly inputMap: Map<number, number>;
+  private readonly inputMap: Map<number, number[]>;
   private sim: GameSimulator;
   private currentFrame = 0;
   private state: PlaybackState = 'idle';
@@ -27,7 +29,7 @@ export class ReplayPlayback {
 
   constructor(file: ReplayFile) {
     this.file = file;
-    this.inputMap = inputEventsToMap(decodeInputStream(file.inputs));
+    this.inputMap = inputEventsToFrames(decodeInputStream(file.inputs));
     this.sim = new GameSimulator(file.seed, file.mode);
   }
 
@@ -61,10 +63,7 @@ export class ReplayPlayback {
 
   scrubTo(targetFrame: number): void {
     const frame = Math.max(0, Math.min(targetFrame, this.maxFrame));
-    this.sim = new GameSimulator(this.file.seed, this.file.mode);
-    for (let f = 0; f < frame && !this.sim.game.isRunEnded; f++) {
-      this.sim.tick(this.inputMap.get(f) ?? 0);
-    }
+    this.sim = simulateFrames(new GameSimulator(this.file.seed, this.file.mode), this.inputMap, frame);
     this.currentFrame = frame;
     this.onFrame?.(this.currentFrame, this.sim.game);
   }
@@ -97,7 +96,7 @@ export class ReplayPlayback {
 
   stepForward(): void {
     if (this.currentFrame >= this.maxFrame || this.sim.game.isRunEnded) return;
-    this.sim.tick(this.inputMap.get(this.currentFrame) ?? 0);
+    this.sim.tickFrame(this.inputMap.get(this.currentFrame) ?? NO_MASKS);
     this.currentFrame++;
     this.onFrame?.(this.currentFrame, this.sim.game);
     if (this.currentFrame >= this.maxFrame || this.sim.game.isRunEnded) {

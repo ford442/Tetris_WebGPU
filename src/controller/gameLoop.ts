@@ -1,6 +1,11 @@
 import type Game from '../game.js';
 import type { IView } from '../view/IView.js';
-import type { ReplayRecorder } from '../replay/recorder.js';
+import {
+  MAX_CATCHUP_TICKS,
+  SIM_TICK_MS,
+  type AdvanceResult,
+  type FrameStepper,
+} from '../replay/frameStepper.js';
 import type { TSpinResult } from '../game/tSpin.js';
 import type { SubliminalReinforcement } from '../effects/subliminalReinforcement.js';
 import type SoundManager from '../sound.js';
@@ -19,12 +24,14 @@ export interface ControllerLoopHost {
   view: IView;
   viewWebGPU: IView;
   soundManager: SoundManager;
-  replayRecorder: ReplayRecorder;
+  /** The shared rules step; its sink is the replay recorder. */
+  stepper: FrameStepper;
   subliminal: SubliminalReinforcement | null;
   lastTime: number;
   lastLevel: number;
   playTimeMs: number;
-  gravityTimer: number;
+  /** Real time (ms) not yet consumed by SIM_TICK_MS rules ticks. */
+  simAccumMs: number;
   hitStopFrames: number;
   processBufferedAction(currentTime: number): void;
   handleInput(dt: number): void;
@@ -45,17 +52,30 @@ export function stopGameLoop(host: ControllerLoopHost): void {
   }
 }
 
+/**
+ * A frame threw: report it instead of letting it escape the rAF callback, and let the caller stop
+ * the loop. Same outcome as the old async frame (a rejected promise ended the loop and was reported
+ * as unhandled) — one bad render must not take the page's timer queue with it.
+ */
+export function reportFrameError(err: unknown): void {
+  if (typeof reportError === 'function') reportError(err);
+  else console.error(err);
+}
+
 export function startGameLoop(host: ControllerLoopHost): void {
   const animate = (time: number) => {
     if (!host.isPlaying || host.isPaused) {
       return;
     }
-
-    void runControllerFrame(host, time).then((shouldContinue) => {
-      if (shouldContinue) {
-        host.gameLoopID = requestAnimationFrame(animate);
-      }
-    });
+    let keepGoing = false;
+    try {
+      keepGoing = runControllerFrame(host, time);
+    } catch (err) {
+      reportFrameError(err);
+    }
+    if (keepGoing) {
+      host.gameLoopID = requestAnimationFrame(animate);
+    }
   };
 
   host.gameLoopID = requestAnimationFrame(animate);
@@ -65,79 +85,36 @@ export function clampDt(dt: number, maxDt = 100): number {
   return Math.min(dt, maxDt);
 }
 
-export function stepGravity(
-  game: Game,
-  gravityTimer: number,
-  dt: number,
-): number {
-  const level = game.getEffectiveLevel();
-  let speedMs = 1000 * Math.pow(0.85, level - 1);
-  if (speedMs < 0.5) speedMs = 0.5;
-
-  let timer = gravityTimer || 0;
-  timer += dt;
-
-  let steps = 0;
-  const maxSteps = 20;
-  while (timer > speedMs && steps < maxSteps) {
-    game.movePieceDown();
-    timer -= speedMs;
-    steps++;
+/** Game over / victory: stop the recorder, show the end screen, save the leaderboard. */
+function endRun(host: ControllerLoopHost): false {
+  host.finishReplayRecording();
+  host.soundManager.playGameOver();
+  host.isPlaying = false;
+  const endState = host.game.getState();
+  announceGameOver(endState.score, endState.isVictory);
+  host.view.renderEndScreen(endState);
+  const isNewHigh = host.game.saveModeLeaderboard();
+  updateHighScoreDisplay(host.game);
+  if (isNewHigh && host.subliminal) {
+    host.subliminal.triggerReinforcement('highScore', 'strong');
   }
-
-  if (steps >= maxSteps) {
-    timer = 0;
-  }
-
-  return timer;
+  return false;
 }
 
-export async function runControllerFrame(
+/** Sound / view / a11y reactions to a tick's lock-delay result. */
+function presentAdvance(
   host: ControllerLoopHost,
-  time: number,
-): Promise<boolean> {
-  if (!host.isPlaying || host.isPaused) {
-    return false;
-  }
-
-  const dt = clampDt(time - host.lastTime);
-  host.lastTime = time;
-
-  // Render unconditionally so that hit-stop flashes and particles continue playing
-  host.viewWebGPU.render?.(dt);
-
-  // If in hit-stop, freeze the simulation but let animations run
-  const reducedMotion = host.viewWebGPU.visualEffects?.reducedMotion ?? false;
-  if (!reducedMotion && host.hitStopFrames > 0) {
-    host.hitStopFrames--;
-    return true; // skip input and state updates this frame
-  }
-
-  host.replayRecorder.advanceClock(dt);
-
-  if (host.isPlaying && !host.isPaused) {
-    host.playTimeMs += dt;
-    host.subliminal?.checkBackgroundReinforcement(host.playTimeMs);
-    host.game.tickMode(dt);
-  }
-
-  host.processBufferedAction(time);
-  host.handleInput(dt);
-  host.gravityTimer = stepGravity(host.game, host.gravityTimer, dt);
-
-  const lockPieceType = host.audioPieceType();
-  const lockPieceCol = host.audioColumn();
-  const result = await host.game.updateAsync(dt);
-
+  result: AdvanceResult,
+  pieceType: string,
+  pieceCol: number,
+  reducedMotion: boolean,
+): void {
   if (host.game.level > host.lastLevel) {
     host.soundManager.playLevelUp(host.game.level);
     announceLevelUp(host.game.level);
     host.lastLevel = host.game.level;
     host.subliminal?.triggerReinforcement('levelUp', 'strong');
   }
-
-  const pieceType = lockPieceType;
-  const pieceCol = lockPieceCol;
 
   if (result.linesCleared.length > 0) {
     const scoreEvent = host.game.scoreEvent;
@@ -179,21 +156,70 @@ export async function runControllerFrame(
       host.subliminal.triggerReinforcement('tspin', 'strong');
     }
   }
+}
 
-  if (result.gameOver || host.game.victory) {
-    host.finishReplayRecording();
-    host.soundManager.playGameOver();
-    host.isPlaying = false;
-    const endState = host.game.getState();
-    announceGameOver(endState.score, endState.isVictory);
-    host.view.renderEndScreen(endState);
-    const isNewHigh = host.game.saveModeLeaderboard();
-    updateHighScoreDisplay(host.game);
-    if (isNewHigh && host.subliminal) {
-      host.subliminal.triggerReinforcement('highScore', 'strong');
-    }
+/**
+ * One fixed rules tick of live play: sample input once (buffered retries, DAS/ARR), then the shared
+ * FrameStepper.advance(). Every input lands in the same mask stream the recorder stores, so a replay
+ * of this run is this run. Returns false to stop draining ticks this frame.
+ */
+function runLiveTick(host: ControllerLoopHost, time: number, reducedMotion: boolean): boolean {
+  host.playTimeMs += SIM_TICK_MS;
+  host.subliminal?.checkBackgroundReinforcement(host.playTimeMs);
+
+  host.processBufferedAction(time);
+  host.handleInput(SIM_TICK_MS);
+  if (host.game.isRunEnded) return false;
+
+  const pieceType = host.audioPieceType();
+  const pieceCol = host.audioColumn();
+  const result = host.stepper.advance();
+  presentAdvance(host, result, pieceType, pieceCol, reducedMotion);
+
+  if (host.game.isRunEnded) return false;
+  return reducedMotion || host.hitStopFrames === 0;
+}
+
+/**
+ * One presentation frame. Rendering (hit-stop, particles, the view) follows the real, clamped `dt`;
+ * the rules only move in SIM_TICK_MS ticks. Hit-stop freezes the rules clock (no time accrues), so
+ * it pauses the match rather than changing it.
+ */
+export function runControllerFrame(
+  host: ControllerLoopHost,
+  time: number,
+): boolean {
+  if (!host.isPlaying || host.isPaused) {
     return false;
   }
+
+  const dt = clampDt(time - host.lastTime);
+  host.lastTime = time;
+
+  // Render unconditionally so that hit-stop flashes and particles continue playing
+  host.viewWebGPU.render?.(dt);
+
+  // A hard drop pressed between frames can end the run.
+  if (host.game.isRunEnded) return endRun(host);
+
+  // If in hit-stop, freeze the simulation but let animations run
+  const reducedMotion = host.viewWebGPU.visualEffects?.reducedMotion ?? false;
+  if (!reducedMotion && host.hitStopFrames > 0) {
+    host.hitStopFrames--;
+    return true; // skip input and state updates this frame
+  }
+
+  // Consume real time in SIM_TICK_MS quanta; a backlog past MAX_CATCHUP_TICKS is dropped.
+  host.simAccumMs += dt;
+  let ticks = 0;
+  while (host.simAccumMs >= SIM_TICK_MS && ticks < MAX_CATCHUP_TICKS) {
+    host.simAccumMs -= SIM_TICK_MS;
+    ticks++;
+    if (!runLiveTick(host, time, reducedMotion)) break;
+  }
+  if (ticks >= MAX_CATCHUP_TICKS && host.simAccumMs >= SIM_TICK_MS) host.simAccumMs = 0;
+
+  if (host.game.isRunEnded) return endRun(host);
 
   const state = host.game.getState();
   updateModeHud(state);

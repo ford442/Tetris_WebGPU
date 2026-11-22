@@ -1,6 +1,5 @@
 import Game from '../game.js';
-import { applyActionMask } from '../replay/actions.js';
-import { REPLAY_TICK_MS } from '../replay/format.js';
+import { FrameStepper } from '../replay/frameStepper.js';
 import { hashPlayfield } from '../replay/boardHash.js';
 import { attackRowsFromClear } from './garbage.js';
 import { createGarbageRngFactory } from './garbageRng.js';
@@ -27,32 +26,18 @@ export interface VersusTickResult {
   hardDropGhostY1: number;
 }
 
-function stepGravity(game: Game, gravityTimer: number): number {
-  const level = game.getEffectiveLevel();
-  let speedMs = 1000 * Math.pow(0.85, level - 1);
-  if (speedMs < 0.5) speedMs = 0.5;
-
-  gravityTimer += REPLAY_TICK_MS;
-  let steps = 0;
-  while (gravityTimer > speedMs && steps < 20 && !game.isRunEnded) {
-    game.movePieceDown();
-    gravityTimer -= speedMs;
-    steps++;
-  }
-  if (steps >= 20) gravityTimer = 0;
-  return gravityTimer;
-}
-
 /**
  * Fixed-step dual-board versus simulator for online lockstep.
- * Both peers run identical instances with the same seeds and inputs.
+ * Both peers run identical instances with the same seeds and inputs. Each board advances through
+ * the shared FrameStepper, so board N of a match is the same frame sequence as a GameSimulator
+ * replay of board N's masks (as long as it receives no garbage).
  */
 export class VersusLockstepSim {
   readonly g0: Game;
   readonly g1: Game;
   frame = 0;
-  private gravityTimer0 = 0;
-  private gravityTimer1 = 0;
+  readonly stepper0: FrameStepper;
+  readonly stepper1: FrameStepper;
   private garbageFactory0: ReturnType<typeof createGarbageRngFactory>;
   private garbageFactory1: ReturnType<typeof createGarbageRngFactory>;
 
@@ -63,6 +48,8 @@ export class VersusLockstepSim {
     this.g1.view = null;
     this.g0.setMode('versus');
     this.g1.setMode('versus');
+    this.stepper0 = new FrameStepper(this.g0);
+    this.stepper1 = new FrameStepper(this.g1);
     this.garbageFactory0 = createGarbageRngFactory(matchSeed, 0);
     this.garbageFactory1 = createGarbageRngFactory(matchSeed, 1);
     this.reset(matchSeed);
@@ -76,8 +63,8 @@ export class VersusLockstepSim {
     this.g0.setGarbageRngFactory(() => this.garbageFactory0.nextRng());
     this.g1.setGarbageRngFactory(() => this.garbageFactory1.nextRng());
     this.frame = 0;
-    this.gravityTimer0 = 0;
-    this.gravityTimer1 = 0;
+    this.stepper0.reset();
+    this.stepper1.reset();
   }
 
   private sendAttack(from: 0 | 1, linesCleared: number): void {
@@ -92,69 +79,21 @@ export class VersusLockstepSim {
     const linesBefore0 = this.g0.lines;
     const linesBefore1 = this.g1.lines;
 
-    let hardDropped0 = false;
-    let hardDropDist0 = 0;
-    let hardDropColorIdx0 = 1;
-    let hardDropX0 = 0;
-    let hardDropGhostY0 = 0;
+    const r0 = this.stepper0.press(p0Mask);
+    const hardDropped0 = r0.hardDropped;
+    const hardDropX0 = r0.dropX;
+    const hardDropGhostY0 = r0.dropGhostY;
+    const hardDropDist0 = r0.dropDist;
+    const hardDropColorIdx0 = r0.dropColorIdx;
+    this.stepper0.advance();
 
-    let hardDropped1 = false;
-    let hardDropDist1 = 0;
-    let hardDropColorIdx1 = 1;
-    let hardDropX1 = 0;
-    let hardDropGhostY1 = 0;
-
-    if (!this.g0.isRunEnded) {
-      const ghostY = this.g0.activPiece ? this.g0.getGhostY() : 0;
-      const currentX = this.g0.activPiece?.x ?? 4;
-      const currentY = this.g0.activPiece?.y ?? 0;
-      const type = this.g0.activPiece?.type ?? 'T';
-      const hadPiece = !!this.g0.activPiece;
-
-      const { hardDropped } = applyActionMask(this.g0, p0Mask);
-      if (hardDropped && hadPiece) {
-        hardDropped0 = true;
-        hardDropX0 = currentX;
-        hardDropGhostY0 = this.g0.lastDropPos?.y ?? this.g0.gameStateCache.lastDropPos?.y ?? ghostY;
-        hardDropDist0 = ghostY - currentY;
-        if (type === 'I') hardDropColorIdx0 = 1;
-        else if (type === 'J') hardDropColorIdx0 = 2;
-        else if (type === 'L') hardDropColorIdx0 = 3;
-        else if (type === 'O') hardDropColorIdx0 = 4;
-        else if (type === 'S') hardDropColorIdx0 = 5;
-        else if (type === 'T') hardDropColorIdx0 = 6;
-        else if (type === 'Z') hardDropColorIdx0 = 7;
-      }
-      this.gravityTimer0 = stepGravity(this.g0, this.gravityTimer0);
-      this.g0.update(REPLAY_TICK_MS);
-      this.g0.tickMode(REPLAY_TICK_MS);
-    }
-
-    if (!this.g1.isRunEnded) {
-      const ghostY = this.g1.activPiece ? this.g1.getGhostY() : 0;
-      const currentX = this.g1.activPiece?.x ?? 4;
-      const currentY = this.g1.activPiece?.y ?? 0;
-      const type = this.g1.activPiece?.type ?? 'T';
-      const hadPiece = !!this.g1.activPiece;
-
-      const { hardDropped } = applyActionMask(this.g1, p1Mask);
-      if (hardDropped && hadPiece) {
-        hardDropped1 = true;
-        hardDropX1 = currentX;
-        hardDropGhostY1 = this.g1.lastDropPos?.y ?? this.g1.gameStateCache.lastDropPos?.y ?? ghostY;
-        hardDropDist1 = ghostY - currentY;
-        if (type === 'I') hardDropColorIdx1 = 1;
-        else if (type === 'J') hardDropColorIdx1 = 2;
-        else if (type === 'L') hardDropColorIdx1 = 3;
-        else if (type === 'O') hardDropColorIdx1 = 4;
-        else if (type === 'S') hardDropColorIdx1 = 5;
-        else if (type === 'T') hardDropColorIdx1 = 6;
-        else if (type === 'Z') hardDropColorIdx1 = 7;
-      }
-      this.gravityTimer1 = stepGravity(this.g1, this.gravityTimer1);
-      this.g1.update(REPLAY_TICK_MS);
-      this.g1.tickMode(REPLAY_TICK_MS);
-    }
+    const r1 = this.stepper1.press(p1Mask);
+    const hardDropped1 = r1.hardDropped;
+    const hardDropX1 = r1.dropX;
+    const hardDropGhostY1 = r1.dropGhostY;
+    const hardDropDist1 = r1.dropDist;
+    const hardDropColorIdx1 = r1.dropColorIdx;
+    this.stepper1.advance();
 
     const linesCleared0 = this.g0.lines - linesBefore0;
     const linesCleared1 = this.g1.lines - linesBefore1;

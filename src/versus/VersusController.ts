@@ -17,9 +17,10 @@ import {
   announceLineClear,
 } from '../a11y/announcer.js';
 import { onPauseMenuClose, onPauseMenuOpen } from '../a11y/keyboardNav.js';
-import { clampDt } from '../controller/gameLoop.js';
+import { clampDt, reportFrameError } from '../controller/gameLoop.js';
+import { FrameStepper, MAX_CATCHUP_TICKS, SIM_TICK_MS } from '../replay/frameStepper.js';
 import { CpuOpponent } from '../bot/CpuOpponent.js';
-import { REPLAY_ACTION } from '../replay/actions.js';
+import { actionNameToMask, REPLAY_ACTION } from '../replay/actions.js';
 
 type Action = PlayerAction;
 
@@ -29,7 +30,8 @@ interface PlayerSlot {
   keys: Record<string, boolean>;
   actionTimers: Record<Action, number>;
   lastDirection: 'left' | 'right' | null;
-  gravityTimer: number;
+  /** The shared rules step for this board (gravity, lock delay, mode clock). */
+  stepper: FrameStepper;
   lastLevel: number;
   holdCtx: CanvasRenderingContext2D;
   nextCtx: CanvasRenderingContext2D;
@@ -56,6 +58,8 @@ export default class VersusController {
   private cpu: CpuOpponent | null = null;
 
   private lastTime = 0;
+  /** Real time not yet consumed by fixed SIM_TICK_MS rules ticks. */
+  private simAccumMs = 0;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
   private boundBlurOrHidden!: () => void;
@@ -87,7 +91,7 @@ export default class VersusController {
         keys: {},
         actionTimers: emptyTimers(),
         lastDirection: null,
-        gravityTimer: 0,
+        stepper: new FrameStepper(g0),
         lastLevel: 1,
         holdCtx: holdP1,
         nextCtx: nextP1,
@@ -98,7 +102,7 @@ export default class VersusController {
         keys: {},
         actionTimers: emptyTimers(),
         lastDirection: null,
-        gravityTimer: 0,
+        stepper: new FrameStepper(g1),
         lastLevel: 1,
         holdCtx: holdP2,
         nextCtx: nextP2,
@@ -161,6 +165,7 @@ export default class VersusController {
     this.isPlaying = true;
     this.isPaused = false;
     this.lastTime = performance.now();
+    this.simAccumMs = 0;
 
     if (!this.players[0].game.activPiece || this.players[0].game.isRunEnded) {
       this.resetGames();
@@ -197,6 +202,7 @@ export default class VersusController {
     this.isPaused = false;
     this.isPlaying = true;
     this.lastTime = performance.now();
+    this.simAccumMs = 0;
     this.soundManager.musicManager.resume();
     this.hidePauseMenu();
     this.gameLoop();
@@ -246,7 +252,7 @@ export default class VersusController {
     const seed = generateReplaySeed();
     for (const p of this.players) {
       p.game.reset({ seed: seed + (p === this.players[1] ? 1 : 0) });
-      p.gravityTimer = 0;
+      p.stepper.reset();
       p.lastLevel = p.game.level;
       Object.assign(p.actionTimers, emptyTimers());
     }
@@ -321,100 +327,71 @@ export default class VersusController {
     const g = slot.game;
     if (g.isRunEnded) return;
 
+    if (action === 'hardDrop') {
+      this.hardDrop(player, REPLAY_ACTION.HARD_DROP);
+      return;
+    }
+    const couldHold = g.canHold;
+    slot.stepper.press(actionNameToMask(action));
     switch (action) {
       case 'left':
-        g.movePieceLeft();
-        this.soundManager.playMove('left', g.activPiece?.x ?? 4);
-        break;
       case 'right':
-        g.movePieceRight();
-        this.soundManager.playMove('right', g.activPiece?.x ?? 4);
-        break;
       case 'down':
-        g.movePieceDown();
-        this.soundManager.playMove('down', g.activPiece?.x ?? 4);
+        this.soundManager.playMove(action, g.activPiece?.x ?? 4);
         break;
       case 'rotateCW':
-        g.rotatePiece(true);
-        this.soundManager.playRotate();
-        break;
       case 'rotateCCW':
-        g.rotatePiece(false);
         this.soundManager.playRotate();
-        break;
-      case 'hardDrop':
-        void this.hardDrop(player);
         break;
       case 'hold':
-        if (g.canHold) {
-          g.hold();
-          this.soundManager.playHold();
-        }
+        if (couldHold) this.soundManager.playHold();
         break;
     }
   }
 
-  /** Apply one bot action mask to player 2 through the same game calls a human's keys end up in. */
+  /** Apply one bot action mask to player 2 through the same step a human's keys end up in. */
   private applyCpuMask(mask: number): void {
     const g = this.players[1].game;
     if (g.isRunEnded) return;
-    if (mask & REPLAY_ACTION.LEFT) g.movePieceLeft();
-    if (mask & REPLAY_ACTION.RIGHT) g.movePieceRight();
-    if (mask & REPLAY_ACTION.DOWN) g.movePieceDown();
-    if (mask & REPLAY_ACTION.ROTATE_CW) g.rotatePiece(true);
-    if (mask & REPLAY_ACTION.ROTATE_CCW) g.rotatePiece(false);
-    if (mask & REPLAY_ACTION.HOLD && g.canHold) {
-      g.hold();
-      this.soundManager.playHold();
+    if (mask & REPLAY_ACTION.HARD_DROP) {
+      this.hardDrop(1, mask);
+      return;
     }
-    if (mask & REPLAY_ACTION.HARD_DROP) void this.hardDrop(1);
+    const couldHold = g.canHold;
+    this.players[1].stepper.press(mask);
+    if (mask & REPLAY_ACTION.HOLD && couldHold) this.soundManager.playHold();
   }
 
-  private async hardDrop(player: 0 | 1): Promise<void> {
+  /** Press `mask` (which includes HARD_DROP) on `player`'s board and present the drop. */
+  private hardDrop(player: 0 | 1, mask: number): void {
     const slot = this.players[player];
     const g = slot.game;
-
-    const ghostY = g.activPiece ? g.getGhostY() : 0;
-    const dropDist = g.activPiece ? ghostY - g.activPiece.y : 0;
-    const currentX = g.activPiece?.x ?? 4;
-
-    const type = g.activPiece?.type ?? 'T';
-    let colorIdx = 1;
-    if (type === 'I') colorIdx = 1;
-    else if (type === 'J') colorIdx = 2;
-    else if (type === 'L') colorIdx = 3;
-    else if (type === 'O') colorIdx = 4;
-    else if (type === 'S') colorIdx = 5;
-    else if (type === 'T') colorIdx = 6;
-    else if (type === 'Z') colorIdx = 7;
-
-    const result = await g.hardDropAsync();
+    const couldHold = g.canHold;
+    const r = slot.stepper.press(mask);
+    if (mask & REPLAY_ACTION.HOLD && couldHold) this.soundManager.playHold();
+    if (!r.hardDropped) return;
     this.soundManager.playHardDrop();
-
-    const finalGhostY = g.lastDropPos?.y
-      ?? g.gameStateCache.lastDropPos?.y
-      ?? ghostY;
 
     // Use view's onHardDrop hook for particle systems/visual parity
     if (this.view.onHardDrop) {
-      this.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx);
+      this.view.onHardDrop(r.dropX, r.dropGhostY, r.dropDist, r.dropColorIdx);
     }
 
-    if (result.linesCleared.length > 0) {
+    if (r.linesCleared.length > 0) {
       const combo = g.scoreEvent?.combo ?? 0;
-      this.soundManager.playLineClear(result.linesCleared.length, combo, false, g.activPiece?.x ?? 4);
+      this.soundManager.playLineClear(r.linesCleared.length, combo, false, g.activPiece?.x ?? 4);
       announceLineClear(
-        result.linesCleared.length,
+        r.linesCleared.length,
         g.score,
         combo,
-        result.tSpin,
+        r.tSpin,
         player === 0 ? 'Player 1' : 'Player 2',
       );
-      this.sendAttack(player, result.linesCleared.length, result.tSpin);
-    } else if (result.locked) {
+      this.sendAttack(player, r.linesCleared.length, r.tSpin);
+    } else if (r.locked) {
       this.soundManager.playLock(g.activPiece?.type ?? 'T', g.activPiece?.x ?? 4);
     }
-    if (result.gameOver) this.onPlayerDefeated(player);
+    if (g.isRunEnded) this.onPlayerDefeated(player);
   }
 
   private sendAttack(from: 0 | 1, linesCleared: number, tSpin: TSpinResult): void {
@@ -447,9 +424,7 @@ export default class VersusController {
       slot.actionTimers[action] += dt;
       const threshold = slot.actionTimers[action] === dt ? DAS : ARR;
       if (slot.actionTimers[action] >= threshold) {
-        if (action === 'left') slot.game.movePieceLeft();
-        else if (action === 'right') slot.game.movePieceRight();
-        else slot.game.movePieceDown();
+        slot.stepper.press(actionNameToMask(action));
         slot.actionTimers[action] -= ARR;
       }
     }
@@ -458,29 +433,65 @@ export default class VersusController {
   private gameLoop(): void {
     const animate = (time: number) => {
       if (!this.isPlaying || this.isPaused) return;
-      void this.runFrame(time).then((cont) => {
-        if (cont) this.gameLoopID = requestAnimationFrame(animate);
-      });
+      let keepGoing = false;
+      try {
+        keepGoing = this.runFrame(time);
+      } catch (err) {
+        reportFrameError(err);
+      }
+      if (keepGoing) this.gameLoopID = requestAnimationFrame(animate);
     };
     this.gameLoopID = requestAnimationFrame(animate);
   }
 
-  private async runFrame(time: number): Promise<boolean> {
+  /** Rules advance in fixed SIM_TICK_MS ticks; rendering follows the real frame delta. */
+  private runFrame(time: number): boolean {
     if (!this.isPlaying || this.isPaused) return false;
     const dt = clampDt(time - this.lastTime);
     this.lastTime = time;
 
-    let anyAlive = false;
+    this.simAccumMs += dt;
+    let ticks = 0;
+    while (this.simAccumMs >= SIM_TICK_MS && ticks < MAX_CATCHUP_TICKS) {
+      this.simAccumMs -= SIM_TICK_MS;
+      ticks++;
+      if (!this.runTick()) return false;
+    }
+    if (ticks >= MAX_CATCHUP_TICKS && this.simAccumMs >= SIM_TICK_MS) this.simAccumMs = 0;
+
+    if (this.players[0].game.isRunEnded && this.players[1].game.isRunEnded) return false;
+
+    const s0 = this.players[0].game.getState();
+    const s1 = this.players[1].game.getState();
+    this.updateVersusHud(s0, s1);
+    this.viewWebGPU.state = s0;
+    this.viewWebGPU.splitScreen.stateB = s1;
+    if (this.view.renderDualScreen) {
+      const g0 = this.players[0].game;
+      const g1 = this.players[1].game;
+      const ghostY1 = g0.activPiece ? g0.getGhostY() : 0;
+      const ghostY2 = g1.activPiece ? g1.getGhostY() : 0;
+      this.view.renderDualScreen(s0, s1, [-9, 0], [9, 0], ghostY1, ghostY2);
+    }
+    this.view.renderMainScreen(s0);
+    this.renderSidePanels(s0, s1);
+    this.viewWebGPU.render(dt / 1000);
+    return true;
+  }
+
+  /** One rules tick for both boards. Returns false once the round is over. */
+  private runTick(): boolean {
     for (let i = 0; i < 2; i++) {
       const slot = this.players[i]!;
       if (slot.game.isRunEnded) continue;
-      anyAlive = true;
-      slot.game.tickMode(dt);
       if (i === 1 && this.cpu) {
-        this.cpu.advance(dt, slot.game, (mask) => this.applyCpuMask(mask));
+        this.cpu.advance(SIM_TICK_MS, slot.game, (mask) => this.applyCpuMask(mask));
       } else {
-        this.handleInput(slot, dt);
+        this.handleInput(slot, SIM_TICK_MS);
       }
+      if (!this.isPlaying) return false; // a CPU hard drop can end the round
+
+      const result = slot.stepper.advance();
 
       const level = slot.game.getEffectiveLevel();
       if (level > slot.lastLevel) {
@@ -490,17 +501,6 @@ export default class VersusController {
         slot.lastLevel = level;
       }
 
-      let speedMs = 1000 * Math.pow(0.85, level - 1);
-      if (speedMs < 0.5) speedMs = 0.5;
-      slot.gravityTimer += dt;
-      let steps = 0;
-      while (slot.gravityTimer > speedMs && steps < 10) {
-        slot.game.movePieceDown();
-        slot.gravityTimer -= speedMs;
-        steps++;
-      }
-
-      const result = await slot.game.updateAsync(dt);
       if (result.linesCleared.length > 0) {
         const combo = slot.game.scoreEvent?.combo ?? 0;
         this.soundManager.playLineClear(result.linesCleared.length, combo, false, 4);
@@ -527,24 +527,6 @@ export default class VersusController {
         return false;
       }
     }
-
-    if (!anyAlive) return false;
-
-    const s0 = this.players[0].game.getState();
-    const s1 = this.players[1].game.getState();
-    this.updateVersusHud(s0, s1);
-    this.viewWebGPU.state = s0;
-    this.viewWebGPU.splitScreen.stateB = s1;
-    if (this.view.renderDualScreen) {
-      const g0 = this.players[0].game;
-      const g1 = this.players[1].game;
-      const ghostY1 = g0.activPiece ? g0.getGhostY() : 0;
-      const ghostY2 = g1.activPiece ? g1.getGhostY() : 0;
-      this.view.renderDualScreen(s0, s1, [-9, 0], [9, 0], ghostY1, ghostY2);
-    }
-    this.view.renderMainScreen(s0);
-    this.renderSidePanels(s0, s1);
-    this.viewWebGPU.render(dt / 1000);
     return true;
   }
 

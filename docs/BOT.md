@@ -165,8 +165,7 @@ Edit `shared/botWeights.json`, run `npm run asbuild:release`, then `npm test` �
 * Finesse-trainer and "why did I lose" UIs are not built; the data they need exists (`BotCore.plan()` returns the
   shortest input path for any placement; `search()` returns ranked alternatives with values).
 * No "assist" auto-on in Zen yet — the H overlay is available in every single-player mode.
-* **Sim stepping (#561):** `Game.hardDrop()` completes one microtask late, so a synchronous `GameSimulator` /
-  `VersusLockstepSim` loop never finishes a hard drop inside its tick (the lockstep sim therefore never sends garbage
-  under sync stepping). The bot drivers flush a microtask and keep their own attack accounting; see
-  [ARCHITECTURE.md → Known hazards](ARCHITECTURE.md). The lockstep sim itself is untouched.
+* **Sim stepping:** resolved — every driver steps through the shared `FrameStepper`
+  (`src/replay/frameStepper.ts`) and `Game.hardDrop()` is synchronous, so `GameSimulator`, `VersusLockstepSim` and
+  `VersusBotMatch` see a hard drop's clear inside its tick. `stepMask`'s await is now only a yield.
 * A tiny neural evaluator on WASM SIMD remains an optional follow-up if heuristic play plateaus.
