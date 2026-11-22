@@ -15,7 +15,6 @@ export interface DasArrDeps {
   moveRight(): void;
   moveDown(): boolean;
   onDasMove?(x: number, y: number): void;
-  recordDownReplay?(): void;
 }
 
 export function isActionPressed(
@@ -86,11 +85,7 @@ export function processDasArrInput(deps: DasArrDeps, dt: number): void {
       if (steps > 22) steps = 22;
 
       for (let i = 0; i < steps; i++) {
-        const moved = deps.moveDown();
-        if (moved) {
-          deps.recordDownReplay?.();
-        }
-        if (!moved) {
+        if (!deps.moveDown()) {
           break;
         }
       }

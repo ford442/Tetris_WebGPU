@@ -1,31 +1,33 @@
 import Game from '../game.js';
 import type { GameModeId } from '../game/modes/types.js';
-import { applyActionMask, REPLAY_ACTION } from './actions.js';
 import {
   decodeInputStream,
-  inputEventsToMap,
-  REPLAY_TICK_MS,
+  inputEventsToFrames,
   type ReplayFile,
   type ReplayInputEvent,
 } from './format.js';
 import { hashGameState } from './boardHash.js';
+import { FrameStepper, type AdvanceResult } from './frameStepper.js';
+
+const NO_MASKS: readonly number[] = [];
 
 /**
- * Fixed-step (60 Hz) game simulator for deterministic replay verification.
- * Uses sync CPU update() — no GPU line-clear path.
+ * Headless replay simulator: a view-less `Game` driven by the shared FrameStepper — the same step
+ * live play and the lockstep peer use — so a recorded run re-simulates to the same board.
  */
 export class GameSimulator {
   readonly game: Game;
-  frame = 0;
-  private gravityTimer = 0;
+  readonly stepper: FrameStepper;
 
   constructor(seed: number, modeId: GameModeId = 'marathon') {
     this.game = new Game();
     this.game.view = null;
-    if (this.game.modeId !== modeId) {
-      this.game.setMode(modeId);
-    }
-    this.game.reset({ seed });
+    this.stepper = new FrameStepper(this.game);
+    this.reset(seed, modeId);
+  }
+
+  get frame(): number {
+    return this.stepper.frame;
   }
 
   reset(seed: number, modeId: GameModeId = 'marathon'): void {
@@ -33,70 +35,46 @@ export class GameSimulator {
       this.game.setMode(modeId);
     }
     this.game.reset({ seed });
-    this.frame = 0;
-    this.gravityTimer = 0;
+    this.stepper.reset();
   }
 
-  tick(actionMask = 0): void {
-    if (this.game.isRunEnded) return;
-
-    // Capture state for onHardDrop before applying the action
-    const g = this.game;
-    const isHardDrop = (actionMask & REPLAY_ACTION.HARD_DROP) !== 0;
-    const wasActive = !!g.activPiece;
-    let currentX = 4;
-    let ghostY = 0;
-    let dropDist = 0;
-    let colorIdx = 1;
-
-    if (isHardDrop && wasActive) {
-      currentX = g.activPiece.x;
-      ghostY = g.getGhostY();
-      dropDist = ghostY - g.activPiece.y;
-      const type = g.activPiece.type;
-      if (type === 'I') colorIdx = 1;
-      else if (type === 'J') colorIdx = 2;
-      else if (type === 'L') colorIdx = 3;
-      else if (type === 'O') colorIdx = 4;
-      else if (type === 'S') colorIdx = 5;
-      else if (type === 'T') colorIdx = 6;
-      else if (type === 'Z') colorIdx = 7;
+  /** Apply one input mask to the current frame (forwarding a hard drop to the view, if any). */
+  press(mask: number): void {
+    const r = this.stepper.press(mask);
+    const view = this.game.view;
+    if (r.hardDropped && view?.onHardDrop) {
+      const snap = this.game.getHardDropSnapshot?.();
+      view.onHardDrop(r.dropX, r.dropGhostY, r.dropDist, r.dropColorIdx, snap?.blocks);
     }
-
-    applyActionMask(this.game, actionMask);
-
-    if (isHardDrop && wasActive && g.view && g.view.onHardDrop) {
-      const finalGhostY = g.lastDropPos?.y
-        ?? g.gameStateCache.lastDropPos?.y
-        ?? ghostY;
-      const snap = g.getHardDropSnapshot?.();
-      g.view.onHardDrop(currentX, finalGhostY, dropDist, colorIdx, snap?.blocks);
-    }
-
-    this.applyGravity();
-    this.game.update(REPLAY_TICK_MS);
-    this.game.tickMode(REPLAY_TICK_MS);
-    this.frame++;
   }
 
-  private applyGravity(): void {
-    const level = this.game.getEffectiveLevel();
-    let speedMs = 1000 * Math.pow(0.85, level - 1);
-    if (speedMs < 0.5) speedMs = 0.5;
+  /** One frame with a single input mask. */
+  tick(actionMask = 0): AdvanceResult {
+    if (actionMask !== 0) this.press(actionMask);
+    return this.stepper.advance();
+  }
 
-    this.gravityTimer += REPLAY_TICK_MS;
-    let steps = 0;
-    while (this.gravityTimer > speedMs && steps < 20 && !this.game.isRunEnded) {
-      this.game.movePieceDown();
-      this.gravityTimer -= speedMs;
-      steps++;
-    }
-    if (steps >= 20) this.gravityTimer = 0;
+  /** One frame with the frame's masks in recorded order (see ReplayRecorder). */
+  tickFrame(masks: readonly number[]): AdvanceResult {
+    for (let i = 0; i < masks.length; i++) this.press(masks[i]!);
+    return this.stepper.advance();
   }
 
   boardHash(): number {
     return hashGameState(this.game.playfield, this.game.score, this.game.lines);
   }
+}
+
+/** Re-simulate `frames` frames of a per-frame input list. */
+export function simulateFrames(
+  sim: GameSimulator,
+  inputs: ReadonlyMap<number, readonly number[]>,
+  frames: number,
+): GameSimulator {
+  for (let f = 0; f < frames && !sim.game.isRunEnded; f++) {
+    sim.tickFrame(inputs.get(f) ?? NO_MASKS);
+  }
+  return sim;
 }
 
 export function runSimulation(
@@ -105,16 +83,11 @@ export function runSimulation(
   maxFrames?: number,
   modeId: GameModeId = 'marathon',
 ): GameSimulator {
-  const sim = new GameSimulator(seed, modeId);
-  const inputs = inputEventsToMap(events);
-  const limit = maxFrames ?? (events.length > 0
-    ? Math.max(...events.map((e) => e.frame)) + 1
-    : 0);
-
-  for (let f = 0; f < limit && !sim.game.isRunEnded; f++) {
-    sim.tick(inputs.get(f) ?? 0);
+  let limit = maxFrames ?? 0;
+  if (maxFrames === undefined) {
+    for (const e of events) limit = Math.max(limit, e.frame + 1);
   }
-  return sim;
+  return simulateFrames(new GameSimulator(seed, modeId), inputEventsToFrames(events), limit);
 }
 
 export function runReplayFile(file: ReplayFile): GameSimulator {

@@ -20,7 +20,8 @@ import { emitSoftDropTrail } from "./controller/softDropFx.js";
 import { type SubliminalReinforcement } from "./effects/subliminalReinforcement.js";
 import { INPUT_CONFIG } from "./config/gameConfig.js";
 import { ReplayRecorder, generateReplaySeed } from "./replay/recorder.js";
-import type { ReplayActionName } from "./replay/actions.js";
+import { actionNameToMask, type ReplayActionName } from "./replay/actions.js";
+import { FrameStepper } from "./replay/frameStepper.js";
 import type { ReplayFile } from "./replay/format.js";
 import { HintOverlay } from "./bot/hint.js";
 
@@ -100,13 +101,16 @@ export default class Controller {
   lastTime: number = 0;
   lastLevel: number = 1;
   playTimeMs: number = 0;
-  gravityTimer: number = 0;
+  /** Real time not yet consumed by fixed rules ticks (see controller/gameLoop.ts). */
+  simAccumMs: number = 0;
 
   /** Assist hints (H): the CPU's best placements drawn as ghost cells. */
   readonly hint = new HintOverlay();
 
   /** Replay capture for the current run. */
   readonly replayRecorder = new ReplayRecorder();
+  /** The shared rules step — the same one replay and the lockstep peer run. */
+  readonly stepper: FrameStepper;
   lastReplayFile: ReplayFile | null = null;
   onReplayFinished: ((file: ReplayFile) => void) | null = null;
 
@@ -115,6 +119,8 @@ export default class Controller {
     this.view = view;
     this.viewWebGPU = viewWebGPU;
     this.soundManager = soundManager;
+    this.stepper = new FrameStepper(game);
+    this.stepper.sink = this.replayRecorder;
     this.isPlaying = false;
     this.isPaused = false;
     this.gameLoopID = null;
@@ -223,13 +229,6 @@ export default class Controller {
     }
   }
 
-  // Called by gravity timer
-  update(): void {
-    // Deprecated by unified loop, but kept if startTimer still used
-    this.game.movePieceDown();
-    this.updateView();
-  }
-
   play(): void {
     if (this.isPlaying) return;
     void this.soundManager.unlockAudio();
@@ -246,9 +245,9 @@ export default class Controller {
 
     this.lastLevel = this.game.level;
     this.lastTime = performance.now();
+    this.simAccumMs = 0;
 
-    // Reset timers to prevent jumps
-    this.gravityTimer = 0;
+    // Reset input timers to prevent jumps (gravity is rules state: it lives in the stepper)
     this.actionTimers.left = 0;
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
@@ -294,9 +293,9 @@ export default class Controller {
     this.isPlaying = true;
 
     this.lastTime = performance.now();
-    
-    // Reset timers to prevent jumps
-    this.gravityTimer = 0;
+    this.simAccumMs = 0;
+
+    // Reset input timers to prevent jumps. Gravity is not reset: a pause must not change the match.
     this.actionTimers.left = 0;
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
@@ -366,7 +365,6 @@ export default class Controller {
     this.beginReplaySession();
 
     // Reset timers
-    this.gravityTimer = 0;
     this.actionTimers.left = 0;
     this.actionTimers.right = 0;
     this.actionTimers.down = 0;
@@ -385,12 +383,18 @@ export default class Controller {
   private beginReplaySession(): void {
     const seed = generateReplaySeed();
     this.game.reset({ seed });
+    this.stepper.reset();
+    this.simAccumMs = 0;
     this.replayRecorder.start(seed, this.game.modeId);
     this.lastReplayFile = null;
   }
 
-  recordReplay(action: ReplayActionName): void {
-    this.replayRecorder.recordAction(action);
+  /**
+   * The only way live play changes the board: one input through the shared FrameStepper, which
+   * also hands it to the replay recorder. Safe between rules ticks (see frameStepper.ts).
+   */
+  press(action: ReplayActionName): void {
+    this.stepper.press(actionNameToMask(action));
   }
 
   /** Touch controls entry point (also used for replay hooks). */
@@ -398,43 +402,36 @@ export default class Controller {
     if (!this.isPlaying || this.isPaused) return;
     switch (action) {
       case 'left':
-        this.game.movePieceLeft();
-        this.recordReplay('left');
+        this.press('left');
         this.playMoveSound('left');
         this.actionTimers.left = 0;
         break;
       case 'right':
-        this.game.movePieceRight();
-        this.recordReplay('right');
+        this.press('right');
         this.playMoveSound('right');
         this.actionTimers.right = 0;
         break;
       case 'down':
-        this.game.movePieceDown();
-        this.recordReplay('down');
+        this.press('down');
         this.playMoveSound('down');
         this.actionTimers.down = 0;
         break;
       case 'rotateCW':
-        this.game.rotatePiece(true);
-        this.recordReplay('rotateCW');
+        this.press('rotateCW');
         this.soundManager.playRotate();
         this.viewWebGPU.onRotate?.();
         break;
       case 'rotateCCW':
-        this.game.rotatePiece(false);
-        this.recordReplay('rotateCCW');
+        this.press('rotateCCW');
         this.soundManager.playRotate();
         this.viewWebGPU.onRotate?.();
         break;
       case 'hardDrop':
-        this.recordReplay('hardDrop');
-        void this.performHardDropAsync();
+        this.performHardDrop();
         break;
       case 'hold':
         if (this.game.canHold) {
-          this.game.hold();
-          this.recordReplay('hold');
+          this.press('hold');
           this.soundManager.playHold();
           this.viewWebGPU.onHold?.();
         }
@@ -486,11 +483,7 @@ export default class Controller {
   }
 
   performHardDrop(): void {
-      void this.performHardDropAsync();
-  }
-
-  async performHardDropAsync(): Promise<void> {
-    await runHardDrop(this);
+    runHardDrop(this);
   }
 
   updateHighScoreDisplay(): void {
@@ -525,25 +518,24 @@ export default class Controller {
       getActivPieceY: () => this.game.activPiece?.y,
       getActivPieceRotation: () => this.game.activPiece.rotation,
       canHold: this.game.canHold,
-      moveLeft: () => { this.game.movePieceLeft(); },
-      moveRight: () => { this.game.movePieceRight(); },
+      moveLeft: () => { this.press('left'); },
+      moveRight: () => { this.press('right'); },
       rotateCW: () => {
         const rBefore = this.game.activPiece.rotation;
-        this.game.rotatePiece(true);
+        this.press('rotateCW');
         return this.game.activPiece.rotation !== rBefore;
       },
       rotateCCW: () => {
         const rBefore = this.game.activPiece.rotation;
-        this.game.rotatePiece(false);
+        this.press('rotateCCW');
         return this.game.activPiece.rotation !== rBefore;
       },
       performHold: () => {
         if (!this.game.canHold) return false;
-        this.game.hold();
+        this.press('hold');
         return true;
       },
       performHardDrop: () => { this.performHardDrop(); },
-      recordReplay: (action) => this.recordReplay(action),
       playMoveSound: (direction) => this.playMoveSound(direction),
       playHoldSound: () => this.soundManager.playHold(),
       onRotate: () => { this.viewWebGPU.onRotate?.(); },
@@ -569,26 +561,23 @@ export default class Controller {
       actionTimers: this.actionTimers,
       lastDirection: this.lastDirection,
       moveLeft: () => {
-        this.game.movePieceLeft();
-        this.recordReplay('left');
+        this.press('left');
         this.playMoveSound('left');
         this.viewWebGPU.onMove?.(this.game.activPiece.x, this.game.activPiece.y);
       },
       moveRight: () => {
-        this.game.movePieceRight();
-        this.recordReplay('right');
+        this.press('right');
         this.playMoveSound('right');
         this.viewWebGPU.onMove?.(this.game.activPiece.x, this.game.activPiece.y);
       },
       moveDown: () => {
         const prevY = this.game.activPiece.y;
-        this.game.movePieceDown();
+        this.press('down');
         // Replace heavy onMove flash spam with continuous soft drop pressure
         this.viewWebGPU.visualEffects?.triggerSoftDropPressure?.(0.1);
         emitSoftDropTrail(this.game, this.viewWebGPU);
         return prevY !== this.game.activPiece.y;
       },
-      recordDownReplay: () => { this.recordReplay('down'); },
     }, dt);
   }
 }

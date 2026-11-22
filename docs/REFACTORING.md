@@ -138,7 +138,8 @@ delegate to focused helpers under `game/`.
   injection before spawn, and hold swap.
 
 ### `game/hardDrop.ts`
-- `performHardDrop` — shared body for `hardDrop()` / `hardDropAsync()`.
+- `performHardDropSync` / `performHardDrop` — sync (rules path, `hardDrop()`) and async (`hardDropAsync()`)
+  variants over one shared body.
 
 Existing modules: `pieces.ts` (bag randomizer), `collision.ts` (CPU fallback),
 `rotation.ts` (SRS + wall kicks), `scoring.ts`, `lineUtils.ts`,
@@ -163,9 +164,9 @@ repeatable mechanics.
 
 ### `controller/gameLoop.ts`
 - `startGameLoop` / `stopGameLoop` — `requestAnimationFrame` lifecycle.
-- `stepGravity` — exponential gravity stepping (matches replay simulator math).
-- `runControllerFrame` — per-frame pipeline: replay clock, input, gravity,
-  `game.updateAsync`, audio/view/a11y, render.
+- `runControllerFrame` — per-frame pipeline: render on the real dt, then consume
+  accumulated time in fixed `SIM_TICK_MS` ticks (input phase → `FrameStepper.advance()`
+  → audio/view/a11y), then present. Gravity lives in `replay/frameStepper.ts`.
 
 ### `controller/hudBridge.ts`
 Pure DOM updates: mode HUD, high score label, combo display/milestones, pause menu.

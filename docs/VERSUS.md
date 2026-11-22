@@ -101,7 +101,10 @@ Player 2 uses **WASM board 1** (`Game({ wasmBoardId: 1 })`) in the same shared m
 
 ### Lockstep model
 
-- Both peers run identical `VersusLockstepSim` at 60 Hz.
+- Both peers run identical `VersusLockstepSim` at 60 Hz; each board advances through the shared
+  `FrameStepper` (the same step as single-player and replay), so a board's mask log replays through
+  `ReplayPlayback.scrubTo` to the same hash as long as that board received no garbage.
+  Hard-drop clears now register inside their tick, so they send garbage (they silently did not before).
 - Exchange input bitmasks per frame (3-frame input delay default).
 - Board hash checkpoint every 60 frames for desync detection.
 - Garbage attacks computed locally from line clears (same rules as local).

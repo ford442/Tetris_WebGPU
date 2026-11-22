@@ -32,7 +32,7 @@ import {
   spawnNextPiece,
   type SpawnHoldHost,
 } from './game/spawnHold.js';
-import { performHardDrop } from './game/hardDrop.js';
+import { performHardDrop, performHardDropSync } from './game/hardDrop.js';
 
 export type { GameState } from './game/gameState.js';
 export type { GameModeId } from './game/modes/types.js';
@@ -409,7 +409,7 @@ export default class Game implements ModeGameHooks {
   }
 
   hardDrop(): { linesCleared: number[], locked: boolean, gameOver: boolean, tSpin: TSpinResult } {
-    void performHardDrop(this, () => this.clearLine(), this._hardDropResult);
+    performHardDropSync(this, () => this.clearLine(), this._hardDropResult);
     return this._hardDropResult;
   }
 

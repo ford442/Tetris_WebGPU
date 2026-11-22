@@ -41,11 +41,8 @@ export function resetHardDropResult(result: HardDropResult): void {
   result.tSpin = 'none';
 }
 
-export async function performHardDrop(
-  host: HardDropHost,
-  clearLines: () => number[] | Promise<number[]>,
-  result: HardDropResult,
-): Promise<HardDropResult> {
+/** Drop to the ghost row and lock. Returns the T-spin state captured before the lock. */
+function beginHardDrop(host: HardDropHost, result: HardDropResult): TSpinResult {
   resetHardDropResult(result);
 
   const ghostY = host.getGhostY();
@@ -78,9 +75,15 @@ export async function performHardDrop(
 
   host.lockPiece();
   result.locked = true;
+  return host.isTSpin;
+}
 
-  const wasTSpin = host.isTSpin;
-  const linesScore = await clearLines();
+function finishHardDrop(
+  host: HardDropHost,
+  linesScore: number[],
+  wasTSpin: TSpinResult,
+  result: HardDropResult,
+): HardDropResult {
   host.applyLineClearScoring(linesScore, wasTSpin, result);
   host.notifyModeLock();
 
@@ -88,4 +91,28 @@ export async function performHardDrop(
   if (host.gameOver || host.victory) result.gameOver = true;
 
   return result;
+}
+
+/**
+ * Synchronous hard drop: lock, clear, score and spawn all land before this returns. This is the
+ * rules path (live play, replay, lockstep) — see src/replay/frameStepper.ts.
+ */
+export function performHardDropSync(
+  host: HardDropHost,
+  clearLines: () => number[],
+  result: HardDropResult,
+): HardDropResult {
+  const wasTSpin = beginHardDrop(host, result);
+  return finishHardDrop(host, clearLines(), wasTSpin, result);
+}
+
+/** Async variant for a GPU line-detect `clearLines`; not used by the fixed-tick rules step. */
+export async function performHardDrop(
+  host: HardDropHost,
+  clearLines: () => number[] | Promise<number[]>,
+  result: HardDropResult,
+): Promise<HardDropResult> {
+  const wasTSpin = beginHardDrop(host, result);
+  const linesScore = await clearLines();
+  return finishHardDrop(host, linesScore, wasTSpin, result);
 }

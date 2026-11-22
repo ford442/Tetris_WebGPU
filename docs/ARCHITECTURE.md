@@ -27,9 +27,9 @@ src/
 ├── controller.ts            # Lifecycle: DOM listeners, pause/resume, replay, per-frame glue
 ├── controller/              # Split out of controller.ts
 │   ├── keyboard.ts          # First-press / release handling, SOCD, input-buffer fallbacks
-│   ├── hardDropFlow.ts      # Hard-drop snapshot → async drop → sound/view/leaderboard reactions
+│   ├── hardDropFlow.ts      # Press HARD_DROP through the FrameStepper → sound/view/a11y reactions
 │   ├── softDropFx.ts        # Soft-drop particle trail (typed access to the WebGPU particle system)
-│   ├── gameLoop.ts          # rAF loop host
+│   ├── gameLoop.ts          # rAF loop: render on real dt, rules in fixed SIM_TICK_MS ticks
 │   └── hudBridge.ts         # DOM HUD / pause-menu updates
 ├── viewWebGPU.ts            # Main WebGPU view (canvas, render passes, themes)
 ├── sound.ts                 # Procedural audio (Web Audio API)
@@ -58,6 +58,12 @@ src/
 │   ├── botData.ts           # Validates + packs shared/versusAttack.json and shared/botWeights.json
 │   ├── selfPlay.ts / versusMatch.ts  # Headless drivers (tests, `npm run bot:selfplay`)
 │   └── …                    # types, protocol, gameSnapshot, loadWasm, url
+├── replay/
+│   ├── frameStepper.ts      # FrameStepper: THE rules step (press masks + advance) for every driver
+│   ├── simulator.ts         # GameSimulator: headless FrameStepper for replay / fixtures / self-play
+│   ├── recorder.ts          # ReplayRecorder: the stepper's input sink ([u16 delta][u8 mask] stream)
+│   ├── playback.ts          # ReplayPlayback: scrub = reset + tick N
+│   └── format.ts / actions.ts / boardHash.ts  # .ttr format, REPLAY_ACTION masks, FNV-1a hashes
 ├── view/
 │   ├── IView.ts             # Shared view contract (all renderers)
 │   ├── createView.ts        # Factory + dynamic cpp import
@@ -248,10 +254,30 @@ The go.1ink.us look is **data**, not shader constants:
 
 ### Data Flow
 ```
-Keyboard Input → Controller (DAS/ARR/SOCD) → Game methods → Game.update()
-    → Line clear + Scoring → View.render() → WebGPU render pass
-    → Event callbacks → Visual effects + Audio
+Keyboard Input → Controller (DAS/ARR/SOCD) → FrameStepper.press(mask) ─┐ (recorded)
+rAF → accumulate dt → per SIM_TICK_MS: input phase → FrameStepper.advance()
+    (gravity → Game.update lock delay + sync line clear → tickMode)
+    → View.render() on the real dt → Event callbacks → Visual effects + Audio
 ```
+
+### Sim clock (one match = one frame sequence)
+- **One step:** `src/replay/frameStepper.ts` `FrameStepper` is the only rules step and holds the only
+  gravity integrator. A frame is any number of `press(mask)` calls, then one `advance()` (gravity,
+  `Game.update(SIM_TICK_MS)`, `tickMode`). Live play (`controller/gameLoop.ts`), `GameSimulator` /
+  `ReplayPlayback`, `VersusLockstepSim`, local `VersusController` and the headless `VersusBotMatch` all use it.
+- **Live loop:** rendering, hit-stop and particles follow the real (clamped) rAF `dt`; the rules consume
+  accumulated time in `SIM_TICK_MS` (1000/60) quanta, at most `MAX_CATCHUP_TICKS` per frame. Hit-stop and
+  pause freeze the accumulator, so they pause the match instead of changing it; pause no longer resets gravity.
+- **Inputs:** every live board mutation goes through `Controller.press()` → `stepper.press()`, which also
+  feeds `ReplayRecorder` (the stepper's `sink`). A keydown between two rAFs is identical to a press at the
+  start of the next tick, because no rules run in between. DAS/ARR and the input buffer sample once per tick.
+- **Replay stream:** unchanged `[u16 delta][u8 mask]` (v1). Presses in one frame are OR-ed while that keeps
+  `applyActionMask` order; otherwise extra delta-0 entries for the same frame keep them ordered
+  (`inputEventsToFrames`). Old files still load (best-effort: they were recorded on the variable-dt clock).
+- **Sync only:** the step is CPU/WASM; `Game.hardDrop()` completes lock, clear, score and spawn before it
+  returns. `Game.updateAsync` / `hardDropAsync` (GPU line detect) are no longer on the rules path.
+- **Determinism tests:** `tests/sim-clock.test.ts` (live loop with uneven deltas vs `GameSimulator` vs the
+  recorded `.ttr` vs `VersusLockstepSim` board 0, and a ratchet that only one gravity integrator exists).
 
 ### Playfield Storage
 - 1D `Int8Array` of 200 cells (10 columns × 20 rows) per board; Y-down (`y = 0` is the top)
@@ -408,9 +434,9 @@ protocol or a static server at any prefix. `npm run preview` after a default bui
 ## Known hazards
 
 - **WebGPU resource management** (`viewWebGPU.ts` + `webgpu/`): no wrapper engine — `GPUDevice`, buffers, bind groups and pipelines are managed by hand. The `View` constructor starts async init (`preRender`); the render loop guards `!this.device`, but calling view methods from the controller before init completes can crash if unguarded.
-- **Input timing:** physics uses `performance.now()` deltas while key state comes from DOM events; keep repeat logic in the frame loop.
+- **Input timing:** rules run on the fixed sim clock (see *Sim clock*); key state comes from DOM events and every mutation must go through `FrameStepper.press()` — a direct `game.movePieceLeft()` from the controller would not be recorded and breaks replay/lockstep parity.
+- **Shared WASM boards:** every `Game` on the same `wasmBoardId` shares one 200-byte collision buffer. Never interleave ticks of two board-0 `Game`s (tests run them one after the other).
 - **Rotation kicks:** `game/rotateFlow.ts` advances `kickIndex` twice per loop iteration (every second kick offset is skipped). It is long-standing behaviour that the T-Spin kick indices and tests depend on, so treat any change as a gameplay change, not a refactor.
-- **Hard-drop stepping (sim clock, #561):** `Game.hardDrop()` finishes — line clear, scoring, next-piece spawn — one microtask AFTER the call. A synchronous `GameSimulator.tick()` loop therefore keeps steering an already-locked piece, `runSimulation()` of a bot (or human) stream diverges, and `VersusLockstepSim` never sees the clear inside its tick, so it never sends garbage. `src/bot/selfPlay.ts` (`stepMask`) and `src/bot/versusMatch.ts` flush a microtask after any tick containing a hard drop and do their own attack accounting; they are the single place to change when the unified sim step lands.
 - **Video background:** relies on DOM layering (`z-index`) behind the transparent canvas; large aspect-ratio changes can drift the portal alignment.
 - **Block bind groups** are rebuilt per frame in some paths, which pressures the browser's resource tracker.
 
@@ -448,6 +474,7 @@ Tests live in `tests/` (a few are co-located, e.g. `src/webgpu/materials.test.ts
 - `bot-wasm-core.test.ts` — bot memory contract (inside the page, nothing written at instantiation) + textbook placement counts
 - `bot-parity.test.ts` — bot ↔ real `Game`: shapes, kicks (incl. the quirk), collision, rotation, T-spin class, scoring points, attack rows, generator vs brute-force reachability, planned paths replayed on the engine
 - `bot-eval-search.test.ts` — every evaluator feature vs an independent reference; search decisions, determinism, resumability, node budget
+- `sim-clock.test.ts` / `replay-recorder.test.ts` — one sim clock: live loop (uneven deltas, hit-stop) == `GameSimulator` == recorded `.ttr` via `ReplayPlayback.scrubTo` == `VersusLockstepSim` board 0; single gravity integrator; recorder ordering
 - `bot-selfplay.test.ts` — seeded 200-piece self-play regression, replay round trip, humanizing cadence, CPU-vs-CPU versus
 - `bot-searchers.test.ts` / `bot-cpu-opponent.test.ts` / `bot-hint.test.ts` — Sync/Sliced/Worker searchers (real handler behind a fake Worker), the live-game glue, the hint overlay + leaderboard gate
 - `bot-shared-data.test.ts` / `bot-performance.test.ts` — shared JSON + generated file contract; decision budget (<2 ms median at depth 2) and wasm size guard

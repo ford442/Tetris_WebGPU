@@ -1,5 +1,3 @@
-import type { ReplayActionName } from '../replay/actions.js';
-
 export type BufferAction = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
 
 export interface InputBufferState {
@@ -9,6 +7,10 @@ export interface InputBufferState {
   bufferedMoveActionTime: number;
 }
 
+/**
+ * The moves/rotations/holds/drops below must apply through the shared FrameStepper (which records
+ * them for replay); this module only decides when to retry.
+ */
 export interface InputBufferDeps extends InputBufferState {
   moveBufferWindow: number;
   jumpBufferWindow: number;
@@ -22,7 +24,6 @@ export interface InputBufferDeps extends InputBufferState {
   rotateCCW(): boolean;
   performHold(): boolean;
   performHardDrop(): void;
-  recordReplay(action: ReplayActionName): void;
   playMoveSound(direction: 'left' | 'right'): void;
   playHoldSound(): void;
   onRotate?(): void;
@@ -53,7 +54,6 @@ export function processInputBuffer(deps: InputBufferDeps, currentTime: number): 
         if (deps.getActivPieceX() !== pxBefore) moveSuccess = true;
       }
       if (moveSuccess) {
-        deps.recordReplay(deps.bufferedMoveAction === 'left' ? 'left' : 'right');
         deps.playMoveSound(deps.bufferedMoveAction === 'left' ? 'left' : 'right');
         deps.bufferedMoveAction = null;
       }
@@ -75,19 +75,16 @@ export function processInputBuffer(deps: InputBufferDeps, currentTime: number): 
   let success = false;
   if (deps.bufferedAction === 'rotateCW') {
     if (deps.rotateCW()) {
-      deps.recordReplay('rotateCW');
       deps.onRotate?.();
       success = true;
     }
   } else if (deps.bufferedAction === 'rotateCCW') {
     if (deps.rotateCCW()) {
-      deps.recordReplay('rotateCCW');
       deps.onRotate?.();
       success = true;
     }
   } else if (deps.bufferedAction === 'hold') {
     if (deps.performHold()) {
-      deps.recordReplay('hold');
       triggerHoldAnimation();
       deps.playHoldSound();
       deps.onHold?.();
@@ -95,7 +92,6 @@ export function processInputBuffer(deps: InputBufferDeps, currentTime: number): 
     }
   } else if (deps.bufferedAction === 'hardDrop') {
     const yBefore = deps.getActivPieceY();
-    deps.recordReplay('hardDrop');
     deps.performHardDrop();
     if (deps.getActivPieceY() !== yBefore) {
       success = true;
